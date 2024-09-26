@@ -1,10 +1,10 @@
 #pragma once
-#include "Component.h"
+#include "../ECS/IComponent.h"
 
 
 namespace engine
 {
-	namespace component
+	namespace ecs
 	{
 		struct Transform
 		{
@@ -43,30 +43,24 @@ namespace engine
 		};
 
 
-		class TransformComponent : public IComponent
+		struct TransformComponent : public IComponent
 		{
-			engineComponent(engine::component::TransformComponent);
-
-
-		private:
-			Transform transform_;
+			ecsComponent(engine::ecs::TransformComponent);
 
 
 		public:
-			TransformComponent(engine::IGameObject* gameObject);
+			Transform transform;
+
+
+		public:
+			TransformComponent();
 			~TransformComponent();
-			void Start() override;
-			void Update() override;
-			void Render(graphics::RenderContext& context) override {};
-
-
-		public:
 
 
 		public:
 			void SetParent(TransformComponent* parent)
 			{
-				transform_.SetParent(&parent->transform_);
+				transform.SetParent(&parent->transform);
 			}
 
 		public:

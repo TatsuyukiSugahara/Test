@@ -2,7 +2,6 @@
  * ゲームオブジェクトの基底クラス
  */
 #pragma once
-#include "../Component/Component.h"
 
 
 namespace engine
@@ -34,8 +33,6 @@ namespace engine
 		bool isNewFromGameObjectManager_;
 		bool isRegist_;
 		bool isActive_;
-
-		engine::component::ComponentManager componentManager_;
 
 
 	public:
@@ -152,63 +149,6 @@ namespace engine
 		bool CanRun() const
 		{
 			return isActive_ && isStart_ && !isDead_ && !isRegistDeadList_;
-		}
-
-
-		/**
-		 * コンポーネント関連
-		 */
-	public:
-		template <typename T>
-		T* AddComponent()
-		{
-			return componentManager_.AddComponent(this);
-		}
-
-		template <typename T>
-		void RemoveComponent()
-		{
-			componentManager_.RemoveComponent<T>();
-		}
-
-		template <typename T>
-		T* GetComponent()
-		{
-			return componentManager_.GetComponent<T>();
-		}
-
-
-		/**
-		 * コンポーネント関連の処理を呼び出すため追加
-		 */
-	public:
-		void StartComponent()
-		{
-			componentManager_.Start();
-		}
-		void UpdateComponent()
-		{
-			componentManager_.Update();
-		}
-		void RenderComponent(graphics::RenderContext& context)
-		{
-			componentManager_.Render(context);
-		}
-		void PreUpdateComponent()
-		{
-			componentManager_.PreUpdate();
-		}
-		void PostUpdateComponent()
-		{
-			componentManager_.PostUpdate();
-		}
-		void PreRenderComponent(graphics::RenderContext& context)
-		{
-			componentManager_.PreRender(context);
-		}
-		void PostRenderComponent(graphics::RenderContext& context)
-		{
-			componentManager_.PostRender(context);
 		}
 	};
 

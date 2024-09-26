@@ -36,7 +36,6 @@ namespace engine
 		for (auto& list : gameObjectListArray_) {
 			for (auto* gameObject : list) {
 				gameObject->StartWrapper();
-				gameObject->StartComponent();
 			}
 		}
 
@@ -44,19 +43,16 @@ namespace engine
 		for (auto& list : gameObjectListArray_) {
 			for (auto* gameObject : list) {
 				gameObject->PreUpdate();
-				gameObject->PreUpdateComponent();
 			}
 		}
 		for (auto& list : gameObjectListArray_) {
 			for (auto* gameObject : list) {
 				gameObject->UpdateWapper();
-				gameObject->UpdateComponent();
 			}
 		}
 		for (auto& list : gameObjectListArray_) {
 			for (auto* gameObject : list) {
 				gameObject->PostUpdateWapper();
-				gameObject->PostUpdateComponent();
 			}
 		}
 
@@ -73,19 +69,16 @@ namespace engine
 		for (auto& list : gameObjectListArray_) {
 			for (auto* gameObject : list) {
 				gameObject->PreRender(context);
-				gameObject->PreRenderComponent(context);
 			}
 		}
 		for (auto& list : gameObjectListArray_) {
 			for (auto* gameObject : list) {
 				gameObject->Render(context);
-				gameObject->RenderComponent(context);
 			}
 		}
 		for (auto& list : gameObjectListArray_) {
 			for (auto* gameObject : list) {
 				gameObject->PostRender(context);
-				gameObject->PostRenderComponent(context);
 			}
 		}
 	}

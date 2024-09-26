@@ -1,15 +1,15 @@
 #pragma once
-#include "Component.h"
+#include "../ECS/IComponent.h"
 #include "../Graphics/StaticMesh.h"
 
 
 namespace engine
 {
-	namespace component
+	namespace ecs
 	{
-		class StaticMeshComponent : public engine::component::IComponent
+		class StaticMeshComponent : public engine::ecs::IComponent
 		{
-			engineComponent(engine::component::StaticMeshComponent);
+			ecsComponent(engine::ecs::StaticMeshComponent);
 
 
 		private:
@@ -31,19 +31,25 @@ namespace engine
 
 			
 		public:
-			StaticMeshComponent(engine::IGameObject* gameObject);
+			StaticMeshComponent();
 			virtual ~StaticMeshComponent();
 
-			void Start() override;
-			void Update() override;
-			void Render(graphics::RenderContext& context) override;
+			void Update();
+
+
+		public:
+			inline bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
+
+
+		public:
+			inline engine::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
 		};
 
 
 		/**
 		 * 物体を衝突させる際に使用するコンポーネント
 		 */
-		class PhysicalBodyComponent : public engine::component::IComponent
+		class PhysicalBodyComponent : public engine::ecs::IComponent
 		{
 
 		};
@@ -51,7 +57,7 @@ namespace engine
 		/**
 		 * 衝突判定に使用するコンポーネント
 		 */
-		class GhostBodyComponent : public engine::component::IComponent
+		class GhostBodyComponent : public engine::ecs::IComponent
 		{
 
 		};

@@ -184,5 +184,9 @@ namespace app
 		void Update(engine::graphics::RenderContext& context) override;
 
 		void Register() override;
+
+
+	private:
+		void Render(engine::graphics::RenderContext& context);
 	};
 }

@@ -1,27 +1,19 @@
 #include "../EnginePreCompile.h"
 #include "../Engine.h"
 #include "BodyComponent.h"
-#include "../GameObject/GameObject.h"
-#include "../Graphics/Camera.h"
 
 namespace engine
 {
-	namespace component
+	namespace ecs
 	{
-		StaticMeshComponent::StaticMeshComponent(engine::IGameObject* gameObject)
-			: IComponent(gameObject)
-			, componentState_(ComponentState::LoadRequest)
+		StaticMeshComponent::StaticMeshComponent()
+			:componentState_(ComponentState::LoadRequest)
 		{
 
 		}
 		
 		
 		StaticMeshComponent::~StaticMeshComponent()
-		{
-
-		}
-
-		void StaticMeshComponent::Start()
 		{
 
 		}
@@ -59,23 +51,9 @@ namespace engine
 				}
 				case ComponentState::Completed:
 				{
-					// @todo for test
-					engine::math::Quaternion q;
-					q.SetEuler(engine::math::Vector3(90.0f, 90.0f, 90.0f));
-					staticMesh_.Update(engine::math::Vector3(0, 0, 0), q, engine::math::Vector3(1.0f));
+					// “Ç‚Ýž‚ÝŠ®—¹
 				}
 			}
-		}
-
-
-		void StaticMeshComponent::Render(graphics::RenderContext& context)
-		{
-			if (componentState_ != ComponentState::Completed) {
-				return;
-			}
-
-			engine::Camera* camera = engine::CameraManager::Get().GetCamera(CameraType::Main);
-			staticMesh_.Render(context, camera->GetViewMatrix(), camera->GetProjectionMatrix());
 		}
 	}
 }

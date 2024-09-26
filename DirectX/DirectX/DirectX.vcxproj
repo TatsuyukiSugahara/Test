@@ -152,6 +152,9 @@
     <ClCompile Include="Engine\Component\BodyComponent.cpp" />
     <ClCompile Include="Engine\Component\Component.cpp" />
     <ClCompile Include="Engine\Component\TransformComponent.cpp" />
+    <ClCompile Include="Engine\ECS\Chunk.cpp" />
+    <ClCompile Include="Engine\ECS\EntityManager.cpp" />
+    <ClCompile Include="Engine\ECS\System.cpp" />
     <ClCompile Include="Engine\Engine.cpp" />
     <ClCompile Include="Engine\GameObject\GameObject.cpp" />
     <ClCompile Include="Engine\Graphics\Camera.cpp" />
@@ -176,6 +179,15 @@
     <ClInclude Include="Engine\Component\BodyComponent.h" />
     <ClInclude Include="Engine\Component\Component.h" />
     <ClInclude Include="Engine\Component\TransformComponent.h" />
+    <ClInclude Include="Engine\ECS\Archetype.h" />
+    <ClInclude Include="Engine\ECS\Chunk.h" />
+    <ClInclude Include="Engine\ECS\ComponentArray.h" />
+    <ClInclude Include="Engine\ECS\ECS.h" />
+    <ClInclude Include="Engine\ECS\Entity.h" />
+    <ClInclude Include="Engine\ECS\EntityManager.h" />
+    <ClInclude Include="Engine\ECS\IComponent.h" />
+    <ClInclude Include="Engine\ECS\System.h" />
+    <ClInclude Include="Engine\ECS\TypeInfo.h" />
     <ClInclude Include="Engine\Engine.h" />
     <ClInclude Include="Engine\EnginePreCompile.h" />
     <ClInclude Include="Engine\GameObject\GameObject.h" />

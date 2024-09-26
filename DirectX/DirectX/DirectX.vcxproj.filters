@@ -34,6 +34,9 @@
     <Filter Include="Engine\Physics">
       <UniqueIdentifier>{c739d076-df44-472d-873f-202f105a6f6a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Engine\ECS">
+      <UniqueIdentifier>{d90cc128-47d8-4d9f-8ac5-59ba19967b65}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Engine\Graphics\RenderContext.cpp">
@@ -98,6 +101,15 @@
     </ClCompile>
     <ClCompile Include="Engine\Physics\BulletPhysics.cpp">
       <Filter>Engine\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ECS\Chunk.cpp">
+      <Filter>Engine\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ECS\EntityManager.cpp">
+      <Filter>Engine\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ECS\System.cpp">
+      <Filter>Engine\ECS</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -175,6 +187,33 @@
     </ClInclude>
     <ClInclude Include="Engine\Physics\BulletPhysics.h">
       <Filter>Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\TypeInfo.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\IComponent.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\Entity.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\Archetype.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\Chunk.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\ComponentArray.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\System.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\EntityManager.h">
+      <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ECS\ECS.h">
+      <Filter>Engine\ECS</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -41,7 +41,7 @@ namespace engine
 		uint32_t EntityManager::GetChunkIndex(const Archetype& archetype) const
 		{
 			auto chunkIndex = 0;
-			for (auto&& chunk : chunkList_)
+			for (auto& chunk : chunkList_)
 			{
 				if (chunk.GetArchetype() == archetype) {
 					return chunkIndex;
@@ -56,7 +56,7 @@ namespace engine
 		{
 			std::vector<Chunk*> result;
 			result.reserve(4);
-			for (auto&& chunk : chunkList_) {
+			for (auto& chunk : chunkList_) {
 				if (archetype.IsIn(chunk.GetArchetype())) {
 					result.push_back(&chunk);
 				}

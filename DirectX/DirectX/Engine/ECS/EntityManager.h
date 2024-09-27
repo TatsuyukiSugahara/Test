@@ -1,5 +1,7 @@
 #pragma once
 #include "Chunk.h"
+#include <vector>
+#include <memory>
 
 
 namespace engine

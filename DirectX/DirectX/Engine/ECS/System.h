@@ -48,7 +48,7 @@ namespace engine
 			template <typename T>
 			void AddSystem()
 			{
-				systemList_.push_back(new T());
+				systemList_.push_back(std::make_unique<T>());
 			}
 
 

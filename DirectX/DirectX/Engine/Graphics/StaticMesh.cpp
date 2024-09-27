@@ -23,6 +23,7 @@ namespace engine
 
 		StaticMesh::StaticMesh()
 			: worldMatrix_(math::Matrix4x4::Identity)
+			, indicesSize_(0)
 		{
 		}
 
@@ -32,14 +33,31 @@ namespace engine
 		}
 
 
-		bool StaticMesh::Initialize(engine::res::RefMeshResource meshResource, engine::res::RefGPUResource gpuResource, const ShaderType shaderType)
+		void StaticMesh::Initialize(engine::res::RefMeshResource meshResource, engine::res::RefGPUResource gpuResource, const ShaderType shaderType)
 		{
 			meshResource_ = meshResource;
 			gpuResource_ = gpuResource;
 
 			vertexBuffer_.Create(meshResource_->GetVerticsSize(), sizeof(engine::graphics::VertexData), meshResource_->GetVertics()->data());
 			indexBuffer_.Create(meshResource_->GetIndicesSize(), meshResource_->GetIndices()->data());
+			indicesSize_ = meshResource_->GetIndicesSize();
 
+			Initialize(shaderType);
+		}
+
+
+		void StaticMesh::Initialize(const void* vertexBuffer, const uint32_t vertexNum, const void* indexBuffer, const uint32_t indexNum, const ShaderType shaderType)
+		{
+			vertexBuffer_.Create(vertexNum, sizeof(engine::graphics::VertexData), vertexBuffer);
+			indexBuffer_.Create(indexNum, indexBuffer);
+			indicesSize_ = indexNum;
+
+			Initialize(shaderType);
+		}
+
+
+		void StaticMesh::Initialize(const ShaderType shaderType)
+		{
 			// 使用するシェーダーを設定
 			const ShaderInformation& shaderInformation = shaderInformations[static_cast<uint8_t>(shaderType)];
 			vsShader_.Load(shaderInformation.vsFileNme, shaderInformation.vsFuncName, engine::graphics::Shader::ShaderType::VS);
@@ -56,8 +74,6 @@ namespace engine
 
 			// 定数バッファ生成
 			constantBuffer_.Create(nullptr, sizeof(engine::graphics::VSConstantBuffer));
-
-			return true;
 		}
 
 
@@ -93,14 +109,16 @@ namespace engine
 			context.IASetIndexBuffer(indexBuffer_);
 			context.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			context.PSSetShaderResource(0, *gpuResource_->GetShaderResourceView());
+			if (gpuResource_) {
+				context.PSSetShaderResource(0, *gpuResource_->GetShaderResourceView());
+			}
 			context.PsSetSampler(0, samplerState_);
 
 			context.VSSetShader(vsShader_);
 			context.PSSetShader(psShader_);
 			context.IASetInputLayout(vsShader_.GetInputLayout());
 
-			context.DrawIndexed(meshResource_->GetIndicesSize());
+			context.DrawIndexed(indicesSize_);
 		}
 	}
 }

@@ -1,6 +1,7 @@
 #pragma once
-#include "../ECS/IComponent.h"
+#include "../ECS/ECS.h"
 #include "../Graphics/StaticMesh.h"
+#include "../Graphics/RenderContext.h"
 
 
 namespace engine
@@ -31,9 +32,7 @@ namespace engine
 
 			
 		public:
-			StaticMeshComponent();
-			virtual ~StaticMeshComponent();
-
+			void Initialize();
 			void Update();
 
 
@@ -44,6 +43,29 @@ namespace engine
 		public:
 			inline engine::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
 		};
+
+
+
+
+
+		class RenderSystem : public engine::ecs::SystemBase
+		{
+		public:
+			RenderSystem();
+			~RenderSystem();
+			void Update() override;
+			void Render(engine::graphics::RenderContext& context);
+
+
+		private:
+			static RenderSystem* instance_;
+
+
+		public:
+			static RenderSystem& Get() { return *instance_; }
+			static bool IsAvailable() { return instance_ != nullptr; }
+		};
+
 
 
 		/**

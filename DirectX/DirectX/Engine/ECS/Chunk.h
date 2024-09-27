@@ -2,6 +2,7 @@
 #include "ComponentArray.h"
 #include "Archetype.h"
 #include "Entity.h"
+#include <memory>
 
 
 namespace engine
@@ -86,7 +87,7 @@ namespace engine
 			T* GetComponent(const Entity& entity)
 			{
 				if (entity.index >= size_) {
-					EngineAssert(false);
+					// EngineAssert(false);
 					return nullptr;
 				}
 
@@ -116,7 +117,7 @@ namespace engine
 			ComponentArray<T> GetComponentArray()
 			{
 				using TType = std::remove_const_t<std::remove_reference_t<T>>;
-				const auto offset = archetype_.GetOffset<TType>() * capacity_;
+				auto offset = archetype_.GetOffset<TType>() * capacity_;
 				return ComponentArray<T>(reinterpret_cast<TType*>(begin_.get() + offset), size_);
 			}
 

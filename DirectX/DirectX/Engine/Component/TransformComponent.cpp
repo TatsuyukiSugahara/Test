@@ -4,7 +4,7 @@
 
 namespace engine
 {
-	namespace component
+	namespace ecs
 	{
 		Transform::Transform()
 			: position(engine::math::Vector3::Zero)
@@ -115,23 +115,12 @@ namespace engine
 		/*******************************************/
 
 
-		TransformComponent::TransformComponent(engine::IGameObject* gameObject)
-			: engine::component::IComponent(gameObject)
+		TransformComponent::TransformComponent()
 		{
 		}
 
 
 		TransformComponent::~TransformComponent()
-		{
-		}
-
-
-		void TransformComponent::Start()
-		{
-		}
-
-
-		void TransformComponent::Update()
 		{
 		}
 	}

@@ -146,11 +146,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Application\Application.cpp" />
+    <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
     <ClCompile Include="Application\GameObject\Actor.cpp" />
     <ClCompile Include="Application\Main.cpp" />
     <ClCompile Include="Application\Scene\Scene.cpp" />
-    <ClCompile Include="Engine\Component\BodyComponent.cpp" />
-    <ClCompile Include="Engine\Component\Component.cpp" />
+    <ClCompile Include="Engine\Component\BodyComponentSystem.cpp" />
     <ClCompile Include="Engine\Component\TransformComponent.cpp" />
     <ClCompile Include="Engine\ECS\Chunk.cpp" />
     <ClCompile Include="Engine\ECS\EntityManager.cpp" />
@@ -172,12 +172,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application\Application.h" />
+    <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
     <ClInclude Include="Application\GameObject\Actor.h" />
     <ClInclude Include="Application\Scene\Scene.h" />
     <ClInclude Include="Application\Utility.h" />
     <ClInclude Include="Engine\Application.h" />
-    <ClInclude Include="Engine\Component\BodyComponent.h" />
-    <ClInclude Include="Engine\Component\Component.h" />
+    <ClInclude Include="Engine\Component\BodyComponentSystem.h" />
     <ClInclude Include="Engine\Component\TransformComponent.h" />
     <ClInclude Include="Engine\ECS\Archetype.h" />
     <ClInclude Include="Engine\ECS\Chunk.h" />

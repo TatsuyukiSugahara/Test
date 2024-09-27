@@ -4,6 +4,13 @@
 #include "../Engine/GameObject/GameObject.h"
 #include "../Engine/ECS/ECS.h"
 
+// @todo for test
+#include "../Engine/Component/TransformComponent.h"
+#include "../Engine/Component/BodyComponentSystem.h"
+#include "../Engine/Resource/Resource.h"
+#include "../Engine/Graphics/Camera.h"
+#include "../Engine/HID/Input.h"
+
 namespace app
 {
 	Application::Application()
@@ -36,6 +43,9 @@ namespace app
 		camera->SetNear(0.01f);
 		camera->Update();
 
+		// @todo for test
+		engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::StaticMeshComponent>();
+
 		//app::scene::SceneManager::Create();
 		//engine::GameObjectManager::Create();
 
@@ -60,14 +70,8 @@ namespace app
 
 	void Application::Update(engine::graphics::RenderContext& context)
 	{
-		if (hoge_ == nullptr) {
-			hoge_ = new Hoge();
-		}
-		hoge_->Update();
-
 		//app::scene::SceneManager::Get().Update();
 		//engine::GameObjectManager::Get().Execute(context);
-		hoge_->Render(context);
 
 		// システム更新
 		engine::ecs::SystemManager::Get().Update();
@@ -85,14 +89,25 @@ namespace app
 
 	void Application::Register()
 	{
+		// リソース登録
 		engine::res::ResourceManager::Get().RegisterBank<engine::res::TResourceBank<engine::res::RefGPUResource>>(engine::res::TextureLoader::ResourceBankID());
 		engine::res::ResourceManager::Get().RegisterBank<engine::res::TResourceBank<engine::res::RefMeshResource>>(engine::res::FbxLoader::ResourceBankID());
 		engine::res::ResourceManager::Get().RegisterBank<engine::res::TResourceBank<engine::res::RefPMDResource>>(engine::res::PMDLoader::ResourceBankID());
+
+
+		// システム登録
+		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::RenderSystem>();
 	}
 
 
 	void Application::Render(engine::graphics::RenderContext& context)
 	{
+		// 画面クリア
+		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		context.OMSetRenderTargets(1, &engine::Engine::Get().GetMainRenderTarget());
+		context.ClearRenderTargetView(0, clearColor);
+		context.RSSetViewport(0.0f, 0.0f, static_cast<float>(engine::Engine::Get().GetRenderWidth()), static_cast<float>(engine::Engine::Get().GetRenderHeight()));
 
+		engine::ecs::RenderSystem::Get().Render(context);
 	}
 }

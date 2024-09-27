@@ -11,6 +11,17 @@ namespace engine
 {
 	namespace ecs
 	{
+		namespace _internal
+		{
+			template<typename Func, class... Args>
+			static void Foreach(Chunk* chunk, Func&& func, Args ... args)
+			{
+				for (uint32_t i = 0; i < chunk->GetSize(); ++i) {
+					func(&args[i]...);
+				}
+			}
+		}
+
 
 		template<class T1, typename Func>
 		void Foreach(Func&& func)
@@ -18,7 +29,7 @@ namespace engine
 			auto chunkList = EntityManager::Get().GetChunkList<T1>();
 			for (auto&& chunk : chunkList) {
 				auto arg1 = chunk->template GetComponentArray<T1>();
-				foreachImpl_(chunk, func, arg1);
+				_internal::Foreach(chunk, func, arg1);
 			}
 		}
 
@@ -30,7 +41,7 @@ namespace engine
 			for (auto&& chunk : chunkList) {
 				auto arg1 = chunk->template GetComponentArray<T1>();
 				auto arg2 = chunk->template GetComponentArray<T2>();
-				foreachImpl_(chunk, func, arg1, arg2);
+				_internal::Foreach(chunk, func, arg1, arg2);
 			}
 		}
 
@@ -43,7 +54,7 @@ namespace engine
 				auto arg1 = chunk->template GetComponentArray<T1>();
 				auto arg2 = chunk->template GetComponentArray<T2>();
 				auto arg3 = chunk->template GetComponentArray<T3>();
-				foreachImpl_(chunk, func, arg1, arg2, arg3);
+				_internal::Foreach(chunk, func, arg1, arg2, arg3);
 			}
 		}
 
@@ -57,19 +68,7 @@ namespace engine
 				auto arg2 = chunk->template GetComponentArray<T2>();
 				auto arg3 = chunk->template GetComponentArray<T3>();
 				auto arg4 = chunk->template GetComponentArray<T4>();
-				foreachImpl_(chunk, func, arg1, arg2, arg3, arg4);
-			}
-		}
-
-
-		namespace _internal
-		{
-			template<typename Func, class... Args>
-			static void _Foreach(Chunk* chunk, Func&& func, Args ... args)
-			{
-				for (uint32_t i = 0; i < chunk->GetSize(); ++i) {
-					func(args[i]...);
-				}
+				_internal::Foreach(chunk, func, arg1, arg2, arg3, arg4);
 			}
 		}
 	}

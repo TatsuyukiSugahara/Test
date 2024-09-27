@@ -1,6 +1,5 @@
 #pragma once
 #include "IComponent.h"
-#include "../EnginePreCompile.h"
 
 
 namespace engine
@@ -14,15 +13,14 @@ namespace engine
 		{
 		private:
 			TypeInfo typeList_[MAX_COMPONENT_SIZE];
-			size_t archetypeMemorySize_;
-			size_t archetypeSize_;
+			/** 特別に初期化 */
+			size_t archetypeMemorySize_ = 0;
+			size_t archetypeSize_ = 0;
 
 
 
 
 		public:
-			Archetype() : archetypeMemorySize_(0), archetypeSize_(0) {}
-
 			constexpr bool operator==(const Archetype& other) const
 			{
 				if (archetypeSize_ != other.archetypeSize_) {
@@ -71,8 +69,8 @@ namespace engine
 			template <typename T>
 			constexpr Archetype& AddType()
 			{
-				EngineAssert(archetypeSize_ > 0);
-				EngineAssert(archetypeSize_ < ArraySize(typeList_));
+				//EngineAssert(archetypeSize_ > 0);
+				//EngineAssert(archetypeSize_ < ArraySize(typeList_));
 
 				size_t insertIndex = archetypeSize_;
 				constexpr auto newType = TypeInfo::Create<T>();
@@ -95,12 +93,11 @@ namespace engine
 			/**
 			 * 指定したコンポーネントが登録されているIndex取得
 			 */
-			template <typename T, typename  std::enable_if_t<IsComponent<T>>>
+			template <typename T/*, typename  std::enable_if_t<IsComponent<T>>*/>
 			constexpr size_t GetIndex() const
 			{
-				const auto targetType = TypeInfo::Create<T>();
 				for (size_t i = 0; archetypeSize_; ++i) {
-					if (typeList_[i] == targetType) {
+					if (typeList_[i] == TypeInfo::Create<T>()) {
 						return i;
 					}
 				}
@@ -112,14 +109,12 @@ namespace engine
 			/**
 			 * 指定したComponentまでのメモリサイズ取得
 			 */
-			template <typename T, typename = std::enable_if_t<IsComponent<T>>>
+			template <typename T/*, typename = std::enable_if_t<IsComponent<T>>*/>
 			constexpr size_t GetOffset() const
 			{
 				size_t result = 0;
-
-				const auto targetType = TypeInfo::Create<T>();
 				for (size_t i = 0; i < archetypeSize_; ++i) {
-					if (typeList_[i] == targetType) {
+					if (typeList_[i] == TypeInfo::Create<T>()) {
 						break;
 					}
 					result += typeList_[i].GetSize();
@@ -161,7 +156,7 @@ namespace engine
 			 */
 			constexpr size_t GetSize(const size_t index) const
 			{
-				EngineAssert(index < archetypeSize_);
+				//EngineAssert(index < archetypeSize_);
 				return typeList_[index].GetSize();
 			}
 
@@ -228,10 +223,10 @@ namespace engine
 
 
 		private:
-			template <typename Head, typename ...Tails, typename = std::enable_if_t<IsComponent<Head>>>
+			template <typename Head, typename ...Tails/*, typename = std::enable_if_t<IsComponent<Head>>*/>
 			constexpr void CreateImpl()
 			{
-				EngineAssert(archetypeSize_ < ArraySize(typeList_));
+				//EngineAssert(archetypeSize_ < ArraySize(typeList_));
 				typeList_[archetypeSize_] = TypeInfo::Create<Head>();
 				++archetypeSize_;
 				if constexpr (sizeof...(Tails) != 0) {

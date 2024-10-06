@@ -37,6 +37,9 @@
     <Filter Include="Engine\ECS">
       <UniqueIdentifier>{d90cc128-47d8-4d9f-8ac5-59ba19967b65}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Application\ECS">
+      <UniqueIdentifier>{dd20472a-3dcc-46aa-a0f6-a307ef217f92}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Engine\Graphics\RenderContext.cpp">
@@ -84,12 +87,6 @@
     <ClCompile Include="Engine\HID\Input.cpp">
       <Filter>Engine\HID</Filter>
     </ClCompile>
-    <ClCompile Include="Engine\Component\Component.cpp">
-      <Filter>Engine\Component</Filter>
-    </ClCompile>
-    <ClCompile Include="Engine\Component\BodyComponent.cpp">
-      <Filter>Engine\Component</Filter>
-    </ClCompile>
     <ClCompile Include="Engine\Component\TransformComponent.cpp">
       <Filter>Engine\Component</Filter>
     </ClCompile>
@@ -110,6 +107,15 @@
     </ClCompile>
     <ClCompile Include="Engine\ECS\System.cpp">
       <Filter>Engine\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\JobSystem.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Component\BodyComponentSystem.cpp">
+      <Filter>Engine\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Application\ECS\ActorComponentSystem.cpp">
+      <Filter>Application\ECS</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -167,14 +173,8 @@
     <ClInclude Include="Engine\HID\Input.h">
       <Filter>Engine\HID</Filter>
     </ClInclude>
-    <ClInclude Include="Engine\Component\Component.h">
-      <Filter>Engine\Component</Filter>
-    </ClInclude>
     <ClInclude Include="Engine\GameObject\GameObject.h">
       <Filter>Engine\GameObject</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\Component\BodyComponent.h">
-      <Filter>Engine\Component</Filter>
     </ClInclude>
     <ClInclude Include="Engine\Component\TransformComponent.h">
       <Filter>Engine\Component</Filter>
@@ -214,6 +214,15 @@
     </ClInclude>
     <ClInclude Include="Engine\ECS\ECS.h">
       <Filter>Engine\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\JobSystem.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Component\BodyComponentSystem.h">
+      <Filter>Engine\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\ECS\ActorComponentSystem.h">
+      <Filter>Application\ECS</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

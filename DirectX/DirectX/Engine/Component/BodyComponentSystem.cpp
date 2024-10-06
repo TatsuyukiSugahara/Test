@@ -39,9 +39,7 @@ namespace engine
 						break;
 					}
 
-					if (!staticMesh_.Initialize(meshResouce_, gpuResource_, engine::graphics::StaticMesh::ShaderType::NormalModel)) {
-						break;
-					}
+					staticMesh_.Initialize(meshResouce_, gpuResource_, engine::graphics::StaticMesh::ShaderType::NormalModel);
 					componentState_ = ComponentState::Completed;
 					/** FALL THROUGH */
 				}

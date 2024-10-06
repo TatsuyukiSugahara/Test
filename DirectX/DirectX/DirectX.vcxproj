@@ -163,6 +163,7 @@
     <ClCompile Include="Engine\Graphics\Shader.cpp" />
     <ClCompile Include="Engine\Graphics\StaticMesh.cpp" />
     <ClCompile Include="Engine\HID\Input.cpp" />
+    <ClCompile Include="Engine\JobSystem.cpp" />
     <ClCompile Include="Engine\Math\Matrix.cpp" />
     <ClCompile Include="Engine\Math\Vector.cpp" />
     <ClCompile Include="Engine\Physics\BulletPhysics.cpp" />
@@ -197,6 +198,7 @@
     <ClInclude Include="Engine\Graphics\Shader.h" />
     <ClInclude Include="Engine\Graphics\StaticMesh.h" />
     <ClInclude Include="Engine\HID\Input.h" />
+    <ClInclude Include="Engine\JobSystem.h" />
     <ClInclude Include="Engine\Math\Matrix.h" />
     <ClInclude Include="Engine\Math\Utility.h" />
     <ClInclude Include="Engine\Math\Vector.h" />

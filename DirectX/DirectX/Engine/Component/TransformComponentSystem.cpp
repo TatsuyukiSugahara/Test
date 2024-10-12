@@ -1,6 +1,6 @@
 #include "../EnginePreCompile.h"
 #include "../Engine.h"
-#include "TransformComponent.h"
+#include "TransformComponentSystem.h"
 
 namespace engine
 {
@@ -122,6 +122,35 @@ namespace engine
 
 		TransformComponent::~TransformComponent()
 		{
+		}
+
+
+
+
+		/*******************************************/
+
+
+		HierarcicalTransformSystem* HierarcicalTransformSystem::instance_ = nullptr;
+
+
+		HierarcicalTransformSystem::HierarcicalTransformSystem()
+		{
+			instance_ = this;
+		}
+
+
+		HierarcicalTransformSystem::~HierarcicalTransformSystem()
+		{
+			instance_ = nullptr;
+		}
+
+
+		void HierarcicalTransformSystem::Update()
+		{
+			engine::ecs::Foreach<TransformComponent>([](TransformComponent* component)
+				{
+					component->transform.UpdateTransform();
+				});
 		}
 	}
 }

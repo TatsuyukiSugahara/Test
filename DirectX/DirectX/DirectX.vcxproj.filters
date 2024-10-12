@@ -87,9 +87,6 @@
     <ClCompile Include="Engine\HID\Input.cpp">
       <Filter>Engine\HID</Filter>
     </ClCompile>
-    <ClCompile Include="Engine\Component\TransformComponent.cpp">
-      <Filter>Engine\Component</Filter>
-    </ClCompile>
     <ClCompile Include="Engine\Physics\Physics.cpp">
       <Filter>Engine\Physics</Filter>
     </ClCompile>
@@ -116,6 +113,9 @@
     </ClCompile>
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp">
       <Filter>Application\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Component\TransformComponentSystem.cpp">
+      <Filter>Engine\Component</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -176,9 +176,6 @@
     <ClInclude Include="Engine\GameObject\GameObject.h">
       <Filter>Engine\GameObject</Filter>
     </ClInclude>
-    <ClInclude Include="Engine\Component\TransformComponent.h">
-      <Filter>Engine\Component</Filter>
-    </ClInclude>
     <ClInclude Include="Engine\Physics\Physics.h">
       <Filter>Engine\Physics</Filter>
     </ClInclude>
@@ -223,6 +220,9 @@
     </ClInclude>
     <ClInclude Include="Application\ECS\ActorComponentSystem.h">
       <Filter>Application\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Component\TransformComponentSystem.h">
+      <Filter>Engine\Component</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

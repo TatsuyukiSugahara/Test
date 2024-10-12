@@ -5,7 +5,7 @@
 #include "../Engine/ECS/ECS.h"
 
 // @todo for test
-#include "../Engine/Component/TransformComponent.h"
+#include "../Engine/Component/TransformComponentSystem.h"
 #include "../Engine/Component/BodyComponentSystem.h"
 #include "../Engine/Resource/Resource.h"
 #include "../Engine/Graphics/Camera.h"
@@ -38,13 +38,19 @@ namespace app
 
 		// @todo for test
 		engine::Camera* camera = engine::CameraManager::Get().GetCamera(engine::CameraType::Main);
-		camera->SetPosition(engine::math::Vector3(0.0f, 0.0f, 1.0f));
+		camera->SetPosition(engine::math::Vector3(0.0f, 0.0f, 3.0f));
 		camera->SetTarget(engine::math::Vector3(0.0f, 0.0f, 0.0f));
 		camera->SetNear(0.01f);
 		camera->Update();
 
 		// @todo for test
-		engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::StaticMeshComponent>();
+		auto entitiy = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::BoxStaticMeshComponent>();
+		engine::ecs::BoxStaticMeshComponent* boxComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::BoxStaticMeshComponent>(entitiy);
+		boxComponent->Initialize();
+		engine::ecs::TransformComponent* transformComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::TransformComponent>(entitiy);
+		transformComponent->transform.localPosition.Set(0.0f);
+		transformComponent->transform.localAngle.Set(0.0f);
+		transformComponent->transform.localScale.Set(1.0f);
 
 		//app::scene::SceneManager::Create();
 		//engine::GameObjectManager::Create();
@@ -96,6 +102,7 @@ namespace app
 
 
 		// ƒVƒXƒeƒ€“o˜^
+		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::HierarcicalTransformSystem>();
 		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::RenderSystem>();
 	}
 

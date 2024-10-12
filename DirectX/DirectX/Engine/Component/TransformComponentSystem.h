@@ -1,6 +1,5 @@
 #pragma once
-#include "../ECS/IComponent.h"
-
+#include "../ECS/ECS.h"
 
 namespace engine
 {
@@ -65,6 +64,27 @@ namespace engine
 
 		public:
 			//engine::math::Vector3 GetFront() const;
+		};
+
+
+		
+
+		class HierarcicalTransformSystem : public ecs::SystemBase
+		{
+		public:
+			HierarcicalTransformSystem();
+			~HierarcicalTransformSystem();
+
+			void Update();
+
+
+		private:
+			static HierarcicalTransformSystem* instance_;
+
+
+		public:
+			static HierarcicalTransformSystem& Get() { return *instance_; }
+			static bool IsAvailable() { return instance_ != nullptr; }
 		};
 	}
 }

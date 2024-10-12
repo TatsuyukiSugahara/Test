@@ -101,8 +101,7 @@ namespace engine
 			template <typename T>
 			T* GetComponent(const Entity& entity)
 			{
-				const auto chunkIndex = GetChunkIndex(entity.chunkIndex);
-				return chunkList_[chunkIndex].GetComponent<T>(entity);
+				return chunkList_[entity.chunkIndex].GetComponent<T>(entity);
 			}
 
 
@@ -112,8 +111,7 @@ namespace engine
 			template <typename T>
 			void SetComponent(const Entity& entity)
 			{
-				const auto chunkIndex = GetChunkIndex(entity.chunkIndex);
-				chunkList_[chunkIndex].SetComponent<T>(entity);
+				chunkList_[entity.chunkIndex].SetComponent<T>(entity);
 			}
 
 

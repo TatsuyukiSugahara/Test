@@ -17,6 +17,7 @@ namespace engine
 			enum class ShaderType
 			{
 				NormalModel,
+				SimpleBox,
 			};
 
 		private:

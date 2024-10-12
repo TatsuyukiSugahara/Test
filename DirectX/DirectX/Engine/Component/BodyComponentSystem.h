@@ -8,6 +8,36 @@ namespace engine
 {
 	namespace ecs
 	{
+		class BoxStaticMeshComponent : public engine::ecs::IComponent
+		{
+			ecsComponent(engine::ecs::BoxStaticMeshComponent);
+
+		private:
+			enum class ComponentState : uint8_t
+			{
+				Loading,
+				Completed,
+			};
+
+		private:
+			ComponentState componentState_;
+
+			engine::graphics::StaticMesh staticMesh_;
+
+
+		public:
+			void Initialize();
+			void Update();
+
+
+		public:
+			inline bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
+
+
+		public:
+			inline engine::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
+		};
+
 		class StaticMeshComponent : public engine::ecs::IComponent
 		{
 			ecsComponent(engine::ecs::StaticMeshComponent);

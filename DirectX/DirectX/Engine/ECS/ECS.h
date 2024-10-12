@@ -37,7 +37,7 @@ namespace engine
 		template<class T1, class T2, typename Func>
 		void Foreach(Func&& func)
 		{
-			auto chunkList = EntityManager::Get().GetChunkList<T1>();
+			auto chunkList = EntityManager::Get().GetChunkList<T1, T2>();
 			for (auto&& chunk : chunkList) {
 				auto arg1 = chunk->template GetComponentArray<T1>();
 				auto arg2 = chunk->template GetComponentArray<T2>();
@@ -49,7 +49,7 @@ namespace engine
 		template<class T1, class T2, class T3, typename Func>
 		void Foreach(Func&& func)
 		{
-			auto chunkList = EntityManager::Get().GetChunkList<T1>();
+			auto chunkList = EntityManager::Get().GetChunkList<T1, T2, T3>();
 			for (auto&& chunk : chunkList) {
 				auto arg1 = chunk->template GetComponentArray<T1>();
 				auto arg2 = chunk->template GetComponentArray<T2>();
@@ -62,7 +62,7 @@ namespace engine
 		template<class T1, class T2, class T3, class T4, typename Func>
 		void Foreach(Func&& func)
 		{
-			auto chunkList = EntityManager::Get().GetChunkList<T1>();
+			auto chunkList = EntityManager::Get().GetChunkList<T1, T2, T3, T4>();
 			for (auto&& chunk : chunkList) {
 				auto arg1 = chunk->template GetComponentArray<T1>();
 				auto arg2 = chunk->template GetComponentArray<T2>();

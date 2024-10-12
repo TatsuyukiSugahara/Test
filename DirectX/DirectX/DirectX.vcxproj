@@ -151,7 +151,7 @@
     <ClCompile Include="Application\Main.cpp" />
     <ClCompile Include="Application\Scene\Scene.cpp" />
     <ClCompile Include="Engine\Component\BodyComponentSystem.cpp" />
-    <ClCompile Include="Engine\Component\TransformComponent.cpp" />
+    <ClCompile Include="Engine\Component\TransformComponentSystem.cpp" />
     <ClCompile Include="Engine\ECS\Chunk.cpp" />
     <ClCompile Include="Engine\ECS\EntityManager.cpp" />
     <ClCompile Include="Engine\ECS\System.cpp" />
@@ -179,7 +179,7 @@
     <ClInclude Include="Application\Utility.h" />
     <ClInclude Include="Engine\Application.h" />
     <ClInclude Include="Engine\Component\BodyComponentSystem.h" />
-    <ClInclude Include="Engine\Component\TransformComponent.h" />
+    <ClInclude Include="Engine\Component\TransformComponentSystem.h" />
     <ClInclude Include="Engine\ECS\Archetype.h" />
     <ClInclude Include="Engine\ECS\Chunk.h" />
     <ClInclude Include="Engine\ECS\ComponentArray.h" />

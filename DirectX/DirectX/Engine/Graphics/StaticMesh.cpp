@@ -17,6 +17,7 @@ namespace engine
 			};
 			ShaderInformation shaderInformations[] = {
 				{ "Assets/Shader/Model.fx", "VSMain", "Assets/Shader/Model.fx", "PSMain"},
+				{ "Assets/Shader/SimpleBox.fx", "VSMain", "Assets/Shader/SimpleBox.fx", "PSMain"},
 			};
 		}
 
@@ -64,13 +65,15 @@ namespace engine
 			psShader_.Load(shaderInformation.psFileNme, shaderInformation.psFuncName, engine::graphics::Shader::ShaderType::PS);
 
 			// 使用するテクスチャのサンプラー設定
-			D3D11_SAMPLER_DESC samplerDesc;
-			engine::memory::Clear(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
-			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-			samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-			samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-			samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-			samplerState_.Create(samplerDesc);
+			if (gpuResource_) {
+				D3D11_SAMPLER_DESC samplerDesc;
+				engine::memory::Clear(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
+				samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+				samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+				samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+				samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+				samplerState_.Create(samplerDesc);
+			}
 
 			// 定数バッファ生成
 			constantBuffer_.Create(nullptr, sizeof(engine::graphics::VSConstantBuffer));
@@ -111,8 +114,8 @@ namespace engine
 
 			if (gpuResource_) {
 				context.PSSetShaderResource(0, *gpuResource_->GetShaderResourceView());
+				context.PsSetSampler(0, samplerState_);
 			}
-			context.PsSetSampler(0, samplerState_);
 
 			context.VSSetShader(vsShader_);
 			context.PSSetShader(psShader_);

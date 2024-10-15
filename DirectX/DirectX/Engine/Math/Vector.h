@@ -131,6 +131,11 @@ namespace engine
 				z = z / v.z;
 				return out;
 			}
+			/** ƒ[ƒ‚© */
+			inline bool IsZero() const
+			{
+				return x == 0.0f && y == 0.0f && z == 0.0f;
+			}
 			/** ˆê’v‚·‚é‚© */
 			inline bool IsEquals(const Vector3& v, const float value = FLT_EPSILON) const
 			{

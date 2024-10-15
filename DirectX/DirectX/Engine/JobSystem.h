@@ -6,19 +6,23 @@
 #include <queue>
 #include <mutex>
 #include <functional>
+#include <future>
 
 
 namespace engine
 {
+	using JobHandle = std::shared_future<void>;
+
 
 	class JobSystem
 	{
 	private:
 		using JobFunction = std::function<void()>;
+		using JobPackagedTask = std::packaged_task<void()>;
 
 	private:
 		/** ジョブ */
-		std::queue<JobFunction> jobQueue_;
+		std::queue<JobPackagedTask> jobQueue_;
 		std::mutex jobQueueMutex_;
 
 		/** ワーカースレッド */
@@ -46,19 +50,42 @@ namespace engine
 		}
 
 		/** ジョブを追加 */
-		void Schedule(const JobFunction& job)
+		JobHandle Schedule(const JobFunction& job)
 		{
+			JobPackagedTask task(job);
+			auto future = task.get_future().share();
 			{
 				std::lock_guard<std::mutex> lock(jobQueueMutex_);
 				jobCounter_.fetch_add(1);		// ジョブ追加
 				completedFlag_.store(false);	// 未完了
 
 				// ジョブ追加
-				jobQueue_.push(job);
+				jobQueue_.push(std::move(task));
 			}
 			// 待機中のワーカースレッドを一つ起こす
 			condition_.notify_one();
+			return future;
 		}
+		/** ジョブを追加(依存関係設定) */
+		JobHandle Schedule(const JobFunction& job, const std::vector<JobHandle>& dependencies)
+		{
+			// 指定ジョブに依存ジョブが終わるまで待機する処理を追加
+			auto wrapper = [job, dependencies]()
+				{
+					// 全ての依存ジョブが終わるまで待機
+					for (auto& depend : dependencies) {
+						if (depend.valid()) {
+							depend.wait();
+						}
+					}
+
+					job();
+				};
+
+			return Schedule(wrapper);
+		}
+
+
 		/** 全ジョブが完了するまで待機 */
 		void WaitForAll() const
 		{
@@ -71,7 +98,7 @@ namespace engine
 		{
 			// 無限ループで待機と実行を繰り返す
 			while (true) {
-				JobFunction job;
+				JobPackagedTask job;
 				{
 					// 条件による待機なのでunique_lockに
 					std::unique_lock<std::mutex> lock(jobQueueMutex_);

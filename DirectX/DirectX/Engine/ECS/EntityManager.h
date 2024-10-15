@@ -2,6 +2,7 @@
 #include "Chunk.h"
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 
 namespace engine
@@ -12,7 +13,7 @@ namespace engine
 		{
 		private:
 			std::vector<Chunk> chunkList_;
-
+			std::unordered_map<uint32_t, Entity> entityHandles_;
 
 
 		private:
@@ -20,6 +21,7 @@ namespace engine
 			~EntityManager()
 			{
 				chunkList_.clear();
+				entityHandles_.clear();
 			}
 
 
@@ -41,6 +43,32 @@ namespace engine
 			 * エンティティ破棄
 			 */
 			void DestroyEntity(const Entity& entity);
+			void DestroyEntity(const EntityHandle& handle);
+
+
+		public:
+			inline EntityHandle GetHandle(const Entity& entity)
+			{
+				for (auto& it : entityHandles_) {
+					if (it.second == entity) {
+						return EntityHandle(it.first);
+					}
+				}
+				// 見つからなかった
+				return EntityHandle();
+			}
+
+
+			inline bool IsValid(const EntityHandle& handle) const
+			{
+				const auto& it = entityHandles_.find(handle.handleIndex);
+				if (it != entityHandles_.end()) {
+					return true;
+				}
+				return false;
+			}
+
+
 
 
 		public:
@@ -84,14 +112,23 @@ namespace engine
 			{
 				auto newArchetype = chunkList_[entity.chunkIndex].GetArchetype();
 				newArchetype.AddType<T>();
-				const auto newChunkIndex = GetChunkIndex(newArchetype);
+				auto newChunkIndex = GetChunkIndex(newArchetype);
 				if (newChunkIndex == chunkList_.size()) {
 					newChunkIndex = CreateChunk(newArchetype);
 				}
 
+				// Entity情報が変わるので一旦取得
+				EntityHandle entityHandle = GetHandle(entity);
+
 				auto& chunk = chunkList_[newChunkIndex];
 				chunkList_[entity.chunkIndex].MoveEntity(entity, chunk);
 				entity.chunkIndex = newChunkIndex;
+
+				// EntityHandleのEntity情報変更
+				const auto& it = entityHandles_.find(entityHandle.handleIndex);
+				if (it != entityHandles_.end()) {
+					it->second = entity;
+				}
 			}
 			
 
@@ -102,6 +139,15 @@ namespace engine
 			T* GetComponent(const Entity& entity)
 			{
 				return chunkList_[entity.chunkIndex].GetComponent<T>(entity);
+			}
+			template <typename T>
+			T* GetComponent(const EntityHandle& handle)
+			{
+				const auto& it = entityHandles_.find(handle.handleIndex);
+				if (it != entityHandles_.end()) {
+					return GetComponent<T>(it->second);
+				}
+				return nullptr;
 			}
 
 

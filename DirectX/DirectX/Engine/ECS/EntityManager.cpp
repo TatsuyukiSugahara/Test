@@ -19,13 +19,30 @@ namespace engine
 			auto entity = chunkList_[chunkIndex].CreateEntity();
 			entity.chunkIndex = chunkIndex;
 
+			uint32_t entityHandleIndex = entityHandles_.size();
+			entityHandles_.insert(std::pair<uint32_t, Entity>(entityHandleIndex, entity));
+
 			return entity;
 		}
 
 
 		void EntityManager::DestroyEntity(const Entity& entity)
 		{
+			DestroyEntity(GetHandle(entity));
+		}
+
+
+		void EntityManager::DestroyEntity(const EntityHandle& handle)
+		{
+			if (!IsValid(handle)) {
+				return;
+			}
+			const auto& it = entityHandles_.find(handle.handleIndex);
+			auto entity = it->second;
+
 			chunkList_[entity.chunkIndex].DestroyEntity(entity);
+
+			entityHandles_.erase(handle.handleIndex);
 		}
 
 

@@ -19,9 +19,6 @@
     <Filter Include="Application\Scene">
       <UniqueIdentifier>{af14e523-8193-4aad-9893-996102390b23}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Application\GameObject">
-      <UniqueIdentifier>{ea6ace28-f9d1-41d6-9cbb-5a116df41df6}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Engine\Resource">
       <UniqueIdentifier>{0dd3f527-688b-4000-a85f-54637f175461}</UniqueIdentifier>
     </Filter>
@@ -39,6 +36,9 @@
     </Filter>
     <Filter Include="Application\ECS">
       <UniqueIdentifier>{dd20472a-3dcc-46aa-a0f6-a307ef217f92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Application\Actor">
+      <UniqueIdentifier>{6ca76a0e-faaa-433d-8b01-adf2ccafc9d2}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -78,9 +78,6 @@
     <ClCompile Include="Application\Scene\Scene.cpp">
       <Filter>Application\Scene</Filter>
     </ClCompile>
-    <ClCompile Include="Application\GameObject\Actor.cpp">
-      <Filter>Application\GameObject</Filter>
-    </ClCompile>
     <ClCompile Include="Engine\Resource\Resource.cpp">
       <Filter>Engine\Resource</Filter>
     </ClCompile>
@@ -116,6 +113,15 @@
     </ClCompile>
     <ClCompile Include="Engine\Component\TransformComponentSystem.cpp">
       <Filter>Engine\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Application\Scene\BattleScene.cpp">
+      <Filter>Application\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Application\Actor\StateMachine.cpp">
+      <Filter>Application\Actor</Filter>
+    </ClCompile>
+    <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp">
+      <Filter>Application\ECS</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -160,9 +166,6 @@
     </ClInclude>
     <ClInclude Include="Application\Scene\Scene.h">
       <Filter>Application\Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="Application\GameObject\Actor.h">
-      <Filter>Application\GameObject</Filter>
     </ClInclude>
     <ClInclude Include="Engine\Application.h">
       <Filter>Engine</Filter>
@@ -223,6 +226,15 @@
     </ClInclude>
     <ClInclude Include="Engine\Component\TransformComponentSystem.h">
       <Filter>Engine\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\Scene\BattleScene.h">
+      <Filter>Application\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\Actor\StateMachine.h">
+      <Filter>Application\Actor</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h">
+      <Filter>Application\ECS</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -145,10 +145,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Application\Actor\StateMachine.cpp" />
     <ClCompile Include="Application\Application.cpp" />
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
-    <ClCompile Include="Application\GameObject\Actor.cpp" />
+    <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp" />
     <ClCompile Include="Application\Main.cpp" />
+    <ClCompile Include="Application\Scene\BattleScene.cpp" />
     <ClCompile Include="Application\Scene\Scene.cpp" />
     <ClCompile Include="Engine\Component\BodyComponentSystem.cpp" />
     <ClCompile Include="Engine\Component\TransformComponentSystem.cpp" />
@@ -172,9 +174,11 @@
     <ClCompile Include="Engine\Resource\Resource.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Application\Actor\StateMachine.h" />
     <ClInclude Include="Application\Application.h" />
     <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
-    <ClInclude Include="Application\GameObject\Actor.h" />
+    <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h" />
+    <ClInclude Include="Application\Scene\BattleScene.h" />
     <ClInclude Include="Application\Scene\Scene.h" />
     <ClInclude Include="Application\Utility.h" />
     <ClInclude Include="Engine\Application.h" />

@@ -1,15 +1,15 @@
 #include "Utility.h"
 #include "Application.h"
 #include "Scene/Scene.h"
-#include "../Engine/GameObject/GameObject.h"
-#include "../Engine/ECS/ECS.h"
+#include "../Engine/HID/Input.h"
+#include "../Engine/Graphics/Camera.h"
+#include "../Engine/Resource/Resource.h"
 
-// @todo for test
+#include "../Engine/ECS/ECS.h"
 #include "../Engine/Component/TransformComponentSystem.h"
 #include "../Engine/Component/BodyComponentSystem.h"
-#include "../Engine/Resource/Resource.h"
-#include "../Engine/Graphics/Camera.h"
-#include "../Engine/HID/Input.h"
+#include "ECS/ActorComponentSystem.h"
+#include "ECS/ActorSteeringComponentSystem.h"
 
 namespace app
 {
@@ -35,25 +35,8 @@ namespace app
 		engine::hid::InputManager::Get().Setup();
 		// カメラ管理生成
 		engine::CameraManager::Initialize();
-
-		// @todo for test
-		engine::Camera* camera = engine::CameraManager::Get().GetCamera(engine::CameraType::Main);
-		camera->SetPosition(engine::math::Vector3(0.0f, 0.0f, 3.0f));
-		camera->SetTarget(engine::math::Vector3(0.0f, 0.0f, 0.0f));
-		camera->SetNear(0.01f);
-		camera->Update();
-
-		// @todo for test
-		auto entitiy = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::BoxStaticMeshComponent>();
-		engine::ecs::BoxStaticMeshComponent* boxComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::BoxStaticMeshComponent>(entitiy);
-		boxComponent->Initialize();
-		engine::ecs::TransformComponent* transformComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::TransformComponent>(entitiy);
-		transformComponent->transform.localPosition.Set(0.0f);
-		transformComponent->transform.localAngle.Set(0.0f);
-		transformComponent->transform.localScale.Set(1.0f);
-
-		//app::scene::SceneManager::Create();
-		//engine::GameObjectManager::Create();
+		// シーン管理生成
+		app::SceneManager::Create();
 
 		return true;
 	}
@@ -61,9 +44,8 @@ namespace app
 
 	void Application::Finalize()
 	{
-		//app::scene::SceneManager::Release();
-		//engine::GameObjectManager::Release();
-
+		// シーン管理破棄
+		app::SceneManager::Release();
 		// ECS関連破棄
 		engine::ecs::EntityManager::Finalize();
 		engine::ecs::SystemManager::Finalize();
@@ -76,9 +58,6 @@ namespace app
 
 	void Application::Update(engine::graphics::RenderContext& context)
 	{
-		//app::scene::SceneManager::Get().Update();
-		//engine::GameObjectManager::Get().Execute(context);
-
 		// システム更新
 		engine::ecs::SystemManager::Get().Update();
 
@@ -86,6 +65,8 @@ namespace app
 		engine::res::ResourceManager::Get().Update();
 		// 入力管理更新
 		engine::hid::InputManager::Get().Update();
+		// シーン管理更新
+		app::SceneManager::Get().Update();
 
 
 		// 描画
@@ -102,6 +83,8 @@ namespace app
 
 
 		// システム登録
+		engine::ecs::SystemManager::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
+		engine::ecs::SystemManager::Get().AddSystem<app::ecs::ActorStateMachineSystem>();
 		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::HierarcicalTransformSystem>();
 		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::RenderSystem>();
 	}

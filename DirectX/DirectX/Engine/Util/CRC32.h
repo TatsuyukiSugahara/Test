@@ -89,7 +89,7 @@ namespace engine
 
 
             // CRC32コードを計算
-			constexpr uint32_t ComputeCrc32Step(unsigned int crc, const char* p, int index, int len)
+			constexpr uint32_t ComputeCrc32Step(unsigned int crc, const char* p, int index, size_t len)
 			{
 				return index >= len ? crc : ComputeCrc32Step(((crc >> 8) & 0x00FFFFFF) ^ CRC32_TABLE[(crc ^ (*(p + index))) & 0xFF], p, index + 1, len);
 			}

@@ -50,4 +50,6 @@
 #include "Math/Matrix.h"
 #include "Math/Utility.h"
 
+#include "Util/CRC32.h"
+
 #include "Utility.h"

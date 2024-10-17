@@ -15,7 +15,6 @@
 
 
 #define ArraySize(ary) (sizeof(ary) / sizeof(ary[0]))
-#define EngineHash32(str) engine::util::Hash32(str)
 
 
 namespace engine
@@ -35,17 +34,6 @@ namespace engine
 
 	namespace util
 	{
-		/** 文字列から32bitハッシュ地計算 */
-		static int32_t Hash32(const char* str)
-		{
-			int32_t hash = 0;
-			int32_t length = static_cast<int32_t>(strlen(str));
-			for (int32_t i = 0; i < length; ++i) {
-				hash = hash * 37 + str[i];
-			}
-			return hash;
-		}
-
 		template <typename T>
 		using Function = std::function<T>;
 	}

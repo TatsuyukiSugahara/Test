@@ -12,7 +12,7 @@ namespace engine
 		/** リソース読み込みクラスに定義 */
 #define engineResourceLoader(name) \
 public:\
-	static int32_t ResourceBankID() { return engine::util::Hash32(#name); }
+	static int32_t ResourceBankID() { return engine::util::ComputeCrc32(#name); }
 
 		/** 無効なリソースバンクID */
 		static constexpr int32_t INVALID_RESOURCE_BANK_ID = 0;

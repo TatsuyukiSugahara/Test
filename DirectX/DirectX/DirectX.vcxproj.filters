@@ -40,6 +40,9 @@
     <Filter Include="Application\Actor">
       <UniqueIdentifier>{6ca76a0e-faaa-433d-8b01-adf2ccafc9d2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Engine\Util">
+      <UniqueIdentifier>{ec0fba07-4c22-4637-9849-565ebf6dd4aa}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Engine\Graphics\RenderContext.cpp">
@@ -235,6 +238,9 @@
     </ClInclude>
     <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h">
       <Filter>Application\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Util\CRC32.h">
+      <Filter>Engine\Util</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

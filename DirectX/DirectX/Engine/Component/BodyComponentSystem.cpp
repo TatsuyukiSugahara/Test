@@ -89,8 +89,8 @@ namespace engine
 				case ComponentState::LoadRequest:
 				{
 					// @todo for test
-					meshResouce_ = engine::res::ResourceManager::Get().Load<engine::res::RefMeshResource, engine::res::FbxLoader>("Assets/Character/SmallFish.fbx");
-					gpuResource_ = engine::res::ResourceManager::Get().Load<engine::res::RefGPUResource, engine::res::TextureLoader>("Assets/Character/SmallFish.png");
+					meshResouce_ = engine::res::ResourceManager::Get().Load<engine::res::MeshResource>("Assets/Character/SmallFish.fbx");
+					gpuResource_ = engine::res::ResourceManager::Get().Load<engine::res::GPUResource>("Assets/Character/SmallFish.png");
 					componentState_ = ComponentState::Loading;
 					/** FALL THROUGH */
 				}

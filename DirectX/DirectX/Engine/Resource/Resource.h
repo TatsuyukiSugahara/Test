@@ -9,13 +9,12 @@ namespace engine
 {
 	namespace res
 	{
-		/** リソース読み込みクラスに定義 */
-#define engineResourceLoader(name) \
+		/** リソースクラスに定義 */
+#define engineResource(name) \
 public:\
-	static int32_t ResourceBankID() { return engine::util::ComputeCrc32(#name); }
+	static int32_t ID() { return engine::util::ComputeCrc32(#name); }
 
-		/** 無効なリソースバンクID */
-		static constexpr int32_t INVALID_RESOURCE_BANK_ID = 0;
+
 
 
 		/**
@@ -31,7 +30,7 @@ public:\
 				Completed,
 			};
 
-		protected:
+		public:
 			void* data_;
 			ResourceState state_;
 
@@ -44,9 +43,6 @@ public:\
 			bool IsLoading() const { return state_ == ResourceState::Loading; }
 			bool IsCompleted() const { return state_ == ResourceState::Completed; }
 			bool IsFaild() const { return state_ == ResourceState::Invalid; }
-
-		public:
-			static uint32_t ResourceBankID() { return INVALID_RESOURCE_BANK_ID; }
 		};
 
 		/**
@@ -54,18 +50,20 @@ public:\
 		 */
 		class ResourceLoaderBase
 		{
+		private:
+			using RefResource = std::shared_ptr<ResourceBase>;
+
 		protected:
 			const char* requestPath_;
+			RefResource resource_;
 
 		public:
-			ResourceLoaderBase() : requestPath_(nullptr) {}
+			ResourceLoaderBase() : requestPath_(nullptr), resource_(nullptr) {}
 			virtual ~ResourceLoaderBase() {}
+			virtual ResourceBase* Create() = 0;
 			virtual void Update() = 0;
-
-			template <typename RefResource>
-			RefResource Create() { return nullptr; }
-
 			void Request(const char* path) { requestPath_ = path; }
+			void SetRefResource(const RefResource& refResource) { resource_ = refResource; }
 		};
 
 
@@ -84,7 +82,7 @@ public:\
 		};
 		class MeshResource : public ResourceBase
 		{
-			friend class FbxLoader;
+			engineResource(engine::res::MeshResource);
 
 		public:
 			MeshResource()
@@ -114,8 +112,6 @@ public:\
 		 */
 		class FbxLoader : public ResourceLoaderBase
 		{
-			engineResourceLoader(FbxLoader);
-
 		private:
 			struct VertexWork
 			{
@@ -127,15 +123,14 @@ public:\
 				VertexWork() : isSetting(false) {}
 			};
 
-		private:
-			RefMeshResource resource_;
-
 		public:
 			FbxLoader();
 			~FbxLoader();
-
+			virtual ResourceBase* Create() override
+			{
+				return new MeshResource();
+			}
 			virtual void Update() override;
-			RefMeshResource Create();
 
 		private:
 			bool Loading();
@@ -176,7 +171,7 @@ public:\
 		};
 		class PMDResource : public ResourceBase
 		{
-			friend class PMDLoader;
+			engineResource(engine::res::PMDResource);
 
 		public:
 			PMDResource()
@@ -208,8 +203,6 @@ public:\
 		 */
 		class PMDLoader : public ResourceLoaderBase
 		{
-			engineResourceLoader(PMDLoader);
-
 		private:
 			struct Vertex
 			{
@@ -220,15 +213,15 @@ public:\
 				uint8_t boneWeight;
 				uint8_t edgeFlg;
 			};
-		private:
-			RefPMDResource resource_;
 
 		public:
 			PMDLoader();
 			~PMDLoader();
-
+			virtual ResourceBase* Create() override
+			{
+				return new PMDResource();
+			}
 			virtual void Update() override;
-			RefPMDResource Create();
 
 		private:
 			bool Loading();
@@ -258,7 +251,7 @@ public:\
 		};
 		class GPUResource : public ResourceBase
 		{
-			friend class TextureLoader;
+			engineResource(engine::res::GPUResource);
 
 		public:
 			GPUResource()
@@ -285,17 +278,14 @@ public:\
 		 */
 		class TextureLoader : public ResourceLoaderBase
 		{
-			engineResourceLoader(TextureLoader);
-
-		private:
-			RefGPUResource resource_;
-
 		public:
 			TextureLoader();
 			~TextureLoader();
-
+			virtual ResourceBase* Create() override
+			{
+				return new GPUResource();
+			}
 			virtual void Update() override;
-			RefGPUResource Create();
 
 		private:
 			bool Loading();
@@ -360,11 +350,18 @@ public:\
 			~ResourceBankBase() {};
 		};
 
-		template <typename RefResource>
+		template <typename Resource>
 		class TResourceBank : public ResourceBankBase
 		{
 		private:
-			std::unordered_map<std::string, RefResource> resourceMap_;
+			using RefResource = std::shared_ptr<Resource>;
+			using ResourceHashMap = std::unordered_map<std::string, RefResource>;
+			using ResourcePair = std::pair<std::string, RefResource>;
+
+
+		private:
+			ResourceHashMap resourceMap_;
+
 
 		public:
 			TResourceBank()
@@ -407,7 +404,7 @@ public:\
 				if (Contains(path)) {
 					return;
 				}
-				resourceMap_.insert(std::pair<std::string, RefResource>(path, refResource));
+				resourceMap_.insert(ResourcePair(path, refResource));
 			}
 		};
 
@@ -439,7 +436,7 @@ public:\
 		{
 		private:
 			std::vector<ResourceLoaderBase*> loaders_;
-			std::unordered_map<int32_t, ResourceBankBase*> bankMap_;
+
 
 		private:
 			ResourceManager();
@@ -451,57 +448,35 @@ public:\
 			void Update();
 
 			/** 読み込み */
-			template <typename RefResource, typename TLoader>
-			RefResource Load(const char* path)
+			template <typename Resource>
+			std::shared_ptr<Resource> Load(const char* path)
 			{
-				TResourceBank<RefResource>* bank = FindBank<TResourceBank<RefResource>>(TLoader::ResourceBankID());
+				TResourceBank<Resource>* bank = FindBank<Resource, TResourceBank<Resource>>();
 				if (bank == nullptr) {
  					EngineAssert(false);
 				}
-				RefResource refResource = bank->Find(path);
+				std::shared_ptr<Resource> refResource = bank->Find(path);
 				if (refResource) {
 					return refResource;
 				}
 
-				TLoader* loader = new TLoader();
+				ResourceLoaderBase* loader = static_cast<ResourceLoaderBase*>(CreateLoader<Resource>());
 				loader->Request(path);
 				loaders_.push_back(loader);
 
-				refResource = loader->Create();
+				Resource* resource = static_cast<Resource*>(loader->Create());
+				refResource = std::make_shared<Resource>(*resource);
+				loader->SetRefResource(refResource);
 				bank->Register(path, refResource);
 
 				return refResource;
 			}
 
-			/** バンクの登録 */
-			template <typename TResourceBank>
-			void RegisterBank(const int32_t bankId)
-			{
-				if (bankMap_.contains(bankId)) {
-					// 登録済み
-					EngineAssert(false);
-					return;
-				}
-				bankMap_.insert(std::pair<int32_t, ResourceBankBase*>(bankId, new TResourceBank()));
-			}
-
-
-		private:
-			/** バンクを探す */
-			template <typename TResourceBank>
-			TResourceBank* FindBank(const int32_t bankId)
-			{
-				auto it = bankMap_.find(bankId);
-				if (it == bankMap_.end()) {
-					return nullptr;
-				}
-				return static_cast<TResourceBank*>(it->second);
-			}
-
 
 		private:
 			void ClearLoaders();
-			void ClearBank();
+
+
 
 
 			/**
@@ -524,6 +499,102 @@ public:\
 					delete instance_;
 					instance_ = nullptr;
 				}
+			}
+
+
+
+
+			/**
+			 * リソースバンク
+			 */
+		private:
+			using BankHashMap = std::unordered_map<uint32_t, ResourceBankBase*>;
+			using BankPair = std::pair<uint32_t, ResourceBankBase*>;
+			static BankHashMap bankMap_;
+
+
+		public:
+			/** バンクの登録 */
+			template <typename Resource, typename TResourceBank>
+			static void RegisterBank()
+			{
+				if (bankMap_.contains(Resource::ID())) {
+					// 登録済み
+					EngineAssert(false);
+					return;
+				}
+				bankMap_.insert(BankPair(Resource::ID(), new TResourceBank()));
+			}
+
+
+			static void ClearBank()
+			{
+				if (bankMap_.size() == 0) {
+					return;
+				}
+				for (auto it : bankMap_) {
+					auto* ptr = it.second;
+					delete ptr;
+					ptr = nullptr;
+				}
+				bankMap_.clear();
+			}
+
+
+
+
+		private:
+			/** バンクを探す */
+			template <typename Resource, typename TResourceBank>
+			TResourceBank* FindBank()
+			{
+				auto it = bankMap_.find(Resource::ID());
+				if (it == bankMap_.end()) {
+					return nullptr;
+				}
+				return static_cast<TResourceBank*>(it->second);
+			}
+
+
+
+
+			/**
+			 * リソース読み込みクラスのリフレクション用
+			 */
+		private:
+			using ReflectionFunc = std::function<void*()>;
+			using ReflectionHashMap = std::unordered_map<uint32_t, ReflectionFunc>;
+			using ReflectionPair = std::pair<uint32_t, ReflectionFunc>;
+
+
+		private:
+			static ReflectionHashMap loaderHashMap_;
+
+
+		public:
+			template <typename Resource, typename Loader>
+			static void Reflection()
+			{
+				loaderHashMap_.insert(ReflectionPair(Resource::ID(), [] { return new Loader(); }));
+			}
+
+
+			static void ClearReflection()
+			{
+				loaderHashMap_.clear();
+			}
+
+
+		private:
+			template<typename Resource>
+			static void* CreateLoader()
+			{
+				const auto& it = loaderHashMap_.find(Resource::ID());
+				if (it != loaderHashMap_.end()) {
+					return it->second();
+				}
+				EngineAssert(false);
+				return nullptr;
 			}
 		};
 	}

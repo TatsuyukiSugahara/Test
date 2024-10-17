@@ -13,8 +13,6 @@ namespace engine
 		 * FBXリソース読み込み
 		 */
 		FbxLoader::FbxLoader()
-			: ResourceLoaderBase()
-			, resource_(nullptr)
 		{
 		}
 
@@ -131,13 +129,6 @@ namespace engine
 		//}
 
 
-		RefMeshResource FbxLoader::Create()
-		{
-			resource_ = RefMeshResource(new MeshResource());
-			return resource_;
-		}
-
-
 		//int32_t FbxLoader::CreateVertexIndex(const VertexWork& vertexWork, const fbxsdk::FbxVector4& normal, const fbxsdk::FbxVector2& uv, std::vector<VertexWork>& vertexWorkList, const int32_t oldIndex, std::vector<math::Vector2Int32>& indexPairList)
 		//{
 		//	// すでに生成されている場合は、そのインデックスを返す
@@ -174,8 +165,6 @@ namespace engine
 
 
 		PMDLoader::PMDLoader()
-			: ResourceLoaderBase()
-			, resource_(nullptr)
 		{
 		}
 
@@ -241,13 +230,6 @@ namespace engine
 		}
 
 
-		RefPMDResource PMDLoader::Create()
-		{
-			resource_ = RefPMDResource(new PMDResource());
-			return resource_;
-		}
-
-
 
 
 		/*******************************************/
@@ -257,8 +239,6 @@ namespace engine
 		 * FBXリソース読み込み
 		 */
 		TextureLoader::TextureLoader()
-			: ResourceLoaderBase()
-			, resource_(nullptr)
 		{
 		}
 
@@ -315,12 +295,6 @@ namespace engine
 			return true;
 		}
 
-
-		RefGPUResource TextureLoader::Create()
-		{
-			resource_ = RefGPUResource(new GPUResource());
-			return resource_;
-		}
 
 		//GPUResource::GPUResource()
 		//	: shaderResourceView_()
@@ -452,21 +426,22 @@ namespace engine
 
 		/*******************************************/
 
-		
+
+		ResourceManager::BankHashMap ResourceManager::bankMap_;
+		ResourceManager::ReflectionHashMap ResourceManager::loaderHashMap_;
+
 		ResourceManager* ResourceManager::instance_ = nullptr;
 
 
 		ResourceManager::ResourceManager()
 		{
 			loaders_.clear();
-			bankMap_.clear();
 		}
 
 
 		ResourceManager::~ResourceManager()
 		{
 			ClearLoaders();
-			ClearBank();
 		}
 
 
@@ -492,20 +467,6 @@ namespace engine
 				loader = nullptr;
 			}
 			loaders_.clear();
-		}
-
-
-		void ResourceManager::ClearBank()
-		{
-			if (bankMap_.size() == 0) {
-				return;
-			}
-			for (auto it : bankMap_) {
-				auto* ptr = it.second;
-				delete ptr;
-				ptr = nullptr;
-			}
-			bankMap_.clear();
 		}
 	}
 }

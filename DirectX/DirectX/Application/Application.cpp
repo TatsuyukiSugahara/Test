@@ -50,6 +50,8 @@ namespace app
 		engine::ecs::EntityManager::Finalize();
 		engine::ecs::SystemManager::Finalize();
 		// ƒŠƒ\[ƒXŠÇ—”jŠü
+		engine::res::ResourceManager::ClearBank();
+		engine::res::ResourceManager::ClearReflection();
 		engine::res::ResourceManager::Finalize();
 		// “ü—ÍŠÇ—”jŠü
 		engine::hid::InputManager::Finalize();
@@ -77,9 +79,13 @@ namespace app
 	void Application::Register()
 	{
 		// ƒŠƒ\[ƒX“o˜^
-		engine::res::ResourceManager::Get().RegisterBank<engine::res::TResourceBank<engine::res::RefGPUResource>>(engine::res::TextureLoader::ResourceBankID());
-		engine::res::ResourceManager::Get().RegisterBank<engine::res::TResourceBank<engine::res::RefMeshResource>>(engine::res::FbxLoader::ResourceBankID());
-		engine::res::ResourceManager::Get().RegisterBank<engine::res::TResourceBank<engine::res::RefPMDResource>>(engine::res::PMDLoader::ResourceBankID());
+		engine::res::ResourceManager::RegisterBank<engine::res::GPUResource, engine::res::TResourceBank<engine::res::GPUResource>>();
+		engine::res::ResourceManager::RegisterBank<engine::res::MeshResource, engine::res::TResourceBank<engine::res::MeshResource>>();
+		engine::res::ResourceManager::RegisterBank<engine::res::PMDResource, engine::res::TResourceBank<engine::res::PMDResource>>();
+
+		engine::res::ResourceManager::Reflection<engine::res::GPUResource, engine::res::TextureLoader>();
+		engine::res::ResourceManager::Reflection<engine::res::MeshResource, engine::res::FbxLoader>();
+		engine::res::ResourceManager::Reflection<engine::res::PMDResource, engine::res::PMDLoader>();
 
 
 		// ƒVƒXƒeƒ€“o˜^

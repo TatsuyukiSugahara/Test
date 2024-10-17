@@ -414,21 +414,6 @@ public:\
 		/*******************************************/
 
 
-		/** ResourceManagerでのLoad関数でLoadを指定しなくて良いようにしたい */
-		//class ResourceLoaderReflection
-		//{
-		//public:
-		//	/** リフレクション用インターフェース */
-		//	class IReflection
-		//	{
-		//	public:
-		//		std::function<void*> createInstance;
-		//	};
-		//};
-
-		/*******************************************/
-
-
 		/**
 		 * リソース管理クラス
 		 */

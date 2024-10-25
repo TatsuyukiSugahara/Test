@@ -14,7 +14,22 @@
 #endif
 
 
+
+
+// 配列数
 #define ArraySize(ary) (sizeof(ary) / sizeof(ary[0]))
+
+
+
+
+// デバッグ出力
+#ifdef _DEBUG
+#define EnginePrintf( fmt , ... ) engine::debug::Printf(fmt, __VA_ARGS__ )
+#else
+#define EnginePrintf( fmt , ... ) ((void)0)
+#endif
+
+
 
 
 namespace engine
@@ -38,21 +53,19 @@ namespace engine
 		using Function = std::function<T>;
 	}
 
-	namespace _internal
+	namespace debug
 	{
-		//void DebugPrintf(const char* format, ...)
-		//{
-		//	wchar_t _format[512];
-		//	size_t ret;
-		//	mbstowcs_s(&ret, _format, format, ArraySize(_format));
+		inline void Printf(const char* format, ...)
+		{
+			char temp[1024];	// これくらいあれば足りるだろう
+			va_list ap;
+			
+			va_start(ap, format);
 
-		//	// これくらいあれば足りるだろう
-		//	TCHAR c[512];
-		//	va_list argList;
-		//	__crt_va_start(argList, _format);
-		//	_stprintf_s(c, _format, argList);
-		//	__crt_va_end(argList);
-		//	OutputDebugString(c);
-		//}
+			vsprintf_s(temp, format, ap);
+			OutputDebugStringA(temp);
+
+			va_end(ap);
+		}
 	}
 }

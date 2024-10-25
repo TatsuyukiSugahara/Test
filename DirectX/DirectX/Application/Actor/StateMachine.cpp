@@ -35,7 +35,7 @@ namespace app
 		{
 			// ˆÚ“®
 			if (!stateMachine_->GetDirection().IsZero()) {
-				stateMachine_->RequestStateID(StateID::Move);
+				stateMachine_->RequestStateID(EngineHash32("Move"));
 			}
 		}
 
@@ -84,7 +84,7 @@ namespace app
 					transformComponent->transform.localPosition.Add(move);
 				}
 			} else {
-				stateMachine_->RequestStateID(StateID::Idle);
+				stateMachine_->RequestStateID(EngineHash32("Idle"));
 			}
 		}
 
@@ -107,13 +107,17 @@ namespace app
 			, direction_(0.0f)
 			, speed_(0.0f)
 		{
-
+			stateHashMap_.clear();
 		}
 
 
 		StateMachine::~StateMachine()
 		{
-
+			for (auto it : stateHashMap_) {
+				delete it.second;
+				it.second = nullptr;
+			}
+			stateHashMap_.clear();
 		}
 
 
@@ -122,24 +126,9 @@ namespace app
 			if (requestStateId_ != INVALID_STATE_ID) {
 				if (currentState_) {
 					currentState_->Exit();
-					delete currentState_;
 				}
-
-				switch (requestStateId_)
-				{
-					case StateID::Idle:
-					{
-						currentState_ = new IdleState(this);
-						break;
-					}
-					case StateID::Move:
-					{
-						currentState_ = new MoveState(this);
-						break;
-					}
-				}
+				currentState_ = stateHashMap_[requestStateId_];
 				currentState_->Entry();
-
 				requestStateId_ = INVALID_STATE_ID;
 			}
 

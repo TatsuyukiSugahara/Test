@@ -6,19 +6,6 @@ namespace app
 {
 	namespace actor
 	{
-		/**
-		 * 状態の種類
-		 */
-		struct StateID
-		{
-			enum
-			{
-				Idle,
-				Move,
-			};
-		};
-
-
 		class StateMachine;
 
 
@@ -82,7 +69,13 @@ namespace app
 		class StateMachine
 		{
 		private:
+			using StateHashMap = std::unordered_map<uint32_t, IState*>;
+			using StatePair = std::pair<uint32_t, IState*>;
+
+
+		private:
 			/** 状態関連 */
+			StateHashMap stateHashMap_;
 			IState* currentState_;
 			uint32_t requestStateId_;
 
@@ -102,6 +95,19 @@ namespace app
 
 
 		public:
+			/** 状態追加 */
+			template <typename T>
+			void AddState(const uint32_t stateId)
+			{
+				auto it = stateHashMap_.find(stateId);
+				if (it != stateHashMap_.end()) {
+					// すでに追加済み
+					EngineAssert(false);
+					return;
+				}
+				stateHashMap_.insert(StatePair(stateId, new T(this)));
+			}
+
 			/** 状態リクエスト */
 			inline void RequestStateID(const uint32_t request) { requestStateId_ = request; }
 

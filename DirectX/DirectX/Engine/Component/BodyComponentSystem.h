@@ -26,7 +26,8 @@ namespace engine
 
 
 		public:
-			void Initialize();
+			BoxStaticMeshComponent();
+			~BoxStaticMeshComponent();
 			void Update();
 
 
@@ -62,7 +63,8 @@ namespace engine
 
 			
 		public:
-			void Initialize();
+			StaticMeshComponent();
+			~StaticMeshComponent();
 			void Update();
 
 

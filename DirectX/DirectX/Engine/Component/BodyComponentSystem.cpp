@@ -43,9 +43,15 @@ namespace engine
 			};
 		}
 
-		void BoxStaticMeshComponent::Initialize()
+
+		BoxStaticMeshComponent::BoxStaticMeshComponent()
+			: componentState_(ComponentState::Loading)
 		{
-			componentState_ = ComponentState::Loading;
+		}
+
+
+		BoxStaticMeshComponent::~BoxStaticMeshComponent()
+		{
 		}
 
 
@@ -72,9 +78,14 @@ namespace engine
 
 
 
-		void StaticMeshComponent::Initialize()
+		StaticMeshComponent::StaticMeshComponent()
+			: componentState_(ComponentState::LoadRequest)
 		{
-			componentState_ = ComponentState::LoadRequest;
+		}
+
+
+		StaticMeshComponent::~StaticMeshComponent()
+		{
 		}
 
 
@@ -137,13 +148,13 @@ namespace engine
 
 		void RenderSystem::Update()
 		{
-			engine::ecs::Foreach<TransformComponent, BoxStaticMeshComponent>([](TransformComponent* transformComponent, BoxStaticMeshComponent* boxStaticMeshComponent)
+			engine::ecs::Foreach<TransformComponent, BoxStaticMeshComponent>([](const engine::ecs::Entity& entity, TransformComponent* transformComponent, BoxStaticMeshComponent* boxStaticMeshComponent)
 				{
 					boxStaticMeshComponent->Update();
 					boxStaticMeshComponent->GetStaticMesh()->Update(transformComponent->transform.position, transformComponent->transform.rotation, transformComponent->transform.scale);
 				});
 
-			engine::ecs::Foreach<TransformComponent, StaticMeshComponent>([](TransformComponent* trasnformComponent, StaticMeshComponent* staticMeshComponent)
+			engine::ecs::Foreach<TransformComponent, StaticMeshComponent>([](const engine::ecs::Entity& entity, TransformComponent* trasnformComponent, StaticMeshComponent* staticMeshComponent)
 				{
 					// ƒŠƒ\[ƒX“Ç‚Ýž‚Ý
 					staticMeshComponent->Update();
@@ -159,12 +170,12 @@ namespace engine
 		void RenderSystem::Render(engine::graphics::RenderContext& context)
 		{
 			const auto* camera = CameraManager::Get().GetCamera(CameraType::Main);
-			engine::ecs::Foreach<BoxStaticMeshComponent>([&context, &camera](BoxStaticMeshComponent* staticMeshComponent)
+			engine::ecs::Foreach<BoxStaticMeshComponent>([&context, &camera](const engine::ecs::Entity& entity, BoxStaticMeshComponent* staticMeshComponent)
 				{
 					if (!staticMeshComponent->IsCompleted()) return;
 					staticMeshComponent->GetStaticMesh()->Render(context, camera->GetViewMatrix(), camera->GetProjectionMatrix());
 				});
-			engine::ecs::Foreach<StaticMeshComponent>([&context, &camera](StaticMeshComponent* staticMeshComponent)
+			engine::ecs::Foreach<StaticMeshComponent>([&context, &camera](const engine::ecs::Entity& entity, StaticMeshComponent* staticMeshComponent)
 				{
 					if (!staticMeshComponent->IsCompleted()) return;
 					staticMeshComponent->GetStaticMesh()->Render(context, camera->GetViewMatrix(), camera->GetProjectionMatrix());

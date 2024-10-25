@@ -35,7 +35,9 @@ namespace engine
 			Entity CreateEntity()
 			{
 				constexpr auto archetype = Archetype::Create<Args...>();
-				return CreateEntity(archetype);
+				auto entity = CreateEntity(archetype);
+				NewComponent<Args...>(entity);
+				return entity;
 			}
 
 
@@ -159,6 +161,63 @@ namespace engine
 			{
 				chunkList_[entity.chunkIndex].SetComponent<T>(entity);
 			}
+
+
+
+
+			/**
+			 * Entity生成時にコンストラクタを呼ぶため配置New
+			 */
+		private:
+#define newComponent(T) new(chunkList_[entity.chunkIndex].GetComponent<T>(entity)) T();
+
+			template<typename T1>
+			void NewComponent(const Entity& entity)
+			{
+				newComponent(T1);
+			}
+			template<typename T1, typename T2>
+			void NewComponent(const Entity& entity)
+			{
+				newComponent(T1);
+				newComponent(T2);
+			}
+			template<typename T1, typename T2, typename T3>
+			void NewComponent(const Entity& entity)
+			{
+				newComponent(T1);
+				newComponent(T2);
+				newComponent(T3);
+			}
+			template<typename T1, typename T2, typename T3, typename T4>
+			void NewComponent(const Entity& entity)
+			{
+				newComponent(T1);
+				newComponent(T2);
+				newComponent(T3);
+				newComponent(T4);
+			}
+			template<typename T1, typename T2, typename T3, typename T4, typename T5>
+			void NewComponent(const Entity& entity)
+			{
+				newComponent(T1);
+				newComponent(T2);
+				newComponent(T3);
+				newComponent(T4);
+				newComponent(T5);
+			}
+			template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6>
+			void NewComponent(const Entity& entity)
+			{
+				newComponent(T1);
+				newComponent(T2);
+				newComponent(T3);
+				newComponent(T4);
+				newComponent(T5);
+				newComponent(T6);
+			}
+
+#undef newComponent
 
 
 

@@ -34,7 +34,7 @@ namespace app
 			}
 
 
-			engine::ecs::Foreach<CharacterSteeringComponent>([direction, speed](CharacterSteeringComponent* component)
+			engine::ecs::Foreach<CharacterSteeringComponent>([direction, speed](const engine::ecs::Entity& entity, CharacterSteeringComponent* component)
 				{
 					if (!engine::ecs::EntityManager::Get().IsValid(component->GetTarget())) {
 						return;

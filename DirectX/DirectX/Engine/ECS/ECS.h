@@ -16,20 +16,23 @@ namespace engine
 			template<typename Func, class... Args>
 			static void Foreach(Chunk* chunk, Func&& func, Args ... args)
 			{
+				const uint32_t chunkIndex = EntityManager::Get().GetChunkIndex(chunk->GetArchetype());
 				for (uint32_t i = 0; i < chunk->GetSize(); ++i) {
-					func(&args[i]...);
+					Entity entity(chunkIndex, i);
+					func(entity , &args[i]...);
 				}
 			}
 		}
 
+
+#define getArg(T) chunk->template GetComponentArray<T>()
 
 		template<class T1, typename Func>
 		void Foreach(Func&& func)
 		{
 			auto chunkList = EntityManager::Get().GetChunkList<T1>();
 			for (auto&& chunk : chunkList) {
-				auto arg1 = chunk->template GetComponentArray<T1>();
-				_internal::Foreach(chunk, func, arg1);
+				_internal::Foreach(chunk, func, getArg(T1));
 			}
 		}
 
@@ -39,9 +42,7 @@ namespace engine
 		{
 			auto chunkList = EntityManager::Get().GetChunkList<T1, T2>();
 			for (auto&& chunk : chunkList) {
-				auto arg1 = chunk->template GetComponentArray<T1>();
-				auto arg2 = chunk->template GetComponentArray<T2>();
-				_internal::Foreach(chunk, func, arg1, arg2);
+				_internal::Foreach(chunk, func, getArg(T1), getArg(T2));
 			}
 		}
 
@@ -51,10 +52,7 @@ namespace engine
 		{
 			auto chunkList = EntityManager::Get().GetChunkList<T1, T2, T3>();
 			for (auto&& chunk : chunkList) {
-				auto arg1 = chunk->template GetComponentArray<T1>();
-				auto arg2 = chunk->template GetComponentArray<T2>();
-				auto arg3 = chunk->template GetComponentArray<T3>();
-				_internal::Foreach(chunk, func, arg1, arg2, arg3);
+				_internal::Foreach(chunk, func, getArg(T1), getArg(T2), getArg(T3));
 			}
 		}
 
@@ -64,12 +62,30 @@ namespace engine
 		{
 			auto chunkList = EntityManager::Get().GetChunkList<T1, T2, T3, T4>();
 			for (auto&& chunk : chunkList) {
-				auto arg1 = chunk->template GetComponentArray<T1>();
-				auto arg2 = chunk->template GetComponentArray<T2>();
-				auto arg3 = chunk->template GetComponentArray<T3>();
-				auto arg4 = chunk->template GetComponentArray<T4>();
-				_internal::Foreach(chunk, func, arg1, arg2, arg3, arg4);
+				_internal::Foreach(chunk, func, getArg(T1), getArg(T2), getArg(T3), getArg(T4));
 			}
 		}
+
+
+		template<class T1, class T2, class T3, class T4, class T5, typename Func>
+		void Foreach(Func&& func)
+		{
+			auto chunkList = EntityManager::Get().GetChunkList<T1, T2, T3, T4, T5>();
+			for (auto&& chunk : chunkList) {
+				_internal::Foreach(chunk, func, getArg(T1), getArg(T2), getArg(T3), getArg(T4), getArg(T5));
+			}
+		}
+
+
+		template<class T1, class T2, class T3, class T4, class T5, class T6, typename Func>
+		void Foreach(Func&& func)
+		{
+			auto chunkList = EntityManager::Get().GetChunkList<T1, T2, T3, T4, T5, T6>();
+			for (auto&& chunk : chunkList) {
+				_internal::Foreach(chunk, func, getArg(T1), getArg(T2), getArg(T3), getArg(T4), getArg(T5), getArg(T6));
+			}
+		}
+
+#undef getArg
 	}
 }

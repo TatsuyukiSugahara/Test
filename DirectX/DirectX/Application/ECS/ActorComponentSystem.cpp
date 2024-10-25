@@ -17,7 +17,7 @@ namespace app
 
 		void ActorStateMachineSystem::Update()
 		{
-			engine::ecs::Foreach<StateMachineComponent>([](StateMachineComponent* component)
+			engine::ecs::Foreach<StateMachineComponent>([](const engine::ecs::Entity& entity, StateMachineComponent* component)
 				{
 					component->GetStateMachine()->Update();
 				});

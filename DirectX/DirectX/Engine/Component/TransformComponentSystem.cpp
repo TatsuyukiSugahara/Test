@@ -147,7 +147,7 @@ namespace engine
 
 		void HierarcicalTransformSystem::Update()
 		{
-			engine::ecs::Foreach<TransformComponent>([](TransformComponent* component)
+			engine::ecs::Foreach<TransformComponent>([](const engine::ecs::Entity& entity, TransformComponent* component)
 				{
 					component->transform.UpdateTransform();
 				});

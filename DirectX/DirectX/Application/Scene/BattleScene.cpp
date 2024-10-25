@@ -43,16 +43,19 @@ namespace app
 			engine::ecs::EntityHandle targetHandle;
 			{
 				auto entity = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::BoxStaticMeshComponent, app::ecs::StateMachineComponent>();
-				engine::ecs::BoxStaticMeshComponent* boxComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::BoxStaticMeshComponent>(entity);
-				boxComponent->Initialize();
 
+				targetHandle = engine::ecs::EntityManager::Get().GetHandle(entity);
+
+				app::ecs::StateMachineComponent* stateMachineComponent = engine::ecs::EntityManager::Get().GetComponent<app::ecs::StateMachineComponent>(entity);
+				stateMachineComponent->GetStateMachine()->AddState<app::actor::IdleState>(EngineHash32("Idle"));
+				stateMachineComponent->GetStateMachine()->AddState<app::actor::MoveState>(EngineHash32("Move"));
+				stateMachineComponent->GetStateMachine()->RequestStateID(EngineHash32("Idle"));
+				stateMachineComponent->GetStateMachine()->SetTargetHandle(targetHandle);
 
 				engine::ecs::TransformComponent* transformComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::TransformComponent>(entity);
 				transformComponent->transform.localPosition.Set(0.0f);
 				transformComponent->transform.localAngle.Set(0.0f);
 				transformComponent->transform.localScale.Set(1.0f);
-
-				targetHandle = engine::ecs::EntityManager::Get().GetHandle(entity);
 			}
 			{
 				auto entity = engine::ecs::EntityManager::Get().CreateEntity<app::ecs::CharacterSteeringComponent>();

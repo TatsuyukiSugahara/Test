@@ -1,6 +1,8 @@
 #include "EnginePreCompile.h"
 #include "Engine.h"
 #include "Application.h"
+#include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
+
 
 namespace engine
 {
@@ -10,14 +12,8 @@ namespace engine
 	Engine::Engine()
 		: hInstance_(nullptr)
 		, hWnd_(nullptr)
-		, driverType_(D3D_DRIVER_TYPE_NULL)
-		, featureLevel_(D3D_FEATURE_LEVEL_11_0)
-		, d3dDevice_(nullptr)
 		, renderContext_()
-		, deviceContext_(nullptr)
-		, swapChain_(nullptr)
 		, currentMainRenderTarget_(0)
-		, mainRenderTargets_{}
 		, screenWidth_(0)
 		, screenHeight_(0)
 		, renderWidth_(0)
@@ -34,11 +30,9 @@ namespace engine
 
 	bool Engine::Initialize(const InitializeParameter& initializeParameter)
 	{
-		// ƒEƒBƒ“ƒhƒE‰Šú‰»
 		if (!InitializeWindow(initializeParameter)) {
 			return false;
 		}
-		// ƒOƒ‰ƒtƒBƒbƒNAPI‰Šú‰»
 		if (!InitializeGraphicsAPI(initializeParameter)) {
 			return false;
 		}
@@ -52,27 +46,14 @@ namespace engine
 
 	void Engine::Finalize()
 	{
-		mainRenderTargets_[0].Release();
-		mainRenderTargets_[1].Release();
-		if (swapChain_) {
-			swapChain_->Release();
-			swapChain_ = nullptr;
-		}
-		if (deviceContext_) {
-			deviceContext_->ClearState();
-			deviceContext_->Release();
-			deviceContext_ = nullptr;
-		}
-		if (d3dDevice_) {
-			d3dDevice_->Release();
-			d3dDevice_ = nullptr;
-		}
-
 		if (application_) {
 			application_->Finalize();
 			delete application_;
 			application_ = nullptr;
 		}
+
+		graphics::GraphicsDevice::Get().Finalize();
+		graphics::GraphicsDevice::Release();
 	}
 
 
@@ -88,7 +69,6 @@ namespace engine
 			}
 			else
 			{
-				//XVB
 				Update();
 			}
 		}
@@ -101,115 +81,51 @@ namespace engine
 		EngineAssert(initializeParameter.screenWidth);
 
 		screenHeight_ = initializeParameter.screenHeight;
-		screenWidth_ = initializeParameter.screenWidth;
+		screenWidth_  = initializeParameter.screenWidth;
+
 		WNDCLASSEX wc = {
 			sizeof(WNDCLASSEX), CS_CLASSDC, MsgProc, 0L, 0L,
 			GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr,
 			TEXT("Application"), nullptr
 		};
 		RegisterClassEx(&wc);
-		hWnd_ = CreateWindow(TEXT("Application"), TEXT("Application"),
+		hWnd_ = CreateWindow(
+			TEXT("Application"), TEXT("Application"),
 			WS_OVERLAPPEDWINDOW, 0, 0, screenWidth_, screenHeight_,
-			nullptr, nullptr, initializeParameter.hInstance, nullptr);
+			nullptr, nullptr, initializeParameter.hInstance, nullptr
+		);
 
 		ShowWindow(hWnd_, initializeParameter.nCmdShow);
-
 		return hWnd_ != nullptr;
 	}
 
 
 	bool Engine::InitializeGraphicsAPI(const InitializeParameter& initializeParameter)
 	{
-		uint32_t createDeviceFlags = 0;
-#ifdef _DEBUG
-		createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-		D3D_DRIVER_TYPE driverTypes[] =
-		{
-			D3D_DRIVER_TYPE_HARDWARE,
-			D3D_DRIVER_TYPE_WARP,
-			D3D_DRIVER_TYPE_REFERENCE,
-		};
-		D3D_FEATURE_LEVEL featureLevels[] =
-		{
-			D3D_FEATURE_LEVEL_11_0,
-			D3D_FEATURE_LEVEL_10_1,
-			D3D_FEATURE_LEVEL_10_0,
-		};
-		uint32_t featureLevelsNum = ARRAYSIZE(featureLevels);
-
+		renderWidth_  = initializeParameter.renderWidth;
 		renderHeight_ = initializeParameter.renderHeight;
-		renderWidth_ = initializeParameter.renderWidth;
-		// ƒXƒƒbƒvƒ`ƒFƒCƒ“¶¬
-		DXGI_SWAP_CHAIN_DESC desc;
-		memory::Clear(&desc, sizeof(desc));
-		desc.BufferCount = 1;
-		desc.BufferDesc.Width = renderWidth_;
-		desc.BufferDesc.Height = renderHeight_;
-		desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		desc.BufferDesc.RefreshRate.Numerator = 60;
-		desc.BufferDesc.RefreshRate.Denominator = 1;
-		desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-		desc.OutputWindow = hWnd_;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Windowed = TRUE;
-		desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-		desc.Flags = 0;
-		//‚·‚×‚Ä‚Ìƒhƒ‰ƒCƒoƒ^ƒCƒv‚ÅƒXƒƒbƒvƒ`ƒFƒCƒ“¶¬‚ğ‚·
-		HRESULT hr = E_FAIL;
-		for (const auto driverType : driverTypes) {
-			driverType_ = driverType;
-			hr = D3D11CreateDeviceAndSwapChain(nullptr, driverType_, nullptr, createDeviceFlags, featureLevels, featureLevelsNum,
-				D3D11_SDK_VERSION, &desc, &swapChain_, &d3dDevice_, &featureLevel_, &deviceContext_);
-			if (SUCCEEDED(hr)) {
-				//ƒXƒƒbƒvƒ`ƒFƒCƒ“‚ğì¬‚Å‚«‚½‚Ì‚Åƒ‹[ƒv‚ğ”²‚¯‚éB
-				break;
-			}
-		}
-		if (FAILED(hr)) {
-			// ƒXƒƒbƒvƒ`ƒFƒCƒ“¶¬¸”s
-			return false;
-		}
-		
-		// ‘‚«‚İæ‚Æ‚È‚éƒŒƒ“ƒ_ƒŠƒ“ƒOƒ^[ƒQƒbƒg¶¬
-		ID3D11Texture2D* backBuffer = nullptr;
-		hr = swapChain_->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer);
-		if (FAILED(hr)) {
-			return false;
-		}
-		DXGI_SAMPLE_DESC sampleDesc;
-		sampleDesc.Count = 1;
-		sampleDesc.Quality = 0;
-		bool ret = mainRenderTargets_[0].Create(renderWidth_, renderHeight_, 1, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT, sampleDesc);
-		ret = mainRenderTargets_[1].Create(renderWidth_, renderHeight_, 1, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT, sampleDesc);
-		if (!ret) {
+
+		// D3D11 å®Ÿè£…ã‚’æ³¨å…¥ (å°†æ¥ D3D12 / Vulkan ã«æ›¿ãˆã‚‹å ´åˆã¯ã“ã“ã ã‘å¤‰ãˆã‚‹)
+		graphics::GraphicsDevice::Create(
+			std::make_unique<graphics::D3D11GraphicsDeviceImpl>()
+		);
+
+		if (!graphics::GraphicsDevice::Get().Initialize(hWnd_, renderWidth_, renderHeight_)) {
 			return false;
 		}
 
-		// ƒŒƒ“ƒ_ƒŠƒ“ƒOƒRƒ“ƒeƒLƒXƒg‰Šú‰»
-		renderContext_.Initialize(deviceContext_);
+		graphics::GraphicsDevice::Get().SetupRenderContext(renderContext_);
+		graphics::GraphicsDevice::Get().SetupDefaultRenderState(renderContext_);
 
-		renderContext_.OMSetRenderTargets(1, &mainRenderTargets_[0]);
-
-		// ƒrƒ…[ƒ|[ƒgİ’è
-		renderContext_.RSSetViewport(0.0f, 0.0f, (FLOAT)renderWidth_, (FLOAT)renderHeight_);
-
-		// ƒ‰ƒXƒ^ƒ‰ƒCƒUİ’è
-		{
-			D3D11_RASTERIZER_DESC desc;
-			memory::Clear(&desc, sizeof(desc));
-			desc.FillMode = D3D11_FILL_SOLID;
-			desc.CullMode = D3D11_CULL_BACK;
-			desc.DepthClipEnable = false;
-			desc.MultisampleEnable = false;
-			desc.DepthBiasClamp = 0;
-			desc.SlopeScaledDepthBias = 0;
-
-			ID3D11RasterizerState* state_;
-			d3dDevice_->CreateRasterizerState(&desc, &state_);
-			renderContext_.RSSetState(state_);
-		}
+		renderContext_.OMSetRenderTargets(
+			1,
+			&graphics::GraphicsDevice::Get().GetMainRenderTarget(0)
+		);
+		renderContext_.RSSetViewport(
+			0.0f, 0.0f,
+			static_cast<float>(renderWidth_),
+			static_cast<float>(renderHeight_)
+		);
 
 		return true;
 	}
@@ -219,20 +135,15 @@ namespace engine
 	{
 		application_->Update(renderContext_);
 		CopyMainRenderTargetToBackBuffer();
-		swapChain_->Present(0, 0);
+		graphics::GraphicsDevice::Get().Present();
 	}
 
 
 	void Engine::CopyMainRenderTargetToBackBuffer()
 	{
-		ID3D11Texture2D* backBuffer = nullptr;
-		swapChain_->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer);
-
-		deviceContext_->CopyResource(
-			backBuffer,
-			mainRenderTargets_[currentMainRenderTarget_].GetRenderTarget()
-		);
-		backBuffer->Release();
+		graphics::RenderTarget& rt =
+			graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
+		graphics::GraphicsDevice::Get().CopyToBackBuffer(rt);
 	}
 
 

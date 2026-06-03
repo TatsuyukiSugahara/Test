@@ -1,0 +1,215 @@
+#include "../../EnginePreCompile.h"
+#include "D3D11GraphicsDeviceImpl.h"
+#include "D3D11RenderContextImpl.h"
+#include "../RenderContext.h"
+#include "../GraphicsDevice.h"
+#include "../GPUBuffer.h"
+#include "../Shader.h"
+
+
+namespace engine
+{
+	namespace graphics
+	{
+		D3D11GraphicsDeviceImpl::D3D11GraphicsDeviceImpl()
+			: device_(nullptr)
+			, deviceContext_(nullptr)
+			, swapChain_(nullptr)
+			, rasterizerState_(nullptr)
+			, driverType_(D3D_DRIVER_TYPE_NULL)
+			, featureLevel_(D3D_FEATURE_LEVEL_11_0)
+			, mainRenderTargets_{}
+			, currentRenderTargetIndex_(0)
+		{
+		}
+
+
+		D3D11GraphicsDeviceImpl::~D3D11GraphicsDeviceImpl()
+		{
+		}
+
+
+		bool D3D11GraphicsDeviceImpl::Initialize(HWND hwnd, uint32_t width, uint32_t height)
+		{
+			if (!CreateDeviceAndSwapChain(hwnd, width, height)) {
+				return false;
+			}
+			if (!CreateMainRenderTargets(width, height)) {
+				return false;
+			}
+			return true;
+		}
+
+
+		void D3D11GraphicsDeviceImpl::Finalize()
+		{
+			mainRenderTargets_[0].Release();
+			mainRenderTargets_[1].Release();
+			if (rasterizerState_) {
+				rasterizerState_->Release();
+				rasterizerState_ = nullptr;
+			}
+			if (swapChain_) {
+				swapChain_->Release();
+				swapChain_ = nullptr;
+			}
+			if (deviceContext_) {
+				deviceContext_->ClearState();
+				deviceContext_->Release();
+				deviceContext_ = nullptr;
+			}
+			if (device_) {
+				device_->Release();
+				device_ = nullptr;
+			}
+		}
+
+
+		void D3D11GraphicsDeviceImpl::SetupRenderContext(RenderContext& outContext)
+		{
+			outContext.SetImpl(std::make_unique<D3D11RenderContextImpl>(deviceContext_));
+		}
+
+
+		RenderTarget& D3D11GraphicsDeviceImpl::GetMainRenderTarget(uint32_t index)
+		{
+			return mainRenderTargets_[index];
+		}
+
+
+		void D3D11GraphicsDeviceImpl::Present()
+		{
+			swapChain_->Present(0, 0);
+		}
+
+
+		void D3D11GraphicsDeviceImpl::CopyToBackBuffer(RenderTarget& src)
+		{
+			ID3D11Texture2D* backBuffer = nullptr;
+			swapChain_->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer);
+			deviceContext_->CopyResource(backBuffer, src.GetRenderTarget());
+			backBuffer->Release();
+		}
+
+
+		bool D3D11GraphicsDeviceImpl::CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height)
+		{
+			uint32_t createDeviceFlags = 0;
+#ifdef _DEBUG
+			createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+			D3D_DRIVER_TYPE driverTypes[] = {
+				D3D_DRIVER_TYPE_HARDWARE,
+				D3D_DRIVER_TYPE_WARP,
+				D3D_DRIVER_TYPE_REFERENCE,
+			};
+			D3D_FEATURE_LEVEL featureLevels[] = {
+				D3D_FEATURE_LEVEL_11_0,
+				D3D_FEATURE_LEVEL_10_1,
+				D3D_FEATURE_LEVEL_10_0,
+			};
+
+			DXGI_SWAP_CHAIN_DESC desc = {};
+			desc.BufferCount = 1;
+			desc.BufferDesc.Width = width;
+			desc.BufferDesc.Height = height;
+			desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			desc.BufferDesc.RefreshRate.Numerator = 60;
+			desc.BufferDesc.RefreshRate.Denominator = 1;
+			desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			desc.OutputWindow = hwnd;
+			desc.SampleDesc.Count = 1;
+			desc.SampleDesc.Quality = 0;
+			desc.Windowed = TRUE;
+			desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+			HRESULT hr = E_FAIL;
+			for (const auto driverType : driverTypes) {
+				driverType_ = driverType;
+				hr = D3D11CreateDeviceAndSwapChain(
+					nullptr, driverType_, nullptr, createDeviceFlags,
+					featureLevels, ARRAYSIZE(featureLevels),
+					D3D11_SDK_VERSION, &desc,
+					&swapChain_, &device_, &featureLevel_, &deviceContext_
+				);
+				if (SUCCEEDED(hr)) {
+					break;
+				}
+			}
+			return SUCCEEDED(hr);
+		}
+
+
+		void D3D11GraphicsDeviceImpl::SetupDefaultRenderState(RenderContext& context)
+		{
+			D3D11_RASTERIZER_DESC desc = {};
+			desc.FillMode = D3D11_FILL_SOLID;
+			desc.CullMode = D3D11_CULL_BACK;
+			desc.DepthClipEnable = false;
+			device_->CreateRasterizerState(&desc, &rasterizerState_);
+			context.GetImplAs<D3D11RenderContextImpl>()->RSSetState(rasterizerState_);
+		}
+
+
+		ID3D11Device* D3D11GraphicsDeviceImpl::GetStaticDevice()
+		{
+			return static_cast<D3D11GraphicsDeviceImpl*>(
+				GraphicsDevice::Get().GetImplRaw()
+			)->device_;
+		}
+
+
+		std::unique_ptr<IVertexBuffer> D3D11GraphicsDeviceImpl::CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
+		{
+			auto vb = std::make_unique<VertexBuffer>();
+			vb->Create(vertexNum, stride, data);
+			return vb;
+		}
+
+		std::unique_ptr<IIndexBuffer> D3D11GraphicsDeviceImpl::CreateIndexBuffer(uint32_t indexNum, const void* data)
+		{
+			auto ib = std::make_unique<IndexBuffer>();
+			ib->Create(indexNum, data);
+			return ib;
+		}
+
+		std::unique_ptr<IConstantBuffer> D3D11GraphicsDeviceImpl::CreateConstantBuffer(const void* data, uint32_t size)
+		{
+			auto cb = std::make_unique<ConstantBuffer>();
+			cb->Create(data, size);
+			return cb;
+		}
+
+		std::unique_ptr<IShader> D3D11GraphicsDeviceImpl::CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type)
+		{
+			auto shader = std::make_unique<Shader>();
+			shader->Load(filePath, entryFunc, type);
+			return shader;
+		}
+
+		std::unique_ptr<ISamplerState> D3D11GraphicsDeviceImpl::CreateSamplerState(const SamplerDesc& desc)
+		{
+			auto ss = std::make_unique<SamplerState>();
+			ss->Create(desc);
+			return ss;
+		}
+
+
+		bool D3D11GraphicsDeviceImpl::CreateMainRenderTargets(uint32_t width, uint32_t height)
+		{
+			SampleDesc sampleDesc;
+			for (uint32_t i = 0; i < RENDER_TARGET_COUNT; ++i) {
+				bool ret = mainRenderTargets_[i].Create(
+					width, height, 1,
+					PixelFormat::R8G8B8A8_Unorm,
+					PixelFormat::D24_Unorm_S8_Uint,
+					sampleDesc
+				);
+				if (!ret) {
+					return false;
+				}
+			}
+			return true;
+		}
+	}
+}

@@ -1,0 +1,246 @@
+#include "../../EnginePreCompile.h"
+#include "../RenderContext.h"
+#include "../GPUBuffer.h"
+#include "D3D11GraphicsDeviceImpl.h"
+
+
+namespace
+{
+	using namespace engine::graphics;
+
+	D3D11_FILTER ToD3D11Filter(FilterMode f)
+	{
+		switch (f) {
+			case FilterMode::MinMagMipPoint:       return D3D11_FILTER_MIN_MAG_MIP_POINT;
+			case FilterMode::MinMagMipLinear:      return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+			case FilterMode::MinMagLinearMipPoint: return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+			case FilterMode::Anisotropic:          return D3D11_FILTER_ANISOTROPIC;
+			default:                               return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+		}
+	}
+
+	D3D11_TEXTURE_ADDRESS_MODE ToD3D11Address(AddressMode a)
+	{
+		switch (a) {
+			case AddressMode::Clamp:  return D3D11_TEXTURE_ADDRESS_CLAMP;
+			case AddressMode::Wrap:   return D3D11_TEXTURE_ADDRESS_WRAP;
+			case AddressMode::Mirror: return D3D11_TEXTURE_ADDRESS_MIRROR;
+			case AddressMode::Border: return D3D11_TEXTURE_ADDRESS_BORDER;
+			default:                  return D3D11_TEXTURE_ADDRESS_CLAMP;
+		}
+	}
+
+	DXGI_FORMAT ToD3D11Format(PixelFormat p)
+	{
+		switch (p) {
+			case PixelFormat::R8G8B8A8_Unorm:     return DXGI_FORMAT_R8G8B8A8_UNORM;
+			case PixelFormat::D24_Unorm_S8_Uint:  return DXGI_FORMAT_D24_UNORM_S8_UINT;
+			case PixelFormat::R32_Float:           return DXGI_FORMAT_R32_FLOAT;
+			case PixelFormat::R32G32B32A32_Float: return DXGI_FORMAT_R32G32B32A32_FLOAT;
+			default:                               return DXGI_FORMAT_UNKNOWN;
+		}
+	}
+}
+
+
+namespace engine
+{
+	namespace graphics
+	{
+		bool SamplerState::Create(const SamplerDesc& desc)
+		{
+			Release();
+			D3D11_SAMPLER_DESC d3dDesc      = {};
+			d3dDesc.Filter        = ToD3D11Filter(desc.filter);
+			d3dDesc.AddressU      = ToD3D11Address(desc.addressU);
+			d3dDesc.AddressV      = ToD3D11Address(desc.addressV);
+			d3dDesc.AddressW      = ToD3D11Address(desc.addressW);
+			d3dDesc.MipLODBias    = desc.mipLODBias;
+			d3dDesc.MaxAnisotropy = desc.maxAniso;
+			d3dDesc.MinLOD        = desc.minLOD;
+			d3dDesc.MaxLOD        = desc.maxLOD;
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateSamplerState(&d3dDesc, &samplerState_);
+			if (FAILED(hr)) { EngineAssert(false); return false; }
+			return true;
+		}
+
+
+		/*******************************************/
+
+
+		bool ShaderResourceView::Create(StructuredBuffer& structuredBuffer)
+		{
+			Release();
+			ID3D11Buffer* buffer = structuredBuffer.GetBody();
+			if (!buffer) return true;
+
+			D3D11_BUFFER_DESC descBuffer = {};
+			buffer->GetDesc(&descBuffer);
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC desc = {};
+			desc.ViewDimension        = D3D11_SRV_DIMENSION_BUFFEREX;
+			desc.BufferEx.FirstElement = 0;
+			desc.Format               = DXGI_FORMAT_UNKNOWN;
+			desc.BufferEx.NumElements  = descBuffer.ByteWidth / descBuffer.StructureByteStride;
+
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateShaderResourceView(buffer, &desc, &shaderResourceView_);
+			return SUCCEEDED(hr);
+		}
+
+
+		bool ShaderResourceView::Create(ID3D11Texture2D* texture)
+		{
+			Release();
+			if (!texture) return true;
+
+			D3D11_TEXTURE2D_DESC textureDesc = {};
+			texture->GetDesc(&textureDesc);
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC descSRV = {};
+			descSRV.Format                  = textureDesc.Format;
+			descSRV.ViewDimension           = D3D11_SRV_DIMENSION_TEXTURE2D;
+			descSRV.Texture2D.MipLevels     = textureDesc.MipLevels;
+
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateShaderResourceView(texture, &descSRV, &shaderResourceView_);
+			return SUCCEEDED(hr);
+		}
+
+
+		/*******************************************/
+
+
+		bool UnorderedAccessView::Create(StructuredBuffer& structuredBuffer)
+		{
+			Release();
+			ID3D11Buffer* buffer = structuredBuffer.GetBody();
+			if (!buffer) return true;
+
+			D3D11_BUFFER_DESC descBuffer = {};
+			buffer->GetDesc(&descBuffer);
+
+			D3D11_UNORDERED_ACCESS_VIEW_DESC desc = {};
+			desc.ViewDimension       = D3D11_UAV_DIMENSION_BUFFER;
+			desc.Buffer.FirstElement = 0;
+			desc.Format              = DXGI_FORMAT_UNKNOWN;
+			desc.Buffer.NumElements  = descBuffer.ByteWidth / descBuffer.StructureByteStride;
+
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateUnorderedAccessView(buffer, &desc, &unorderedAccessView_);
+			return SUCCEEDED(hr);
+		}
+
+
+		bool UnorderedAccessView::Create(ID3D11Texture2D* texture)
+		{
+			Release();
+			if (!texture) return true;
+
+			D3D11_TEXTURE2D_DESC textureDesc = {};
+			texture->GetDesc(&textureDesc);
+
+			D3D11_UNORDERED_ACCESS_VIEW_DESC descUAV = {};
+			descUAV.Buffer.FirstElement = 0;
+			descUAV.Buffer.NumElements  = textureDesc.Width / textureDesc.Height;
+			descUAV.Buffer.Flags        = 0;
+			descUAV.Format              = textureDesc.Format;
+			descUAV.ViewDimension       = D3D11_UAV_DIMENSION_TEXTURE2D;
+
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateUnorderedAccessView(texture, &descUAV, &unorderedAccessView_);
+			return SUCCEEDED(hr);
+		}
+
+
+		/*******************************************/
+
+
+		bool RenderTarget::Create(int32_t width, int32_t height, int32_t mipLevel,
+			PixelFormat colorFormat, PixelFormat depthStencilFormat,
+			SampleDesc multiSampleDesc,
+			ID3D11Texture2D* renderTarget, ID3D11Texture2D* depthStencil)
+		{
+			Release();
+			ID3D11Device* device = D3D11GraphicsDeviceImpl::GetStaticDevice();
+
+			DXGI_SAMPLE_DESC sampleDesc = { multiSampleDesc.count, multiSampleDesc.quality };
+
+			D3D11_TEXTURE2D_DESC textureDesc = {};
+			textureDesc.Width      = width;
+			textureDesc.Height     = height;
+			textureDesc.MipLevels  = mipLevel;
+			textureDesc.ArraySize  = 1;
+			textureDesc.Format     = ToD3D11Format(colorFormat);
+			textureDesc.SampleDesc = sampleDesc;
+			textureDesc.Usage      = D3D11_USAGE_DEFAULT;
+			textureDesc.BindFlags  = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+			HRESULT hr;
+			if (renderTarget == nullptr) {
+				hr = device->CreateTexture2D(&textureDesc, nullptr, &renderTarget_);
+				if (FAILED(hr)) { EngineAssert(false); return false; }
+			} else {
+				renderTarget_ = renderTarget;
+				renderTarget_->AddRef();
+			}
+
+			hr = device->CreateRenderTargetView(renderTarget_, nullptr, &renderTargetView_);
+			if (FAILED(hr)) { EngineAssert(false); return false; }
+
+			renderTargetSRV_.Create(renderTarget_);
+			renderTargetUAV_.Create(renderTarget_);
+
+			if (depthStencilFormat != PixelFormat::Unknown) {
+				textureDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+				textureDesc.Format    = ToD3D11Format(depthStencilFormat);
+				if (depthStencil == nullptr) {
+					hr = device->CreateTexture2D(&textureDesc, nullptr, &depthStencil_);
+					if (FAILED(hr)) { EngineAssert(false); return false; }
+				} else {
+					depthStencil_ = depthStencil;
+					depthStencil_->AddRef();
+				}
+
+				D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+				dsvDesc.Format             = textureDesc.Format;
+				dsvDesc.ViewDimension      = D3D11_DSV_DIMENSION_TEXTURE2D;
+				dsvDesc.Texture2D.MipSlice = 0;
+				hr = device->CreateDepthStencilView(depthStencil_, &dsvDesc, &depthStencilView_);
+				if (FAILED(hr)) { EngineAssert(false); return false; }
+			}
+			return true;
+		}
+
+
+		/*******************************************/
+
+
+		graphics::IShaderResourceView* Texture::Create2D(const DirectX::TexMetadata& metaData, const DirectX::Image* images)
+		{
+			D3D11_TEXTURE2D_DESC desc = {};
+			desc.Width              = static_cast<uint32_t>(metaData.width);
+			desc.Height             = static_cast<uint32_t>(metaData.height);
+			desc.MipLevels          = 1;
+			desc.ArraySize          = static_cast<uint32_t>(metaData.arraySize);
+			desc.Format             = metaData.format;
+			desc.SampleDesc.Count   = 1;
+			desc.SampleDesc.Quality = 0;
+			desc.Usage              = D3D11_USAGE_DEFAULT;
+			desc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+			desc.MiscFlags          = metaData.IsCubemap() ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
+
+			const size_t index = metaData.ComputeIndex(0, 0, 0);
+			const DirectX::Image& img = images[index];
+
+			std::unique_ptr<D3D11_SUBRESOURCE_DATA[]> initData(new (std::nothrow) D3D11_SUBRESOURCE_DATA[metaData.arraySize]);
+			initData[0].pSysMem          = img.pixels;
+			initData[0].SysMemPitch      = static_cast<DWORD>(img.rowPitch);
+			initData[0].SysMemSlicePitch = static_cast<DWORD>(img.rowPitch);
+
+			ID3D11Texture2D* ppResource = nullptr;
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateTexture2D(&desc, initData.get(), &ppResource);
+			if (FAILED(hr)) return nullptr;
+
+			ShaderResourceView* shaderResourceView = new ShaderResourceView();
+			shaderResourceView->Create(ppResource);
+			return shaderResourceView;
+		}
+	}
+}

@@ -1,6 +1,6 @@
 #include "../EnginePreCompile.h"
 #include "Shader.h"
-#include "../Engine.h"
+#include "D3D11/D3D11GraphicsDeviceImpl.h"
 
 namespace engine
 {
@@ -8,7 +8,7 @@ namespace engine
 	{
 		namespace
 		{
-			/** ƒtƒ@ƒCƒ‹“Ç‚İ‚İ */
+			/** ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½Ç‚İï¿½ï¿½ï¿½ */
 			void ReadFile(const char* filePath, char* readBuffer, uint32_t& fileSize)
 			{
 				FILE* fp = nullptr;
@@ -22,26 +22,26 @@ namespace engine
 				fclose(fp);
 			}
 
-			/** ’¸“_ƒVƒF[ƒ_[‚©‚ç’¸“_ƒŒƒCƒAƒEƒg¶¬ */
+			/** ï¿½ï¿½ï¿½_ï¿½Vï¿½Fï¿½[ï¿½_ï¿½[ï¿½ï¿½ï¿½ç’¸ï¿½_ï¿½ï¿½ï¿½Cï¿½Aï¿½Eï¿½gï¿½ï¿½ï¿½ï¿½ */
 			HRESULT CreateInputLayoutDescFromVertexShaderSignature(ID3DBlob* shaderBlob, ID3D11Device* d3dDevice, ID3D11InputLayout** inputLayout)
 			{
-				// ƒVƒF[ƒ_[î•ñ‚©‚çƒŠƒtƒŒƒNƒVƒ‡ƒ“‚ğs‚¤
+				// ï¿½Vï¿½Fï¿½[ï¿½_ï¿½[ï¿½ï¿½ñ‚©‚çƒŠï¿½tï¿½ï¿½ï¿½Nï¿½Vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½sï¿½ï¿½
 				ID3D11ShaderReflection* vertexShaderReflection = NULL;
 				if (FAILED(D3DReflect(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)&vertexShaderReflection))) {
 					return S_FALSE;
 				}
 
-				// ƒVƒF[ƒ_[î•ñ‚ğæ“¾
+				// ï¿½Vï¿½Fï¿½[ï¿½_ï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½æ“¾
 				D3D11_SHADER_DESC shaderDesc;
 				vertexShaderReflection->GetDesc(&shaderDesc);
 
-				// “ü—Íî•ñ’è‹`‚ğ“Ç‚İ‚İ
+				// ï¿½ï¿½ï¿½Íï¿½ï¿½ï¿½`ï¿½ï¿½Ç‚İï¿½ï¿½ï¿½
 				std::vector<D3D11_INPUT_ELEMENT_DESC> inputLayoutDescs;
 				for (uint32_t i = 0; i < shaderDesc.InputParameters; ++i) {
 					D3D11_SIGNATURE_PARAMETER_DESC parameterDesc;
 					vertexShaderReflection->GetInputParameterDesc(i, &parameterDesc);
 
-					// ƒGƒŒƒƒ“ƒg’è‹`İ’è
+					// ï¿½Gï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½gï¿½ï¿½`ï¿½İ’ï¿½
 					D3D11_INPUT_ELEMENT_DESC elementDesc;
 					elementDesc.SemanticName = parameterDesc.SemanticName;
 					elementDesc.SemanticIndex = parameterDesc.SemanticIndex;
@@ -72,14 +72,14 @@ namespace engine
 						else if (parameterDesc.ComponentType == D3D_REGISTER_COMPONENT_FLOAT32) elementDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 					}
 
-					// ƒGƒŒƒƒ“ƒg’è‹`‚ğ•Û‘¶
+					// ï¿½Gï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½gï¿½ï¿½`ï¿½ï¿½Û‘ï¿½
 					inputLayoutDescs.push_back(elementDesc);
 				}
 
-				// “ü—ÍƒŒƒCƒAƒEƒg¶¬
+				// ï¿½ï¿½ï¿½Íƒï¿½ï¿½Cï¿½Aï¿½Eï¿½gï¿½ï¿½ï¿½ï¿½
 				HRESULT hr = d3dDevice->CreateInputLayout(&inputLayoutDescs[0], static_cast<UINT>(inputLayoutDescs.size()), shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), inputLayout);
 
-				// ƒŠƒtƒŒƒNƒVƒ‡ƒ“—p‚ÉŠm•Û‚µ‚½ƒƒ‚ƒŠ‚ğ‰ğ•ú
+				// ï¿½ï¿½ï¿½tï¿½ï¿½ï¿½Nï¿½Vï¿½ï¿½ï¿½ï¿½ï¿½pï¿½ÉŠmï¿½Û‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 				vertexShaderReflection->Release();
 
 				return hr;
@@ -147,8 +147,8 @@ namespace engine
 #endif
 
 			ID3DBlob* errorBlob;
-			// ƒVƒF[ƒ_[‚ğ“Ç‚İ‚İ
-			static char shaderBuffer[5 * 1024 * 1024];	// NOTE: 5MB‚Ù‚ÇB‚±‚ê‚­‚ç‚¢‚ ‚ê‚Î‘«‚è‚é‚¾‚ë‚¤
+			// ï¿½Vï¿½Fï¿½[ï¿½_ï¿½[ï¿½ï¿½Ç‚İï¿½ï¿½ï¿½
+			static char shaderBuffer[5 * 1024 * 1024];	// NOTE: 5MBï¿½Ù‚ÇBï¿½ï¿½ï¿½ê‚­ï¿½ç‚¢ï¿½ï¿½ï¿½ï¿½Î‘ï¿½ï¿½ï¿½é‚¾ï¿½ë‚¤
 			uint32_t fileSize = 0;
 			ReadFile(filePath, shaderBuffer, fileSize);
 			static const char* shaderModelNames[] = {
@@ -164,21 +164,21 @@ namespace engine
 				if (errorBlob) {
 					static char text[5 * 1024];
 					snprintf(text, ArraySize(text), "%s", (char*)errorBlob->GetBufferPointer());
-					EngineAssertMsg(false, "ƒVƒF[ƒ_[ƒRƒ“ƒpƒCƒ‹ƒGƒ‰[");
+					EngineAssertMsg(false, "ï¿½Vï¿½Fï¿½[ï¿½_ï¿½[ï¿½Rï¿½ï¿½ï¿½pï¿½Cï¿½ï¿½ï¿½Gï¿½ï¿½ï¿½[");
 				}
 				return false;
 			}
-			ID3D11Device* d3dDevice = Engine::Get().GetD3DDevice();
+			ID3D11Device* d3dDevice = D3D11GraphicsDeviceImpl::GetStaticDevice();
 			switch (shaderType_)
 			{
 				case ShaderType::VS:
 				{
-					// ’¸“_ƒVƒF[ƒ_[
+					// ï¿½ï¿½ï¿½_ï¿½Vï¿½Fï¿½[ï¿½_ï¿½[
 					hr = d3dDevice->CreateVertexShader(blob_->GetBufferPointer(), blob_->GetBufferSize(), nullptr, (ID3D11VertexShader**)&shader_);
 					if (FAILED(hr)) {
 						return false;
 					}
-					// “ü—ÍƒŒƒCƒAƒEƒg¶¬
+					// ï¿½ï¿½ï¿½Íƒï¿½ï¿½Cï¿½Aï¿½Eï¿½gï¿½ï¿½ï¿½ï¿½
 					hr = CreateInputLayoutDescFromVertexShaderSignature(blob_, d3dDevice, &inputLayout_);
 					if (FAILED(hr)) {
 						return false;
@@ -187,7 +187,7 @@ namespace engine
 				}
 				case ShaderType::PS:
 				{
-					// ƒsƒNƒZƒ‹ƒVƒF[ƒ_[
+					// ï¿½sï¿½Nï¿½Zï¿½ï¿½ï¿½Vï¿½Fï¿½[ï¿½_ï¿½[
 					hr = d3dDevice->CreatePixelShader(blob_->GetBufferPointer(), blob_->GetBufferSize(), nullptr, (ID3D11PixelShader**)&shader_);
 					if (FAILED(hr)) {
 						return false;

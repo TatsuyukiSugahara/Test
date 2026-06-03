@@ -1,29 +1,35 @@
 #pragma once
-#include "GPUBuffer.h"
-#include "Shader.h"
+#include <memory>
+#include "IBuffer.h"
+#include "IShader.h"
+#include "IShaderResourceView.h"
+#include "ISamplerState.h"
+#include "IUnorderedAccessView.h"
+#include "GraphicsTypes.h"
+#include "IRenderContextImpl.h"
+
 
 namespace engine
 {
 	namespace graphics
 	{
-		/**
-		 * サンプラステート
-		 */
-		class SamplerState
+		/*******************************************/
+
+
+		class SamplerState : public ISamplerState
 		{
 		private:
 			ID3D11SamplerState* samplerState_;
-
 
 		public:
 			SamplerState();
 			~SamplerState();
 
-			/** サンプラステート生成 */
-			bool Create(const D3D11_SAMPLER_DESC& desc);
-			/** 解放 */
-			void Release();
-			/** サンプラステート取得 */
+			bool  Create(const SamplerDesc& desc) override;
+			void  Release() override;
+			void* GetNativeHandle() const override { return static_cast<void*>(samplerState_); }
+
+			/** D3D11 蝗ｺ譛峨い繧ｯ繧ｻ繧ｵ */
 			ID3D11SamplerState*& GetBody() { return samplerState_; }
 		};
 
@@ -33,27 +39,21 @@ namespace engine
 		/*******************************************/
 
 
-		/**
-		 * ShaderResourceView
-		 * NOTE: テクスチャやストラクチャードバッファなど、シェーダーで使用するリソースビュー
-		 */
-		class ShaderResourceView
+		class ShaderResourceView : public IShaderResourceView
 		{
 		private:
 			ID3D11ShaderResourceView* shaderResourceView_;
-
 
 		public:
 			ShaderResourceView();
 			~ShaderResourceView();
 
-			/** StructuredBuffer用のSRV生成 */
-			bool Create(StructuredBuffer& structuredBuffer);
-			/** テクスチャ用のSRV生成 */
-			bool Create(ID3D11Texture2D* texture);
-			/** 解放 */
-			void Release();
-			/** ShaderResourceView取得 */
+			bool  Create(StructuredBuffer& structuredBuffer);
+			bool  Create(ID3D11Texture2D* texture);
+			void  Release() override;
+			void* GetNativeHandle() const override { return static_cast<void*>(shaderResourceView_); }
+
+			/** D3D11 蝗ｺ譛峨い繧ｯ繧ｻ繧ｵ */
 			inline ID3D11ShaderResourceView*& GetBody() { return shaderResourceView_; }
 		};
 
@@ -63,27 +63,21 @@ namespace engine
 		/*******************************************/
 
 
-		/**
-		 * UnorderedAccessView
-		 * NOTE: コンピュートシェーダーとピクセルシェーダーの出力に使用するビュー
-		 */
-		class UnorderedAccessView
+		class UnorderedAccessView : public IUnorderedAccessView
 		{
 		private:
 			ID3D11UnorderedAccessView* unorderedAccessView_;
-
 
 		public:
 			UnorderedAccessView();
 			~UnorderedAccessView();
 
-			/** StructuredBuffer用のUAV生成 */
-			bool Create(StructuredBuffer& structuredBuffer);
-			/** テクスチャ用のUAV生成 */
-			bool Create(ID3D11Texture2D* texture);
-			/** 解放 */
-			void Release();
-			/** UnorderedAccessView取得 */
+			bool  Create(StructuredBuffer& structuredBuffer);
+			bool  Create(ID3D11Texture2D* texture);
+			void  Release() override;
+			void* GetNativeHandle() const override { return static_cast<void*>(unorderedAccessView_); }
+
+			/** D3D11 蝗ｺ譛峨い繧ｯ繧ｻ繧ｵ */
 			inline ID3D11UnorderedAccessView*& GetBody() { return unorderedAccessView_; }
 		};
 
@@ -93,258 +87,195 @@ namespace engine
 		/*******************************************/
 
 
-		/**
-		 * レンダリングターゲット
-		 */
 		class RenderTarget
 		{
 		private:
-			ID3D11Texture2D* renderTarget_;
+			ID3D11Texture2D*        renderTarget_;
 			ID3D11RenderTargetView* renderTargetView_;
-			ID3D11Texture2D* depthStencil_;
+			ID3D11Texture2D*        depthStencil_;
 			ID3D11DepthStencilView* depthStencilView_;
-			ShaderResourceView renderTargetSRV_;
-			UnorderedAccessView renderTargetUAV_;
+			ShaderResourceView      renderTargetSRV_;
+			UnorderedAccessView     renderTargetUAV_;
 
 		public:
 			RenderTarget();
 			~RenderTarget();
 
-			/** レンダリングターゲット生成 */
-			bool Create(int32_t width, int32_t height, int32_t mipLevel, DXGI_FORMAT colorFormat, DXGI_FORMAT depthStencilFormat, DXGI_SAMPLE_DESC multiSampleDesc, ID3D11Texture2D* renderTarget = nullptr, ID3D11Texture2D* depthStencil = nullptr);
-			/** 解放 */
+			bool Create(int32_t width, int32_t height, int32_t mipLevel,
+				PixelFormat colorFormat, PixelFormat depthStencilFormat,
+				SampleDesc multiSampleDesc,
+				ID3D11Texture2D* renderTarget = nullptr,
+				ID3D11Texture2D* depthStencil = nullptr);
 			void Release();
 
-			/** レンダリングターゲット取得 */
-			inline ID3D11Texture2D* GetRenderTarget() const
-			{
-				return renderTarget_;
-			}
-			/** レンダリングターゲットビュー取得 */
-			inline ID3D11RenderTargetView* GetrenderTargetView() const
-			{
-				return renderTargetView_;
-			}
-			/** レンダリングターゲットSRV取得 */
-			inline ShaderResourceView& GetRenderTargetSRV()
-			{
-				return renderTargetSRV_;
-			}
-			/** レンダリングターゲットUAV取得 */
-			inline UnorderedAccessView& GetRenderTargetUAV()
-			{
-				return renderTargetUAV_;
-			}
-			/** デプスステンシルビュー取得 */
-			inline ID3D11DepthStencilView* GetDepthStencilView() const
-			{
-				return depthStencilView_;
-			}
+			inline ID3D11Texture2D*        GetRenderTarget()     const { return renderTarget_; }
+			inline ID3D11RenderTargetView* GetrenderTargetView() const { return renderTargetView_; }
+			inline IShaderResourceView&    GetRenderTargetSRV()        { return renderTargetSRV_; }
+			inline IUnorderedAccessView&   GetRenderTargetUAV()        { return renderTargetUAV_; }
+			inline ID3D11DepthStencilView* GetDepthStencilView() const { return depthStencilView_; }
 		};
+
 
 
 
 		/*******************************************/
 
 
+		/**
+		 * RenderContext Abstraction (Bridge Pattern)
+		 *
+		 * 謠冗判繧ｳ繝槭Φ繝峨ｒ逋ｺ陦後☆繧九け繝ｩ繧ｹ縲ゅΓ繧ｽ繝�繝峨ヱ繝ｩ繝｡繝ｼ繧ｿ縺ｯ縺吶∋縺ｦ謚ｽ雎｡繧､繝ｳ繧ｿ繝ｼ繝輔ぉ繝ｼ繧ｹ蝙九�
+		 */
 		class RenderContext
 		{
-		private:
-			static constexpr uint32_t MAX_MRT_NUM = 8;
+		public:
+			RenderContext() = default;
+			~RenderContext() = default;
 
+			RenderContext(const RenderContext&) = delete;
+			RenderContext& operator=(const RenderContext&) = delete;
 
-		private:
-			/** デバイスコンテキスト */
-			ID3D11DeviceContext* d3dDeviceContext_;
-			/** ビューポート */
-			D3D11_VIEWPORT viewport_;
-			/** 現在使用中のレンダリングターゲットビュー */
-			ID3D11RenderTargetView* renderTargetViews_[MAX_MRT_NUM];
-			/** 現在設定されているデプスステンシルビュー */
-			ID3D11DepthStencilView* depthStencilView_;
-			/** レンダリングターゲットビューの数 */
-			uint32_t renderTargetViewNum_;
+			void SetImpl(std::unique_ptr<IRenderContextImpl> impl) { impl_ = std::move(impl); }
+
+			template<typename TImpl>
+			TImpl* GetImplAs() { return static_cast<TImpl*>(impl_.get()); }
 
 
 		public:
-			RenderContext();
-			~RenderContext();
-
-			/** 初期化 */
-			void Initialize(ID3D11DeviceContext* d3dDeviceContext);
-			/** レンダリングターゲットビュー設定 */
-			void OMSetRenderTargets(uint32_t numViews, RenderTarget* renderTarget);
-			/** ビューポート設定 */
+			void OMSetRenderTargets(uint32_t numViews, RenderTarget* renderTarget)
+			{
+				impl_->OMSetRenderTargets(numViews, renderTarget);
+			}
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height)
 			{
-				viewport_.Width = width;
-				viewport_.Height = height;
-				viewport_.TopLeftX = topLeftX;
-				viewport_.TopLeftY = topLeftY;
-				viewport_.MinDepth = 0.0f;
-				viewport_.MaxDepth = 1.0f;
-				d3dDeviceContext_->RSSetViewports(1, &viewport_);
+				impl_->RSSetViewport(topLeftX, topLeftY, width, height);
 			}
-			/** ラスタライザ設定 */
-			void RSSetState(ID3D11RasterizerState* state)
-			{
-				d3dDeviceContext_->RSSetState(state);
-			}
-			/** レンダリングターゲットクリア */
 			void ClearRenderTargetView(uint32_t index, float* clearColor)
 			{
-				if (renderTargetViews_ && index < renderTargetViewNum_) {
-					d3dDeviceContext_->ClearRenderTargetView(renderTargetViews_[index], clearColor);
-					d3dDeviceContext_->ClearDepthStencilView(depthStencilView_, D3D11_CLEAR_DEPTH, 1.0f, 0);
-				}
+				impl_->ClearRenderTargetView(index, clearColor);
 			}
-			/** 頂点バッファ設定 */
-			void IASetVertexBuffer(VertexBuffer& vertexBuffer)
+
+			void IASetVertexBuffer(IVertexBuffer& vertexBuffer)
 			{
-				uint32_t offset = 0;
-				uint32_t stride = vertexBuffer.GetStride();
-				d3dDeviceContext_->IASetVertexBuffers(0, 1, &vertexBuffer.GetBody(), &stride, &offset);
+				impl_->IASetVertexBuffer(vertexBuffer);
 			}
-			/** インデックスバッファ設定 */
-			void IASetIndexBuffer(IndexBuffer& indexBuffer)
+			void IASetIndexBuffer(IIndexBuffer& indexBuffer)
 			{
-				d3dDeviceContext_->IASetIndexBuffer(indexBuffer.GetBody(), DXGI_FORMAT_R32_UINT, 0);
+				impl_->IASetIndexBuffer(indexBuffer);
 			}
-			/** プリミティブトポロジー設定 */
-			void IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY topology)
+			void IASetPrimitiveTopology(PrimitiveTopology topology)
 			{
-				d3dDeviceContext_->IASetPrimitiveTopology(topology);
+				impl_->IASetPrimitiveTopology(topology);
 			}
-			/** VSステージに定数バッファ設定 */
-			void VSSetConstantBuffer(uint32_t startSlot, ConstantBuffer& constantBuffer)
+			void IASetInputLayout(IShader& vsShader)
 			{
-				d3dDeviceContext_->VSSetConstantBuffers(startSlot, 1, &constantBuffer.GetBody());
+				impl_->IASetInputLayout(vsShader);
 			}
-			/** PSステージに定数バッファ設定 */
-			void PSSetConstantBuffer(uint32_t startSlot, ConstantBuffer& constantBuffer)
+
+			void VSSetShader(IShader& shader)
 			{
-				d3dDeviceContext_->PSSetConstantBuffers(startSlot, 1, &constantBuffer.GetBody());
+				impl_->VSSetShader(shader);
 			}
-			/** PSステージにSRV設定 */
-			void PSSetShaderResource(uint32_t startSlot, ShaderResourceView& shaderResourceView)
+			void VSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer)
 			{
-				d3dDeviceContext_->PSSetShaderResources(startSlot, 1, &shaderResourceView.GetBody());
+				impl_->VSSetConstantBuffer(startSlot, constantBuffer);
 			}
-			/** PSステージからSRVを外す */
+
+			void PSSetShader(IShader& shader)
+			{
+				impl_->PSSetShader(shader);
+			}
+			void PSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer)
+			{
+				impl_->PSSetConstantBuffer(startSlot, constantBuffer);
+			}
+			void PSSetShaderResource(uint32_t startSlot, IShaderResourceView& shaderResourceView)
+			{
+				impl_->PSSetShaderResource(startSlot, shaderResourceView);
+			}
 			void PSUnsetShaderResource(uint32_t slot)
 			{
-				ID3D11ShaderResourceView* view[] = {
-					nullptr,
-				};
-				d3dDeviceContext_->PSSetShaderResources(slot, 1, view);
+				impl_->PSUnsetShaderResource(slot);
 			}
-			/** PSステージにサンプラステート設定 */
-			void PsSetSampler(uint32_t startSlot, SamplerState& samplerState)
+			void PsSetSampler(uint32_t startSlot, ISamplerState& samplerState)
 			{
-				d3dDeviceContext_->PSSetSamplers(startSlot, 1, &samplerState.GetBody());
+				impl_->PSSetSampler(startSlot, samplerState);
 			}
-			/** 頂点シェーダー設定 */
-			void VSSetShader(Shader& shader)
+
+			void CSSetShader(IShader& shader)
 			{
-				d3dDeviceContext_->VSSetShader((ID3D11VertexShader*)shader.GetBody(), nullptr, 0);
+				impl_->CSSetShader(shader);
 			}
-			/** ピクセルシェーダー設定 */
-			void PSSetShader(Shader& shader)
+			void CSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer)
 			{
-				d3dDeviceContext_->PSSetShader((ID3D11PixelShader*)shader.GetBody(), nullptr, 0);
+				impl_->CSSetConstantBuffer(startSlot, constantBuffer);
 			}
-			/** コンピュートシェーダー設定 */
-			void CSSetShader(Shader& shader)
+			void CSSetShaderResource(uint32_t startSlot, IShaderResourceView& shaderResourceView)
 			{
-				d3dDeviceContext_->CSSetShader((ID3D11ComputeShader*)shader.GetBody(), nullptr, 0);
+				impl_->CSSetShaderResource(startSlot, shaderResourceView);
 			}
-			/** CSステージに定数バッファ設定 */
-			void CSSetConstantBuffer(uint32_t startSlot, ConstantBuffer& constantBuffer)
-			{
-				d3dDeviceContext_->CSSetConstantBuffers(startSlot, 1, &constantBuffer.GetBody());
-			}
-			/** コンピュートシェーダーにSRV設定 */
-			void CSSetShaderResource(uint32_t startSlot, ShaderResourceView& shaderResourceView)
-			{
-				d3dDeviceContext_->CSSetShaderResources(startSlot, 1, &shaderResourceView.GetBody());
-			}
-			/** コンピュートシェーダーからSRVを外す */
 			void CSUnsetShaderResource(uint32_t slot)
 			{
-				ID3D11ShaderResourceView* view[] = {
-					nullptr,
-				};
-				d3dDeviceContext_->CSSetShaderResources(slot, 1, view);
+				impl_->CSUnsetShaderResource(slot);
 			}
-			/** コンピュートシェーダーにUAV設定 */
-			void CSSetUnorderedAccessView(uint32_t startSlot, UnorderedAccessView& unorderedAccessView)
+			void CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& unorderedAccessView)
 			{
-				d3dDeviceContext_->CSSetUnorderedAccessViews(startSlot, 1, &unorderedAccessView.GetBody(), nullptr);
+				impl_->CSSetUnorderedAccessView(startSlot, unorderedAccessView);
 			}
-			/** コンピュートシェーダーからUAVを外す */
 			void CSUnsetUnorderedAccessView(uint32_t slot)
 			{
-				ID3D11UnorderedAccessView* view[] = {
-					nullptr,
-				};
-				d3dDeviceContext_->CSSetUnorderedAccessViews(slot, 1, view, nullptr);
+				impl_->CSUnsetUnorderedAccessView(slot);
 			}
-			/** 描画 */
+
 			void Draw(uint32_t vertexCount, uint32_t startVertexLocation)
 			{
-				d3dDeviceContext_->Draw(vertexCount, startVertexLocation);
+				impl_->Draw(vertexCount, startVertexLocation);
 			}
 			void DrawIndexed(uint32_t indexCount)
 			{
-				d3dDeviceContext_->DrawIndexed(indexCount, 0, 0);
+				impl_->DrawIndexed(indexCount);
 			}
-			/** ディスパッチ */
-			void Dispatch(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ)
+			void Dispatch(uint32_t x, uint32_t y, uint32_t z)
 			{
-				d3dDeviceContext_->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+				impl_->Dispatch(x, y, z);
 			}
-			/** 入力レイアウト設定 */
-			void IASetInputLayout(ID3D11InputLayout* inputLayout)
-			{
-				d3dDeviceContext_->IASetInputLayout(inputLayout);
-			}
-			/** リソースコピー */
-			template <typename TResource>
-			void CopyResource(TResource& destResource, TResource& srcResource)
-			{
-				if (destResource.GetBody() && srcResource.GetBody()) {
-					d3dDeviceContext_->CopyResource(destResource.GetBody(), srcResource.GetBody());
-				}
-			}
-			void CopyResource(ID3D11Resource* destResource, ID3D11Resource* srcResource)
-			{
-				if (destResource && srcResource) {
-					d3dDeviceContext_->CopyResource(destResource, srcResource);
-				}
-			}
-			/** マップ */
-			template <typename TBuffer>
-			void Map(TBuffer& buffer, uint32_t subResource, D3D11_MAP mapType, uint32_t mapFlags, D3D11_MAPPED_SUBRESOURCE& mappedResource)
-			{
-				if (buffer.GetBody()) {
-					d3dDeviceContext_->Map(buffer.GetBody(), subResource, mapType, mapFlags, &mappedResource);
-				}
-			}
-			template <typename TBuffer>
-			void Unmap(TBuffer& buffer, uint32_t subResource)
-			{
-				if (buffer.GetBody()) {
-					d3dDeviceContext_->Unmap(buffer.GetBody(), subResource);
-				}
-			}
-			/** サブリソース更新 */
+
+			/** GetNativeHandle() 縺ｧ void* 繧貞叙繧雁�ｺ縺励※蝙区ｶ亥悉迚医�ｮ impl 縺ｸ蟋碑ｭｲ */
 			template <typename TBuffer, typename SrcBuffer>
 			void UpdateSubresource(TBuffer& gpuBuffer, SrcBuffer buffer)
 			{
-				if (gpuBuffer.GetBody()) {
-					d3dDeviceContext_->UpdateSubresource(gpuBuffer.GetBody(), 0, nullptr, &buffer, 0, 0);
+				if (gpuBuffer.GetNativeHandle()) {
+					impl_->UpdateSubresourceRaw(gpuBuffer.GetNativeHandle(), &buffer);
 				}
 			}
+
+			template <typename TResource>
+			void CopyResource(TResource& destResource, TResource& srcResource)
+			{
+				if (destResource.GetNativeHandle() && srcResource.GetNativeHandle()) {
+					impl_->CopyResourceRaw(destResource.GetNativeHandle(), srcResource.GetNativeHandle());
+				}
+			}
+
+			template <typename TBuffer>
+			void Map(TBuffer& buffer, uint32_t subResource, MapType mapType, uint32_t mapFlags, MappedSubresource& mappedResource)
+			{
+				if (buffer.GetNativeHandle()) {
+					impl_->MapRaw(buffer.GetNativeHandle(), subResource, mapType, mapFlags, mappedResource);
+				}
+			}
+
+			template <typename TBuffer>
+			void Unmap(TBuffer& buffer, uint32_t subResource)
+			{
+				if (buffer.GetNativeHandle()) {
+					impl_->UnmapRaw(buffer.GetNativeHandle(), subResource);
+				}
+			}
+
+
+		private:
+			std::unique_ptr<IRenderContextImpl> impl_;
 		};
 
 
@@ -356,7 +287,7 @@ namespace engine
 		class Texture
 		{
 		public:
-			static graphics::ShaderResourceView* Create2D(const DirectX::TexMetadata& metaData, const DirectX::Image* images);
+			static IShaderResourceView* Create2D(const DirectX::TexMetadata& metaData, const DirectX::Image* images);
 		};
 	}
 }

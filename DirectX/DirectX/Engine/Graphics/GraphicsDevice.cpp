@@ -1,0 +1,91 @@
+#include "../../Engine/EnginePreCompile.h"
+#include "GraphicsDevice.h"
+#include "RenderContext.h"
+
+
+namespace engine
+{
+	namespace graphics
+	{
+		GraphicsDevice* GraphicsDevice::instance_ = nullptr;
+
+
+		GraphicsDevice::GraphicsDevice(std::unique_ptr<IGraphicsDeviceImpl> impl)
+			: impl_(std::move(impl))
+		{
+		}
+
+
+		GraphicsDevice::~GraphicsDevice()
+		{
+		}
+
+
+		bool GraphicsDevice::Initialize(HWND hwnd, uint32_t width, uint32_t height)
+		{
+			return impl_->Initialize(hwnd, width, height);
+		}
+
+
+		void GraphicsDevice::Finalize()
+		{
+			impl_->Finalize();
+		}
+
+
+		void GraphicsDevice::SetupRenderContext(RenderContext& outContext)
+		{
+			impl_->SetupRenderContext(outContext);
+		}
+
+
+		RenderTarget& GraphicsDevice::GetMainRenderTarget(uint32_t index)
+		{
+			return impl_->GetMainRenderTarget(index);
+		}
+
+
+		void GraphicsDevice::Present()
+		{
+			impl_->Present();
+		}
+
+
+		void GraphicsDevice::CopyToBackBuffer(RenderTarget& src)
+		{
+			impl_->CopyToBackBuffer(src);
+		}
+
+
+		void GraphicsDevice::SetupDefaultRenderState(RenderContext& context)
+		{
+			impl_->SetupDefaultRenderState(context);
+		}
+
+
+		std::unique_ptr<IVertexBuffer> GraphicsDevice::CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
+		{
+			return impl_->CreateVertexBuffer(vertexNum, stride, data);
+		}
+
+		std::unique_ptr<IIndexBuffer> GraphicsDevice::CreateIndexBuffer(uint32_t indexNum, const void* data)
+		{
+			return impl_->CreateIndexBuffer(indexNum, data);
+		}
+
+		std::unique_ptr<IConstantBuffer> GraphicsDevice::CreateConstantBuffer(const void* data, uint32_t size)
+		{
+			return impl_->CreateConstantBuffer(data, size);
+		}
+
+		std::unique_ptr<IShader> GraphicsDevice::CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type)
+		{
+			return impl_->CreateShader(filePath, entryFunc, type);
+		}
+
+		std::unique_ptr<ISamplerState> GraphicsDevice::CreateSamplerState(const SamplerDesc& desc)
+		{
+			return impl_->CreateSamplerState(desc);
+		}
+	}
+}

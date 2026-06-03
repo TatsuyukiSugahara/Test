@@ -1,19 +1,19 @@
 #pragma once
+#include <memory>
 #include "../Resource/Resource.h"
+#include "IBuffer.h"
+#include "IShader.h"
+#include "ISamplerState.h"
+#include "RenderContext.h"
 
 
 namespace engine
 {
 	namespace graphics
 	{
-		/**
-		 * TODO:マテリアルとか作るようにしたい
-		 */
-
 		class StaticMesh
 		{
 		public:
-			/** 使用するシェーダーの種類 */
 			enum class ShaderType
 			{
 				NormalModel,
@@ -21,17 +21,17 @@ namespace engine
 			};
 
 		private:
-			VertexBuffer vertexBuffer_;
-			IndexBuffer indexBuffer_;
-			uint32_t indicesSize_;
-			Shader vsShader_;
-			Shader psShader_;
-			engine::graphics::SamplerState samplerState_;
-			graphics::ConstantBuffer constantBuffer_;
-			math::Matrix4x4 worldMatrix_;
+			std::unique_ptr<IVertexBuffer>   vertexBuffer_;
+			std::unique_ptr<IIndexBuffer>    indexBuffer_;
+			uint32_t                         indicesSize_;
+			std::unique_ptr<IShader>         vsShader_;
+			std::unique_ptr<IShader>         psShader_;
+			std::unique_ptr<ISamplerState>   samplerState_;
+			std::unique_ptr<IConstantBuffer> constantBuffer_;
+			math::Matrix4x4                  worldMatrix_;
 
 			engine::res::RefMeshResource meshResource_;
-			engine::res::RefGPUResource gpuResource_;
+			engine::res::RefGPUResource  gpuResource_;
 
 
 		public:

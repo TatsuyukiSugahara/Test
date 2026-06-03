@@ -1,36 +1,30 @@
 #pragma once
+#include "IBuffer.h"
+#include "../Math/Vector.h"
+#include "../Math/Matrix.h"
+
 
 namespace engine
 {
 	namespace graphics
 	{
 		/**
-		 * GPUBuffer
+		 * D3D11 ãƒãƒƒãƒ•ã‚¡åŸºåº•ã‚¯ãƒ©ã‚¹ (ID3D11Buffer ã‚’ä¿æŒ)
 		 */
 		class GPUBuffer
 		{
 		private:
-			/** GPUBuffer */
 			ID3D11Buffer* gpuBuffer_;
-
 
 		public:
 			GPUBuffer();
 			virtual ~GPUBuffer();
 
-			/**
-			 * GPUBuffer¶¬
-			 */
 			bool Create(const void* initialData, D3D11_BUFFER_DESC& bufferDesc);
 
-			/**
-			 * ID3D11BufferŽæ“¾
-			 */
-			inline ID3D11Buffer*& GetBody() { return gpuBuffer_; }
+			inline ID3D11Buffer*& GetBody()         { return gpuBuffer_; }
+			inline void*          GetNativeHandle() const { return static_cast<void*>(gpuBuffer_); }
 
-			/**
-			 * ‰ð•ú
-			 */
 			void Release();
 		};
 
@@ -41,18 +35,17 @@ namespace engine
 
 
 		/**
-		 * ’è”ƒoƒbƒtƒ@
+		 * å®šæ•°ãƒãƒƒãƒ•ã‚¡ (D3D11)
 		 */
-		class ConstantBuffer : public GPUBuffer
+		class ConstantBuffer : public GPUBuffer, public IConstantBuffer
 		{
 		public:
 			ConstantBuffer();
 			virtual ~ConstantBuffer();
 
-			/**
-			 * ConstantBuffer¶¬
-			 */
-			bool Create(const void* initialData, uint32_t bufferSize);
+			bool Create(const void* initialData, uint32_t bufferSize) override;
+			void Release() override       { GPUBuffer::Release(); }
+			void* GetNativeHandle() const override { return GPUBuffer::GetNativeHandle(); }
 		};
 
 
@@ -62,9 +55,9 @@ namespace engine
 
 
 		/**
-		 * StructuredBuffer
+		 * æ§‹é€ åŒ–ãƒãƒƒãƒ•ã‚¡ (D3D11)
 		 */
-		class StructuredBuffer
+		class StructuredBuffer : public IStructuredBuffer
 		{
 		private:
 			ID3D11Buffer* structuredBuffer_;
@@ -73,12 +66,12 @@ namespace engine
 			StructuredBuffer();
 			~StructuredBuffer();
 
-			/** StructuredBuffer¶¬ */
-			inline bool Create(const void* initialData, D3D11_BUFFER_DESC& bufferDesc);
-			/** ID3D11Buffer‚ðŽæ“¾ */
-			inline ID3D11Buffer*& GetBody() { return structuredBuffer_; }
-			/** ‰ð•ú */
-			void Release();
+			bool Create(const void* initialData, D3D11_BUFFER_DESC& bufferDesc);
+
+			inline ID3D11Buffer*& GetBody()         { return structuredBuffer_; }
+			inline void*          GetNativeHandle() const override { return static_cast<void*>(structuredBuffer_); }
+
+			void Release() override;
 		};
 
 
@@ -88,26 +81,24 @@ namespace engine
 
 
 		/**
-		 * VertexBuffer
+		 * é ‚ç‚¹ãƒãƒƒãƒ•ã‚¡ (D3D11)
 		 */
-		class VertexBuffer
+		class VertexBuffer : public IVertexBuffer
 		{
 		private:
 			ID3D11Buffer* vertexBuffer_;
-			uint32_t stride_;
+			uint32_t      stride_;
 
 		public:
 			VertexBuffer();
 			~VertexBuffer();
 
-			/** VertexBuffer¶¬ */
-			bool Create(uint32_t vertexNum, uint32_t stride, const void* srcVertexBuffer);
-			/** ’¸“_ƒXƒgƒ‰ƒCƒhŽæ“¾ */
-			inline uint32_t GetStride() const { return stride_; }
-			/** ID3D11Buffer‚ðŽæ“¾ */
-			inline ID3D11Buffer*& GetBody() { return vertexBuffer_; }
-			/** ‰ð•ú */
-			void Release();
+			bool     Create(uint32_t vertexNum, uint32_t stride, const void* srcVertexBuffer) override;
+			void     Release() override;
+			uint32_t GetStride() const override { return stride_; }
+
+			inline ID3D11Buffer*& GetBody()         { return vertexBuffer_; }
+			inline void*          GetNativeHandle() const override { return static_cast<void*>(vertexBuffer_); }
 		};
 
 
@@ -117,9 +108,9 @@ namespace engine
 
 
 		/**
-		 * IndexBuffer
+		 * ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ãƒãƒƒãƒ•ã‚¡ (D3D11)
 		 */
-		class IndexBuffer
+		class IndexBuffer : public IIndexBuffer
 		{
 		private:
 			ID3D11Buffer* indexBuffer_;
@@ -128,12 +119,11 @@ namespace engine
 			IndexBuffer();
 			~IndexBuffer();
 
-			/** IndexBuffer¶¬ */
-			bool Create(uint32_t indexNum, const void* srcIndexBuffer);
-			/** ID3D11Buffer‚ðŽæ“¾ */
-			inline ID3D11Buffer*& GetBody() { return indexBuffer_; }
-			/** ‰ð•ú */
-			void Release();
+			bool  Create(uint32_t indexNum, const void* srcIndexBuffer) override;
+			void  Release() override;
+
+			inline ID3D11Buffer*& GetBody()         { return indexBuffer_; }
+			inline void*          GetNativeHandle() const override { return static_cast<void*>(indexBuffer_); }
 		};
 
 
@@ -142,25 +132,5 @@ namespace engine
 		/*******************************************/
 
 
-		/**
-		 * ’¸“_ƒoƒbƒtƒ@‚Ìî•ñ 
-		 */
-		struct VertexData
-		{
-			math::Vector3 position;
-			math::Vector3 normal;
-			math::Vector2 uv;
-		};
-
-
-		/**
-		 * ’è”ƒoƒbƒtƒ@
-		 */
-		struct VSConstantBuffer
-		{
-			math::Matrix4x4 world;
-			math::Matrix4x4 view;
-			math::Matrix4x4 projection;
-		};
 	}
 }

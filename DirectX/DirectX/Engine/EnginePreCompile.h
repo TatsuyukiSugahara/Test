@@ -2,11 +2,12 @@
 
 #pragma warning (disable  : 4201)
 
-// #define DEBUG_MASTER		0	// ƒfƒoƒbƒOƒrƒ‹ƒh
-// #define RELEASE_MASTER		1	// ƒŠƒŠ[ƒXƒrƒ‹ƒh
-// #define PREVIEW_MASTER		2	// ƒ}ƒXƒ^[ƒrƒ‹ƒh
+// #define DEBUG_MASTER		0	// ï¿½fï¿½oï¿½bï¿½Oï¿½rï¿½ï¿½ï¿½h
+// #define RELEASE_MASTER		1	// ï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½Xï¿½rï¿½ï¿½ï¿½h
+// #define PREVIEW_MASTER		2	// ï¿½}ï¿½Xï¿½^ï¿½[ï¿½rï¿½ï¿½ï¿½h
 
 
+#define NOMINMAX
 #include <windows.h>
 #pragma warning(push)
 #pragma warning(disable:4005)
@@ -35,9 +36,18 @@
 #include <array>
 #include <list>
 #include <string>
+#include <algorithm>
+#include <functional>
 
 #include <memory>
 #include <unordered_map>
+
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <future>
+#include <atomic>
+#include <chrono>
 
 #include <tchar.h>
 #include <stdio.h>
@@ -51,5 +61,6 @@
 #include "Math/Utility.h"
 
 #include "Util/CRC32.h"
+#include "Util/ThreadPool.h"
 
 #include "Utility.h"

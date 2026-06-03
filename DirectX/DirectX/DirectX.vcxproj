@@ -71,9 +71,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ExecutablePath>$(DXSDK_DIR)Utilities\bin\x64;$(DXSDK_DIR)Utilities\bin\x86;$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(DXSDK_DIR)Include;$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
-    <LibraryPath>$(DXSDK_DIR)Lib\x64;$(SolutionDir)ThirdParty\BulletPhysics\lib\Debug;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)ThirdParty\BulletPhysics\lib\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
@@ -121,7 +120,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;d3dx11d.lib;d3dx9d.lib;dxerr.lib;dxguid.lib;winmm.lib;comctl32.lib;BulletCollision.lib;BulletDynamics.lib;LinearMath.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxguid.lib;winmm.lib;comctl32.lib;BulletCollision.lib;BulletDynamics.lib;LinearMath.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(FBXSDK_DIR)\lib\x64\debug;$(SolutionDir)ThirdParty;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -166,6 +165,12 @@
     <ClCompile Include="Engine\Graphics\StaticMesh.cpp" />
     <ClCompile Include="Engine\HID\Input.cpp" />
     <ClCompile Include="Engine\JobSystem.cpp" />
+    <ClCompile Include="Engine\Util\ThreadPool.cpp" />
+    <ClCompile Include="Engine\Graphics\GraphicsDevice.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11Resources.cpp" />
+    <ClCompile Include="Engine\Graphics\GraphicsDevice.cpp" />
     <ClCompile Include="Engine\Math\Matrix.cpp" />
     <ClCompile Include="Engine\Math\Vector.cpp" />
     <ClCompile Include="Engine\Physics\BulletPhysics.cpp" />
@@ -212,6 +217,18 @@
     <ClInclude Include="Engine\Resource\Resource.h" />
     <ClInclude Include="Engine\Utility.h" />
     <ClInclude Include="Engine\Util\CRC32.h" />
+    <ClInclude Include="Engine\Util\ThreadPool.h" />
+    <ClInclude Include="Engine\Graphics\IGraphicsDeviceImpl.h" />
+    <ClInclude Include="Engine\Graphics\GraphicsDevice.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.h" />
+    <ClInclude Include="Engine\Graphics\GraphicsTypes.h" />
+    <ClInclude Include="Engine\Graphics\IRenderContextImpl.h" />
+    <ClInclude Include="Engine\Graphics\IBuffer.h" />
+    <ClInclude Include="Engine\Graphics\IShader.h" />
+    <ClInclude Include="Engine\Graphics\IShaderResourceView.h" />
+    <ClInclude Include="Engine\Graphics\ISamplerState.h" />
+    <ClInclude Include="Engine\Graphics\IUnorderedAccessView.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

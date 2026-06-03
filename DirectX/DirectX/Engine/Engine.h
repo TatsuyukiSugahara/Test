@@ -1,5 +1,7 @@
 #pragma once
 #include "Graphics/RenderContext.h"
+#include "Graphics/GraphicsDevice.h"
+
 
 namespace engine
 {
@@ -20,16 +22,11 @@ namespace engine
 	{
 	private:
 		HINSTANCE hInstance_;
-		HWND hWnd_;
-		D3D_DRIVER_TYPE driverType_;
-		D3D_FEATURE_LEVEL featureLevel_;
-		ID3D11Device* d3dDevice_;
-		graphics::RenderContext renderContext_;
-		ID3D11DeviceContext* deviceContext_;
-		IDXGISwapChain* swapChain_;
-		uint32_t currentMainRenderTarget_;
-		graphics::RenderTarget mainRenderTargets_[2];
+		HWND      hWnd_;
 
+		graphics::RenderContext renderContext_;
+
+		uint32_t currentMainRenderTarget_;
 		uint32_t screenWidth_;
 		uint32_t screenHeight_;
 		uint32_t renderWidth_;
@@ -56,17 +53,14 @@ namespace engine
 		void CopyMainRenderTargetToBackBuffer();
 
 	public:
-		/** デバイス取得 */
-		inline ID3D11Device* GetD3DDevice() const { return d3dDevice_; }
-		/** デバイスコンテキスト取得 */
-		inline ID3D11DeviceContext* GetD3DDeviceContext() const { return deviceContext_; }
-		/**  */
-		inline int32_t GetRenderWidth() const { return renderWidth_; }
+		inline int32_t GetRenderWidth()  const { return renderWidth_; }
 		inline int32_t GetRenderHeight() const { return renderHeight_; }
 
 		inline void ToggleMainRenderTarget() { currentMainRenderTarget_ ^= 1; }
-		inline graphics::RenderTarget& GetMainRenderTarget() { return mainRenderTargets_[currentMainRenderTarget_]; }
-
+		inline graphics::RenderTarget& GetMainRenderTarget()
+		{
+			return graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
+		}
 
 	public:
 		HWND GetHWND() { return hWnd_; }
@@ -83,18 +77,12 @@ namespace engine
 		static Engine* instance_;
 
 	public:
-		/** インスタンス生成 */
 		static void Create()
 		{
 			EngineAssert(instance_ == nullptr);
 			instance_ = new Engine();
 		}
-		/** インスタンス取得 */
-		static Engine& Get()
-		{
-			return *instance_;
-		}
-		/** インスタンス解放 */
+		static Engine& Get()  { return *instance_; }
 		static void Release()
 		{
 			if (instance_) {
@@ -105,7 +93,6 @@ namespace engine
 
 
 	private:
-		/** ウィンドウプロシージャ */
 		static LRESULT CALLBACK MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	};
 }

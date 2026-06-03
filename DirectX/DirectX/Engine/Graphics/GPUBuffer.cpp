@@ -1,6 +1,6 @@
 #include "../EnginePreCompile.h"
 #include "GPUBuffer.h"
-#include "../Engine.h"
+#include "D3D11/D3D11GraphicsDeviceImpl.h"
 
 namespace engine
 {
@@ -25,9 +25,9 @@ namespace engine
 			if (initialData) {
 				D3D11_SUBRESOURCE_DATA data;
 				data.pSysMem = initialData;
-				hr = Engine::Get().GetD3DDevice()->CreateBuffer(&bufferDesc, &data, &gpuBuffer_);
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&bufferDesc, &data, &gpuBuffer_);
 			} else {
-				hr = Engine::Get().GetD3DDevice()->CreateBuffer(&bufferDesc, NULL, &gpuBuffer_);
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&bufferDesc, NULL, &gpuBuffer_);
 			}
 			if (FAILED(hr)) {
 				return false;
@@ -66,7 +66,7 @@ namespace engine
 			D3D11_BUFFER_DESC desc;
 			memory::Clear(&desc, sizeof(desc));
 			desc.Usage = D3D11_USAGE_DEFAULT;
-			desc.ByteWidth = (((bufferSize - 1) / 16) + 1) * 16; // 16ƒoƒCƒgƒAƒ‰ƒCƒƒ“ƒg‚É‚·‚é
+			desc.ByteWidth = (((bufferSize - 1) / 16) + 1) * 16; // 16ï¿½oï¿½Cï¿½gï¿½Aï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½gï¿½É‚ï¿½ï¿½ï¿½
 			desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 			desc.CPUAccessFlags = 0;
 			return GPUBuffer::Create(initialData, desc);
@@ -97,10 +97,10 @@ namespace engine
 			if (initialData) {
 				D3D11_SUBRESOURCE_DATA data;
 				data.pSysMem = initialData;
-				hr = Engine::Get().GetD3DDevice()->CreateBuffer(&bufferDesc, &data, &structuredBuffer_);
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&bufferDesc, &data, &structuredBuffer_);
 			}
 			else {
-				hr = Engine::Get().GetD3DDevice()->CreateBuffer(&bufferDesc, NULL, &structuredBuffer_);
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&bufferDesc, NULL, &structuredBuffer_);
 			}
 			if (FAILED(hr)) {
 				return false;
@@ -149,7 +149,7 @@ namespace engine
 			memory::Clear(&initialData, sizeof(initialData));
 			initialData.pSysMem = srcVertexBuffer;
 
-			HRESULT hr = Engine::Get().GetD3DDevice()->CreateBuffer(&desc, &initialData, &vertexBuffer_);
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&desc, &initialData, &vertexBuffer_);
 			if (FAILED(hr)) {
 				return false;
 			}
@@ -197,7 +197,7 @@ namespace engine
 			memory::Clear(&initialData, sizeof(initialData));
 			initialData.pSysMem = srcIndexBuffer;
 
-			HRESULT hr = Engine::Get().GetD3DDevice()->CreateBuffer(&desc, &initialData, &indexBuffer_);
+			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&desc, &initialData, &indexBuffer_);
 			if (FAILED(hr)) {
 				return false;
 			}

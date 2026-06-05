@@ -87,5 +87,10 @@ namespace engine
 		{
 			return impl_->CreateSamplerState(desc);
 		}
+
+		std::unique_ptr<IShaderResourceView> GraphicsDevice::CreateTexture2D(const Texture2DDesc& desc, const ImageData& data)
+		{
+			return impl_->CreateTexture2D(desc, data);
+		}
 	}
 }

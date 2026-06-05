@@ -7,119 +7,15 @@
 #include "IUnorderedAccessView.h"
 #include "GraphicsTypes.h"
 #include "IRenderContextImpl.h"
+// D3D11 concrete resources (SamplerState/ShaderResourceView/UnorderedAccessView/RenderTarget):
+//   Graphics/D3D11/D3D11RenderResources.h
 
 
 namespace engine
 {
 	namespace graphics
 	{
-		/*******************************************/
-
-
-		class SamplerState : public ISamplerState
-		{
-		private:
-			ID3D11SamplerState* samplerState_;
-
-		public:
-			SamplerState();
-			~SamplerState();
-
-			bool  Create(const SamplerDesc& desc) override;
-			void  Release() override;
-			void* GetNativeHandle() const override { return static_cast<void*>(samplerState_); }
-
-			/** D3D11 固有アクセサ */
-			ID3D11SamplerState*& GetBody() { return samplerState_; }
-		};
-
-
-
-
-		/*******************************************/
-
-
-		class ShaderResourceView : public IShaderResourceView
-		{
-		private:
-			ID3D11ShaderResourceView* shaderResourceView_;
-
-		public:
-			ShaderResourceView();
-			~ShaderResourceView();
-
-			bool  Create(StructuredBuffer& structuredBuffer);
-			bool  Create(ID3D11Texture2D* texture);
-			void  Release() override;
-			void* GetNativeHandle() const override { return static_cast<void*>(shaderResourceView_); }
-
-			/** D3D11 固有アクセサ */
-			inline ID3D11ShaderResourceView*& GetBody() { return shaderResourceView_; }
-		};
-
-
-
-
-		/*******************************************/
-
-
-		class UnorderedAccessView : public IUnorderedAccessView
-		{
-		private:
-			ID3D11UnorderedAccessView* unorderedAccessView_;
-
-		public:
-			UnorderedAccessView();
-			~UnorderedAccessView();
-
-			bool  Create(StructuredBuffer& structuredBuffer);
-			bool  Create(ID3D11Texture2D* texture);
-			void  Release() override;
-			void* GetNativeHandle() const override { return static_cast<void*>(unorderedAccessView_); }
-
-			/** D3D11 固有アクセサ */
-			inline ID3D11UnorderedAccessView*& GetBody() { return unorderedAccessView_; }
-		};
-
-
-
-
-		/*******************************************/
-
-
-		class RenderTarget
-		{
-		private:
-			ID3D11Texture2D*        renderTarget_;
-			ID3D11RenderTargetView* renderTargetView_;
-			ID3D11Texture2D*        depthStencil_;
-			ID3D11DepthStencilView* depthStencilView_;
-			ShaderResourceView      renderTargetSRV_;
-			UnorderedAccessView     renderTargetUAV_;
-
-		public:
-			RenderTarget();
-			~RenderTarget();
-
-			bool Create(int32_t width, int32_t height, int32_t mipLevel,
-				PixelFormat colorFormat, PixelFormat depthStencilFormat,
-				SampleDesc multiSampleDesc,
-				ID3D11Texture2D* renderTarget = nullptr,
-				ID3D11Texture2D* depthStencil = nullptr);
-			void Release();
-
-			inline ID3D11Texture2D*        GetRenderTarget()     const { return renderTarget_; }
-			inline ID3D11RenderTargetView* GetrenderTargetView() const { return renderTargetView_; }
-			inline IShaderResourceView&    GetRenderTargetSRV()        { return renderTargetSRV_; }
-			inline IUnorderedAccessView&   GetRenderTargetUAV()        { return renderTargetUAV_; }
-			inline ID3D11DepthStencilView* GetDepthStencilView() const { return depthStencilView_; }
-		};
-
-
-
-
-		/*******************************************/
-
+		class RenderTarget;
 
 		/**
 		 * RenderContext Abstraction (Bridge Pattern)
@@ -139,7 +35,6 @@ namespace engine
 
 			template<typename TImpl>
 			TImpl* GetImplAs() { return static_cast<TImpl*>(impl_.get()); }
-
 
 		public:
 			void OMSetRenderTargets(uint32_t numViews, RenderTarget* renderTarget)
@@ -240,7 +135,6 @@ namespace engine
 				impl_->Dispatch(x, y, z);
 			}
 
-			/** GetNativeHandle() で void* を取り出して型消去版の impl へ委譲 */
 			template <typename TBuffer, typename SrcBuffer>
 			void UpdateSubresource(TBuffer& gpuBuffer, SrcBuffer buffer)
 			{
@@ -273,21 +167,13 @@ namespace engine
 				}
 			}
 
-
 		private:
 			std::unique_ptr<IRenderContextImpl> impl_;
 		};
 
 
-
-
 		/*******************************************/
 
 
-		class Texture
-		{
-		public:
-			static IShaderResourceView* Create2D(const DirectX::TexMetadata& metaData, const DirectX::Image* images);
-		};
 	}
 }

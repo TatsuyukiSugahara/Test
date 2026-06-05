@@ -1,6 +1,6 @@
 #include "../../EnginePreCompile.h"
 #include "D3D11RenderContextImpl.h"
-#include "../RenderContext.h"
+#include "D3D11RenderResources.h"
 
 
 namespace engine

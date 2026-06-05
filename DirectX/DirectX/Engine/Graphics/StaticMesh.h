@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include "../Resource/Resource.h"
+#include "../Math/Matrix.h"
 #include "IBuffer.h"
 #include "IShader.h"
 #include "ISamplerState.h"

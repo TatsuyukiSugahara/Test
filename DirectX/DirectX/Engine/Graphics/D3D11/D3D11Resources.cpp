@@ -1,6 +1,6 @@
 #include "../../EnginePreCompile.h"
-#include "../RenderContext.h"
-#include "../GPUBuffer.h"
+#include "D3D11RenderResources.h"
+#include "D3D11Buffers.h"
 #include "D3D11GraphicsDeviceImpl.h"
 
 
@@ -212,35 +212,33 @@ namespace engine
 		/*******************************************/
 
 
-		graphics::IShaderResourceView* Texture::Create2D(const DirectX::TexMetadata& metaData, const DirectX::Image* images)
+		std::unique_ptr<IShaderResourceView> D3D11GraphicsDeviceImpl::CreateTexture2D(const Texture2DDesc& texDesc, const ImageData& imgData)
 		{
-			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width              = static_cast<uint32_t>(metaData.width);
-			desc.Height             = static_cast<uint32_t>(metaData.height);
-			desc.MipLevels          = 1;
-			desc.ArraySize          = static_cast<uint32_t>(metaData.arraySize);
-			desc.Format             = metaData.format;
-			desc.SampleDesc.Count   = 1;
-			desc.SampleDesc.Quality = 0;
-			desc.Usage              = D3D11_USAGE_DEFAULT;
-			desc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
-			desc.MiscFlags          = metaData.IsCubemap() ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
+			D3D11_TEXTURE2D_DESC d3dDesc = {};
+			d3dDesc.Width              = texDesc.width;
+			d3dDesc.Height             = texDesc.height;
+			d3dDesc.MipLevels          = texDesc.mipLevels;
+			d3dDesc.ArraySize          = texDesc.arraySize;
+			d3dDesc.Format             = static_cast<DXGI_FORMAT>(texDesc.nativeFormat);
+			d3dDesc.SampleDesc.Count   = 1;
+			d3dDesc.SampleDesc.Quality = 0;
+			d3dDesc.Usage              = D3D11_USAGE_DEFAULT;
+			d3dDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+			d3dDesc.MiscFlags          = texDesc.isCubemap ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
 
-			const size_t index = metaData.ComputeIndex(0, 0, 0);
-			const DirectX::Image& img = images[index];
+			D3D11_SUBRESOURCE_DATA initData = {};
+			initData.pSysMem          = imgData.pixels;
+			initData.SysMemPitch      = imgData.rowPitch;
+			initData.SysMemSlicePitch = imgData.slicePitch;
 
-			std::unique_ptr<D3D11_SUBRESOURCE_DATA[]> initData(new (std::nothrow) D3D11_SUBRESOURCE_DATA[metaData.arraySize]);
-			initData[0].pSysMem          = img.pixels;
-			initData[0].SysMemPitch      = static_cast<DWORD>(img.rowPitch);
-			initData[0].SysMemSlicePitch = static_cast<DWORD>(img.rowPitch);
-
-			ID3D11Texture2D* ppResource = nullptr;
-			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateTexture2D(&desc, initData.get(), &ppResource);
+			ID3D11Texture2D* tex = nullptr;
+			HRESULT hr = GetStaticDevice()->CreateTexture2D(&d3dDesc, &initData, &tex);
 			if (FAILED(hr)) return nullptr;
 
-			ShaderResourceView* shaderResourceView = new ShaderResourceView();
-			shaderResourceView->Create(ppResource);
-			return shaderResourceView;
+			auto srv = std::make_unique<ShaderResourceView>();
+			srv->Create(tex);
+			tex->Release();
+			return srv;
 		}
 	}
 }

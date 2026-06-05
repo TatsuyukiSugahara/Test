@@ -1,5 +1,5 @@
-#include "../EnginePreCompile.h"
-#include "Shader.h"
+﻿#include "../EnginePreCompile.h"
+#include "D3D11/D3D11Shader.h"
 #include "D3D11/D3D11GraphicsDeviceImpl.h"
 
 namespace engine
@@ -122,8 +122,8 @@ namespace engine
 						static_cast<ID3D11ComputeShader*>(shader_)->Release();
 						break;
 					}
-					shader_ = nullptr;
 				}
+				shader_ = nullptr;
 			}
 			if (inputLayout_) {
 				inputLayout_->Release();

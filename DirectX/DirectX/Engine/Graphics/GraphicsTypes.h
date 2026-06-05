@@ -133,5 +133,29 @@ namespace engine
 			math::Matrix4x4 view;
 			math::Matrix4x4 projection;
 		};
+
+
+		/**
+		 * テクスチャ生成記述子 (API 非依存)
+		 * nativeFormat: D3D11/D3D12 では DXGI_FORMAT を uint32_t にキャスト。
+		 *               Vulkan では VkFormat を uint32_t にキャスト。
+		 */
+		struct Texture2DDesc
+		{
+			uint32_t width        = 0;
+			uint32_t height       = 0;
+			uint32_t arraySize    = 1;
+			uint32_t mipLevels    = 1;
+			bool     isCubemap    = false;
+			uint32_t nativeFormat = 0;
+		};
+
+		/** CPU 側の画像データ (API 非依存) */
+		struct ImageData
+		{
+			const void* pixels     = nullptr;
+			uint32_t    rowPitch   = 0;
+			uint32_t    slicePitch = 0;
+		};
 	}
 }

@@ -1,5 +1,5 @@
 #include "../EnginePreCompile.h"
-#include "GPUBuffer.h"
+#include "D3D11/D3D11Buffers.h"
 #include "D3D11/D3D11GraphicsDeviceImpl.h"
 
 namespace engine

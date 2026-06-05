@@ -1,6 +1,5 @@
 #include "../EnginePreCompile.h"
-#include "../Graphics/GPUBuffer.h"
-#include "../Graphics/RenderContext.h"
+#include "../Graphics/GraphicsDevice.h"
 #include "Resource.h"
 #include "../Engine.h"
 
@@ -121,8 +120,24 @@ namespace engine
 				}
 			}
 
+			const DirectX::Image* imgs = image->GetImages();
+			const size_t baseIdx = info.ComputeIndex(0, 0, 0);
+
+			engine::graphics::Texture2DDesc texDesc;
+			texDesc.width        = static_cast<uint32_t>(info.width);
+			texDesc.height       = static_cast<uint32_t>(info.height);
+			texDesc.arraySize    = static_cast<uint32_t>(info.arraySize);
+			texDesc.mipLevels    = 1;
+			texDesc.isCubemap    = info.IsCubemap();
+			texDesc.nativeFormat = static_cast<uint32_t>(info.format);
+
+			engine::graphics::ImageData imgData;
+			imgData.pixels    = imgs[baseIdx].pixels;
+			imgData.rowPitch  = static_cast<uint32_t>(imgs[baseIdx].rowPitch);
+			imgData.slicePitch = static_cast<uint32_t>(imgs[baseIdx].slicePitch);
+
 			TextureData* textureData = static_cast<TextureData*>(resource_->data_);
-			textureData->srv = engine::graphics::Texture::Create2D(info, image->GetImages());
+			textureData->srv = engine::graphics::GraphicsDevice::Get().CreateTexture2D(texDesc, imgData).release();
 
 			return true;
 		}

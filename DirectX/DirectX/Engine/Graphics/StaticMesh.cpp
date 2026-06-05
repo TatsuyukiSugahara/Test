@@ -105,9 +105,6 @@ namespace engine
 			context.VSSetConstantBuffer(0, *constantBuffer_);
 			context.PSSetConstantBuffer(0, *constantBuffer_);
 
-			float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-			context.ClearRenderTargetView(0, clearColor);
-
 			context.IASetVertexBuffer(*vertexBuffer_);
 			context.IASetIndexBuffer(*indexBuffer_);
 			context.IASetPrimitiveTopology(PrimitiveTopology::TriangleList);

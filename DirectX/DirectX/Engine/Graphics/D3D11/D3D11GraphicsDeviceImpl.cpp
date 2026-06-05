@@ -1,10 +1,9 @@
 #include "../../EnginePreCompile.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include "D3D11RenderContextImpl.h"
-#include "../RenderContext.h"
+#include "D3D11Buffers.h"
+#include "D3D11Shader.h"
 #include "../GraphicsDevice.h"
-#include "../GPUBuffer.h"
-#include "../Shader.h"
 
 
 namespace engine

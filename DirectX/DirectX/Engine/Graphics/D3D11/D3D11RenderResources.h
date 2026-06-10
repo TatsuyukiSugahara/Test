@@ -2,6 +2,7 @@
 #include "../ISamplerState.h"
 #include "../IShaderResourceView.h"
 #include "../IUnorderedAccessView.h"
+#include "../IRenderTarget.h"
 #include "../GraphicsTypes.h"
 
 namespace engine
@@ -21,9 +22,8 @@ namespace engine
 			SamplerState();
 			~SamplerState();
 
-			bool  Create(const SamplerDesc& desc) override;
-			void  Release() override;
-			void* GetNativeHandle() const override { return static_cast<void*>(samplerState_); }
+			bool Create(const SamplerDesc& desc) override;
+			void Release() override;
 
 			ID3D11SamplerState*& GetBody() { return samplerState_; }
 		};
@@ -39,10 +39,9 @@ namespace engine
 			ShaderResourceView();
 			~ShaderResourceView();
 
-			bool  Create(StructuredBuffer& structuredBuffer);
-			bool  Create(ID3D11Texture2D* texture);
-			void  Release() override;
-			void* GetNativeHandle() const override { return static_cast<void*>(shaderResourceView_); }
+			bool Create(StructuredBuffer& structuredBuffer);
+			bool Create(ID3D11Texture2D* texture);
+			void Release() override;
 
 			inline ID3D11ShaderResourceView*& GetBody() { return shaderResourceView_; }
 		};
@@ -58,17 +57,16 @@ namespace engine
 			UnorderedAccessView();
 			~UnorderedAccessView();
 
-			bool  Create(StructuredBuffer& structuredBuffer);
-			bool  Create(ID3D11Texture2D* texture);
-			void  Release() override;
-			void* GetNativeHandle() const override { return static_cast<void*>(unorderedAccessView_); }
+			bool Create(StructuredBuffer& structuredBuffer);
+			bool Create(ID3D11Texture2D* texture);
+			void Release() override;
 
 			inline ID3D11UnorderedAccessView*& GetBody() { return unorderedAccessView_; }
 		};
 
 		/*******************************************/
 
-		class RenderTarget
+		class RenderTarget : public IRenderTarget
 		{
 		private:
 			ID3D11Texture2D*        renderTarget_;
@@ -89,11 +87,14 @@ namespace engine
 				ID3D11Texture2D* depthStencil = nullptr);
 			void Release();
 
-			inline ID3D11Texture2D*        GetRenderTarget()      const { return renderTarget_; }
-			inline ID3D11RenderTargetView* GetrenderTargetView()  const { return renderTargetView_; }
-			inline IShaderResourceView&    GetRenderTargetSRV()         { return renderTargetSRV_; }
-			inline IUnorderedAccessView&   GetRenderTargetUAV()         { return renderTargetUAV_; }
-			inline ID3D11DepthStencilView* GetDepthStencilView()  const { return depthStencilView_; }
+			// IRenderTarget
+			IShaderResourceView&  GetRenderTargetSRV() override { return renderTargetSRV_; }
+			IUnorderedAccessView& GetRenderTargetUAV() override { return renderTargetUAV_; }
+
+			// D3D11 固有アクセサ (D3D11 実装コードのみ使用)
+			inline ID3D11Texture2D*        GetRenderTarget()     const { return renderTarget_; }
+			inline ID3D11RenderTargetView* GetrenderTargetView() const { return renderTargetView_; }
+			inline ID3D11DepthStencilView* GetDepthStencilView() const { return depthStencilView_; }
 		};
 	}
 }

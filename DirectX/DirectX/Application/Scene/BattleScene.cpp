@@ -42,7 +42,7 @@ namespace app
 			// 操作キャラクター生成
 			engine::ecs::EntityHandle targetHandle;
 			{
-				auto entity = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::BoxStaticMeshComponent, app::ecs::StateMachineComponent>();
+				auto entity = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::StaticMeshComponent, app::ecs::StateMachineComponent>();
 
 				targetHandle = engine::ecs::EntityManager::Get().GetHandle(entity);
 
@@ -51,6 +51,9 @@ namespace app
 				stateMachineComponent->GetStateMachine()->AddState<app::actor::MoveState>(EngineHash32("Move"));
 				stateMachineComponent->GetStateMachine()->RequestStateID(EngineHash32("Idle"));
 				stateMachineComponent->GetStateMachine()->SetTargetHandle(targetHandle);
+
+				engine::ecs::StaticMeshComponent* staticMeshComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::StaticMeshComponent>(entity);
+				staticMeshComponent->SetModelPath("../temp/Assets/unityChan.tkm");
 
 				engine::ecs::TransformComponent* transformComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::TransformComponent>(entity);
 				transformComponent->transform.localPosition.Set(0.0f);

@@ -25,14 +25,16 @@ namespace engine
 			std::unique_ptr<IVertexBuffer>   vertexBuffer_;
 			std::unique_ptr<IIndexBuffer>    indexBuffer_;
 			uint32_t                         indicesSize_;
-			std::unique_ptr<IShader>         vsShader_;
-			std::unique_ptr<IShader>         psShader_;
 			std::unique_ptr<ISamplerState>   samplerState_;
 			std::unique_ptr<IConstantBuffer> constantBuffer_;
 			math::Matrix4x4                  worldMatrix_;
+			math::Matrix4x4                  localMatrix_;
+			bool                             isInitialized_;
 
 			engine::res::RefMeshResource meshResource_;
 			engine::res::RefGPUResource  gpuResource_;
+			engine::res::RefShaderResource vsShaderResource_;
+			engine::res::RefShaderResource psShaderResource_;
 
 
 		public:
@@ -41,6 +43,7 @@ namespace engine
 
 			void Initialize(engine::res::RefMeshResource meshResource, engine::res::RefGPUResource gpuResource, const ShaderType shaderType);
 			void Initialize(const void* vertexBuffer, const uint32_t vertexNum, const void* indexBuffer, const uint32_t indexNum, const ShaderType shaderType);
+			void SetLocalMatrix(const math::Matrix4x4& localMatrix);
 			void Update(const math::Vector3& translation, const math::Quaternion& rotation, const math::Vector3& scale);
 			void Render(RenderContext& context, const math::Matrix4x4& view, const math::Matrix4x4& projection);
 

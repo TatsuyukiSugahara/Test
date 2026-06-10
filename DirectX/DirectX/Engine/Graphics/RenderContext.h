@@ -15,7 +15,7 @@ namespace engine
 {
 	namespace graphics
 	{
-		class RenderTarget;
+		class IRenderTarget;
 
 		/**
 		 * RenderContext Abstraction (Bridge Pattern)
@@ -37,7 +37,7 @@ namespace engine
 			TImpl* GetImplAs() { return static_cast<TImpl*>(impl_.get()); }
 
 		public:
-			void OMSetRenderTargets(uint32_t numViews, RenderTarget* renderTarget)
+			void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget)
 			{
 				impl_->OMSetRenderTargets(numViews, renderTarget);
 			}
@@ -135,36 +135,10 @@ namespace engine
 				impl_->Dispatch(x, y, z);
 			}
 
-			template <typename TBuffer, typename SrcBuffer>
-			void UpdateSubresource(TBuffer& gpuBuffer, SrcBuffer buffer)
+			template <typename SrcData>
+			void UpdateSubresource(IConstantBuffer& buf, const SrcData& data)
 			{
-				if (gpuBuffer.GetNativeHandle()) {
-					impl_->UpdateSubresourceRaw(gpuBuffer.GetNativeHandle(), &buffer);
-				}
-			}
-
-			template <typename TResource>
-			void CopyResource(TResource& destResource, TResource& srcResource)
-			{
-				if (destResource.GetNativeHandle() && srcResource.GetNativeHandle()) {
-					impl_->CopyResourceRaw(destResource.GetNativeHandle(), srcResource.GetNativeHandle());
-				}
-			}
-
-			template <typename TBuffer>
-			void Map(TBuffer& buffer, uint32_t subResource, MapType mapType, uint32_t mapFlags, MappedSubresource& mappedResource)
-			{
-				if (buffer.GetNativeHandle()) {
-					impl_->MapRaw(buffer.GetNativeHandle(), subResource, mapType, mapFlags, mappedResource);
-				}
-			}
-
-			template <typename TBuffer>
-			void Unmap(TBuffer& buffer, uint32_t subResource)
-			{
-				if (buffer.GetNativeHandle()) {
-					impl_->UnmapRaw(buffer.GetNativeHandle(), subResource);
-				}
+				impl_->UpdateConstantBuffer(buf, &data);
 			}
 
 		private:

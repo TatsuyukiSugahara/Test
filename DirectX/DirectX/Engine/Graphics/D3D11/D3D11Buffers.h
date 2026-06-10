@@ -16,8 +16,7 @@ namespace engine
 
 			bool Create(const void* initialData, D3D11_BUFFER_DESC& bufferDesc);
 
-			inline ID3D11Buffer*& GetBody()        { return gpuBuffer_; }
-			inline void*          GetNativeHandle() const { return static_cast<void*>(gpuBuffer_); }
+			inline ID3D11Buffer*& GetBody() { return gpuBuffer_; }
 
 			void Release();
 		};
@@ -28,9 +27,8 @@ namespace engine
 			ConstantBuffer();
 			virtual ~ConstantBuffer();
 
-			bool  Create(const void* initialData, uint32_t bufferSize) override;
-			void  Release() override       { GPUBuffer::Release(); }
-			void* GetNativeHandle() const override { return GPUBuffer::GetNativeHandle(); }
+			bool Create(const void* initialData, uint32_t bufferSize) override;
+			void Release() override { GPUBuffer::Release(); }
 		};
 
 		class StructuredBuffer : public IStructuredBuffer
@@ -44,8 +42,7 @@ namespace engine
 
 			bool Create(const void* initialData, D3D11_BUFFER_DESC& bufferDesc);
 
-			inline ID3D11Buffer*& GetBody()        { return structuredBuffer_; }
-			inline void*          GetNativeHandle() const override { return static_cast<void*>(structuredBuffer_); }
+			inline ID3D11Buffer*& GetBody() { return structuredBuffer_; }
 
 			void Release() override;
 		};
@@ -64,8 +61,7 @@ namespace engine
 			void     Release() override;
 			uint32_t GetStride() const override { return stride_; }
 
-			inline ID3D11Buffer*& GetBody()        { return vertexBuffer_; }
-			inline void*          GetNativeHandle() const override { return static_cast<void*>(vertexBuffer_); }
+			inline ID3D11Buffer*& GetBody() { return vertexBuffer_; }
 		};
 
 		class IndexBuffer : public IIndexBuffer
@@ -77,11 +73,10 @@ namespace engine
 			IndexBuffer();
 			~IndexBuffer();
 
-			bool  Create(uint32_t indexNum, const void* srcIndexBuffer) override;
-			void  Release() override;
+			bool Create(uint32_t indexNum, const void* srcIndexBuffer) override;
+			void Release() override;
 
-			inline ID3D11Buffer*& GetBody()        { return indexBuffer_; }
-			inline void*          GetNativeHandle() const override { return static_cast<void*>(indexBuffer_); }
+			inline ID3D11Buffer*& GetBody() { return indexBuffer_; }
 		};
 	}
 }

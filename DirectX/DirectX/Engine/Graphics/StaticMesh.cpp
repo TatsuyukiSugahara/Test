@@ -26,6 +26,8 @@ namespace engine
 		StaticMesh::StaticMesh()
 			: indicesSize_(0)
 			, worldMatrix_(math::Matrix4x4::Identity)
+			, localMatrix_(math::Matrix4x4::Identity)
+			, isInitialized_(false)
 		{
 		}
 
@@ -39,6 +41,11 @@ namespace engine
 		{
 			meshResource_ = meshResource;
 			gpuResource_  = gpuResource;
+			isInitialized_ = false;
+
+			if (!meshResource_ || meshResource_->GetVerticsSize() == 0 || meshResource_->GetIndicesSize() == 0) {
+				return;
+			}
 
 			vertexBuffer_ = GraphicsDevice::Get().CreateVertexBuffer(
 				meshResource_->GetVerticsSize(),
@@ -57,6 +64,11 @@ namespace engine
 
 		void StaticMesh::Initialize(const void* vertexBuffer, const uint32_t vertexNum, const void* indexBuffer, const uint32_t indexNum, const ShaderType shaderType)
 		{
+			isInitialized_ = false;
+			if (!vertexBuffer || vertexNum == 0 || !indexBuffer || indexNum == 0) {
+				return;
+			}
+
 			vertexBuffer_ = GraphicsDevice::Get().CreateVertexBuffer(vertexNum, sizeof(engine::graphics::VertexData), vertexBuffer);
 			indexBuffer_  = GraphicsDevice::Get().CreateIndexBuffer(indexNum, indexBuffer);
 			indicesSize_  = indexNum;
@@ -68,8 +80,8 @@ namespace engine
 		void StaticMesh::Initialize(const ShaderType shaderType)
 		{
 			const ShaderInformation& info = shaderInformations[static_cast<uint8_t>(shaderType)];
-			vsShader_ = GraphicsDevice::Get().CreateShader(info.vsFilePath, info.vsFuncName, IShader::ShaderType::VS);
-			psShader_ = GraphicsDevice::Get().CreateShader(info.psFilePath, info.psFuncName, IShader::ShaderType::PS);
+			vsShaderResource_ = engine::res::ResourceManager::Get().LoadShader(info.vsFilePath, info.vsFuncName, IShader::ShaderType::VS);
+			psShaderResource_ = engine::res::ResourceManager::Get().LoadShader(info.psFilePath, info.psFuncName, IShader::ShaderType::PS);
 
 			if (gpuResource_) {
 				SamplerDesc samplerDesc;
@@ -81,22 +93,46 @@ namespace engine
 			}
 
 			constantBuffer_ = GraphicsDevice::Get().CreateConstantBuffer(nullptr, sizeof(engine::graphics::VSConstantBuffer));
+			isInitialized_ = vertexBuffer_ && indexBuffer_ && constantBuffer_;
+		}
+
+
+		void StaticMesh::SetLocalMatrix(const math::Matrix4x4& localMatrix)
+		{
+			localMatrix_ = localMatrix;
 		}
 
 
 		void StaticMesh::Update(const math::Vector3& translation, const math::Quaternion& rotation, const math::Vector3& scale)
 		{
-			math::Matrix4x4 scaleMatrix, rotationMatrix, translationMatrix;
+			math::Matrix4x4 scaleMatrix, rotationMatrix, translationMatrix, localScaleMatrix, localRotationMatrix;
 			scaleMatrix.MakeScaling(scale);
 			rotationMatrix.MakeRotationFromQuaternion(rotation);
 			translationMatrix.MakeTranslation(translation);
-			worldMatrix_.Mull(scaleMatrix, rotationMatrix);
-			worldMatrix_.Mull(worldMatrix_, translationMatrix);
+			localScaleMatrix.Mull(localMatrix_, scaleMatrix);
+			localRotationMatrix.Mull(localScaleMatrix, rotationMatrix);
+			worldMatrix_.Mull(localRotationMatrix, translationMatrix);
 		}
 
 
 		void StaticMesh::Render(RenderContext& context, const math::Matrix4x4& view, const math::Matrix4x4& projection)
 		{
+			if (!isInitialized_) {
+				return;
+			}
+			if (!vsShaderResource_ || !psShaderResource_) {
+				return;
+			}
+			if (!vsShaderResource_->IsCompleted() || !psShaderResource_->IsCompleted()) {
+				return;
+			}
+
+			IShader* vsShader = vsShaderResource_->GetShader();
+			IShader* psShader = psShaderResource_->GetShader();
+			if (!vsShader || !psShader) {
+				return;
+			}
+
 			VSConstantBuffer cb;
 			cb.world      = worldMatrix_;
 			cb.view       = view;
@@ -109,14 +145,14 @@ namespace engine
 			context.IASetIndexBuffer(*indexBuffer_);
 			context.IASetPrimitiveTopology(PrimitiveTopology::TriangleList);
 
-			if (gpuResource_) {
+			if (gpuResource_ && gpuResource_->GetShaderResourceView() && samplerState_) {
 				context.PSSetShaderResource(0, *gpuResource_->GetShaderResourceView());
 				context.PsSetSampler(0, *samplerState_);
 			}
 
-			context.VSSetShader(*vsShader_);
-			context.PSSetShader(*psShader_);
-			context.IASetInputLayout(*vsShader_);
+			context.VSSetShader(*vsShader);
+			context.PSSetShader(*psShader);
+			context.IASetInputLayout(*vsShader);
 
 			context.DrawIndexed(indicesSize_);
 		}

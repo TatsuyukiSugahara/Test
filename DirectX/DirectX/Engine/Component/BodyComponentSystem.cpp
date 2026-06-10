@@ -41,6 +41,15 @@ namespace engine
 				0,1,4, 1,5,4,	// –Ê5
 				2,3,6, 3,7,6,	// –Ê6
 			};
+
+			engine::math::Matrix4x4 MakeZUpModelLocalMatrix(float modelScale)
+			{
+				engine::math::Matrix4x4 axisMatrix, scaleMatrix, localMatrix;
+				axisMatrix.MakeRotationX(-1.57079632679f);
+				scaleMatrix.MakeScaling(engine::math::Vector3(modelScale));
+				localMatrix.Mull(axisMatrix, scaleMatrix);
+				return localMatrix;
+			}
 		}
 
 
@@ -53,33 +62,30 @@ namespace engine
 		BoxStaticMeshComponent::~BoxStaticMeshComponent()
 		{
 		}
-
-
 		void BoxStaticMeshComponent::Update()
 		{
 			switch (componentState_)
 			{
 				case ComponentState::Loading:
 				{
+					staticMesh_.Initialize(BOX_VERTEX_BUFFER, ArraySize(BOX_VERTEX_BUFFER), BOX_INDEX_BUFFER, ArraySize(BOX_INDEX_BUFFER), engine::graphics::StaticMesh::ShaderType::SimpleBox);
 					componentState_ = ComponentState::Completed;
-					/** FALL THROUGH */
+					break;
 				}
 				case ComponentState::Completed:
 				{
-					staticMesh_.Initialize(BOX_VERTEX_BUFFER, ArraySize(BOX_VERTEX_BUFFER), BOX_INDEX_BUFFER, ArraySize(BOX_INDEX_BUFFER), engine::graphics::StaticMesh::ShaderType::SimpleBox);
+					break;
 				}
-
 			}
 		}
 
-
 		/*******************************************/
-
-
-
-
 		StaticMeshComponent::StaticMeshComponent()
-			: componentState_(ComponentState::LoadRequest)
+			: componentState_(ComponentState::Invalid)
+			, modelPath_()
+			, texturePath_()
+			, modelLocalMatrix_(MakeZUpModelLocalMatrix(0.05f))
+			, textureLoadRequested_(false)
 		{
 		}
 
@@ -88,6 +94,22 @@ namespace engine
 		{
 		}
 
+		void StaticMeshComponent::SetModelPath(const char* modelPath, const char* texturePath)
+		{
+			modelPath_ = modelPath ? modelPath : "";
+			texturePath_ = texturePath ? texturePath : "";
+			meshResouce_.reset();
+			gpuResource_.reset();
+			textureLoadRequested_ = false;
+			componentState_ = modelPath_.empty() ? ComponentState::Invalid : ComponentState::LoadRequest;
+		}
+		void StaticMeshComponent::SetModelLocalMatrix(const engine::math::Matrix4x4& localMatrix)
+		{
+			modelLocalMatrix_ = localMatrix;
+			if (componentState_ == ComponentState::Completed) {
+				staticMesh_.SetLocalMatrix(modelLocalMatrix_);
+			}
+		}
 
 		void StaticMeshComponent::Update()
 		{
@@ -99,32 +121,50 @@ namespace engine
 				}
 				case ComponentState::LoadRequest:
 				{
-					// @todo for test
-					meshResouce_ = engine::res::ResourceManager::Get().Load<engine::res::MeshResource>("Assets/Character/SmallFish.fbx");
-					gpuResource_ = engine::res::ResourceManager::Get().Load<engine::res::GPUResource>("Assets/Character/SmallFish.png");
+					meshResouce_ = engine::res::ResourceManager::Get().Load<engine::res::MeshResource>(modelPath_.c_str());
+					gpuResource_.reset();
+					textureLoadRequested_ = false;
 					componentState_ = ComponentState::Loading;
 					/** FALL THROUGH */
 				}
 				case ComponentState::Loading:
 				{
+					if (!meshResouce_ || meshResouce_->IsFailed()) {
+						componentState_ = ComponentState::Invalid;
+						break;
+					}
 					if (!meshResouce_->IsCompleted()) {
 						break;
 					}
-					if (!gpuResource_->IsCompleted()) {
-						break;
+
+					if (!textureLoadRequested_) {
+						const std::string& texturePath = texturePath_.empty() ? meshResouce_->GetTexturePath() : texturePath_;
+						if (!texturePath.empty()) {
+							gpuResource_ = engine::res::ResourceManager::Get().Load<engine::res::GPUResource>(texturePath.c_str());
+						}
+						textureLoadRequested_ = true;
 					}
 
+					if (gpuResource_) {
+						if (gpuResource_->IsFailed()) {
+							gpuResource_.reset();
+						}
+						else if (!gpuResource_->IsCompleted()) {
+							break;
+						}
+					}
+
+					staticMesh_.SetLocalMatrix(modelLocalMatrix_);
 					staticMesh_.Initialize(meshResouce_, gpuResource_, engine::graphics::StaticMesh::ShaderType::NormalModel);
 					componentState_ = ComponentState::Completed;
-					/** FALL THROUGH */
+					break;
 				}
 				case ComponentState::Completed:
 				{
-					// “Ç‚Ýž‚ÝŠ®—¹
+					break;
 				}
 			}
 		}
-
 
 		/*******************************************/
 
@@ -159,9 +199,7 @@ namespace engine
 					// ƒŠƒ\[ƒX“Ç‚Ýž‚Ý
 					staticMeshComponent->Update();
 					if (staticMeshComponent->IsCompleted()) {
-						//staticMeshComponent->GetStaticMesh()->Update(trasnformComponent->transform.position, trasnformComponent->transform.rotation, trasnformComponent->transform.scale);
-						// @todo for test
-						staticMeshComponent->GetStaticMesh()->Update(trasnformComponent->transform.position, trasnformComponent->transform.rotation, 1.0f);
+						staticMeshComponent->GetStaticMesh()->Update(trasnformComponent->transform.position, trasnformComponent->transform.rotation, trasnformComponent->transform.scale);
 					}
 				});
 		}

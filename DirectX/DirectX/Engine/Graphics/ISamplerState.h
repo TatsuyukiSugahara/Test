@@ -11,10 +11,8 @@ namespace engine
 		{
 		public:
 			virtual ~ISamplerState() = default;
-			virtual bool  Create(const SamplerDesc& desc) = 0;
-			virtual void  Release() = 0;
-			/** D3D11: ID3D11SamplerState* を void* で返す */
-			virtual void* GetNativeHandle() const = 0;
+			virtual bool Create(const SamplerDesc& desc) = 0;
+			virtual void Release() = 0;
 		};
 	}
 }

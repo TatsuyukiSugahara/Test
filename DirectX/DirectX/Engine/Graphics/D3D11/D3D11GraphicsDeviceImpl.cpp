@@ -28,8 +28,9 @@ namespace engine
 		}
 
 
-		bool D3D11GraphicsDeviceImpl::Initialize(HWND hwnd, uint32_t width, uint32_t height)
+		bool D3D11GraphicsDeviceImpl::Initialize(NativeWindowHandle window, uint32_t width, uint32_t height)
 		{
+			HWND hwnd = static_cast<HWND>(window.handle);
 			if (!CreateDeviceAndSwapChain(hwnd, width, height)) {
 				return false;
 			}
@@ -70,7 +71,7 @@ namespace engine
 		}
 
 
-		RenderTarget& D3D11GraphicsDeviceImpl::GetMainRenderTarget(uint32_t index)
+		IRenderTarget& D3D11GraphicsDeviceImpl::GetMainRenderTarget(uint32_t index)
 		{
 			return mainRenderTargets_[index];
 		}
@@ -82,11 +83,12 @@ namespace engine
 		}
 
 
-		void D3D11GraphicsDeviceImpl::CopyToBackBuffer(RenderTarget& src)
+		void D3D11GraphicsDeviceImpl::CopyToBackBuffer(IRenderTarget& src)
 		{
+			RenderTarget& rt = static_cast<RenderTarget&>(src);
 			ID3D11Texture2D* backBuffer = nullptr;
 			swapChain_->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer);
-			deviceContext_->CopyResource(backBuffer, src.GetRenderTarget());
+			deviceContext_->CopyResource(backBuffer, rt.GetRenderTarget());
 			backBuffer->Release();
 		}
 
@@ -145,7 +147,8 @@ namespace engine
 			desc.FillMode = D3D11_FILL_SOLID;
 			desc.CullMode = D3D11_CULL_BACK;
 			desc.DepthClipEnable = false;
-			device_->CreateRasterizerState(&desc, &rasterizerState_);
+			HRESULT hr = device_->CreateRasterizerState(&desc, &rasterizerState_);
+			EngineAssert(SUCCEEDED(hr));
 			context.GetImplAs<D3D11RenderContextImpl>()->RSSetState(rasterizerState_);
 		}
 
@@ -161,35 +164,35 @@ namespace engine
 		std::unique_ptr<IVertexBuffer> D3D11GraphicsDeviceImpl::CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
 		{
 			auto vb = std::make_unique<VertexBuffer>();
-			vb->Create(vertexNum, stride, data);
+			if (!vb->Create(vertexNum, stride, data)) return nullptr;
 			return vb;
 		}
 
 		std::unique_ptr<IIndexBuffer> D3D11GraphicsDeviceImpl::CreateIndexBuffer(uint32_t indexNum, const void* data)
 		{
 			auto ib = std::make_unique<IndexBuffer>();
-			ib->Create(indexNum, data);
+			if (!ib->Create(indexNum, data)) return nullptr;
 			return ib;
 		}
 
 		std::unique_ptr<IConstantBuffer> D3D11GraphicsDeviceImpl::CreateConstantBuffer(const void* data, uint32_t size)
 		{
 			auto cb = std::make_unique<ConstantBuffer>();
-			cb->Create(data, size);
+			if (!cb->Create(data, size)) return nullptr;
 			return cb;
 		}
 
 		std::unique_ptr<IShader> D3D11GraphicsDeviceImpl::CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type)
 		{
 			auto shader = std::make_unique<Shader>();
-			shader->Load(filePath, entryFunc, type);
+			if (!shader->Load(filePath, entryFunc, type)) return nullptr;
 			return shader;
 		}
 
 		std::unique_ptr<ISamplerState> D3D11GraphicsDeviceImpl::CreateSamplerState(const SamplerDesc& desc)
 		{
 			auto ss = std::make_unique<SamplerState>();
-			ss->Create(desc);
+			if (!ss->Create(desc)) return nullptr;
 			return ss;
 		}
 

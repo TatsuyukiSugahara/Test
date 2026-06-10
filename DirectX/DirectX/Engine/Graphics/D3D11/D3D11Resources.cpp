@@ -3,6 +3,8 @@
 #include "D3D11Buffers.h"
 #include "D3D11GraphicsDeviceImpl.h"
 
+#include <vector>
+
 
 namespace
 {
@@ -33,11 +35,26 @@ namespace
 	DXGI_FORMAT ToD3D11Format(PixelFormat p)
 	{
 		switch (p) {
-			case PixelFormat::R8G8B8A8_Unorm:     return DXGI_FORMAT_R8G8B8A8_UNORM;
-			case PixelFormat::D24_Unorm_S8_Uint:  return DXGI_FORMAT_D24_UNORM_S8_UINT;
-			case PixelFormat::R32_Float:           return DXGI_FORMAT_R32_FLOAT;
-			case PixelFormat::R32G32B32A32_Float: return DXGI_FORMAT_R32G32B32A32_FLOAT;
-			default:                               return DXGI_FORMAT_UNKNOWN;
+			case PixelFormat::R8G8B8A8_Unorm:      return DXGI_FORMAT_R8G8B8A8_UNORM;
+			case PixelFormat::R8G8B8A8_Unorm_SRGB: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+			case PixelFormat::B8G8R8A8_Unorm:      return DXGI_FORMAT_B8G8R8A8_UNORM;
+			case PixelFormat::B8G8R8A8_Unorm_SRGB: return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+			case PixelFormat::D24_Unorm_S8_Uint:   return DXGI_FORMAT_D24_UNORM_S8_UINT;
+			case PixelFormat::R16G16B16A16_Float:  return DXGI_FORMAT_R16G16B16A16_FLOAT;
+			case PixelFormat::R32_Float:            return DXGI_FORMAT_R32_FLOAT;
+			case PixelFormat::R32G32B32A32_Float:  return DXGI_FORMAT_R32G32B32A32_FLOAT;
+			case PixelFormat::BC1_Unorm:            return DXGI_FORMAT_BC1_UNORM;
+			case PixelFormat::BC1_Unorm_SRGB:       return DXGI_FORMAT_BC1_UNORM_SRGB;
+			case PixelFormat::BC2_Unorm:            return DXGI_FORMAT_BC2_UNORM;
+			case PixelFormat::BC2_Unorm_SRGB:       return DXGI_FORMAT_BC2_UNORM_SRGB;
+			case PixelFormat::BC3_Unorm:            return DXGI_FORMAT_BC3_UNORM;
+			case PixelFormat::BC3_Unorm_SRGB:       return DXGI_FORMAT_BC3_UNORM_SRGB;
+			case PixelFormat::BC4_Unorm:            return DXGI_FORMAT_BC4_UNORM;
+			case PixelFormat::BC5_Unorm:            return DXGI_FORMAT_BC5_UNORM;
+			case PixelFormat::BC6H_UFloat16:        return DXGI_FORMAT_BC6H_UF16;
+			case PixelFormat::BC7_Unorm:            return DXGI_FORMAT_BC7_UNORM;
+			case PixelFormat::BC7_Unorm_SRGB:       return DXGI_FORMAT_BC7_UNORM_SRGB;
+			default:                                return DXGI_FORMAT_UNKNOWN;
 		}
 	}
 }
@@ -97,9 +114,23 @@ namespace engine
 			texture->GetDesc(&textureDesc);
 
 			D3D11_SHADER_RESOURCE_VIEW_DESC descSRV = {};
-			descSRV.Format                  = textureDesc.Format;
-			descSRV.ViewDimension           = D3D11_SRV_DIMENSION_TEXTURE2D;
-			descSRV.Texture2D.MipLevels     = textureDesc.MipLevels;
+			descSRV.Format = textureDesc.Format;
+			if (textureDesc.MiscFlags & D3D11_RESOURCE_MISC_TEXTURECUBE) {
+				descSRV.ViewDimension              = D3D11_SRV_DIMENSION_TEXTURECUBE;
+				descSRV.TextureCube.MostDetailedMip = 0;
+				descSRV.TextureCube.MipLevels      = textureDesc.MipLevels;
+			}
+			else if (textureDesc.ArraySize > 1) {
+				descSRV.ViewDimension                  = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+				descSRV.Texture2DArray.MostDetailedMip = 0;
+				descSRV.Texture2DArray.MipLevels       = textureDesc.MipLevels;
+				descSRV.Texture2DArray.FirstArraySlice = 0;
+				descSRV.Texture2DArray.ArraySize       = textureDesc.ArraySize;
+			}
+			else {
+				descSRV.ViewDimension       = D3D11_SRV_DIMENSION_TEXTURE2D;
+				descSRV.Texture2D.MipLevels = textureDesc.MipLevels;
+			}
 
 			HRESULT hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateShaderResourceView(texture, &descSRV, &shaderResourceView_);
 			return SUCCEEDED(hr);
@@ -219,20 +250,37 @@ namespace engine
 			d3dDesc.Height             = texDesc.height;
 			d3dDesc.MipLevels          = texDesc.mipLevels;
 			d3dDesc.ArraySize          = texDesc.arraySize;
-			d3dDesc.Format             = static_cast<DXGI_FORMAT>(texDesc.nativeFormat);
+			d3dDesc.Format             = ToD3D11Format(texDesc.format);
 			d3dDesc.SampleDesc.Count   = 1;
 			d3dDesc.SampleDesc.Quality = 0;
 			d3dDesc.Usage              = D3D11_USAGE_DEFAULT;
 			d3dDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
 			d3dDesc.MiscFlags          = texDesc.isCubemap ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
 
-			D3D11_SUBRESOURCE_DATA initData = {};
-			initData.pSysMem          = imgData.pixels;
-			initData.SysMemPitch      = imgData.rowPitch;
-			initData.SysMemSlicePitch = imgData.slicePitch;
+			D3D11_SUBRESOURCE_DATA singleInitData = {};
+			std::vector<D3D11_SUBRESOURCE_DATA> initDataArray;
+			const D3D11_SUBRESOURCE_DATA* initData = nullptr;
+			if (imgData.subresources && imgData.subresourceCount > 0) {
+				initDataArray.reserve(imgData.subresourceCount);
+				for (uint32_t index = 0; index < imgData.subresourceCount; ++index) {
+					const ImageSubresourceData& src = imgData.subresources[index];
+					D3D11_SUBRESOURCE_DATA dst = {};
+					dst.pSysMem          = src.pixels;
+					dst.SysMemPitch      = src.rowPitch;
+					dst.SysMemSlicePitch = src.slicePitch;
+					initDataArray.push_back(dst);
+				}
+				initData = initDataArray.data();
+			}
+			else {
+				singleInitData.pSysMem          = imgData.pixels;
+				singleInitData.SysMemPitch      = imgData.rowPitch;
+				singleInitData.SysMemSlicePitch = imgData.slicePitch;
+				initData = &singleInitData;
+			}
 
 			ID3D11Texture2D* tex = nullptr;
-			HRESULT hr = GetStaticDevice()->CreateTexture2D(&d3dDesc, &initData, &tex);
+			HRESULT hr = GetStaticDevice()->CreateTexture2D(&d3dDesc, initData, &tex);
 			if (FAILED(hr)) return nullptr;
 
 			auto srv = std::make_unique<ShaderResourceView>();

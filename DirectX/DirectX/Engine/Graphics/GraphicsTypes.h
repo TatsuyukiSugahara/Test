@@ -94,16 +94,35 @@ namespace engine
 
 
 		/**
-		 * ピクセルフォーマット
-		 * D3D11: DXGI_FORMAT_*
+		 * ピクセルフォーマット (API 非依存)
+		 * D3D11: DXGI_FORMAT_* への変換は D3D11 層の ToD3D11Format() が担う
 		 */
 		enum class PixelFormat : uint8_t
 		{
 			Unknown,
+			// 8bit 4ch
 			R8G8B8A8_Unorm,
+			R8G8B8A8_Unorm_SRGB,
+			B8G8R8A8_Unorm,
+			B8G8R8A8_Unorm_SRGB,
+			// Depth/Stencil
 			D24_Unorm_S8_Uint,
+			// Float
+			R16G16B16A16_Float,
 			R32_Float,
 			R32G32B32A32_Float,
+			// BC 圧縮
+			BC1_Unorm,
+			BC1_Unorm_SRGB,
+			BC2_Unorm,
+			BC2_Unorm_SRGB,
+			BC3_Unorm,
+			BC3_Unorm_SRGB,
+			BC4_Unorm,
+			BC5_Unorm,
+			BC6H_UFloat16,
+			BC7_Unorm,
+			BC7_Unorm_SRGB,
 		};
 
 
@@ -135,19 +154,23 @@ namespace engine
 		};
 
 
-		/**
-		 * テクスチャ生成記述子 (API 非依存)
-		 * nativeFormat: D3D11/D3D12 では DXGI_FORMAT を uint32_t にキャスト。
-		 *               Vulkan では VkFormat を uint32_t にキャスト。
-		 */
+		/** テクスチャ生成記述子 (API 非依存) */
 		struct Texture2DDesc
 		{
-			uint32_t width        = 0;
-			uint32_t height       = 0;
-			uint32_t arraySize    = 1;
-			uint32_t mipLevels    = 1;
-			bool     isCubemap    = false;
-			uint32_t nativeFormat = 0;
+			uint32_t    width     = 0;
+			uint32_t    height    = 0;
+			uint32_t    arraySize = 1;
+			uint32_t    mipLevels = 1;
+			bool        isCubemap = false;
+			PixelFormat format    = PixelFormat::Unknown;
+		};
+
+		/** CPU 側の画像サブリソースデータ (API 非依存) */
+		struct ImageSubresourceData
+		{
+			const void* pixels     = nullptr;
+			uint32_t    rowPitch   = 0;
+			uint32_t    slicePitch = 0;
 		};
 
 		/** CPU 側の画像データ (API 非依存) */
@@ -156,6 +179,20 @@ namespace engine
 			const void* pixels     = nullptr;
 			uint32_t    rowPitch   = 0;
 			uint32_t    slicePitch = 0;
+			const ImageSubresourceData* subresources = nullptr;
+			uint32_t subresourceCount = 0;
+		};
+
+
+		/**
+		 * プラットフォーム非依存のウィンドウハンドル
+		 * Win32:  handle に HWND を void* キャストして格納
+		 * macOS:  NSWindow*
+		 * Wayland: wl_surface*
+		 */
+		struct NativeWindowHandle
+		{
+			void* handle = nullptr;
 		};
 	}
 }

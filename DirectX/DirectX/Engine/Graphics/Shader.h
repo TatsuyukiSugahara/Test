@@ -1,3 +1,25 @@
 #pragma once
+#include <string>
 #include "IShader.h"
-// D3D11 concrete implementation: Graphics/D3D11/D3D11Shader.h
+
+namespace engine
+{
+	namespace graphics
+	{
+		struct ShaderResourceDesc
+		{
+			std::string         filePath;
+			std::string         entryFuncName;
+			IShader::ShaderType shaderType = IShader::ShaderType::VS;
+		};
+
+		std::string BuildShaderResourceKey(
+			const char* filePath,
+			const char* entryFuncName,
+			IShader::ShaderType shaderType);
+
+		bool ParseShaderResourceKey(
+			const std::string& key,
+			ShaderResourceDesc& outDesc);
+	}
+}

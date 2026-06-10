@@ -10,9 +10,7 @@ namespace engine
 		{
 		public:
 			virtual ~IShaderResourceView() = default;
-			virtual void  Release() = 0;
-			/** D3D11: ID3D11ShaderResourceView* を void* で返す */
-			virtual void* GetNativeHandle() const = 0;
+			virtual void Release() = 0;
 		};
 	}
 }

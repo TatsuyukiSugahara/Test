@@ -14,8 +14,6 @@ namespace engine
 			virtual bool     Create(uint32_t vertexNum, uint32_t stride, const void* data) = 0;
 			virtual void     Release() = 0;
 			virtual uint32_t GetStride() const = 0;
-			/** 実装が持つ GPU ハンドルを void* で返す (D3D11: ID3D11Buffer*) */
-			virtual void*    GetNativeHandle() const = 0;
 		};
 
 		/** インデックスバッファ インターフェース */
@@ -23,9 +21,8 @@ namespace engine
 		{
 		public:
 			virtual ~IIndexBuffer() = default;
-			virtual bool  Create(uint32_t indexNum, const void* data) = 0;
-			virtual void  Release() = 0;
-			virtual void* GetNativeHandle() const = 0;
+			virtual bool Create(uint32_t indexNum, const void* data) = 0;
+			virtual void Release() = 0;
 		};
 
 		/** 定数バッファ インターフェース */
@@ -33,9 +30,8 @@ namespace engine
 		{
 		public:
 			virtual ~IConstantBuffer() = default;
-			virtual bool  Create(const void* data, uint32_t size) = 0;
-			virtual void  Release() = 0;
-			virtual void* GetNativeHandle() const = 0;
+			virtual bool Create(const void* data, uint32_t size) = 0;
+			virtual void Release() = 0;
 		};
 
 		/** 構造体バッファ インターフェース */
@@ -43,8 +39,7 @@ namespace engine
 		{
 		public:
 			virtual ~IStructuredBuffer() = default;
-			virtual void  Release() = 0;
-			virtual void* GetNativeHandle() const = 0;
+			virtual void Release() = 0;
 		};
 	}
 }

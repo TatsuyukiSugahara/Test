@@ -11,7 +11,7 @@ namespace engine
 {
 	namespace graphics
 	{
-		class RenderTarget;
+		class IRenderTarget;
 
 		/**
 		 * RenderContext Implementor interface (Bridge Pattern)
@@ -24,7 +24,7 @@ namespace engine
 		public:
 			virtual ~IRenderContextImpl() = default;
 
-			virtual void OMSetRenderTargets(uint32_t numViews, RenderTarget* renderTarget) = 0;
+			virtual void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget) = 0;
 			virtual void RSSetViewport(float topLeftX, float topLeftY, float width, float height) = 0;
 			virtual void ClearRenderTargetView(uint32_t index, float* clearColor) = 0;
 
@@ -53,11 +53,7 @@ namespace engine
 			virtual void DrawIndexed(uint32_t indexCount) = 0;
 			virtual void Dispatch(uint32_t x, uint32_t y, uint32_t z) = 0;
 
-			/** テンプレートメソッドから呼ばれる型消去版 */
-			virtual void UpdateSubresourceRaw(void* gpuBuffer, const void* srcData) = 0;
-			virtual void CopyResourceRaw(void* dest, void* src) = 0;
-			virtual void MapRaw(void* buffer, uint32_t subResource, MapType mapType, uint32_t flags, MappedSubresource& mapped) = 0;
-			virtual void UnmapRaw(void* buffer, uint32_t subResource) = 0;
+			virtual void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) = 0;
 		};
 	}
 }

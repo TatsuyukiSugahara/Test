@@ -21,9 +21,9 @@ namespace engine
 		}
 
 
-		bool GraphicsDevice::Initialize(HWND hwnd, uint32_t width, uint32_t height)
+		bool GraphicsDevice::Initialize(NativeWindowHandle window, uint32_t width, uint32_t height)
 		{
-			return impl_->Initialize(hwnd, width, height);
+			return impl_->Initialize(window, width, height);
 		}
 
 
@@ -39,7 +39,7 @@ namespace engine
 		}
 
 
-		RenderTarget& GraphicsDevice::GetMainRenderTarget(uint32_t index)
+		IRenderTarget& GraphicsDevice::GetMainRenderTarget(uint32_t index)
 		{
 			return impl_->GetMainRenderTarget(index);
 		}
@@ -51,7 +51,7 @@ namespace engine
 		}
 
 
-		void GraphicsDevice::CopyToBackBuffer(RenderTarget& src)
+		void GraphicsDevice::CopyToBackBuffer(IRenderTarget& src)
 		{
 			impl_->CopyToBackBuffer(src);
 		}

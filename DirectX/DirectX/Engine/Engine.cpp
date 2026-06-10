@@ -1,7 +1,9 @@
 #include "EnginePreCompile.h"
 #include "Engine.h"
 #include "Application.h"
+#ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
+#endif
 
 
 namespace engine
@@ -105,12 +107,12 @@ namespace engine
 		renderWidth_  = initializeParameter.renderWidth;
 		renderHeight_ = initializeParameter.renderHeight;
 
-		// D3D11 実装を注入 (将来 D3D12 / Vulkan に替える場合はここだけ変える)
-		graphics::GraphicsDevice::Create(
-			std::make_unique<graphics::D3D11GraphicsDeviceImpl>()
-		);
+		// 選択された API の実装を注入 (将来 D3D12 / Vulkan に替える場合は define を変えてここを追加する)
+#ifdef ENGINE_GRAPHICS_D3D11
+		graphics::GraphicsDevice::Create<graphics::D3D11GraphicsDeviceImpl>();
+#endif // ENGINE_GRAPHICS_D3D11
 
-		if (!graphics::GraphicsDevice::Get().Initialize(hWnd_, renderWidth_, renderHeight_)) {
+		if (!graphics::GraphicsDevice::Get().Initialize({ hWnd_ }, renderWidth_, renderHeight_)) {
 			return false;
 		}
 
@@ -141,7 +143,7 @@ namespace engine
 
 	void Engine::CopyMainRenderTargetToBackBuffer()
 	{
-		graphics::RenderTarget& rt =
+		graphics::IRenderTarget& rt =
 			graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
 		graphics::GraphicsDevice::Get().CopyToBackBuffer(rt);
 	}

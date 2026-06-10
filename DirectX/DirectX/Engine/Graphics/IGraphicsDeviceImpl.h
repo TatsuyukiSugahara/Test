@@ -1,11 +1,11 @@
 #pragma once
 #include <cstdint>
 #include <memory>
-#include <windows.h>
 #include "IBuffer.h"
 #include "IShader.h"
 #include "IShaderResourceView.h"
 #include "ISamplerState.h"
+#include "GraphicsTypes.h"
 
 
 namespace engine
@@ -13,7 +13,7 @@ namespace engine
 	namespace graphics
 	{
 		class RenderContext;
-		class RenderTarget;
+		class IRenderTarget;
 
 		/**
 		 * Graphics API Implementor interface (Bridge Pattern)
@@ -27,7 +27,7 @@ namespace engine
 			virtual ~IGraphicsDeviceImpl() = default;
 
 			/** デバイス・スワップチェーン等の初期化 */
-			virtual bool Initialize(HWND hwnd, uint32_t width, uint32_t height) = 0;
+			virtual bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) = 0;
 
 			/** 解放 */
 			virtual void Finalize() = 0;
@@ -39,13 +39,13 @@ namespace engine
 			virtual void SetupRenderContext(RenderContext& outContext) = 0;
 
 			/** メインのレンダリングターゲットを返す */
-			virtual RenderTarget& GetMainRenderTarget(uint32_t index) = 0;
+			virtual IRenderTarget& GetMainRenderTarget(uint32_t index) = 0;
 
 			/** 描画結果を画面に出す */
 			virtual void Present() = 0;
 
 			/** メインRTを現在のバックバッファへコピー（不要な API では空実装） */
-			virtual void CopyToBackBuffer(RenderTarget& src) = 0;
+			virtual void CopyToBackBuffer(IRenderTarget& src) = 0;
 
 			/** デフォルトのラスタライザーなど API 固有の初期レンダーステートを設定する */
 			virtual void SetupDefaultRenderState(RenderContext& context) = 0;

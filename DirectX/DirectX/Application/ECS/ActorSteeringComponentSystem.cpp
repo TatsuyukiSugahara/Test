@@ -19,7 +19,7 @@ namespace app
 		void CharacterSteeringSystem::Update()
 		{
 			engine::math::Vector3 direction(0.0f);
-			float speed = 1.0f;	// “ü—Í‘¬“x‚¾‚ªˆê’UŒÅ’è
+			float speed = 0.01f;	// “ü—Í‘¬“x‚¾‚ªˆê’UŒÅ’è
 			if (engine::hid::InputManager::Get().GetKeyBoard().IsPressed(engine::hid::BUTTON_W)) {
 				++direction.y;
 			}

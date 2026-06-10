@@ -10,7 +10,7 @@ namespace engine
 		 * DirectX 11 RenderContext Concrete Implementor (Bridge Pattern)
 		 *
 		 * ID3D11DeviceContext* などは .cpp にのみ登場する。
-		 * GetNativeHandle() で受け取った void* を D3D11 型にキャストして API を呼ぶ。
+		 * 抽象インターフェース型を D3D11 具象型にキャストして API を呼ぶ。
 		 */
 		class D3D11RenderContextImpl : public IRenderContextImpl
 		{
@@ -18,7 +18,7 @@ namespace engine
 			explicit D3D11RenderContextImpl(ID3D11DeviceContext* context);
 			~D3D11RenderContextImpl() override = default;
 
-			void OMSetRenderTargets(uint32_t numViews, RenderTarget* renderTarget) override;
+			void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget) override;
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height) override;
 			void ClearRenderTargetView(uint32_t index, float* clearColor) override;
 
@@ -47,10 +47,7 @@ namespace engine
 			void DrawIndexed(uint32_t indexCount) override;
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
 
-			void UpdateSubresourceRaw(void* gpuBuffer, const void* srcData) override;
-			void CopyResourceRaw(void* dest, void* src) override;
-			void MapRaw(void* buffer, uint32_t subResource, MapType mapType, uint32_t flags, MappedSubresource& mapped) override;
-			void UnmapRaw(void* buffer, uint32_t subResource) override;
+			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;
 
 			/** D3D11 専用: ラスタライザーステート */
 			void RSSetState(ID3D11RasterizerState* state);

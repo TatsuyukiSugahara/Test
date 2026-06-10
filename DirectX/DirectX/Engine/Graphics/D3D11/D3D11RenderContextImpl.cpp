@@ -1,6 +1,8 @@
 #include "../../EnginePreCompile.h"
 #include "D3D11RenderContextImpl.h"
 #include "D3D11RenderResources.h"
+#include "D3D11Buffers.h"
+#include "D3D11Shader.h"
 
 
 namespace engine
@@ -17,14 +19,16 @@ namespace engine
 		}
 
 
-		void D3D11RenderContextImpl::OMSetRenderTargets(uint32_t numViews, RenderTarget* renderTarget)
+		void D3D11RenderContextImpl::OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget)
 		{
 			memory::Clear(renderTargetViews_, sizeof(renderTargetViews_));
 			depthStencilView_ = nullptr;
 			if (renderTarget) {
-				depthStencilView_ = renderTarget[0].GetDepthStencilView();
+				// IRenderTarget* は常に RenderTarget[] の先頭を指す (D3D11 backend 内保証)
+				RenderTarget* rts = static_cast<RenderTarget*>(renderTarget);
+				depthStencilView_ = rts[0].GetDepthStencilView();
 				for (uint32_t i = 0; i < numViews; ++i) {
-					renderTargetViews_[i] = renderTarget[i].GetrenderTargetView();
+					renderTargetViews_[i] = rts[i].GetrenderTargetView();
 				}
 			}
 			context_->OMSetRenderTargets(numViews, renderTargetViews_, depthStencilView_);
@@ -57,14 +61,14 @@ namespace engine
 		{
 			uint32_t offset = 0;
 			uint32_t stride = vb.GetStride();
-			auto* d3dBuf    = static_cast<ID3D11Buffer*>(vb.GetNativeHandle());
+			auto* d3dBuf    = static_cast<VertexBuffer&>(vb).GetBody();
 			context_->IASetVertexBuffers(0, 1, &d3dBuf, &stride, &offset);
 		}
 
 
 		void D3D11RenderContextImpl::IASetIndexBuffer(IIndexBuffer& ib)
 		{
-			auto* d3dBuf = static_cast<ID3D11Buffer*>(ib.GetNativeHandle());
+			auto* d3dBuf = static_cast<IndexBuffer&>(ib).GetBody();
 			context_->IASetIndexBuffer(d3dBuf, DXGI_FORMAT_R32_UINT, 0);
 		}
 
@@ -77,42 +81,42 @@ namespace engine
 
 		void D3D11RenderContextImpl::IASetInputLayout(IShader& vsShader)
 		{
-			auto* layout = static_cast<ID3D11InputLayout*>(vsShader.GetInputLayout());
+			auto* layout = static_cast<Shader&>(vsShader).GetInputLayoutD3D11();
 			context_->IASetInputLayout(layout);
 		}
 
 
 		void D3D11RenderContextImpl::VSSetShader(IShader& shader)
 		{
-			auto* vs = static_cast<ID3D11VertexShader*>(shader.GetNativeHandle());
+			auto* vs = static_cast<Shader&>(shader).GetShaderAs<ID3D11VertexShader>();
 			context_->VSSetShader(vs, nullptr, 0);
 		}
 
 
 		void D3D11RenderContextImpl::VSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& cb)
 		{
-			auto* d3dBuf = static_cast<ID3D11Buffer*>(cb.GetNativeHandle());
+			auto* d3dBuf = static_cast<ConstantBuffer&>(cb).GetBody();
 			context_->VSSetConstantBuffers(startSlot, 1, &d3dBuf);
 		}
 
 
 		void D3D11RenderContextImpl::PSSetShader(IShader& shader)
 		{
-			auto* ps = static_cast<ID3D11PixelShader*>(shader.GetNativeHandle());
+			auto* ps = static_cast<Shader&>(shader).GetShaderAs<ID3D11PixelShader>();
 			context_->PSSetShader(ps, nullptr, 0);
 		}
 
 
 		void D3D11RenderContextImpl::PSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& cb)
 		{
-			auto* d3dBuf = static_cast<ID3D11Buffer*>(cb.GetNativeHandle());
+			auto* d3dBuf = static_cast<ConstantBuffer&>(cb).GetBody();
 			context_->PSSetConstantBuffers(startSlot, 1, &d3dBuf);
 		}
 
 
 		void D3D11RenderContextImpl::PSSetShaderResource(uint32_t startSlot, IShaderResourceView& srv)
 		{
-			auto* d3dSRV = static_cast<ID3D11ShaderResourceView*>(srv.GetNativeHandle());
+			auto* d3dSRV = static_cast<ShaderResourceView&>(srv).GetBody();
 			context_->PSSetShaderResources(startSlot, 1, &d3dSRV);
 		}
 
@@ -126,28 +130,28 @@ namespace engine
 
 		void D3D11RenderContextImpl::PSSetSampler(uint32_t startSlot, ISamplerState& ss)
 		{
-			auto* d3dSS = static_cast<ID3D11SamplerState*>(ss.GetNativeHandle());
+			auto* d3dSS = static_cast<SamplerState&>(ss).GetBody();
 			context_->PSSetSamplers(startSlot, 1, &d3dSS);
 		}
 
 
 		void D3D11RenderContextImpl::CSSetShader(IShader& shader)
 		{
-			auto* cs = static_cast<ID3D11ComputeShader*>(shader.GetNativeHandle());
+			auto* cs = static_cast<Shader&>(shader).GetShaderAs<ID3D11ComputeShader>();
 			context_->CSSetShader(cs, nullptr, 0);
 		}
 
 
 		void D3D11RenderContextImpl::CSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& cb)
 		{
-			auto* d3dBuf = static_cast<ID3D11Buffer*>(cb.GetNativeHandle());
+			auto* d3dBuf = static_cast<ConstantBuffer&>(cb).GetBody();
 			context_->CSSetConstantBuffers(startSlot, 1, &d3dBuf);
 		}
 
 
 		void D3D11RenderContextImpl::CSSetShaderResource(uint32_t startSlot, IShaderResourceView& srv)
 		{
-			auto* d3dSRV = static_cast<ID3D11ShaderResourceView*>(srv.GetNativeHandle());
+			auto* d3dSRV = static_cast<ShaderResourceView&>(srv).GetBody();
 			context_->CSSetShaderResources(startSlot, 1, &d3dSRV);
 		}
 
@@ -161,7 +165,7 @@ namespace engine
 
 		void D3D11RenderContextImpl::CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& uav)
 		{
-			auto* d3dUAV = static_cast<ID3D11UnorderedAccessView*>(uav.GetNativeHandle());
+			auto* d3dUAV = static_cast<UnorderedAccessView&>(uav).GetBody();
 			context_->CSSetUnorderedAccessViews(startSlot, 1, &d3dUAV, nullptr);
 		}
 
@@ -191,41 +195,11 @@ namespace engine
 		}
 
 
-		void D3D11RenderContextImpl::UpdateSubresourceRaw(void* gpuBuffer, const void* srcData)
+		void D3D11RenderContextImpl::UpdateConstantBuffer(IConstantBuffer& buf, const void* data)
 		{
-			if (gpuBuffer) {
-				context_->UpdateSubresource(static_cast<ID3D11Resource*>(gpuBuffer), 0, nullptr, srcData, 0, 0);
-			}
-		}
-
-
-		void D3D11RenderContextImpl::CopyResourceRaw(void* dest, void* src)
-		{
-			if (dest && src) {
-				context_->CopyResource(
-					static_cast<ID3D11Resource*>(dest),
-					static_cast<ID3D11Resource*>(src)
-				);
-			}
-		}
-
-
-		void D3D11RenderContextImpl::MapRaw(void* buffer, uint32_t subResource, MapType mapType, uint32_t flags, MappedSubresource& mapped)
-		{
-			if (buffer) {
-				D3D11_MAPPED_SUBRESOURCE d3dMapped = {};
-				context_->Map(static_cast<ID3D11Resource*>(buffer), subResource, ToD3D11(mapType), flags, &d3dMapped);
-				mapped.pData      = d3dMapped.pData;
-				mapped.rowPitch   = d3dMapped.RowPitch;
-				mapped.depthPitch = d3dMapped.DepthPitch;
-			}
-		}
-
-
-		void D3D11RenderContextImpl::UnmapRaw(void* buffer, uint32_t subResource)
-		{
-			if (buffer) {
-				context_->Unmap(static_cast<ID3D11Resource*>(buffer), subResource);
+			auto* d3dBuf = static_cast<ConstantBuffer&>(buf).GetBody();
+			if (d3dBuf) {
+				context_->UpdateSubresource(d3dBuf, 0, nullptr, data, 0, 0);
 			}
 		}
 
@@ -245,19 +219,6 @@ namespace engine
 				case PrimitiveTopology::LineStrip:     return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
 				case PrimitiveTopology::PointList:     return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
 				default:                               return D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
-			}
-		}
-
-
-		D3D11_MAP D3D11RenderContextImpl::ToD3D11(MapType mapType)
-		{
-			switch (mapType) {
-				case MapType::Read:             return D3D11_MAP_READ;
-				case MapType::Write:            return D3D11_MAP_WRITE;
-				case MapType::ReadWrite:        return D3D11_MAP_READ_WRITE;
-				case MapType::WriteDiscard:     return D3D11_MAP_WRITE_DISCARD;
-				case MapType::WriteNoOverwrite: return D3D11_MAP_WRITE_NO_OVERWRITE;
-				default:                        return D3D11_MAP_WRITE_DISCARD;
 			}
 		}
 	}

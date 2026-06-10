@@ -1,4 +1,5 @@
 #pragma once
+#include <windows.h>
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsDevice.h"
 
@@ -57,7 +58,7 @@ namespace engine
 		inline int32_t GetRenderHeight() const { return renderHeight_; }
 
 		inline void ToggleMainRenderTarget() { currentMainRenderTarget_ ^= 1; }
-		inline graphics::RenderTarget& GetMainRenderTarget()
+		inline graphics::IRenderTarget& GetMainRenderTarget()
 		{
 			return graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
 		}

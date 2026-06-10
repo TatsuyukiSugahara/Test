@@ -20,12 +20,12 @@ namespace engine
 			D3D11GraphicsDeviceImpl();
 			~D3D11GraphicsDeviceImpl() override;
 
-			bool Initialize(HWND hwnd, uint32_t width, uint32_t height) override;
+			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) override;
 			void Finalize() override;
 			void SetupRenderContext(RenderContext& outContext) override;
-			RenderTarget& GetMainRenderTarget(uint32_t index) override;
+			IRenderTarget& GetMainRenderTarget(uint32_t index) override;
 			void Present() override;
-			void CopyToBackBuffer(RenderTarget& src) override;
+			void CopyToBackBuffer(IRenderTarget& src) override;
 			void SetupDefaultRenderState(RenderContext& context) override;
 
 			/** D3D11 固有: デバイスが必要な箇所（バッファ生成など）向け */
@@ -42,7 +42,7 @@ namespace engine
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) override;
 
 		private:
-			bool CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height);
+			bool CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height); // HWND は D3D11 内部のみ
 			bool CreateMainRenderTargets(uint32_t width, uint32_t height);
 
 		private:

@@ -1,7 +1,6 @@
 #pragma once
 #include <memory>
 #include <cstdint>
-#include <windows.h>
 #include "IGraphicsDeviceImpl.h"
 
 
@@ -10,7 +9,7 @@ namespace engine
 	namespace graphics
 	{
 		class RenderContext;
-		class RenderTarget;
+		class IRenderTarget;
 
 		/**
 		 * Graphics Device Abstraction (Bridge Pattern)
@@ -29,8 +28,6 @@ namespace engine
 		class GraphicsDevice
 		{
 		public:
-			/** Implementor を外部から注入する (Dependency Injection) */
-			explicit GraphicsDevice(std::unique_ptr<IGraphicsDeviceImpl> impl);
 			~GraphicsDevice();
 
 			GraphicsDevice(const GraphicsDevice&) = delete;
@@ -38,20 +35,20 @@ namespace engine
 
 
 		public:
-			bool Initialize(HWND hwnd, uint32_t width, uint32_t height);
+			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height);
 			void Finalize();
 
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);
 
 			/** メインのレンダリングターゲットを返す */
-			RenderTarget& GetMainRenderTarget(uint32_t index);
+			IRenderTarget& GetMainRenderTarget(uint32_t index);
 
 			/** 描画結果を画面に出す */
 			void Present();
 
 			/** メインRTをバックバッファへコピー */
-			void CopyToBackBuffer(RenderTarget& src);
+			void CopyToBackBuffer(IRenderTarget& src);
 
 			/** デフォルトのレンダーステートを設定する */
 			void SetupDefaultRenderState(RenderContext& context);
@@ -81,12 +78,16 @@ namespace engine
 			 */
 		private:
 			static GraphicsDevice* instance_;
+			explicit GraphicsDevice(std::unique_ptr<IGraphicsDeviceImpl> impl);
 
 		public:
-			static void Create(std::unique_ptr<IGraphicsDeviceImpl> impl)
+			template<typename TImpl, typename... TArgs>
+			static void Create(TArgs&&... args)
 			{
+				static_assert(std::is_base_of_v<IGraphicsDeviceImpl, TImpl>,
+				              "TImpl must implement IGraphicsDeviceImpl");
 				if (instance_ == nullptr) {
-					instance_ = new GraphicsDevice(std::move(impl));
+					instance_ = new GraphicsDevice(std::make_unique<TImpl>(std::forward<TArgs>(args)...));
 				}
 			}
 			static GraphicsDevice& Get() { return *instance_; }

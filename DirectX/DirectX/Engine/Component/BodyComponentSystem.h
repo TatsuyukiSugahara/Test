@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include "../ECS/ECS.h"
 #include "../Graphics/StaticMesh.h"
 #include "../Graphics/RenderContext.h"
@@ -60,12 +61,18 @@ namespace engine
 			engine::res::RefMeshResource meshResouce_;
 			engine::res::RefGPUResource gpuResource_;
 			engine::graphics::StaticMesh staticMesh_;
+			std::string modelPath_;
+			std::string texturePath_;
+			engine::math::Matrix4x4 modelLocalMatrix_;
+			bool textureLoadRequested_;
 
 			
 		public:
 			StaticMeshComponent();
 			~StaticMeshComponent();
 			void Update();
+			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
+			void SetModelLocalMatrix(const engine::math::Matrix4x4& localMatrix);
 
 
 		public:

@@ -2,13 +2,21 @@
 
 #pragma warning (disable  : 4201)
 
-// #define DEBUG_MASTER		0	// �f�o�b�O�r���h
-// #define RELEASE_MASTER		1	// �����[�X�r���h
-// #define PREVIEW_MASTER		2	// �}�X�^�[�r���h
+// #define DEBUG_MASTER		0	// ?f?o?b?O?r???h
+// #define RELEASE_MASTER		1	// ?????[?X?r???h
+// #define PREVIEW_MASTER		2	// ?}?X?^?[?r???h
 
+
+// Graphics API selection.
+// Define ENGINE_GRAPHICS_D3D11 here, or pass it via project preprocessor settings.
+#define ENGINE_GRAPHICS_D3D11
+// #define ENGINE_GRAPHICS_D3D12
+// #define ENGINE_GRAPHICS_VULKAN
 
 #define NOMINMAX
 #include <windows.h>
+
+#ifdef ENGINE_GRAPHICS_D3D11
 #pragma warning(push)
 #pragma warning(disable:4005)
 #include <d3d11.h>
@@ -16,6 +24,7 @@
 #pragma comment(lib, "d3d11.lib")
 #include <d3dcompiler.h>
 #pragma comment(lib,"d3dcompiler.lib")
+#endif // ENGINE_GRAPHICS_D3D11
 
 
 //DirectInput

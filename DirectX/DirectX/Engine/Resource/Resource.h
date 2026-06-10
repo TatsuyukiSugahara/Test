@@ -1,9 +1,21 @@
 #pragma once
+#include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <future>
 #include <chrono>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 #include "../Graphics/GraphicsTypes.h"
+#include "../Graphics/IShader.h"
 #include "../Graphics/IShaderResourceView.h"
+#include "../Graphics/Shader.h"
+#include "../Util/CRC32.h"
+#include "../Util/ThreadPool.h"
 
 //#include <fbxsdk.h>
 //#pragma comment(lib, "libfbxsdk-md.lib")
@@ -50,7 +62,8 @@ public:\
 
 			bool IsLoading()   const { return state_.load(std::memory_order_acquire) == ResourceState::Loading; }
 			bool IsCompleted() const { return state_.load(std::memory_order_acquire) == ResourceState::Completed; }
-			bool IsFaild()     const { return state_.load(std::memory_order_acquire) == ResourceState::Invalid; }
+			bool IsFailed()    const { return state_.load(std::memory_order_acquire) == ResourceState::Invalid; }
+			bool IsFaild()     const { return IsFailed(); }
 
 			// ローダースレッドから呼ぶ状態更新
 			void SetState(ResourceState s) { state_.store(s, std::memory_order_release); }
@@ -69,19 +82,20 @@ public:\
 			using RefResource = std::shared_ptr<ResourceBase>;
 
 		protected:
-			const char* requestPath_;
+			std::string requestPath_;
 			RefResource resource_;
 
 		private:
 			std::future<void> future_;
+			std::atomic<bool> loadSucceeded_;
 
 		public:
-			ResourceLoaderBase() : requestPath_(nullptr), resource_(nullptr) {}
+			ResourceLoaderBase() : requestPath_(), resource_(nullptr), loadSucceeded_(false) {}
 			virtual ~ResourceLoaderBase() {}
 
 			virtual ResourceBase* Create() = 0;
 
-			void Request(const char* path) { requestPath_ = path; }
+			void Request(const char* path) { requestPath_ = path ? path : ""; }
 			void SetRefResource(const RefResource& refResource) { resource_ = refResource; }
 
 			/** ThreadPool::Get() へロードをサブミットする */
@@ -100,9 +114,15 @@ public:\
 				if (future_.valid()) future_.wait();
 			}
 
+			/** worker 完了後、メインスレッドで GPU/API 側の仕上げを行う */
+			bool Finish();
+
 		private:
 			/** 派生クラスが実装する実際のロード処理 */
 			virtual bool Loading() = 0;
+
+			/** Loading 成功後にメインスレッドで実行する処理 */
+			virtual bool FinalizeLoading() { return true; }
 		};
 
 
@@ -118,6 +138,7 @@ public:\
 		{
 			std::vector<graphics::VertexData> vertics;
 			std::vector<uint32_t> indices;
+			std::string texturePath;
 		};
 		class MeshResource : public ResourceBase
 		{
@@ -140,6 +161,8 @@ public:\
 			const uint32_t GetVerticsSize() const { return static_cast<uint32_t>(GetVertics()->size()); }
 			const std::vector<uint32_t>* GetIndices()  const { return &Get()->indices; };
 			const uint32_t GetIndicesSize()  const { return static_cast<uint32_t>(GetIndices()->size()); };
+			const std::string& GetTexturePath() const { return Get()->texturePath; }
+			bool HasTexturePath() const { return !Get()->texturePath.empty(); }
 
 		private:
 			inline MeshData* Get() const { return static_cast<MeshData*>(data_); }
@@ -166,6 +189,20 @@ public:\
 		public:
 			FbxLoader();
 			~FbxLoader();
+			virtual ResourceBase* Create() override
+			{
+				return new MeshResource();
+			}
+
+		private:
+			bool Loading() override;
+		};
+
+		class MeshLoader : public ResourceLoaderBase
+		{
+		public:
+			MeshLoader();
+			~MeshLoader();
 			virtual ResourceBase* Create() override
 			{
 				return new MeshResource();
@@ -267,9 +304,22 @@ public:\
 		 */
 		struct TextureData
 		{
+			graphics::Texture2DDesc desc;
+			std::vector<uint8_t> pixels;
+			std::vector<graphics::ImageSubresourceData> subresources;
+			uint32_t rowPitch;
+			uint32_t slicePitch;
 			graphics::IShaderResourceView* srv;
 
-			TextureData() : srv(nullptr) {}
+			TextureData()
+				: desc()
+				, pixels()
+				, subresources()
+				, rowPitch(0)
+				, slicePitch(0)
+				, srv(nullptr)
+			{
+			}
 			~TextureData()
 			{
 				if (srv) {
@@ -318,6 +368,60 @@ public:\
 
 		private:
 			bool Loading() override;
+			bool FinalizeLoading() override;
+		};
+
+
+		/**
+		 * シェーダーデータ
+		 *
+		 * requestPath_ は graphics::BuildShaderResourceKey() で生成したキーを受け取る。
+		 * worker thread では記述子の解析だけを行い、GPU/API オブジェクト生成は
+		 * ResourceManager::Update() から呼ばれる FinalizeLoading() で行う。
+		 */
+		struct ShaderData
+		{
+			graphics::ShaderResourceDesc desc;
+			std::unique_ptr<graphics::IShader> shader;
+		};
+		class ShaderResource : public ResourceBase
+		{
+			engineResource(engine::res::ShaderResource);
+
+		public:
+			ShaderResource()
+				: ResourceBase()
+			{
+				data_ = new ShaderData();
+			}
+
+			virtual ~ShaderResource()
+			{
+				delete data_;
+				data_ = nullptr;
+			}
+
+			graphics::IShader* GetShader() const { return Get()->shader.get(); }
+
+		private:
+			inline ShaderData* Get() const { return static_cast<ShaderData*>(data_); }
+		};
+		using RefShaderResource = std::shared_ptr<ShaderResource>;
+
+
+		class ShaderLoader : public ResourceLoaderBase
+		{
+		public:
+			ShaderLoader();
+			~ShaderLoader();
+			virtual ResourceBase* Create() override
+			{
+				return new ShaderResource();
+			}
+
+		private:
+			bool Loading() override;
+			bool FinalizeLoading() override;
 		};
 
 
@@ -334,7 +438,7 @@ public:\
 		{
 		public:
 			ResourceBankBase() {};
-			~ResourceBankBase() {};
+			virtual ~ResourceBankBase() {};
 		};
 
 		template <typename Resource>
@@ -347,6 +451,7 @@ public:\
 
 		private:
 			ResourceHashMap resourceMap_;
+			mutable std::mutex mutex_;
 
 		public:
 			TResourceBank()
@@ -360,28 +465,31 @@ public:\
 
 		public:
 			/** キャッシュ済みリソースを返す。なければ nullptr */
-			RefResource Find(const char* path)
+			RefResource Find(const std::string& path)
 			{
+				std::lock_guard<std::mutex> lock(mutex_);
 				auto it = resourceMap_.find(path);
 				if (it != resourceMap_.end()) {
-					return static_cast<RefResource>(it->second);
+					if (!it->second || it->second->IsFailed()) {
+						resourceMap_.erase(it);
+						return RefResource(nullptr);
+					}
+					return it->second;
 				}
 				return RefResource(nullptr);
 			}
-			bool Contains(const char* path) const
+			std::pair<RefResource, bool> RegisterOrGet(const std::string& path, RefResource refResource)
 			{
+				std::lock_guard<std::mutex> lock(mutex_);
 				auto it = resourceMap_.find(path);
 				if (it != resourceMap_.end()) {
-					return true;
-				}
-				return false;
-			}
-			void Register(const char* path, RefResource refResource)
-			{
-				if (Contains(path)) {
-					return;
+					if (it->second && !it->second->IsFailed()) {
+						return std::make_pair(it->second, false);
+					}
+					resourceMap_.erase(it);
 				}
 				resourceMap_.insert(ResourcePair(path, refResource));
+				return std::make_pair(refResource, true);
 			}
 		};
 
@@ -402,6 +510,7 @@ public:\
 		{
 		private:
 			std::vector<ResourceLoaderBase*> loaders_;
+			std::mutex loadersMutex_;
 
 
 		private:
@@ -420,27 +529,56 @@ public:\
 				TResourceBank<Resource>* bank = FindBank<Resource, TResourceBank<Resource>>();
 				if (bank == nullptr) {
  					EngineAssert(false);
+					return nullptr;
 				}
 
+				const std::string key = NormalizeResourcePath(path);
+
 				// キャッシュ済みなら即返す
-				std::shared_ptr<Resource> refResource = bank->Find(path);
+				std::shared_ptr<Resource> refResource = bank->Find(key);
 				if (refResource) {
 					return refResource;
 				}
 
 				ResourceLoaderBase* loader = static_cast<ResourceLoaderBase*>(CreateLoader<Resource>());
-				loader->Request(path);
+				if (loader == nullptr) {
+					return nullptr;
+				}
 
 				// Create() の所有権を直接 shared_ptr に渡す（コピー不要・double-free 回避）
 				refResource = std::shared_ptr<Resource>(static_cast<Resource*>(loader->Create()));
+				if (!refResource) {
+					delete loader;
+					return nullptr;
+				}
+
+				const auto registerResult = bank->RegisterOrGet(key, refResource);
+				if (!registerResult.second) {
+					delete loader;
+					return registerResult.first;
+				}
+
+				loader->Request(key.c_str());
 				loader->SetRefResource(refResource);
-				bank->Register(path, refResource);
+
+				{
+					std::lock_guard<std::mutex> lock(loadersMutex_);
+					loaders_.push_back(loader);
+				}
 
 				// ThreadPool へサブミットして非同期ロード開始
 				loader->StartAsync();
-				loaders_.push_back(loader);
 
 				return refResource;
+			}
+
+			RefShaderResource LoadShader(
+				const char* filePath,
+				const char* entryFuncName,
+				graphics::IShader::ShaderType shaderType)
+			{
+				const std::string key = graphics::BuildShaderResourceKey(filePath, entryFuncName, shaderType);
+				return Load<ShaderResource>(key.c_str());
 			}
 
 
@@ -460,6 +598,7 @@ public:\
 		public:
 			static void Initialize()
 			{
+				util::ThreadPool::Initialize();
 				if (instance_ == nullptr) {
 					instance_ = new ResourceManager();
 				}
@@ -471,6 +610,9 @@ public:\
 					delete instance_;
 					instance_ = nullptr;
 				}
+				ClearBank();
+				ClearReflection();
+				util::ThreadPool::Finalize();
 			}
 
 
@@ -484,6 +626,16 @@ public:\
 			using BankHashMap = std::unordered_map<uint32_t, ResourceBankBase*>;
 			using BankPair = std::pair<uint32_t, ResourceBankBase*>;
 			static BankHashMap bankMap_;
+
+			static std::string NormalizeResourcePath(const char* path)
+			{
+				std::string normalized = path ? path : "";
+				std::replace(normalized.begin(), normalized.end(), '\\', '/');
+				if (normalized.compare(0, 2, "./") == 0) {
+					normalized.erase(0, 2);
+				}
+				return normalized;
+			}
 
 
 		public:

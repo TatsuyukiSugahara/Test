@@ -13,7 +13,7 @@ namespace app
 
 
 		/**
-		 * ‘Ò‹@
+		 * å¾…æ©Ÿ
 		 */
 		IdleState::IdleState(StateMachine* stateMachine)
 			: IState(stateMachine)
@@ -33,7 +33,7 @@ namespace app
 
 		void IdleState::Update()
 		{
-			// ˆÚ“®
+			// ç§»å‹•
 			if (!stateMachine_->GetDirection().IsZero()) {
 				stateMachine_->RequestStateID(EngineHash32("Move"));
 			}
@@ -51,7 +51,7 @@ namespace app
 
 
 		/**
-		 * ˆÚ“®
+		 * ç§»å‹•
 		 */
 		MoveState::MoveState(StateMachine* stateMachine)
 			: IState(stateMachine)

@@ -39,7 +39,7 @@ namespace app
 			camera->SetNear(0.01f);
 			camera->Update();
 
-			// 操作キャラクター生成
+			// 謫堺ｽ懊く繝｣繝ｩ繧ｯ繧ｿ繝ｼ逕滓��
 			engine::ecs::EntityHandle targetHandle;
 			{
 				auto entity = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::StaticMeshComponent, app::ecs::StateMachineComponent>();

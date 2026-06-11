@@ -1,5 +1,5 @@
 /**
- * Math‚Ì”Ä—pˆ—ŒQ
+ * Mathã®æ±ç”¨å‡¦ç†ç¾¤
  */
 #pragma once
 

@@ -87,7 +87,9 @@ namespace engine
 		{
 			RenderTarget& rt = static_cast<RenderTarget&>(src);
 			ID3D11Texture2D* backBuffer = nullptr;
-			swapChain_->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer);
+			if (FAILED(swapChain_->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer)) || backBuffer == nullptr) {
+				return;
+			}
 			deviceContext_->CopyResource(backBuffer, rt.GetRenderTarget());
 			backBuffer->Release();
 		}

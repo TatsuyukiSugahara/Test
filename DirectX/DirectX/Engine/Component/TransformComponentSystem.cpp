@@ -35,7 +35,7 @@ namespace engine
 		void Transform::UpdateTransform()
 		{
 			if (parent) {
-				// À•WŒvŽZ
+				// åº§æ¨™è¨ˆç®—
 				engine::math::Matrix4x4 localPos;
 				localPos.MakeTranslation(localPosition);
 
@@ -46,10 +46,10 @@ namespace engine
 				position.y = pos.m[1][3];
 				position.z = pos.m[2][3];
 
-				// ƒXƒP[ƒ‹
+				// ã‚¹ã‚±ãƒ¼ãƒ«
 				scale = localScale * parent->scale;
 
-				// ‰ñ“]
+				// å›žè»¢
 				angle = localAngle + parent->angle;
 				rotation.SetEuler(angle);
 			} else {
@@ -58,9 +58,9 @@ namespace engine
 				angle = localAngle;
 				rotation.SetEuler(angle);
 			}
-			// ‰ñ“]s—ñ
+			// å›žè»¢è¡Œåˆ—
 			rotationMatrix.MakeRotationFromQuaternion(rotation);
-			// ƒ[ƒ‹ƒhs—ñXV
+			// ãƒ¯ãƒ¼ãƒ«ãƒ‰è¡Œåˆ—æ›´æ–°
 			UpdateWorldMatrix();
 		}
 
@@ -74,7 +74,7 @@ namespace engine
 			world.Mull(scal, rotationMatrix);
 			worldMatrix.Mull(world, pos);
 
-			// Žq‚àXV
+			// å­ã‚‚æ›´æ–°
 			for (Transform* child : children) {
 				child->UpdateTransform();
 			}

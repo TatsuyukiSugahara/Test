@@ -1,4 +1,6 @@
 #include "System.h"
+#include "../Util/ThreadPool.h"
+
 
 namespace engine
 {
@@ -9,9 +11,33 @@ namespace engine
 
 		void SystemManager::Update()
 		{
-			// TODOF«—ˆ“I‚É•À—ñˆ—‚³‚¹‚½‚¢
-			for (auto&& system : systemList_) {
-				system->Update();
+			const size_t count = systemEntries_.size();
+			std::vector<std::shared_future<void>> futures(count);
+
+			for (size_t i = 0; i < count; ++i) {
+				SystemBase* system = systemEntries_[i].system.get();
+
+				// ä¾å­˜ã™ã‚‹Systemã®futureã‚’ã‚³ãƒ”ãƒ¼(shared_futureãªã®ã§è¤‡æ•°ã‹ã‚‰å¾…ã¦ã‚‹)
+				std::vector<std::shared_future<void>> deps;
+				deps.reserve(systemEntries_[i].dependencyIndices.size());
+				for (size_t depIdx : systemEntries_[i].dependencyIndices) {
+					deps.push_back(futures[depIdx]);
+				}
+
+				futures[i] = util::ThreadPool::Get().Submit(
+					[system, deps = std::move(deps)]() {
+						for (const auto& dep : deps) {
+							dep.wait();
+						}
+						system->Update();
+					}
+				).share();
+			}
+
+			for (auto& fut : futures) {
+				if (fut.valid()) {
+					fut.wait();
+				}
 			}
 		}
 	}

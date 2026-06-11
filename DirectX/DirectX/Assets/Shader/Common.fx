@@ -1,5 +1,5 @@
 /**
- * ’¸“_ƒVƒF[ƒ_[‚Ì“ü—Í
+ * é ‚ç‚¹ã‚·ã‚§ãƒ¼ãƒ€ãƒ¼ã®å…¥åŠ›
  */
 struct VSInput
 {
@@ -7,7 +7,7 @@ struct VSInput
 	float4 color    : COLOR0;
 };
 /**
- * ƒsƒNƒZƒ‹ƒVƒF[ƒ_[‚Ì“ü—Í
+ * ãƒ”ã‚¯ã‚»ãƒ«ã‚·ã‚§ãƒ¼ãƒ€ãƒ¼ã®å…¥åŠ›
  */
 struct PSInput
 {

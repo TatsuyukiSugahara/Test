@@ -39,7 +39,10 @@
 #else
 	#pragma comment(lib, "DirectXTex/x64/Release/DirectXTex.lib")
 #endif
+#pragma warning(push)
+#pragma warning(disable:4065)
 #include <DirectXTex\DirectXTex.h>
+#pragma warning(pop)
 
 #include <vector>
 #include <array>

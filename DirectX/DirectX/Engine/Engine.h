@@ -1,7 +1,9 @@
 #pragma once
 #include <windows.h>
+#include <cstddef>
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsDevice.h"
+#include "Memory/MemoryManager.h"
 
 
 namespace engine
@@ -11,12 +13,13 @@ namespace engine
 	struct InitializeParameter
 	{
 		HINSTANCE hInstance;
-		int32_t screenWidth;
-		int32_t screenHeight;
-		int32_t renderWidth;
-		int32_t renderHeight;
-		int32_t nCmdShow;
-		uint8_t gameObjectPriortyMax;
+		int32_t   screenWidth;
+		int32_t   screenHeight;
+		int32_t   renderWidth;
+		int32_t   renderHeight;
+		int32_t   nCmdShow;
+		uint8_t   gameObjectPriortyMax;
+		memory::MemoryConfig memoryConfig; // アロケータサイズ設定 (デフォルト値あり)
 	};
 
 	class Engine

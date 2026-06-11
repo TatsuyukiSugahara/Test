@@ -1,5 +1,5 @@
 /**
- * @brief �x�N�g��
+ * @brief ベクトル
  */
 #pragma once
 #include <DirectXMath.h>
@@ -9,7 +9,7 @@ namespace engine
 	namespace math
 	{
 		/**
-		 * 2�����x�N�g��
+		 * 2次元ベクトル
 		 */
 		class Vector2
 		{
@@ -22,12 +22,12 @@ namespace engine
 
 
 		public:
-			/** �R���X�g���N�^ */
-			Vector2() {}
+			/** コンストラクタ */
+			Vector2() : x(0.0f), y(0.0f) {}
 			Vector2(float x, float y) : x(x), y(y) {}
 			Vector2(float xy) : x(xy), y(xy) {}
 
-			/** ������Z�q */
+			/** 代入演算子 */
 			Vector2& operator=(const Vector2& v)
 			{
 				x = v.x;
@@ -35,14 +35,14 @@ namespace engine
 				return *this;
 			}
 
-			/** ��v���邩 */
+			/** 一致するか */
 			inline bool IsEquals(const Vector2& v, const float value = FLT_EPSILON) const
 			{
 				if (fabs(x - v.x) >= value) return false;
 				if (fabs(y - v.y) >= value) return false;
 				return true;
 			}
-			/** �e�v�f�̐ݒ� */
+			/** 各要素の設定 */
 			inline void Set(float _x, float _y)
 			{
 				x = _x;
@@ -61,7 +61,7 @@ namespace engine
 
 
 		/**
-		 * 3�����x�N�g��
+		 * 3次元ベクトル
 		 */
 		class Vector3
 		{
@@ -85,18 +85,18 @@ namespace engine
 				return DirectX::XMLoadFloat3(&vector);
 			}
 
-			/** �R���X�g���N�^ */
-			Vector3() {}
+			/** コンストラクタ */
+			Vector3() : vector(0.0f, 0.0f, 0.0f) {}
 			Vector3(float x, float y, float z) : x(x), y(y), z(z) {}
 			Vector3(float xyz) : x(xyz), y(xyz), z(xyz) {}
 
-			/** ������Z�q */
+			/** 代入演算子 */
 			Vector3& operator=(const Vector3& v)
 			{
 				vector = v.vector;
 				return *this;
 			}
-			/** ���Z */
+			/** 加算 */
 			Vector3 operator+(const Vector3& v)
 			{
 				Vector3 out;
@@ -105,16 +105,12 @@ namespace engine
 				out.z = z + v.z;
 				return out;
 			}
-			/** ���Z */
-			Vector3 operator-(const Vector3& v)
+			/** 減算 */
+			Vector3 operator-(const Vector3& v) const
 			{
-				Vector3 out;
-				x = x - v.x;
-				y = y - v.y;
-				z = z - v.z;
-				return out;
+				return Vector3(x - v.x, y - v.y, z - v.z);
 			}
-			/** ��Z */
+			/** 乗算 */
 			Vector3 operator*(const Vector3& v)
 			{
 				Vector3 out;
@@ -123,7 +119,7 @@ namespace engine
 				z = z * v.z;
 				return out;
 			}
-			/** ���Z */
+			/** 除算 */
 			Vector3 operator/(const Vector3& v)
 			{
 				Vector3 out;
@@ -132,12 +128,12 @@ namespace engine
 				z = z / v.z;
 				return out;
 			}
-			/** �[���� */
+			/** ゼロ判定 */
 			inline bool IsZero() const
 			{
 				return x == 0.0f && y == 0.0f && z == 0.0f;
 			}
-			/** ��v���邩 */
+			/** 一致するか */
 			inline bool IsEquals(const Vector3& v, const float value = FLT_EPSILON) const
 			{
 				if (fabs(x - v.x) >= value) return false;
@@ -145,7 +141,7 @@ namespace engine
 				if (fabs(z - v.z) >= value) return false;
 				return true;
 			}
-			/** �x�N�g���̊e�v�f�ݒ� */
+			/** ベクトルの各要素設定 */
 			inline void Set(float x, float y, float z)
 			{
 				vector.x = x;
@@ -163,7 +159,7 @@ namespace engine
 				vector = v.vector;
 			}
 
-			/** �x�N�g�������Z */
+			/** ベクトル加算 */
 			inline void Add(const Vector3& v)
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat3(&vector);
@@ -178,7 +174,7 @@ namespace engine
 				DirectX::XMVECTOR xvr = DirectX::XMVectorAdd(xv0, xv1);
 				DirectX::XMStoreFloat3(&vector, xvr);
 			}
-			/** �x�N�g�������Z */
+			/** ベクトル減算 */
 			inline void Substract(const Vector3& v)
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat3(&vector);
@@ -193,14 +189,14 @@ namespace engine
 				DirectX::XMVECTOR xvr = DirectX::XMVectorSubtract(xv0, xv1);
 				DirectX::XMStoreFloat3(&vector, xvr);
 			}
-			/** ���� */
+			/** 内積 */
 			inline float Dot(const Vector3& v) const
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat3(&vector);
 				DirectX::XMVECTOR xv1 = DirectX::XMLoadFloat3(&v.vector);
 				return DirectX::XMVector3Dot(xv0, xv1).m128_f32[0];
 			}
-			/** �O�� */
+			/** 外積 */
 			inline void Cross(const Vector3& v)
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat3(&vector);
@@ -215,33 +211,42 @@ namespace engine
 				DirectX::XMVECTOR xvr = DirectX::XMVector3Cross(xv0, xv1);
 				DirectX::XMStoreFloat3(&vector, xvr);
 			}
-			/** �������擾 */
+			/** 長さを取得 */
 			inline float Length() const
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat3(&vector);
 				return DirectX::XMVector3Length(xv).m128_f32[0];
 			}
-			/** ������2����擾 */
+			/** 長さの2乗を取得 */
 			inline float LengthSq() const
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat3(&vector);
 				return DirectX::XMVector3LengthSq(xv).m128_f32[0];
 			}
-			/** �g�� */
+			/** 拡大縮小 */
 			inline void Scale(float s)
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat3(&vector);
 				xv = DirectX::XMVectorScale(xv, s);
 				DirectX::XMStoreFloat3(&vector, xv);
 			}
-			/** ���K�� */
+			/** 正規化 */
 			inline void Normalize()
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat3(&vector);
 				xv = DirectX::XMVector3Normalize(xv);
 				DirectX::XMStoreFloat3(&vector, xv);
 			}
-			/** ���Z */
+			/** 正規化(ゼロベクトルの場合はfalseを返す) */
+			inline bool TryNormalize()
+			{
+				if (LengthSq() <= 0.000001f) {
+					return false;
+				}
+				Normalize();
+				return true;
+			}
+			/** 除算 */
 			inline void Div(float d)
 			{
 				float scale = 1.0f / d;
@@ -256,7 +261,7 @@ namespace engine
 
 
 		/**
-		 * 4�v�f�̃x�N�g��
+		 * 4要素のベクトル
 		 */
 		class Vector4
 		{
@@ -279,12 +284,12 @@ namespace engine
 				vector = v.vector;
 				return *this;
 			}
-			/**	�R���X�g���N�^ */
-			Vector4() {}
+			/**	コンストラクタ */
+			Vector4() : vector(0.0f, 0.0f, 0.0f, 0.0f) {}
 			Vector4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 			Vector4(float xyzw) : x(xyzw), y(xyzw), z(xyzw), w(xyzw) {}
 			Vector4(const Vector4& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
-			/** �ݒ� */
+			/** 設定 */
 			void Set(float x, float y, float z, float w)
 			{
 				this->x = x;
@@ -303,14 +308,14 @@ namespace engine
 			{
 				*this = v;
 			}
-			/** ���K�� */
+			/** 正規化 */
 			void Normalize()
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat4(&vector);
 				xv = DirectX::XMVector4Normalize(xv);
 				DirectX::XMStoreFloat4(&vector, xv);
 			}
-			/** �x�N�g�������Z */
+			/** ベクトル加算 */
 			inline void Add(const Vector4& v)
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat4(&vector);
@@ -325,7 +330,7 @@ namespace engine
 				DirectX::XMVECTOR xvr = DirectX::XMVectorAdd(xv0, xv1);
 				DirectX::XMStoreFloat4(&vector, xvr);
 			}
-			/** �x�N�g�������Z */
+			/** ベクトル減算 */
 			inline void Substract(const Vector4& v)
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat4(&vector);
@@ -340,26 +345,26 @@ namespace engine
 				DirectX::XMVECTOR xvr = DirectX::XMVectorSubtract(xv0, xv1);
 				DirectX::XMStoreFloat4(&vector, xvr);
 			}
-			/** ���� */
+			/** 内積 */
 			inline float Dot(const Vector4& v) const
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat4(&vector);
 				DirectX::XMVECTOR xv1 = DirectX::XMLoadFloat4(&v.vector);
 				return DirectX::XMVector4Dot(xv0, xv1).m128_f32[0];
 			}
-			/** �������擾 */
+			/** 長さを取得 */
 			inline float Length()
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat4(&vector);
 				return DirectX::XMVector4Length(xv).m128_f32[0];
 			}
-			/** ������2����擾 */
+			/** 長さの2乗を取得 */
 			inline float LengthSq()
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat4(&vector);
 				return DirectX::XMVector4LengthSq(xv).m128_f32[0];
 			}
-			/** �g�� */
+			/** 拡大縮小 */
 			inline void Scale(float scale)
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat4(&vector);
@@ -384,7 +389,7 @@ namespace engine
 			Quaternion() {}
 			Quaternion(float x, float y, float z, float w) : Vector4(x, y, z, w) {}
 
-			/** �C�ӂ̎�����̉�]�N�H�[�^�j�I�����쐬 */
+			/** 任意軸の回転クォータニオンを作成 */
 			void SetRotation(const Vector3& axis, float angle)
 			{
 				float s;
@@ -419,12 +424,12 @@ namespace engine
 
 
 			public:
-				/** �R���X�g���N�^ */
-				Vector2Template() {}
+				/** コンストラクタ */
+				Vector2Template() : x(static_cast<T>(0)), y(static_cast<T>(0)) {}
 				Vector2Template(T x, T y) : x(x), y(y) {}
 				Vector2Template(T xy) : x(xy), y(xy) {}
 
-				/** �e�v�f�̐ݒ� */
+				/** 各要素の設定 */
 				inline void Set(T _x, T _y)
 				{
 					x = _x;

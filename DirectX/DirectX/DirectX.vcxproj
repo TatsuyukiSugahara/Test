@@ -164,6 +164,9 @@
     <ClCompile Include="Engine\ECS\EntityManager.cpp" />
     <ClCompile Include="Engine\ECS\System.cpp" />
     <ClCompile Include="Engine\Engine.cpp" />
+    <ClCompile Include="Engine\Memory\MemoryManager.cpp" />
+    <ClCompile Include="Engine\Memory\MemoryTracker.cpp" />
+    <ClCompile Include="Engine\Memory\GlobalNew.cpp" />
     <ClCompile Include="Engine\GameObject\GameObject.cpp" />
     <ClCompile Include="Engine\Graphics\Camera.cpp" />
     <ClCompile Include="Engine\Graphics\RenderContext.cpp" />
@@ -183,6 +186,11 @@
     <ClCompile Include="Engine\Physics\BulletPhysics.cpp" />
     <ClCompile Include="Engine\Physics\Collider.cpp" />
     <ClCompile Include="Engine\Physics\Physics.cpp" />
+    <ClCompile Include="Engine\Physics\PhysicsBody.cpp" />
+    <ClCompile Include="Engine\Physics\GhostBody.cpp" />
+    <ClCompile Include="Engine\Physics\GhostBodyManager.cpp" />
+    <ClCompile Include="Engine\Physics\BulletGhostNarrowphase.cpp" />
+    <ClCompile Include="Engine\Physics\CharacterController.cpp" />
     <ClCompile Include="Engine\Resource\Resource.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -206,6 +214,14 @@
     <ClInclude Include="Engine\ECS\System.h" />
     <ClInclude Include="Engine\ECS\TypeInfo.h" />
     <ClInclude Include="Engine\Engine.h" />
+    <ClInclude Include="Engine\Memory\IAllocator.h" />
+    <ClInclude Include="Engine\Memory\HeapAllocator.h" />
+    <ClInclude Include="Engine\Memory\StackAllocator.h" />
+    <ClInclude Include="Engine\Memory\MemoryManager.h" />
+    <ClInclude Include="Engine\Memory\StdAllocatorAdapter.h" />
+    <ClInclude Include="Engine\Memory\AllocatedArray.h" />
+    <ClInclude Include="Engine\Memory\Memory.h" />
+    <ClInclude Include="Engine\Memory\MemoryTracker.h" />
     <ClInclude Include="Engine\EnginePreCompile.h" />
     <ClInclude Include="Engine\GameObject\GameObject.h" />
     <ClInclude Include="Engine\Graphics\Camera.h" />
@@ -219,8 +235,21 @@
     <ClInclude Include="Engine\Math\Utility.h" />
     <ClInclude Include="Engine\Math\Vector.h" />
     <ClInclude Include="Engine\Physics\BulletPhysics.h" />
+    <ClInclude Include="Engine\Physics\BoxCollider.h" />
+    <ClInclude Include="Engine\Physics\SphereCollider.h" />
+    <ClInclude Include="Engine\Physics\CapsuleCollider.h" />
     <ClInclude Include="Engine\Physics\Collider.h" />
+    <ClInclude Include="Engine\Physics\PhysicsTypes.h" />
     <ClInclude Include="Engine\Physics\Physics.h" />
+    <ClInclude Include="Engine\Physics\PhysicsBody.h" />
+    <ClInclude Include="Engine\Physics\GhostPrimitive.h" />
+    <ClInclude Include="Engine\Physics\IBroadphase.h" />
+    <ClInclude Include="Engine\Physics\BulletDbvtBroadphase.h" />
+    <ClInclude Include="Engine\Physics\GhostBody.h" />
+    <ClInclude Include="Engine\Physics\GhostBodyManager.h" />
+    <ClInclude Include="Engine\Physics\IGhostNarrowphase.h" />
+    <ClInclude Include="Engine\Physics\BulletGhostNarrowphase.h" />
+    <ClInclude Include="Engine\Physics\CharacterController.h" />
     <ClInclude Include="Engine\Resource\Resource.h" />
     <ClInclude Include="Engine\Utility.h" />
     <ClInclude Include="Engine\Util\CRC32.h" />

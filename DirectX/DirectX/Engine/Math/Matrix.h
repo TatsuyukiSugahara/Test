@@ -5,8 +5,8 @@ namespace engine
 {
 	namespace math
 	{
-		// TODO: �����I��3x3�Ȃǂ��ǉ��\��
-		/** 4x4�s�� */
+		// TODO: 必要に応じて3x3などを追加する
+		/** 4x4行列 */
 		class Matrix4x4
 		{
 		public:
@@ -34,8 +34,14 @@ namespace engine
 				matrix = mat.matrix;
 				return *this;
 			}
-			/** �R���X�g���N�^ */
-			Matrix4x4() {}
+			/** コンストラクタ */
+			Matrix4x4()
+				: matrix(1.0f, 0.0f, 0.0f, 0.0f,
+						 0.0f, 1.0f, 0.0f, 0.0f,
+						 0.0f, 0.0f, 1.0f, 0.0f,
+						 0.0f, 0.0f, 0.0f, 1.0f)
+			{
+			}
 			Matrix4x4(float m00, float m01, float m02, float m03,
 					  float m10, float m11, float m12, float m13,
 					  float m20, float m21, float m22, float m23,
@@ -46,62 +52,62 @@ namespace engine
 							 m30, m31, m32, m33)
 			{
 			}
-			/** ���s�ړ��s��쐬 */
+			/** 平行移動行列を作成 */
 			void MakeTranslation(const Vector3& translation)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixTranslationFromVector(translation));
 			}
-			/** Y������̉�]�s��쐬 */
+			/** Y軸周りの回転行列を作成 */
 			void MakeRotationY(float angle)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixRotationY(angle));
 			}
-			/** Z������̉�]�s��쐬 */
+			/** Z軸周りの回転行列を作成 */
 			void MakeRotationZ(float angle)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixRotationZ(angle));
 			}
-			/** Y������̉�]�s��쐬 */
+			/** X軸周りの回転行列を作成 */
 			void MakeRotationX(float angle)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixRotationX(angle));
 			}
-			/** �N�H�[�^�j�I�������]�s��쐬 */
+			/** クォータニオンから回転行列を作成 */
 			void MakeRotationFromQuaternion(const Quaternion& q)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixRotationQuaternion(q));
 			}
-			/** �C�ӂ̎�����̉�]�s��쐬 */
+			/** 任意軸周りの回転行列を作成 */
 			void MakeRotationAxis(const Vector3& axis, float angle)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixRotationAxis(axis, angle));
 			}
-			/** �g��s��쐬 */
+			/** 拡大縮小行列を作成 */
 			void MakeScaling(const Vector3& scale)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixScalingFromVector(scale));
 			}
-			/** �v���W�F�N�V�����s��쐬 */
+			/** 射影行列を作成 */
 			void MakeProjectionMatrix(float viewAngle, float aspect, float nearZ, float farZ)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixPerspectiveFovLH(viewAngle, aspect, nearZ, farZ));
 			}
-			/** �J�����s��쐬 */
+			/** ビュー行列を作成 */
 			void MakeLookAt(const Vector3& position, const Vector3& target, const Vector3& up)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixLookAtLH(position, target, up));
 			}
-			/** �s�񓯎m�̏�Z */
+			/** 行列同士の乗算 */
 			void Mull(const Matrix4x4& m0, const Matrix4x4& m1)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixMultiply(m0, m1));
 			}
-			/** �t�s��v�Z */
+			/** 逆行列を計算 */
 			void Inverse(const Matrix4x4& mat)
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixInverse(nullptr, mat));
 			}
-			/** �s���]�u */
+			/** 行列を転置 */
 			void Transpose()
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixTranspose(*this));
@@ -109,7 +115,7 @@ namespace engine
 
 
 		public:
-			/** �P�ʍs�� */
+			/** 単位行列 */
 			static const Matrix4x4 Identity;
 		};
 	}

@@ -19,7 +19,7 @@ namespace engine
 			auto entity = chunkList_[chunkIndex].CreateEntity();
 			entity.chunkIndex = chunkIndex;
 
-			uint32_t entityHandleIndex = entityHandles_.size();
+			const uint32_t entityHandleIndex = static_cast<uint32_t>(entityHandles_.size());
 			entityHandles_.insert(std::pair<uint32_t, Entity>(entityHandleIndex, entity));
 
 			return entity;

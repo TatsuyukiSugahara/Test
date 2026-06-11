@@ -66,7 +66,7 @@ namespace engine
 			D3D11_BUFFER_DESC desc;
 			memory::Clear(&desc, sizeof(desc));
 			desc.Usage = D3D11_USAGE_DEFAULT;
-			desc.ByteWidth = (((bufferSize - 1) / 16) + 1) * 16; // 16�o�C�g�A���C�����g�ɂ���
+			desc.ByteWidth = (((bufferSize - 1) / 16) + 1) * 16; // 16バイトアライメントにする
 			desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 			desc.CPUAccessFlags = 0;
 			return GPUBuffer::Create(initialData, desc);

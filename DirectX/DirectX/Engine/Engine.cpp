@@ -1,6 +1,7 @@
 #include "EnginePreCompile.h"
 #include "Engine.h"
 #include "Application.h"
+#include "Util/ThreadPool.h"
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
 #endif
@@ -39,6 +40,9 @@ namespace engine
 			return false;
 		}
 
+		memory::MemoryManager::Initialize(initializeParameter.memoryConfig);
+		util::ThreadPool::Initialize();
+
 		application_->Initialize();
 		application_->Register();
 
@@ -56,6 +60,9 @@ namespace engine
 
 		graphics::GraphicsDevice::Get().Finalize();
 		graphics::GraphicsDevice::Release();
+
+		util::ThreadPool::Finalize();
+		memory::MemoryManager::Finalize();
 	}
 
 
@@ -138,6 +145,7 @@ namespace engine
 		application_->Update(renderContext_);
 		CopyMainRenderTargetToBackBuffer();
 		graphics::GraphicsDevice::Get().Present();
+		memory::MemoryManager::Get().ResetStackAllocator();
 	}
 
 

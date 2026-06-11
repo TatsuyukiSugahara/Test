@@ -598,7 +598,6 @@ public:\
 		public:
 			static void Initialize()
 			{
-				util::ThreadPool::Initialize();
 				if (instance_ == nullptr) {
 					instance_ = new ResourceManager();
 				}
@@ -612,7 +611,6 @@ public:\
 				}
 				ClearBank();
 				ClearReflection();
-				util::ThreadPool::Finalize();
 			}
 
 

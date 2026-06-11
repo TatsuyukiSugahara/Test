@@ -5,7 +5,6 @@
 #include <cctype>
 #include <cstring>
 #include <cstdio>
-#include <cmath>
 
 
 namespace engine
@@ -313,45 +312,6 @@ namespace engine
 					&& ReadTkmString(fp, material.refraction);
 			}
 
-			float LengthSq(const engine::math::Vector3& v)
-			{
-				return v.x * v.x + v.y * v.y + v.z * v.z;
-			}
-
-			engine::math::Vector3 Subtract(const engine::math::Vector3& a, const engine::math::Vector3& b)
-			{
-				return engine::math::Vector3(a.x - b.x, a.y - b.y, a.z - b.z);
-			}
-
-			engine::math::Vector3 Cross(const engine::math::Vector3& a, const engine::math::Vector3& b)
-			{
-				return engine::math::Vector3(
-					a.y * b.z - a.z * b.y,
-					a.z * b.x - a.x * b.z,
-					a.x * b.y - a.y * b.x);
-			}
-
-			void AddTo(engine::math::Vector3& target, const engine::math::Vector3& value)
-			{
-				target.x += value.x;
-				target.y += value.y;
-				target.z += value.z;
-			}
-
-			bool Normalize(engine::math::Vector3& v)
-			{
-				const float lengthSq = LengthSq(v);
-				if (lengthSq <= 0.000001f) {
-					return false;
-				}
-
-				const float invLength = 1.0f / std::sqrt(lengthSq);
-				v.x *= invLength;
-				v.y *= invLength;
-				v.z *= invLength;
-				return true;
-			}
-
 			bool ReadTkmIndex(
 				FILE* fp,
 				bool is16BitIndex,
@@ -402,20 +362,21 @@ namespace engine
 						continue;
 					}
 
-					const auto edge01 = Subtract(vertices[i1].position, vertices[i0].position);
-					const auto edge02 = Subtract(vertices[i2].position, vertices[i0].position);
-					auto normal = Cross(edge01, edge02);
-					if (!Normalize(normal)) {
+					const auto edge01 = vertices[i1].position - vertices[i0].position;
+					const auto edge02 = vertices[i2].position - vertices[i0].position;
+					engine::math::Vector3 normal;
+					normal.Cross(edge01, edge02);
+					if (!normal.TryNormalize()) {
 						continue;
 					}
 
-					AddTo(vertices[i0].normal, normal);
-					AddTo(vertices[i1].normal, normal);
-					AddTo(vertices[i2].normal, normal);
+					vertices[i0].normal.Add(normal);
+					vertices[i1].normal.Add(normal);
+					vertices[i2].normal.Add(normal);
 				}
 
 				for (auto& vertex : vertices) {
-					if (!Normalize(vertex.normal)) {
+					if (!vertex.normal.TryNormalize()) {
 						vertex.normal.Set(0.0f, 1.0f, 0.0f);
 					}
 				}

@@ -101,7 +101,7 @@ namespace engine
 			btCollisionObjectWrapper wrapA(nullptr, shapeA, objA, transA, -1, -1);
 			btCollisionObjectWrapper wrapB(nullptr, shapeB, objB, transB, -1, -1);
 
-			btCollisionAlgorithm* algorithm = dispatcher->findAlgorithm(&wrapA, &wrapB, nullptr);
+			btCollisionAlgorithm* algorithm = dispatcher->findAlgorithm(&wrapA, &wrapB, nullptr, BT_CONTACT_POINT_ALGORITHMS);
 			if (!algorithm) return false;
 
 			bool hasContact = false;

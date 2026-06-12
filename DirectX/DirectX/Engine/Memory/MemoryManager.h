@@ -1,6 +1,7 @@
 #pragma once
 #include "HeapAllocator.h"
 #include "StackAllocator.h"
+#include <memory>
 
 
 namespace engine
@@ -47,8 +48,8 @@ namespace engine
 				: stackAllocator_(new StackAllocator(config.stackSizeBytes))
 			{}
 
-			HeapAllocator   heap_;
-			StackAllocator* stackAllocator_;
+			HeapAllocator                  heap_;
+			std::unique_ptr<StackAllocator> stackAllocator_;
 
 			static MemoryManager* instance_;
 		};

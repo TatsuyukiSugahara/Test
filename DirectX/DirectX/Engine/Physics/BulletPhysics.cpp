@@ -1,4 +1,6 @@
 #include "BulletPhysics.h"
+#include "../Memory/IAllocator.h"
+#include "LinearMath/btAlignedAllocator.h"
 #include <cassert>
 
 
@@ -73,8 +75,11 @@ namespace engine
 					const btCollisionObjectWrapper* obj0, int, int,
 					const btCollisionObjectWrapper* obj1, int, int) override
 				{
+					// Bullet はペアの順序を保証しないため両方向をチェックする
 					if (obj0->getCollisionObject() == self) {
 						userCallback(*obj1->getCollisionObject());
+					} else if (obj1->getCollisionObject() == self) {
+						userCallback(*obj0->getCollisionObject());
 					}
 					return 0.0f;
 				}
@@ -199,6 +204,22 @@ namespace engine
 
 
 		BulletPhysicsWorld* BulletPhysicsWorld::instance_ = nullptr;
+
+
+		void BulletPhysicsWorld::InstallAllocatorHook()
+		{
+			// Bullet 内部確保をエンジンの HeapAllocator 経由にリダイレクトする。
+			// aligned_malloc/_free が btScalar(double) の SIMD 要件を満たすアライメントを保証する。
+			btAlignedAllocSetCustomAligned(
+				[](size_t size, int alignment) -> void* {
+					return engine::memory::GetDefaultAllocator().Allocate(
+						size, static_cast<size_t>(alignment));
+				},
+				[](void* ptr) {
+					engine::memory::GetDefaultAllocator().Deallocate(ptr);
+				}
+			);
+		}
 
 
 		void BulletPhysicsWorld::Initialize()

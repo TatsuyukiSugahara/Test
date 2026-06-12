@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "Application.h"
 #include "Util/ThreadPool.h"
+#include "Physics/PhysicsBackend.h"
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
 #endif
@@ -33,14 +34,21 @@ namespace engine
 
 	bool Engine::Initialize(const InitializeParameter& initializeParameter)
 	{
+		// メモリマネージャを最初に初期化することで、ウィンドウ・グラフィクス初期化中の
+		// new/delete もエンジンアロケータ管理下に置く。
+		memory::MemoryManager::Initialize(initializeParameter.memoryConfig);
+
+		// Bullet allocator hook は MemoryManager 直後、かつ Bullet 型が一切生成される前に設定する。
+		// GhostBodyManager や BulletDbvtBroadphase が BulletPhysicsWorld より先に作られる場合も含め
+		// 全 Bullet 確保をエンジンアロケータへ流す。
+		physics::PhysicsWorld::InstallAllocatorHook();
+
 		if (!InitializeWindow(initializeParameter)) {
 			return false;
 		}
 		if (!InitializeGraphicsAPI(initializeParameter)) {
 			return false;
 		}
-
-		memory::MemoryManager::Initialize(initializeParameter.memoryConfig);
 		util::ThreadPool::Initialize();
 
 		application_->Initialize();

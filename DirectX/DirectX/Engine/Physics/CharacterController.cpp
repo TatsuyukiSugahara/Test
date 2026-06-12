@@ -104,7 +104,7 @@ namespace engine
 			btBody->setUserIndex(static_cast<int>(collisionAttribute));
 			btBody->setCollisionFlags(btCollisionObject::CF_CHARACTER_OBJECT);
 
-			BulletPhysicsWorld::Get().AddRigidBody(rigidBody_);
+			PhysicsWorld::Get().AddRigidBody(rigidBody_);
 			isInited_ = true;
 		}
 
@@ -149,7 +149,7 @@ namespace engine
 						callback.me       = rigidBody_.GetBody();
 						callback.startPos = posTmp;
 
-						BulletPhysicsWorld::Get().ConvexSweepTestRaw(collider_, sweepStart, sweepEnd, callback);
+						PhysicsWorld::Get().ConvexSweepTestRaw(collider_, sweepStart, sweepEnd, callback);
 
 						if (callback.isHit) {
 							// 壁法線方向の押し戻し量を計算
@@ -198,8 +198,8 @@ namespace engine
 
 		void CharacterController::RemoveRigidBody()
 		{
-			if (isInited_ && BulletPhysicsWorld::IsInitialized()) {
-				BulletPhysicsWorld::Get().RemoveRigidBody(rigidBody_);
+			if (isInited_ && PhysicsWorld::IsInitialized()) {
+				PhysicsWorld::Get().RemoveRigidBody(rigidBody_);
 				isInited_ = false;
 			}
 		}

@@ -1,8 +1,5 @@
 #pragma once
-#include "BulletPhysics.h"
-#include "BoxCollider.h"
-#include "SphereCollider.h"
-#include "CapsuleCollider.h"
+#include "PhysicsBackend.h"
 
 
 namespace engine
@@ -55,7 +52,7 @@ namespace engine
 			                btCollisionObject::CollisionFlags collisionFlags, float restitution);
 
 			std::unique_ptr<ICollider> collider_;
-			BulletRigidBody            rigidBody_;
+			RigidBody                  rigidBody_;
 			bool                       addedToWorld_ = false;
 		};
 	}

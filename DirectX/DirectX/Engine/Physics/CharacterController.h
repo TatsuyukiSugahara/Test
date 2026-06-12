@@ -1,6 +1,5 @@
 #pragma once
-#include "CapsuleCollider.h"
-#include "BulletPhysics.h"
+#include "PhysicsBackend.h"
 
 
 namespace engine
@@ -43,28 +42,26 @@ namespace engine
 			 */
 			const math::Vector3& Execute(const math::Vector3& targetPosition, float deltaTime);
 
-			/**
-			 * 次の Execute() で衝突判定をスキップして targetPosition へ移動する。
-			 */
+			/** 次の Execute() で衝突判定をスキップして targetPosition へ移動する */
 			void RequestTeleport() { isRequestTeleport_ = true; }
 
 
-			const math::Vector3& GetPosition()     const { return position_; }
-			const math::Vector3& GetPrevPosition() const { return prevPosition_; }
+			const math::Vector3& GetPosition()        const { return position_; }
+			const math::Vector3& GetPrevPosition()    const { return prevPosition_; }
 			float                GetVerticalVelocity() const { return verticalVelocity_; }
 
 			void SetPosition(const math::Vector3& pos) { position_ = pos; }
 			void SetGravity (float gravity)            { gravity_  = gravity; }
 
-			BulletCapsuleCollider* GetCollider()  { return &collider_; }
-			BulletRigidBody*       GetRigidBody() { return &rigidBody_; }
+			CapsuleCollider* GetCollider()  { return &collider_; }
+			RigidBody*       GetRigidBody() { return &rigidBody_; }
 
 			void RemoveRigidBody();
 
 
 		private:
-			BulletCapsuleCollider collider_;
-			BulletRigidBody       rigidBody_;
+			CapsuleCollider collider_;
+			RigidBody       rigidBody_;
 
 			math::Vector3 position_;
 			math::Vector3 prevPosition_;

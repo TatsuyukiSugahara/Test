@@ -12,7 +12,7 @@ namespace engine
 			btCollisionObject::CollisionFlags collisionFlags,
 			float restitution)
 		{
-			auto* c = new BulletBoxCollider();
+			auto* c = new BoxCollider();
 			c->Create(halfExtents);
 			collider_.reset(c);
 			CreateCore(position, collisionAttribute, collisionFlags, restitution);
@@ -26,7 +26,7 @@ namespace engine
 			btCollisionObject::CollisionFlags collisionFlags,
 			float restitution)
 		{
-			auto* c = new BulletSphereCollider();
+			auto* c = new SphereCollider();
 			c->Create(radius);
 			collider_.reset(c);
 			CreateCore(position, collisionAttribute, collisionFlags, restitution);
@@ -41,7 +41,7 @@ namespace engine
 			btCollisionObject::CollisionFlags collisionFlags,
 			float restitution)
 		{
-			auto* c = new BulletCapsuleCollider();
+			auto* c = new CapsuleCollider();
 			c->Create(radius, height);
 			collider_.reset(c);
 			CreateCore(position, collisionAttribute, collisionFlags, restitution);
@@ -54,7 +54,13 @@ namespace engine
 			btCollisionObject::CollisionFlags collisionFlags,
 			float restitution)
 		{
-			Release();
+			// collider_ は呼び出し元 (CreateBox/Sphere/Capsule) が既に設定済み。
+			// ここでは古い剛体だけを除去する (collider_ は触らない)。
+			if (addedToWorld_ && rigidBody_.GetBody() && PhysicsWorld::IsInitialized()) {
+				PhysicsWorld::Get().RemoveRigidBody(rigidBody_);
+			}
+			addedToWorld_ = false;
+			rigidBody_.Release();
 
 			RigidBodyInitData data;
 			data.collider    = collider_.get();
@@ -66,15 +72,15 @@ namespace engine
 			rigidBody_.GetBody()->setUserIndex(static_cast<int>(collisionAttribute));
 			rigidBody_.GetBody()->setCollisionFlags(collisionFlags);
 
-			BulletPhysicsWorld::Get().AddRigidBody(rigidBody_);
+			PhysicsWorld::Get().AddRigidBody(rigidBody_);
 			addedToWorld_ = true;
 		}
 
 
 		void PhysicsBody::Release()
 		{
-			if (addedToWorld_ && rigidBody_.GetBody() && BulletPhysicsWorld::IsInitialized()) {
-				BulletPhysicsWorld::Get().RemoveRigidBody(rigidBody_);
+			if (addedToWorld_ && rigidBody_.GetBody() && PhysicsWorld::IsInitialized()) {
+				PhysicsWorld::Get().RemoveRigidBody(rigidBody_);
 			}
 			addedToWorld_ = false;
 			rigidBody_.Release();

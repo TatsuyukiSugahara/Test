@@ -1,11 +1,10 @@
 #pragma once
 #include "IGhostNarrowphase.h"
+#include "GhostPrimitive.h"
+#include "btBulletCollisionCommon.h"
+#include "BulletCollision/CollisionDispatch/btGhostObject.h"
 #include <unordered_map>
 #include <memory>
-
-
-class btGhostObject;
-class btCollisionShape;
 
 
 namespace engine

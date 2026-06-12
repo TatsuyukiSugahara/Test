@@ -122,7 +122,7 @@ namespace engine
 		class BulletPhysicsWorld
 		{
 		public:
-			~BulletPhysicsWorld() { Finalize(); }
+			~BulletPhysicsWorld() { FinalizeWorld(); }
 
 			BulletPhysicsWorld(const BulletPhysicsWorld&) = delete;
 			BulletPhysicsWorld& operator=(const BulletPhysicsWorld&) = delete;
@@ -215,6 +215,12 @@ namespace engine
 
 			// ===== シングルトン =====
 
+			/**
+			 * Bullet 内部確保をエンジンアロケータへ接続する。
+			 * Initialize() より前、かつ Bullet 型を一切生成しない地点で一度だけ呼ぶこと。
+			 * 推奨呼び出し場所: MemoryManager::Initialize() の直後。
+			 */
+			static void                InstallAllocatorHook();
 			static void                Initialize();
 			static void                Finalize();
 			static BulletPhysicsWorld& Get();

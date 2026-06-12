@@ -115,46 +115,29 @@ namespace engine
 		}
 
 
-		void StaticMesh::Render(RenderContext& context, const math::Matrix4x4& view, const math::Matrix4x4& projection)
+		bool StaticMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
-			if (!isInitialized_) {
-				return;
-			}
-			if (!vsShaderResource_ || !psShaderResource_) {
-				return;
-			}
-			if (!vsShaderResource_->IsCompleted() || !psShaderResource_->IsCompleted()) {
-				return;
-			}
+			if (!isInitialized_)                                       return false;
+			if (!vsShaderResource_ || !psShaderResource_)              return false;
+			if (!vsShaderResource_->IsCompleted() ||
+			    !psShaderResource_->IsCompleted())                     return false;
 
-			IShader* vsShader = vsShaderResource_->GetShader();
-			IShader* psShader = psShaderResource_->GetShader();
-			if (!vsShader || !psShader) {
-				return;
-			}
+			IShader* vs = vsShaderResource_->GetShader();
+			IShader* ps = psShaderResource_->GetShader();
+			if (!vs || !ps)                                            return false;
 
-			VSConstantBuffer cb;
-			cb.world      = worldMatrix_;
-			cb.view       = view;
-			cb.projection = projection;
-			context.UpdateSubresource(*constantBuffer_, cb);
-			context.VSSetConstantBuffer(0, *constantBuffer_);
-			context.PSSetConstantBuffer(0, *constantBuffer_);
-
-			context.IASetVertexBuffer(*vertexBuffer_);
-			context.IASetIndexBuffer(*indexBuffer_);
-			context.IASetPrimitiveTopology(PrimitiveTopology::TriangleList);
-
-			if (gpuResource_ && gpuResource_->GetShaderResourceView() && samplerState_) {
-				context.PSSetShaderResource(0, *gpuResource_->GetShaderResourceView());
-				context.PsSetSampler(0, *samplerState_);
-			}
-
-			context.VSSetShader(*vsShader);
-			context.PSSetShader(*psShader);
-			context.IASetInputLayout(*vsShader);
-
-			context.DrawIndexed(indicesSize_);
+			item.vertexBuffer   = vertexBuffer_.get();
+			item.indexBuffer    = indexBuffer_.get();
+			item.samplerState   = samplerState_.get();
+			item.constantBuffer = constantBuffer_.get();
+			item.vs             = vs;
+			item.ps             = ps;
+			item.texture        = (gpuResource_ && gpuResource_->GetShaderResourceView())
+			                      ? gpuResource_->GetShaderResourceView() : nullptr;
+			item.indexCount     = indicesSize_;
+			item.worldMatrix    = worldMatrix_;
+			item.layer          = 0;
+			return true;
 		}
 	}
 }

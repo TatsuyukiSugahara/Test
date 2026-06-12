@@ -4,6 +4,7 @@
 #include "../Engine/HID/Input.h"
 #include "../Engine/Graphics/Camera.h"
 #include "../Engine/Resource/Resource.h"
+#include "../Engine/Rendering/RenderFrame.h"
 
 #include "../Engine/ECS/ECS.h"
 #include "../Engine/Component/TransformComponentSystem.h"
@@ -104,6 +105,11 @@ namespace app
 		context.ClearRenderTargetView(0, clearColor);
 		context.RSSetViewport(0.0f, 0.0f, static_cast<float>(engine::Engine::Get().GetRenderWidth()), static_cast<float>(engine::Engine::Get().GetRenderHeight()));
 
-		engine::ecs::RenderSystem::Get().Render(context);
+		// Gather: ECS を走査して RenderFrame を構築（将来は Game Thread の終端で行う）
+		engine::rendering::RenderFrame frame;
+		engine::ecs::RenderSystem::Get().Gather(frame);
+
+		// Submit: Renderer が RenderFrame を消費して描画（将来は Rendering Thread で行う）
+		renderer_.Render(context, frame);
 	}
 }

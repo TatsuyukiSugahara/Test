@@ -3,6 +3,7 @@
 #include "../ECS/ECS.h"
 #include "../Graphics/StaticMesh.h"
 #include "../Graphics/RenderContext.h"
+#include "../Rendering/RenderFrame.h"
 
 
 namespace engine
@@ -93,7 +94,9 @@ namespace engine
 			RenderSystem();
 			~RenderSystem();
 			void Update() override;
-			void Render(engine::graphics::RenderContext& context);
+
+			/** ECS を走査して RenderFrame を構築する。描画は行わない。 */
+			void Gather(engine::rendering::RenderFrame& frame);
 
 
 		private:

@@ -1,5 +1,6 @@
 #pragma once
 #include "../Engine/Application.h"
+#include "../Engine/Rendering/Renderer.h"
 
 namespace app
 {
@@ -18,5 +19,7 @@ namespace app
 
 	private:
 		void Render(engine::graphics::RenderContext& context);
+
+		engine::rendering::Renderer renderer_;
 	};
 }

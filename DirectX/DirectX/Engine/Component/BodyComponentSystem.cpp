@@ -205,18 +205,29 @@ namespace engine
 		}
 
 
-		void RenderSystem::Render(engine::graphics::RenderContext& context)
+		void RenderSystem::Gather(engine::rendering::RenderFrame& frame)
 		{
 			const auto* camera = CameraManager::Get().GetCamera(CameraType::Main);
-			engine::ecs::Foreach<BoxStaticMeshComponent>([&context, &camera](const engine::ecs::Entity& entity, BoxStaticMeshComponent* staticMeshComponent)
+			frame.camera.viewMatrix       = camera->GetViewMatrix();
+			frame.camera.projectionMatrix = camera->GetProjectionMatrix();
+			frame.camera.position         = camera->GetPosition();
+
+			engine::ecs::Foreach<BoxStaticMeshComponent>([&frame](const engine::ecs::Entity&, BoxStaticMeshComponent* comp)
 				{
-					if (!staticMeshComponent->IsCompleted()) return;
-					staticMeshComponent->GetStaticMesh()->Render(context, camera->GetViewMatrix(), camera->GetProjectionMatrix());
+					if (!comp->IsCompleted()) return;
+					engine::rendering::RenderItem item;
+					if (comp->GetStaticMesh()->FillRenderItem(item)) {
+						frame.items.push_back(item);
+					}
 				});
-			engine::ecs::Foreach<StaticMeshComponent>([&context, &camera](const engine::ecs::Entity& entity, StaticMeshComponent* staticMeshComponent)
+
+			engine::ecs::Foreach<StaticMeshComponent>([&frame](const engine::ecs::Entity&, StaticMeshComponent* comp)
 				{
-					if (!staticMeshComponent->IsCompleted()) return;
-					staticMeshComponent->GetStaticMesh()->Render(context, camera->GetViewMatrix(), camera->GetProjectionMatrix());
+					if (!comp->IsCompleted()) return;
+					engine::rendering::RenderItem item;
+					if (comp->GetStaticMesh()->FillRenderItem(item)) {
+						frame.items.push_back(item);
+					}
 				});
 		}
 	}

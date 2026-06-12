@@ -6,6 +6,7 @@
 #include "IShader.h"
 #include "ISamplerState.h"
 #include "RenderContext.h"
+#include "../Rendering/RenderFrame.h"
 
 
 namespace engine
@@ -45,7 +46,12 @@ namespace engine
 			void Initialize(const void* vertexBuffer, const uint32_t vertexNum, const void* indexBuffer, const uint32_t indexNum, const ShaderType shaderType);
 			void SetLocalMatrix(const math::Matrix4x4& localMatrix);
 			void Update(const math::Vector3& translation, const math::Quaternion& rotation, const math::Vector3& scale);
-			void Render(RenderContext& context, const math::Matrix4x4& view, const math::Matrix4x4& projection);
+
+			/**
+			 * 描画に必要な情報を RenderItem へコピーする。
+			 * ロードが完了していない場合は false を返す。
+			 */
+			bool FillRenderItem(rendering::RenderItem& item) const;
 
 
 		private:

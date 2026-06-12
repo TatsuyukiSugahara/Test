@@ -61,6 +61,9 @@ namespace engine
 			viewAngle_ = angle;
 		}
 
+		/** カメラ座標取得 */
+		const math::Vector3& GetPosition() const { return position_; }
+
 		/** ビュー行列取得 */
 		const math::Matrix4x4& GetViewMatrix() const
 		{

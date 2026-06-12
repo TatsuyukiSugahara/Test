@@ -205,7 +205,7 @@ namespace engine
 		}
 
 
-		void RenderSystem::Gather(engine::rendering::RenderFrame& frame)
+		void RenderSystem::BuildRenderFrame(engine::rendering::RenderFrame& frame)
 		{
 			const auto* camera = CameraManager::Get().GetCamera(CameraType::Main);
 			frame.camera.viewMatrix       = camera->GetViewMatrix();

@@ -10,14 +10,14 @@
     <Filter Include="Engine\Graphics\D3D11">
       <UniqueIdentifier>{b3e7f1a2-c4d5-4e6f-8091-a2b3c4d5e6f7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Engine\Graphics\D3D12">
+      <UniqueIdentifier>{c5d6e7f8-a9b0-1c2d-3e4f-506172839405}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Engine\Math">
       <UniqueIdentifier>{d82d44da-0ab1-4f75-adf2-fb752d3d839c}</UniqueIdentifier>
     </Filter>
     <Filter Include="Application">
       <UniqueIdentifier>{87f39ecf-10b9-4293-aae0-b1e107e948ff}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Engine\GameObject">
-      <UniqueIdentifier>{3e29f37e-9615-4adf-a80a-4bf658464ad7}</UniqueIdentifier>
     </Filter>
     <Filter Include="Application\Scene">
       <UniqueIdentifier>{af14e523-8193-4aad-9893-996102390b23}</UniqueIdentifier>
@@ -45,6 +45,9 @@
     </Filter>
     <Filter Include="Engine\Util">
       <UniqueIdentifier>{ec0fba07-4c22-4637-9849-565ebf6dd4aa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Engine\Rendering">
+      <UniqueIdentifier>{a1b2c3d4-e5f6-7890-abcd-ef1234567890}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -96,9 +99,6 @@
     <ClCompile Include="Application\Application.cpp">
       <Filter>Application</Filter>
     </ClCompile>
-    <ClCompile Include="Engine\GameObject\GameObject.cpp">
-      <Filter>Engine\GameObject</Filter>
-    </ClCompile>
     <ClCompile Include="Application\Scene\Scene.cpp">
       <Filter>Application\Scene</Filter>
     </ClCompile>
@@ -146,6 +146,24 @@
     </ClCompile>
     <ClCompile Include="Engine\Util\ThreadPool.cpp">
       <Filter>Engine\Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Rendering\DrawItemCommand.cpp">
+      <Filter>Engine\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Rendering\FrameCommands.cpp">
+      <Filter>Engine\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Rendering\FrameContext.cpp">
+      <Filter>Engine\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Rendering\RenderCommandList.cpp">
+      <Filter>Engine\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Rendering\Renderer.cpp">
+      <Filter>Engine\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Rendering\RenderThread.cpp">
+      <Filter>Engine\Rendering</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -209,6 +227,12 @@
     <ClInclude Include="Engine\Graphics\D3D11\D3D11Shader.h">
       <Filter>Engine\Graphics\D3D11</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\Graphics\D3D12\D3D12GraphicsDeviceImpl.h">
+      <Filter>Engine\Graphics\D3D12</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Graphics\D3D12\D3D12RenderContextImpl.h">
+      <Filter>Engine\Graphics\D3D12</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\Engine.h">
       <Filter>Engine</Filter>
     </ClInclude>
@@ -238,9 +262,6 @@
     </ClInclude>
     <ClInclude Include="Application\Application.h">
       <Filter>Application</Filter>
-    </ClInclude>
-    <ClInclude Include="Engine\GameObject\GameObject.h">
-      <Filter>Engine\GameObject</Filter>
     </ClInclude>
     <ClInclude Include="Application\Scene\Scene.h">
       <Filter>Application\Scene</Filter>
@@ -310,6 +331,33 @@
     </ClInclude>
     <ClInclude Include="Engine\Util\ThreadPool.h">
       <Filter>Engine\Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\DrawItemCommand.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\FrameCommands.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\FrameContext.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\IRenderCommand.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\RenderCommandList.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\RenderFrame.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\Renderer.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\RenderTargetHandle.h">
+      <Filter>Engine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Rendering\RenderThread.h">
+      <Filter>Engine\Rendering</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

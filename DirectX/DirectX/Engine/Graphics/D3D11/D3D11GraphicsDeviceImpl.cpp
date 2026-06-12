@@ -73,6 +73,9 @@ namespace engine
 
 		IRenderTarget& D3D11GraphicsDeviceImpl::GetMainRenderTarget(uint32_t index)
 		{
+			EngineAssert(index < RENDER_TARGET_COUNT);
+			// Releaseビルドでも配列外アクセスを防ぐ。クラッシュより誤描画のほうが許容できる。
+			if (index >= RENDER_TARGET_COUNT) index = 0;
 			return mainRenderTargets_[index];
 		}
 

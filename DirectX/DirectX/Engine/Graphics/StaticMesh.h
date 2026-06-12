@@ -23,11 +23,10 @@ namespace engine
 			};
 
 		private:
-			std::unique_ptr<IVertexBuffer>   vertexBuffer_;
-			std::unique_ptr<IIndexBuffer>    indexBuffer_;
+			std::shared_ptr<IVertexBuffer>   vertexBuffer_;
+			std::shared_ptr<IIndexBuffer>    indexBuffer_;
 			uint32_t                         indicesSize_;
-			std::unique_ptr<ISamplerState>   samplerState_;
-			std::unique_ptr<IConstantBuffer> constantBuffer_;
+			std::shared_ptr<ISamplerState>   samplerState_;
 			math::Matrix4x4                  worldMatrix_;
 			math::Matrix4x4                  localMatrix_;
 			bool                             isInitialized_;

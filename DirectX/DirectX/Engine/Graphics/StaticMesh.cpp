@@ -92,8 +92,7 @@ namespace engine
 				samplerState_ = GraphicsDevice::Get().CreateSamplerState(samplerDesc);
 			}
 
-			constantBuffer_ = GraphicsDevice::Get().CreateConstantBuffer(nullptr, sizeof(engine::graphics::VSConstantBuffer));
-			isInitialized_ = vertexBuffer_ && indexBuffer_ && constantBuffer_;
+			isInitialized_ = vertexBuffer_ && indexBuffer_;
 		}
 
 
@@ -126,17 +125,22 @@ namespace engine
 			IShader* ps = psShaderResource_->GetShader();
 			if (!vs || !ps)                                            return false;
 
-			item.vertexBuffer   = vertexBuffer_.get();
-			item.indexBuffer    = indexBuffer_.get();
-			item.samplerState   = samplerState_.get();
-			item.constantBuffer = constantBuffer_.get();
-			item.vs             = vs;
-			item.ps             = ps;
-			item.texture        = (gpuResource_ && gpuResource_->GetShaderResourceView())
-			                      ? gpuResource_->GetShaderResourceView() : nullptr;
-			item.indexCount     = indicesSize_;
-			item.worldMatrix    = worldMatrix_;
-			item.layer          = 0;
+			// shared_ptr copies keep GPU buffers alive for the duration of the RenderItem.
+			item.vertexBuffer = vertexBuffer_;
+			item.indexBuffer  = indexBuffer_;
+			item.samplerState = samplerState_;
+
+			// Aliasing constructor: keeps the ResourceBase (vsShaderResource_ / gpuResource_)
+			// alive while the stored pointer addresses the API object inside it.
+			item.vs = std::shared_ptr<IShader>(vsShaderResource_, vs);
+			item.ps = std::shared_ptr<IShader>(psShaderResource_, ps);
+
+			IShaderResourceView* srv = gpuResource_ ? gpuResource_->GetShaderResourceView() : nullptr;
+			item.texture = srv ? std::shared_ptr<IShaderResourceView>(gpuResource_, srv) : nullptr;
+
+			item.indexCount  = indicesSize_;
+			item.worldMatrix = worldMatrix_;
+			item.layer       = 0;
 			return true;
 		}
 	}

@@ -1,26 +1,19 @@
 #pragma once
+#include <memory>
+#include <vector>
 #include "../Math/Matrix.h"
 #include "../Math/Vector.h"
-#include <vector>
+#include "../Graphics/IBuffer.h"
+#include "../Graphics/IShader.h"
+#include "../Graphics/ISamplerState.h"
+#include "../Graphics/IShaderResourceView.h"
 
-
-class IShaderResourceView;
 
 namespace engine
 {
-	namespace graphics
-	{
-		class IVertexBuffer;
-		class IIndexBuffer;
-		class ISamplerState;
-		class IConstantBuffer;
-		class IShader;
-		class IShaderResourceView;
-	}
-
 	namespace rendering
 	{
-		/** カメラのスナップショット（ゲームスレッドでコピー） */
+		/** Camera snapshot copied on the game thread. */
 		struct CameraData
 		{
 			math::Matrix4x4 viewMatrix;
@@ -30,28 +23,34 @@ namespace engine
 
 
 		/**
-		 * 1 ドローコールに必要な情報のスナップショット。
-		 * GPU リソースへの生ポインタはフレーム中に StaticMesh が生きている前提で有効。
-		 * RenderThread 化する際はリソースハンドル方式へ置き換える。
+		 * One draw call worth of data.
+		 *
+		 * All GPU resources are held via shared_ptr so the render thread can safely
+		 * consume this struct one frame after it was built.  StaticMesh::FillRenderItem
+		 * uses the aliasing constructor so that shader/texture ResourceBase owners are
+		 * kept alive transitively.
+		 *
+		 * Constant buffer data (world/view/proj) is stored as plain matrices; the actual
+		 * IConstantBuffer is allocated per-draw from FrameContext::constantBufferPool at
+		 * execute time, not bound to the mesh.
 		 */
 		struct RenderItem
 		{
-			graphics::IVertexBuffer*        vertexBuffer   = nullptr;
-			graphics::IIndexBuffer*         indexBuffer    = nullptr;
-			graphics::ISamplerState*        samplerState   = nullptr;
-			graphics::IConstantBuffer*      constantBuffer = nullptr;
-			graphics::IShader*              vs             = nullptr;
-			graphics::IShader*              ps             = nullptr;
-			graphics::IShaderResourceView*  texture        = nullptr;
-			uint32_t                        indexCount     = 0;
-			math::Matrix4x4                 worldMatrix;
-			uint32_t                        layer          = 0;
+			std::shared_ptr<graphics::IVertexBuffer>       vertexBuffer;
+			std::shared_ptr<graphics::IIndexBuffer>        indexBuffer;
+			std::shared_ptr<graphics::ISamplerState>       samplerState;
+			std::shared_ptr<graphics::IShader>             vs;
+			std::shared_ptr<graphics::IShader>             ps;
+			std::shared_ptr<graphics::IShaderResourceView> texture;
+			uint32_t                                       indexCount   = 0;
+			math::Matrix4x4                                worldMatrix;
+			uint32_t                                       layer        = 0;
 		};
 
 
 		/**
-		 * 1 フレームの描画スナップショット。
-		 * ゲームスレッドが構築し、Renderer が消費する。
+		 * One frame's rendering snapshot.
+		 * Built by the game thread; consumed by Renderer / RenderThread.
 		 */
 		struct RenderFrame
 		{

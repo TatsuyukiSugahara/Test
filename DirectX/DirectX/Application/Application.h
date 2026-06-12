@@ -1,6 +1,7 @@
 #pragma once
 #include "../Engine/Application.h"
 #include "../Engine/Rendering/Renderer.h"
+#include "../Engine/Rendering/RenderThread.h"
 
 namespace app
 {
@@ -10,16 +11,29 @@ namespace app
 		Application();
 		virtual ~Application();
 
-		bool Initialize() override;
+		bool Initialize(engine::graphics::RenderContext& renderContext) override;
 		void Finalize() override;
-		void Update(engine::graphics::RenderContext& context) override;
+
+		/**
+		 * ゲームロジックの更新。RenderContext は受け取らない。
+		 * 描画は Render() → RenderThread::Submit() 経由で行う。
+		 */
+		void Update() override;
+
+		/**
+		 * レンダースレッドの完了を待ちバックバッファへの Present 後に復帰する。
+		 * Engine::Update() が Update() の直後に呼び出す。
+		 */
+		void FlushRender() override;
 
 		void Register() override;
 
 
 	private:
-		void Render(engine::graphics::RenderContext& context);
+		void Render();
 
-		engine::rendering::Renderer renderer_;
+		engine::rendering::Renderer    renderer_;
+		engine::rendering::RenderThread renderThread_;
+		bool                            renderThreadReady_ = false;
 	};
 }

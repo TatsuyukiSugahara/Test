@@ -96,7 +96,7 @@ namespace engine
 			void Update() override;
 
 			/** ECS を走査して RenderFrame を構築する。描画は行わない。 */
-			void Gather(engine::rendering::RenderFrame& frame);
+			void BuildRenderFrame(engine::rendering::RenderFrame& frame);
 
 
 		private:

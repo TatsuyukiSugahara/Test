@@ -51,7 +51,7 @@ namespace engine
 		}
 		util::ThreadPool::Initialize();
 
-		application_->Initialize();
+		application_->Initialize(renderContext_);
 		application_->Register();
 
 		return true;
@@ -150,18 +150,12 @@ namespace engine
 
 	void Engine::Update()
 	{
-		application_->Update(renderContext_);
-		CopyMainRenderTargetToBackBuffer();
-		graphics::GraphicsDevice::Get().Present();
+		application_->Update();
+		// FlushRender() はレンダースレッドがコマンドリストの実行・RT コピー・Present を
+		// 完了するまで待機する。描画に関わるすべての D3D11 コンテキスト呼び出しは
+		// レンダースレッド側に集約され、メインスレッドは Submit() 以降コンテキストに触れない。
+		application_->FlushRender();
 		memory::MemoryManager::Get().ResetStackAllocator();
-	}
-
-
-	void Engine::CopyMainRenderTargetToBackBuffer()
-	{
-		graphics::IRenderTarget& rt =
-			graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
-		graphics::GraphicsDevice::Get().CopyToBackBuffer(rt);
 	}
 
 

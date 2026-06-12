@@ -23,6 +23,7 @@ namespace engine
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) override;
 			void Finalize() override;
 			void SetupRenderContext(RenderContext& outContext) override;
+			uint32_t GetMainRenderTargetCount() const override { return RENDER_TARGET_COUNT; }
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;
 			void Present() override;
 			void CopyToBackBuffer(IRenderTarget& src) override;

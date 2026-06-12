@@ -41,6 +41,9 @@ namespace engine
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);
 
+			/** メインRTの数を返す。RenderTargetHandle の有効インデックス範囲は [0, count) */
+			uint32_t GetMainRenderTargetCount() const;
+
 			/** メインのレンダリングターゲットを返す */
 			IRenderTarget& GetMainRenderTarget(uint32_t index);
 

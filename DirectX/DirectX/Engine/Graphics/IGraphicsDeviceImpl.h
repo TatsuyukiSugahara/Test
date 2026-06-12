@@ -38,6 +38,9 @@ namespace engine
 			 */
 			virtual void SetupRenderContext(RenderContext& outContext) = 0;
 
+			/** メインRTの数を返す。RenderTargetHandle の有効インデックス範囲は [0, count) */
+			virtual uint32_t GetMainRenderTargetCount() const = 0;
+
 			/** メインのレンダリングターゲットを返す */
 			virtual IRenderTarget& GetMainRenderTarget(uint32_t index) = 0;
 

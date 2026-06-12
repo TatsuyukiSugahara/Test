@@ -167,7 +167,6 @@
     <ClCompile Include="Engine\Memory\MemoryManager.cpp" />
     <ClCompile Include="Engine\Memory\MemoryTracker.cpp" />
     <ClCompile Include="Engine\Memory\GlobalNew.cpp" />
-    <ClCompile Include="Engine\GameObject\GameObject.cpp" />
     <ClCompile Include="Engine\Graphics\Camera.cpp" />
     <ClCompile Include="Engine\Graphics\RenderContext.cpp" />
     <ClCompile Include="Engine\Graphics\Shader.cpp" />
@@ -192,6 +191,12 @@
     <ClCompile Include="Engine\Physics\BulletGhostNarrowphase.cpp" />
     <ClCompile Include="Engine\Physics\CharacterController.cpp" />
     <ClCompile Include="Engine\Resource\Resource.cpp" />
+    <ClCompile Include="Engine\Rendering\DrawItemCommand.cpp" />
+    <ClCompile Include="Engine\Rendering\FrameCommands.cpp" />
+    <ClCompile Include="Engine\Rendering\FrameContext.cpp" />
+    <ClCompile Include="Engine\Rendering\RenderCommandList.cpp" />
+    <ClCompile Include="Engine\Rendering\Renderer.cpp" />
+    <ClCompile Include="Engine\Rendering\RenderThread.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application\Actor\StateMachine.h" />
@@ -223,7 +228,6 @@
     <ClInclude Include="Engine\Memory\Memory.h" />
     <ClInclude Include="Engine\Memory\MemoryTracker.h" />
     <ClInclude Include="Engine\EnginePreCompile.h" />
-    <ClInclude Include="Engine\GameObject\GameObject.h" />
     <ClInclude Include="Engine\Graphics\Camera.h" />
     <ClInclude Include="Engine\Graphics\GPUBuffer.h" />
     <ClInclude Include="Engine\Graphics\RenderContext.h" />
@@ -269,6 +273,17 @@
     <ClInclude Include="Engine\Graphics\D3D11\D3D11RenderResources.h" />
     <ClInclude Include="Engine\Graphics\D3D11\D3D11Buffers.h" />
     <ClInclude Include="Engine\Graphics\D3D11\D3D11Shader.h" />
+    <ClInclude Include="Engine\Graphics\D3D12\D3D12GraphicsDeviceImpl.h" />
+    <ClInclude Include="Engine\Graphics\D3D12\D3D12RenderContextImpl.h" />
+    <ClInclude Include="Engine\Rendering\DrawItemCommand.h" />
+    <ClInclude Include="Engine\Rendering\FrameCommands.h" />
+    <ClInclude Include="Engine\Rendering\FrameContext.h" />
+    <ClInclude Include="Engine\Rendering\IRenderCommand.h" />
+    <ClInclude Include="Engine\Rendering\RenderCommandList.h" />
+    <ClInclude Include="Engine\Rendering\RenderFrame.h" />
+    <ClInclude Include="Engine\Rendering\Renderer.h" />
+    <ClInclude Include="Engine\Rendering\RenderTargetHandle.h" />
+    <ClInclude Include="Engine\Rendering\RenderThread.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

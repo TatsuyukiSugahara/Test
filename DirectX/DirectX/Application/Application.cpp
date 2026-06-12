@@ -1,10 +1,13 @@
 #include "Utility.h"
 #include "Application.h"
 #include "Scene/Scene.h"
+#include "../Engine/Engine.h"
 #include "../Engine/HID/Input.h"
 #include "../Engine/Graphics/Camera.h"
 #include "../Engine/Resource/Resource.h"
 #include "../Engine/Rendering/RenderFrame.h"
+#include "../Engine/Rendering/RenderCommandList.h"
+#include "../Engine/Rendering/FrameCommands.h"
 
 #include "../Engine/ECS/ECS.h"
 #include "../Engine/Component/TransformComponentSystem.h"
@@ -24,19 +27,26 @@ namespace app
 	}
 
 
-	bool Application::Initialize()
+	bool Application::Initialize(engine::graphics::RenderContext& renderContext)
 	{
-		// リソース管理生成
+		// レンダースレッドを Initialize 時に起動する。
+		// renderContext はエンジン生存期間中アドレスが固定されているため、ポインタを保持して安全。
+		// Update() は RenderContext を受け取らないので、ゲームコードが immediate context に
+		// 直接触れる経路がなくなる。
+		renderThread_.Initialize(&renderContext);
+		renderThreadReady_ = true;
+
+		// Resource management
 		engine::res::ResourceManager::Initialize();
-		// ECS関連生成
+		// ECS
 		engine::ecs::EntityManager::Initialize();
 		engine::ecs::SystemManager::Initialize();
-		// 入力管理生成
+		// Input
 		engine::hid::InputManager::Initialize();
 		engine::hid::InputManager::Get().Setup();
-		// カメラ管理生成
+		// Camera
 		engine::CameraManager::Initialize();
-		// シーン管理生成
+		// Scene
 		app::SceneManager::Create();
 
 		return true;
@@ -45,39 +55,44 @@ namespace app
 
 	void Application::Finalize()
 	{
-		// シーン管理破棄
+		if (renderThreadReady_)
+		{
+			renderThread_.Finalize();
+			renderThreadReady_ = false;
+		}
+
+		// Scene
 		app::SceneManager::Release();
-		// ECS関連破棄
+		// ECS
 		engine::ecs::EntityManager::Finalize();
 		engine::ecs::SystemManager::Finalize();
-		// リソース管理破棄
+		// Resources
 		engine::res::ResourceManager::Finalize();
-		// 入力管理破棄
+		// Input
 		engine::hid::InputManager::Finalize();
 	}
 
 
-	void Application::Update(engine::graphics::RenderContext& context)
+	void Application::Update()
 	{
-		// システム更新
+		// System update
 		engine::ecs::SystemManager::Get().Update();
 
-		// リソース管理更新
+		// Resource manager update
 		engine::res::ResourceManager::Get().Update();
-		// 入力管理更新
+		// Input update
 		engine::hid::InputManager::Get().Update();
-		// シーン管理更新
+		// Scene update
 		app::SceneManager::Get().Update();
 
-
-		// 描画
-		Render(context);
+		// Render
+		Render();
 	}
 
 
 	void Application::Register()
 	{
-		// リソース登録
+		// Resource registration
 		engine::res::ResourceManager::RegisterBank<engine::res::GPUResource, engine::res::TResourceBank<engine::res::GPUResource>>();
 		engine::res::ResourceManager::RegisterBank<engine::res::MeshResource, engine::res::TResourceBank<engine::res::MeshResource>>();
 		engine::res::ResourceManager::RegisterBank<engine::res::PMDResource, engine::res::TResourceBank<engine::res::PMDResource>>();
@@ -89,7 +104,7 @@ namespace app
 		engine::res::ResourceManager::Reflection<engine::res::ShaderResource, engine::res::ShaderLoader>();
 
 
-		// システム登録
+		// System registration
 		engine::ecs::SystemManager::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
 		engine::ecs::SystemManager::Get().AddSystem<app::ecs::ActorStateMachineSystem>();
 		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::HierarcicalTransformSystem>();
@@ -97,19 +112,43 @@ namespace app
 	}
 
 
-	void Application::Render(engine::graphics::RenderContext& context)
+	void Application::Render()
 	{
-		// 画面クリア
+		auto cmdList = std::make_unique<engine::rendering::RenderCommandList>();
+
+		// --- フレームセットアップ ---
+		// DX12 ではリソースバリア・デスクリプタ・ヒープバインド・クリアコマンドになる。
 		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-		context.OMSetRenderTargets(1, &engine::Engine::Get().GetMainRenderTarget());
-		context.ClearRenderTargetView(0, clearColor);
-		context.RSSetViewport(0.0f, 0.0f, static_cast<float>(engine::Engine::Get().GetRenderWidth()), static_cast<float>(engine::Engine::Get().GetRenderHeight()));
+		cmdList->Enqueue<engine::rendering::SetRenderTargetCommand>(
+			engine::Engine::Get().GetMainRenderTargetHandle());
+		cmdList->Enqueue<engine::rendering::ClearRenderTargetCommand>(0u, clearColor);
+		cmdList->Enqueue<engine::rendering::SetViewportCommand>(
+			0.0f, 0.0f,
+			static_cast<float>(engine::Engine::Get().GetRenderWidth()),
+			static_cast<float>(engine::Engine::Get().GetRenderHeight()));
 
-		// Gather: ECS を走査して RenderFrame を構築（将来は Game Thread の終端で行う）
+		// --- シーンジオメトリ ---
+		// ECS システムは SystemManager::Update() 内で実行済み。
+		// BuildRenderFrame はすべての ECS 並列処理が終わった後のスナップショットパス。
 		engine::rendering::RenderFrame frame;
-		engine::ecs::RenderSystem::Get().Gather(frame);
+		engine::ecs::RenderSystem::Get().BuildRenderFrame(frame);
+		renderer_.BuildCommandList(frame, *cmdList);
 
-		// Submit: Renderer が RenderFrame を消費して描画（将来は Rendering Thread で行う）
-		renderer_.Render(context, frame);
+		// コマンドリストを displayRT ハンドルとともにレンダースレッドへ渡す。
+		// レンダースレッドが同じスレッドで描画・CopyToBackBuffer・Present を行うため、
+		// D3D11 immediate context の単一スレッド化が保たれる。
+		renderThread_.Submit(std::move(cmdList), engine::Engine::Get().GetMainRenderTargetHandle());
+	}
+
+
+	void Application::FlushRender()
+	{
+		if (!renderThreadReady_) return;
+
+		// 単一RTのため WaitForCompletion() を使う。
+		// レンダースレッドが CopyToBackBuffer + Present を完了してから復帰する。
+		// ダブルバッファRT が揃ったら WaitForPreviousFrame() に切り替えると
+		// 1フレーム分の CPU/GPU 重複が得られる。
+		renderThread_.WaitForCompletion();
 	}
 }

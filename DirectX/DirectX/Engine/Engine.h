@@ -4,6 +4,7 @@
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Memory/MemoryManager.h"
+#include "Rendering/RenderTargetHandle.h"
 
 
 namespace engine
@@ -54,7 +55,6 @@ namespace engine
 		bool InitializeWindow(const InitializeParameter& initializeParameter);
 		bool InitializeGraphicsAPI(const InitializeParameter& initializeParameter);
 		void Update();
-		void CopyMainRenderTargetToBackBuffer();
 
 	public:
 		inline int32_t GetRenderWidth()  const { return renderWidth_; }
@@ -64,6 +64,11 @@ namespace engine
 		inline graphics::IRenderTarget& GetMainRenderTarget()
 		{
 			return graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
+		}
+		/** 現在のメインRTへの RenderTargetHandle を返す。コマンド記録時に使う。 */
+		inline rendering::RenderTargetHandle GetMainRenderTargetHandle() const
+		{
+			return rendering::RenderTargetHandle{ currentMainRenderTarget_ };
 		}
 
 	public:

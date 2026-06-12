@@ -1,4 +1,6 @@
 #include "Renderer.h"
+#include "DrawItemCommand.h"
+#include "FrameContext.h"
 #include "../Graphics/RenderContext.h"
 #include "../Graphics/GraphicsTypes.h"
 
@@ -7,43 +9,37 @@ namespace engine
 {
 	namespace rendering
 	{
-		void Renderer::Render(graphics::RenderContext& context, const RenderFrame& frame)
+		void Renderer::BuildCommandList(const RenderFrame& frame, RenderCommandList& outList) const
 		{
 			for (const RenderItem& item : frame.items)
 			{
-				DrawItem(context, item, frame.camera);
+				RecordDrawItem(item, frame.camera, outList);
 			}
 		}
 
 
-		void Renderer::DrawItem(
-			graphics::RenderContext& context,
-			const RenderItem&        item,
-			const CameraData&        camera)
+#if _DEBUG
+		void Renderer::RenderDebugSync(graphics::RenderContext& context, const RenderFrame& frame)
 		{
-			graphics::VSConstantBuffer cb;
-			cb.world      = item.worldMatrix;
-			cb.view       = camera.viewMatrix;
-			cb.projection = camera.projectionMatrix;
-			context.UpdateSubresource(*item.constantBuffer, cb);
-			context.VSSetConstantBuffer(0, *item.constantBuffer);
-			context.PSSetConstantBuffer(0, *item.constantBuffer);
+			// デバッグ専用の同期実行パス。このフレーム専用の CB プールを一時生成する。
+			// プロダクションコードは BuildCommandList + RenderThread の永続プールを使うこと。
+			// 必ずレンダースレッドから呼ぶこと（D3D11 immediate context はスレッド非安全）。
+			ConstantBufferPool pool(sizeof(graphics::VSConstantBuffer));
+			FrameContext fc { &pool };
 
-			context.IASetVertexBuffer(*item.vertexBuffer);
-			context.IASetIndexBuffer(*item.indexBuffer);
-			context.IASetPrimitiveTopology(graphics::PrimitiveTopology::TriangleList);
+			RenderCommandList list;
+			BuildCommandList(frame, list);
+			list.Execute(context, fc);
+		}
+#endif
 
-			if (item.texture && item.samplerState)
-			{
-				context.PSSetShaderResource(0, *item.texture);
-				context.PsSetSampler(0, *item.samplerState);
-			}
 
-			context.VSSetShader(*item.vs);
-			context.PSSetShader(*item.ps);
-			context.IASetInputLayout(*item.vs);
-
-			context.DrawIndexed(item.indexCount);
+		void Renderer::RecordDrawItem(
+			const RenderItem&  item,
+			const CameraData&  camera,
+			RenderCommandList& outList) const
+		{
+			outList.Enqueue<DrawItemCommand>(item, camera);
 		}
 	}
 }

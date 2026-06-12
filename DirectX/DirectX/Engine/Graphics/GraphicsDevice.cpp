@@ -39,6 +39,12 @@ namespace engine
 		}
 
 
+		uint32_t GraphicsDevice::GetMainRenderTargetCount() const
+		{
+			return impl_->GetMainRenderTargetCount();
+		}
+
+
 		IRenderTarget& GraphicsDevice::GetMainRenderTarget(uint32_t index)
 		{
 			return impl_->GetMainRenderTarget(index);

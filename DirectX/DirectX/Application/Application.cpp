@@ -60,7 +60,7 @@ namespace app
 		engine::CameraManager::Get().GetCamera(engine::CameraType::Offscreen)
 			->SetViewportSize(kOffscreenRTWidth, kOffscreenRTHeight);
 
-		// GameInput (VirtualPad + ActionMap)
+		// GameInput (ActionInput + ActionMap)
 		GameInput::Initialize();
 
 		// Scene

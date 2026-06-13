@@ -8,10 +8,11 @@ namespace engine
 		/**
 		 * 物理入力とゲームアクションを仲介する薄い抽象レイヤー。
 		 * TAction はゲーム側で定義した enum class (uint32_t ベース)。
+		 * キーボード・マウス・ゲームパッドを統一して扱う。
 		 * ActionMap のポインタを保持するだけで所有はしない。
 		 */
 		template<typename TAction>
-		class VirtualPad
+		class ActionInput
 		{
 		public:
 			void             SetActionMap(const ActionMap* map) { map_ = map; }

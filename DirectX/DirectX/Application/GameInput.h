@@ -1,5 +1,5 @@
 #pragma once
-#include "../Engine/HID/VirtualPad.h"
+#include "../Engine/HID/ActionInput.h"
 #include "../Engine/HID/ActionMap.h"
 #include "GameAction.h"
 
@@ -32,7 +32,7 @@ namespace app
 	private:
 		engine::hid::ActionMap              keyboardMap_;
 		engine::hid::ActionMap              gamepadMap_;
-		engine::hid::VirtualPad<GameAction> vpad_;
+		engine::hid::ActionInput<GameAction> vpad_;
 		static GameInput*                   sInstance_;
 	};
 }

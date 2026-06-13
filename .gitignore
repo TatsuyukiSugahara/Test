@@ -16,9 +16,9 @@ Release/
 # サードパーティ コンパイル済みライブラリ / ThirdParty Compiled Libs
 # ============================================================
 
-ThirdParty/BulletPhysics/bin/
-ThirdParty/BulletPhysics/lib/
-ThirdParty/DirectXTex/x64/
+DirectX/ThirdParty/BulletPhysics/bin/
+DirectX/ThirdParty/BulletPhysics/lib/
+DirectX/ThirdParty/DirectXTex/x64/
 
 # ============================================================
 # 個人設定 / Personal / IDE Settings

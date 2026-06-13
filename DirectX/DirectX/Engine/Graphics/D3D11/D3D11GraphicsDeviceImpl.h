@@ -25,6 +25,8 @@ namespace engine
 			void SetupRenderContext(RenderContext& outContext) override;
 			uint32_t GetMainRenderTargetCount() const override { return RENDER_TARGET_COUNT; }
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;
+			IRenderTarget* GetRenderTarget(uint32_t index) override;
+			uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
 			void Present() override;
 			void CopyToBackBuffer(IRenderTarget& src) override;
 			void SetupDefaultRenderState(RenderContext& context) override;
@@ -57,6 +59,8 @@ namespace engine
 			static constexpr uint32_t RENDER_TARGET_COUNT = 2;
 			RenderTarget mainRenderTargets_[RENDER_TARGET_COUNT];
 			uint32_t     currentRenderTargetIndex_;
+
+			std::vector<std::unique_ptr<RenderTarget>> offscreenRenderTargets_;
 		};
 	}
 }

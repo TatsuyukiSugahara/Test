@@ -43,6 +43,8 @@ namespace engine
 
 		void D3D11GraphicsDeviceImpl::Finalize()
 		{
+			for (auto& rt : offscreenRenderTargets_) rt->Release();
+			offscreenRenderTargets_.clear();
 			mainRenderTargets_[0].Release();
 			mainRenderTargets_[1].Release();
 			if (rasterizerState_) {
@@ -74,9 +76,39 @@ namespace engine
 		IRenderTarget& D3D11GraphicsDeviceImpl::GetMainRenderTarget(uint32_t index)
 		{
 			EngineAssert(index < RENDER_TARGET_COUNT);
-			// Releaseビルドでも配列外アクセスを防ぐ。クラッシュより誤描画のほうが許容できる。
 			if (index >= RENDER_TARGET_COUNT) index = 0;
 			return mainRenderTargets_[index];
+		}
+
+
+		IRenderTarget* D3D11GraphicsDeviceImpl::GetRenderTarget(uint32_t index)
+		{
+			if (index < RENDER_TARGET_COUNT)
+			{
+				return &mainRenderTargets_[index];
+			}
+			const uint32_t offIdx = index - RENDER_TARGET_COUNT;
+			if (offIdx < static_cast<uint32_t>(offscreenRenderTargets_.size()))
+			{
+				return offscreenRenderTargets_[offIdx].get();
+			}
+			return nullptr;
+		}
+
+
+		uint32_t D3D11GraphicsDeviceImpl::CreateOffscreenRenderTarget(uint32_t width, uint32_t height)
+		{
+			auto rt = std::make_unique<RenderTarget>();
+			SampleDesc sampleDesc;
+			if (!rt->Create(static_cast<int32_t>(width), static_cast<int32_t>(height), 1,
+				PixelFormat::R8G8B8A8_Unorm,
+				PixelFormat::D24_Unorm_S8_Uint,
+				sampleDesc))
+			{
+				return ~0u;
+			}
+			offscreenRenderTargets_.push_back(std::move(rt));
+			return RENDER_TARGET_COUNT + static_cast<uint32_t>(offscreenRenderTargets_.size() - 1);
 		}
 
 

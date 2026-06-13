@@ -207,11 +207,20 @@ namespace engine
 
 		void RenderSystem::BuildRenderFrame(engine::rendering::RenderFrame& frame)
 		{
-			const auto* camera = CameraManager::Get().GetCamera(CameraType::Main);
+			BuildRenderFrame(frame, CameraType::Main);
+		}
+
+
+		void RenderSystem::BuildRenderFrame(engine::rendering::RenderFrame& frame, engine::CameraType cameraType)
+		{
+			const auto* camera = CameraManager::Get().GetCamera(cameraType);
 			frame.camera.viewMatrix       = camera->GetViewMatrix();
 			frame.camera.projectionMatrix = camera->GetProjectionMatrix();
 			frame.camera.position         = camera->GetPosition();
 
+			// 現在の方針: 同じ描画対象を cameraType で指定した別カメラから映す。
+			// カメラごとに描画対象を絞りたい場合は RenderItem / Component 側に
+			// RenderLayer 等を追加して検討する。
 			engine::ecs::Foreach<BoxStaticMeshComponent>([&frame](const engine::ecs::Entity&, BoxStaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;

@@ -4,6 +4,7 @@
 #include "../Engine/Engine.h"
 #include "../Engine/HID/Input.h"
 #include "../Engine/Graphics/Camera.h"
+#include "../Engine/Graphics/GraphicsDevice.h"
 #include "../Engine/Resource/Resource.h"
 #include "../Engine/Rendering/RenderFrame.h"
 #include "../Engine/Rendering/RenderCommandList.h"
@@ -45,6 +46,15 @@ namespace app
 		engine::hid::InputManager::Get().Setup();
 		// Camera
 		engine::CameraManager::Initialize();
+
+		// オフスクリーン RT を生成してオフスクリーンカメラのアスペクト比を設定する。
+		// サイズ変更時は RT を再生成し SetViewportSize() を再度呼ぶこと。
+		offscreenRTHandle_ = engine::graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(
+			static_cast<uint32_t>(kOffscreenRTWidth), static_cast<uint32_t>(kOffscreenRTHeight));
+		EngineAssertMsg(offscreenRTHandle_.IsValid(), "Failed to create offscreen render target");
+		engine::CameraManager::Get().GetCamera(engine::CameraType::Offscreen)
+			->SetViewportSize(kOffscreenRTWidth, kOffscreenRTHeight);
+
 		// Scene
 		app::SceneManager::Create();
 
@@ -83,6 +93,9 @@ namespace app
 		// Scene update
 		app::SceneManager::Get().Update();
 
+		// Rebuild camera matrices after all scene/app camera changes are done
+		engine::CameraManager::Get().UpdateAll();
+
 		// Render
 		Render();
 	}
@@ -112,30 +125,36 @@ namespace app
 
 	void Application::Render()
 	{
-		auto cmdList = std::make_unique<engine::rendering::RenderCommandList>();
-
-		// --- フレームセットアップ ---
-		// DX12 ではリソースバリア・デスクリプタ・ヒープバインド・クリアコマンドになる。
+		const float renderW = static_cast<float>(engine::Engine::Get().GetRenderWidth());
+		const float renderH = static_cast<float>(engine::Engine::Get().GetRenderHeight());
 		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-		cmdList->Enqueue<engine::rendering::SetRenderTargetCommand>(
+
+		// --- オフスクリーンパス ---
+		// displayRT に INVALID を渡すことで CopyToBackBuffer / Present をスキップする。
+		if (offscreenRTHandle_.IsValid())
+		{
+			auto offscreenCmdList = std::make_unique<engine::rendering::RenderCommandList>();
+			offscreenCmdList->Enqueue<engine::rendering::SetRenderTargetCommand>(offscreenRTHandle_);
+			offscreenCmdList->Enqueue<engine::rendering::ClearRenderTargetCommand>(0u, clearColor);
+			offscreenCmdList->Enqueue<engine::rendering::SetViewportCommand>(
+				0.0f, 0.0f, kOffscreenRTWidth, kOffscreenRTHeight);
+			engine::rendering::RenderFrame offscreenFrame;
+			engine::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, engine::CameraType::Offscreen);
+			renderer_.BuildCommandList(offscreenFrame, *offscreenCmdList);
+			renderThread_.Submit(std::move(offscreenCmdList), engine::rendering::RenderTargetHandle{});
+		}
+
+		// --- メインパス ---
+		// displayRT にメイン RT ハンドルを渡して CopyToBackBuffer + Present を実行する。
+		auto mainCmdList = std::make_unique<engine::rendering::RenderCommandList>();
+		mainCmdList->Enqueue<engine::rendering::SetRenderTargetCommand>(
 			engine::Engine::Get().GetMainRenderTargetHandle());
-		cmdList->Enqueue<engine::rendering::ClearRenderTargetCommand>(0u, clearColor);
-		cmdList->Enqueue<engine::rendering::SetViewportCommand>(
-			0.0f, 0.0f,
-			static_cast<float>(engine::Engine::Get().GetRenderWidth()),
-			static_cast<float>(engine::Engine::Get().GetRenderHeight()));
-
-		// --- シーンジオメトリ ---
-		// ECS システムは SystemManager::Update() 内で実行済み。
-		// BuildRenderFrame はすべての ECS 並列処理が終わった後のスナップショットパス。
-		engine::rendering::RenderFrame frame;
-		engine::ecs::RenderSystem::Get().BuildRenderFrame(frame);
-		renderer_.BuildCommandList(frame, *cmdList);
-
-		// コマンドリストを displayRT ハンドルとともにレンダースレッドへ渡す。
-		// レンダースレッドが同じスレッドで描画・CopyToBackBuffer・Present を行うため、
-		// D3D11 immediate context の単一スレッド化が保たれる。
-		renderThread_.Submit(std::move(cmdList), engine::Engine::Get().GetMainRenderTargetHandle());
+		mainCmdList->Enqueue<engine::rendering::ClearRenderTargetCommand>(0u, clearColor);
+		mainCmdList->Enqueue<engine::rendering::SetViewportCommand>(0.0f, 0.0f, renderW, renderH);
+		engine::rendering::RenderFrame mainFrame;
+		engine::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
+		renderer_.BuildCommandList(mainFrame, *mainCmdList);
+		renderThread_.Submit(std::move(mainCmdList), engine::Engine::Get().GetMainRenderTargetHandle());
 	}
 
 

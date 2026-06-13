@@ -33,11 +33,23 @@ namespace app
 
 		void BattleScene::Initialize()
 		{
+			// メインカメラ
 			engine::Camera* camera = engine::CameraManager::Get().GetCamera(engine::CameraType::Main);
 			camera->SetPosition(engine::math::Vector3(0.0f, 0.0f, -50.0f));
 			camera->SetTarget(engine::math::Vector3(0.0f, 0.0f, 0.0f));
 			camera->SetNear(0.01f);
+			camera->SetViewportSize(
+				static_cast<float>(engine::Engine::Get().GetRenderWidth()),
+				static_cast<float>(engine::Engine::Get().GetRenderHeight()));
 			camera->Update();
+
+			// オフスクリーンカメラ
+			// アスペクト比は Application::Initialize() でオフスクリーン RT サイズから設定済み。
+			// TODO: シーンに応じた別アングルを設定する（現在はメインと同一位置）。
+			engine::Camera* offscreenCamera = engine::CameraManager::Get().GetCamera(engine::CameraType::Offscreen);
+			offscreenCamera->SetPosition(engine::math::Vector3(0.0f, 0.0f, -50.0f));
+			offscreenCamera->SetTarget(engine::math::Vector3(0.0f, 0.0f, 0.0f));
+			offscreenCamera->SetNear(0.01f);
 
 			// 操作キャラクター生成
 			engine::ecs::EntityHandle targetHandle;

@@ -32,8 +32,12 @@ namespace app
 	private:
 		void Render();
 
-		engine::rendering::Renderer    renderer_;
-		engine::rendering::RenderThread renderThread_;
-		bool                            renderThreadReady_ = false;
+		engine::rendering::Renderer       renderer_;
+		engine::rendering::RenderThread   renderThread_;
+		bool                              renderThreadReady_ = false;
+
+		engine::rendering::RenderTargetHandle offscreenRTHandle_;
+		static constexpr float kOffscreenRTWidth  = 512.0f;
+		static constexpr float kOffscreenRTHeight = 512.0f;
 	};
 }

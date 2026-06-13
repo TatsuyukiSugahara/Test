@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include "../ECS/ECS.h"
+#include "../Graphics/Camera.h"
 #include "../Graphics/StaticMesh.h"
 #include "../Graphics/RenderContext.h"
 #include "../Rendering/RenderFrame.h"
@@ -97,6 +98,7 @@ namespace engine
 
 			/** ECS を走査して RenderFrame を構築する。描画は行わない。 */
 			void BuildRenderFrame(engine::rendering::RenderFrame& frame);
+			void BuildRenderFrame(engine::rendering::RenderFrame& frame, engine::CameraType cameraType);
 
 
 		private:

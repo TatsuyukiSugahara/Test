@@ -5,6 +5,7 @@ namespace engine
 	enum class CameraType : uint8_t
 	{
 		Main,
+		Offscreen,
 		Maximum,
 	};
 
@@ -22,7 +23,7 @@ namespace engine
 		float near_;
 		float far_;
 		float viewAngle_;
-		float acpect_;
+		float aspect_;
 
 
 	public:
@@ -60,6 +61,10 @@ namespace engine
 		{
 			viewAngle_ = angle;
 		}
+		/** ビューポートサイズからアスペクト比を設定 */
+		void SetViewportSize(float width, float height);
+		/** アスペクト比を直接設定 */
+		void SetAspect(float aspect);
 
 		/** カメラ座標取得 */
 		const math::Vector3& GetPosition() const { return position_; }
@@ -108,9 +113,11 @@ namespace engine
 
 
 	public:
-		Camera* GetCamera(CameraType type)
+		Camera* GetCamera(CameraType type);
+		void UpdateAll()
 		{
-			return &cameras_[static_cast<uint8_t>(type)];
+			for (auto& cam : cameras_)
+				cam.Update();
 		}
 
 

@@ -1,6 +1,5 @@
 #include "../EnginePreCompile.h"
 #include "Camera.h"
-#include "../Engine.h"
 
 namespace engine
 {
@@ -8,8 +7,8 @@ namespace engine
 		: near_(1.0f)
 		, far_(1000.0f)
 		, viewAngle_(math::DegToRadian(90.0f))
-		, acpect_(0.0f)
-		, position_(math::Vector3::Zero)
+		, aspect_(16.0f / 9.0f)
+		, position_(0.0f, 0.0f, -1.0f)
 		, targetPosition_(math::Vector3::Zero)
 		, viewMatrix_(math::Matrix4x4::Identity)
 		, projectionMatrix_(math::Matrix4x4::Identity)
@@ -25,10 +24,30 @@ namespace engine
 	}
 
 
+	void Camera::SetViewportSize(float width, float height)
+	{
+		EngineAssertMsg(width > 0.0f,  "Camera::SetViewportSize: width must be > 0");
+		EngineAssertMsg(height > 0.0f, "Camera::SetViewportSize: height must be > 0");
+		if (width > 0.0f && height > 0.0f)
+		{
+			aspect_ = width / height;
+		}
+	}
+
+
+	void Camera::SetAspect(float aspect)
+	{
+		EngineAssertMsg(aspect > 0.0f, "Camera::SetAspect: aspect must be > 0");
+		if (aspect > 0.0f)
+		{
+			aspect_ = aspect;
+		}
+	}
+
+
 	void Camera::Update()
 	{
-		float aspect = static_cast<float>(Engine::Get().GetRenderWidth() / Engine::Get().GetRenderHeight());
-		projectionMatrix_.MakeProjectionMatrix(viewAngle_, aspect, near_, far_);
+		projectionMatrix_.MakeProjectionMatrix(viewAngle_, aspect_, near_, far_);
 
 		// ビュー行列計算
 		viewMatrix_.MakeLookAt(position_, targetPosition_, math::Vector3::Up);
@@ -61,5 +80,18 @@ namespace engine
 
 	CameraManager::~CameraManager()
 	{
+	}
+
+
+	Camera* CameraManager::GetCamera(CameraType type)
+	{
+		const uint8_t index = static_cast<uint8_t>(type);
+		const uint8_t max   = static_cast<uint8_t>(CameraType::Maximum);
+		EngineAssert(index < max);
+		if (index >= max)
+		{
+			return &cameras_[0];
+		}
+		return &cameras_[index];
 	}
 }

@@ -1,6 +1,7 @@
 #include "../../Engine/EnginePreCompile.h"
 #include "GraphicsDevice.h"
 #include "RenderContext.h"
+#include "../Rendering/RenderTargetHandle.h"
 
 
 namespace engine
@@ -48,6 +49,19 @@ namespace engine
 		IRenderTarget& GraphicsDevice::GetMainRenderTarget(uint32_t index)
 		{
 			return impl_->GetMainRenderTarget(index);
+		}
+
+
+		IRenderTarget* GraphicsDevice::GetRenderTarget(rendering::RenderTargetHandle handle)
+		{
+			if (!handle.IsValid()) return nullptr;
+			return impl_->GetRenderTarget(handle.index);
+		}
+
+
+		rendering::RenderTargetHandle GraphicsDevice::CreateOffscreenRenderTarget(uint32_t width, uint32_t height)
+		{
+			return rendering::RenderTargetHandle{ impl_->CreateOffscreenRenderTarget(width, height) };
 		}
 
 

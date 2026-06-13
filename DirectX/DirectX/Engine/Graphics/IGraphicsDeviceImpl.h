@@ -44,6 +44,18 @@ namespace engine
 			/** メインのレンダリングターゲットを返す */
 			virtual IRenderTarget& GetMainRenderTarget(uint32_t index) = 0;
 
+			/**
+			 * ハンドルが示す RT を返す。メイン・オフスクリーン両方に対応。
+			 * 無効なインデックスの場合は nullptr を返す。
+			 */
+			virtual IRenderTarget* GetRenderTarget(uint32_t index) = 0;
+
+			/**
+			 * オフスクリーン RT を生成してそのインデックスを返す。
+			 * 失敗時は ~0u (INVALID) を返す。
+			 */
+			virtual uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) = 0;
+
 			/** 描画結果を画面に出す */
 			virtual void Present() = 0;
 

@@ -2,6 +2,7 @@
 #include <memory>
 #include <cstdint>
 #include "IGraphicsDeviceImpl.h"
+#include "../Rendering/RenderTargetHandle.h"
 
 
 namespace engine
@@ -46,6 +47,12 @@ namespace engine
 
 			/** メインのレンダリングターゲットを返す */
 			IRenderTarget& GetMainRenderTarget(uint32_t index);
+
+			/** ハンドルが示す RT を返す（メイン・オフスクリーン両対応）。無効なら nullptr */
+			IRenderTarget* GetRenderTarget(rendering::RenderTargetHandle handle);
+
+			/** オフスクリーン RT を生成してハンドルを返す。失敗時は INVALID ハンドル */
+			rendering::RenderTargetHandle CreateOffscreenRenderTarget(uint32_t width, uint32_t height);
 
 			/** 描画結果を画面に出す */
 			void Present();

@@ -1,5 +1,6 @@
 #pragma once
 #include "IComponent.h"
+#include <algorithm>
 
 
 namespace engine
@@ -16,6 +17,8 @@ namespace engine
 			/** 特別に初期化 */
 			size_t archetypeMemorySize_ = 0;
 			size_t archetypeSize_ = 0;
+			// 全コンポーネントのアライメントの最大値（SOA ブロック境界の計算に使用）
+			size_t maxAlign_ = 1;
 
 
 
@@ -43,6 +46,21 @@ namespace engine
 
 		public:
 			/**
+			 * 指定した型が登録されているか
+			 */
+			template <typename T>
+			constexpr bool HasType() const
+			{
+				for (size_t i = 0; i < archetypeSize_; ++i) {
+					if (typeList_[i] == TypeInfo::Create<T>()) {
+						return true;
+					}
+				}
+				return false;
+			}
+
+
+			/**
 			 * 自身が持っているTypeをOtherが全て含んでいるか
 			 */
 			constexpr bool IsIn(const Archetype& other) const
@@ -69,12 +87,8 @@ namespace engine
 			template <typename T>
 			constexpr Archetype& AddType()
 			{
-				//EngineAssert(archetypeSize_ > 0);
-				//EngineAssert(archetypeSize_ < ArraySize(typeList_));
-
 				size_t insertIndex = archetypeSize_;
 				constexpr auto newType = TypeInfo::Create<T>();
-				archetypeMemorySize_ += sizeof(T);
 				for (size_t i = 0; i < archetypeSize_; ++i) {
 					if (typeList_[i].GetHash() > newType.GetHash()) {
 						for (size_t j = archetypeSize_; j > i; --j) {
@@ -86,6 +100,13 @@ namespace engine
 				}
 				typeList_[insertIndex] = newType;
 				++archetypeSize_;
+
+				// maxAlign_ を更新してから archetypeMemorySize_ を再計算
+				maxAlign_ = std::max(maxAlign_, newType.GetAlign());
+				archetypeMemorySize_ = 0;
+				for (size_t i = 0; i < archetypeSize_; ++i) {
+					archetypeMemorySize_ += AlignUp(typeList_[i].GetSize(), maxAlign_);
+				}
 				return *this;
 			}
 
@@ -93,10 +114,10 @@ namespace engine
 			/**
 			 * 指定したコンポーネントが登録されているIndex取得
 			 */
-			template <typename T/*, typename  std::enable_if_t<IsComponent<T>>*/>
+			template <typename T>
 			constexpr size_t GetIndex() const
 			{
-				for (size_t i = 0; archetypeSize_; ++i) {
+				for (size_t i = 0; i < archetypeSize_; ++i) {
 					if (typeList_[i] == TypeInfo::Create<T>()) {
 						return i;
 					}
@@ -107,9 +128,9 @@ namespace engine
 
 
 			/**
-			 * 指定したComponentまでのメモリサイズ取得
+			 * 指定したComponentまでのメモリサイズ取得（padding 込み）
 			 */
-			template <typename T/*, typename = std::enable_if_t<IsComponent<T>>*/>
+			template <typename T>
 			constexpr size_t GetOffset() const
 			{
 				size_t result = 0;
@@ -117,20 +138,21 @@ namespace engine
 					if (typeList_[i] == TypeInfo::Create<T>()) {
 						break;
 					}
-					result += typeList_[i].GetSize();
+					result += AlignUp(typeList_[i].GetSize(), maxAlign_);
 				}
 				return result;
 			}
 
 
 			/**
-			 * Indexまでのメモリサイズを取得
+			 * Indexまでのメモリサイズを取得（padding 込み）
+			 * GetOffsetByIndex(i) * capacity がコンポーネント i の SOA ブロック先頭バイトになる
 			 */
 			constexpr size_t GetOffsetByIndex(const size_t index) const
 			{
 				size_t result = 0;
 				for (size_t i = 0; i < index; ++i) {
-					result += typeList_[i].GetSize();
+					result += AlignUp(typeList_[i].GetSize(), maxAlign_);
 				}
 				return result;
 			}
@@ -156,11 +178,10 @@ namespace engine
 			 */
 			constexpr size_t GetSize(const size_t index) const
 			{
-				//EngineAssert(index < archetypeSize_);
 				return typeList_[index].GetSize();
 			}
 
-			
+
 			/**
 			 * 指定したIndexのTypeInfoを取得
 			 */
@@ -180,11 +201,17 @@ namespace engine
 
 
 			/**
-			 * ArchetypeのByte数を取得
+			 * ArchetypeのByte数を取得（padding 込み、capacity 倍すると SOA バッファ全体サイズになる）
 			 */
 			constexpr size_t GetArchetypeMemorySize() const
 			{
 				return archetypeMemorySize_;
+			}
+
+
+			constexpr size_t GetMaxAlign() const
+			{
+				return maxAlign_;
 			}
 
 
@@ -212,8 +239,12 @@ namespace engine
 					}
 				}
 
+				// ソート後に maxAlign_ を確定してから archetypeMemorySize_ を計算
 				for (size_t i = 0; i < result.archetypeSize_; ++i) {
-					result.archetypeMemorySize_ += result.typeList_[i].GetSize();
+					result.maxAlign_ = std::max(result.maxAlign_, result.typeList_[i].GetAlign());
+				}
+				for (size_t i = 0; i < result.archetypeSize_; ++i) {
+					result.archetypeMemorySize_ += AlignUp(result.typeList_[i].GetSize(), result.maxAlign_);
 				}
 
 				return result;
@@ -223,15 +254,20 @@ namespace engine
 
 
 		private:
-			template <typename Head, typename ...Tails/*, typename = std::enable_if_t<IsComponent<Head>>*/>
+			template <typename Head, typename ...Tails>
 			constexpr void CreateImpl()
 			{
-				//EngineAssert(archetypeSize_ < ArraySize(typeList_));
 				typeList_[archetypeSize_] = TypeInfo::Create<Head>();
 				++archetypeSize_;
 				if constexpr (sizeof...(Tails) != 0) {
 					CreateImpl<Tails...>();
 				}
+			}
+
+			// アライメント切り上げ（align は 2 の冪を前提とする）
+			static constexpr size_t AlignUp(size_t value, size_t align)
+			{
+				return (value + align - 1) & ~(align - 1);
 			}
 		};
 	}

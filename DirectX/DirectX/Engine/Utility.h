@@ -2,6 +2,7 @@
  * 汎用処理群
  */
 #pragma once
+#include <cassert>
 
 
 // アサート

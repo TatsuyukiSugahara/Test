@@ -1,4 +1,5 @@
 #include "System.h"
+#include "EntityManager.h"
 #include "../Util/ThreadPool.h"
 
 
@@ -39,6 +40,9 @@ namespace engine
 					fut.wait();
 				}
 			}
+
+			// System 並列実行中に積まれた破棄コマンドをここで一括処理
+			EntityManager::Get().FlushCommands();
 		}
 	}
 }

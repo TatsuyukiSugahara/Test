@@ -1,3 +1,4 @@
+#include "../EnginePreCompile.h"
 #include "Chunk.h"
 
 
@@ -5,44 +6,15 @@ namespace engine
 {
 	namespace ecs
 	{
-		void Chunk::Marge(Chunk&& other)
+		EntityLocation Chunk::CreateEntity(EntityID id)
 		{
-			// Archetypeが同じでなければマージできない
-			if (archetype_ != other.archetype_) {
-				return;
-			}
-
-			const auto needSize = size_ + other.size_;
-			if (capacity_ < needSize) {
-				ResetMemory(needSize);
-				capacity_ = needSize;
-			}
-
-			for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i) {
-				const auto archetypeOffset = archetype_.GetOffsetByIndex(i);
-				const auto archetypeSize = archetype_.GetSize(i);
-				const auto offset = archetypeOffset * capacity_ + archetypeSize * size_;
-				const auto otherOffset = archetypeOffset * other.capacity_;
-				memcpy(begin_.get() + offset, other.begin_.get() + otherOffset, archetypeSize * other.size_);
-			}
-			size_ += other.size_;
-
-			other.begin_.reset();
-			other.size_ = 0;
-			other.capacity_ = 0;
-		}
-
-
-		Entity Chunk::CreateEntity()
-		{
-			// エンティティをチャンクに追加できないのでメモリを拡張する
 			if (capacity_ == size_) {
-				// ひとまず倍に拡張する
 				ResetMemory(capacity_ * 2);
 			}
-			const auto entity = Entity(size_);
+			const auto loc = EntityLocation(size_);
+			entityIDs_.push_back(id);
 			++size_;
-			return entity;
+			return loc;
 		}
 
 
@@ -63,51 +35,106 @@ namespace engine
 		}
 
 
-		void Chunk::DestroyEntity(const Entity& entity)
+		EntityID Chunk::DestroyEntitySwap(const EntityLocation& loc)
 		{
+			// デストラクタ呼び出し
 			for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i) {
 				const auto offset = archetype_.GetOffsetByIndex(i) * capacity_;
-				const auto currentIndex = offset + archetype_.GetSize(i) * entity.index;
+				const auto currentIndex = offset + archetype_.GetSize(i) * loc.index;
 				const auto dtor = archetype_.GetTypeInfo(i).GetDestructor();
 				if (dtor) {
 					dtor(begin_.get() + currentIndex);
 				}
-				memmove(begin_.get() + currentIndex, begin_.get() + currentIndex + archetype_.GetSize(i), archetype_.GetSize(i) * (size_ - entity.index - 1));
 			}
+
+			const uint32_t lastIndex = size_ - 1;
+			EntityID swappedId = INVALID_ENTITY_ID;
+
+			// 末尾でなければ末尾 entity を空いたスロットへ移動
+			if (loc.index != lastIndex) {
+				for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i) {
+					const auto offset    = archetype_.GetOffsetByIndex(i) * capacity_;
+					const auto compSize  = archetype_.GetSize(i);
+					void* dst = begin_.get() + offset + compSize * loc.index;
+					void* src = begin_.get() + offset + compSize * lastIndex;
+
+					const auto mover = archetype_.GetTypeInfo(i).GetMover();
+					if (mover) {
+						// move-construct でオブジェクト寿命を正しく開始し、
+						// moved-from 状態になった末尾スロットを destructor で終了させる
+						mover(dst, src);
+						const auto dtor = archetype_.GetTypeInfo(i).GetDestructor();
+						if (dtor) {
+							dtor(src);
+						}
+					} else {
+						memcpy(dst, src, compSize);
+					}
+				}
+				swappedId = entityIDs_[lastIndex];
+				entityIDs_[loc.index] = swappedId;
+			}
+
+			entityIDs_.pop_back();
 			--size_;
+			return swappedId;
 		}
 
 
-		void Chunk::MoveEntity(Entity& entity, Chunk& other)
+		EntityID Chunk::MoveEntitySlot(EntityLocation& loc, Chunk& other, EntityID entityId)
 		{
-			const auto newEntity = other.CreateEntity();
+			// 移動先チャンクに EntityID 付きで作成
+			const auto newLoc = other.CreateEntity(entityId);
+
+			// コンポーネントを移動先へ転送
+			// 非 trivially-copyable な型は move-construct を使う（src は moved-from になる）
+			// その後 DestroyEntitySwap がデストラクタを呼んでも安全
 			for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i) {
 				const auto currentOffset = archetype_.GetOffsetByIndex(i) * capacity_;
-				const auto currentIndex = currentOffset + archetype_.GetSize(i) * entity.index;
-				
-				const auto otherArchetypeIndex = other.archetype_.GetIndexByTypeInfo(archetype_.GetTypeInfo(i));
-				const auto otherOffset = other.archetype_.GetOffsetByIndex(otherArchetypeIndex) * other.capacity_;
-				const auto otherIndex = otherOffset + other.archetype_.GetSize(otherArchetypeIndex) * newEntity.index;
+				const auto currentIndex = currentOffset + archetype_.GetSize(i) * loc.index;
 
-				memcpy(other.begin_.get() + otherIndex, begin_.get() + currentIndex, archetype_.GetSize(i));
+				const auto otherArchetypeIndex = other.archetype_.GetIndexByTypeInfo(archetype_.GetTypeInfo(i));
+				EngineAssertMsg(otherArchetypeIndex < other.archetype_.GetArchetypeSize(),
+					"MoveEntitySlot: component not found in destination Archetype");
+				const auto otherOffset = other.archetype_.GetOffsetByIndex(otherArchetypeIndex) * other.capacity_;
+				const auto otherIndex = otherOffset + other.archetype_.GetSize(otherArchetypeIndex) * newLoc.index;
+
+				const auto mover = archetype_.GetTypeInfo(i).GetMover();
+				if (mover) {
+					mover(other.begin_.get() + otherIndex, begin_.get() + currentIndex);
+				} else {
+					memcpy(other.begin_.get() + otherIndex, begin_.get() + currentIndex, archetype_.GetSize(i));
+				}
 			}
 
-			DestroyEntity(entity);
-			entity = newEntity;
+			// 移動元を swap-remove（src は moved-from 状態なのでデストラクタは安全）
+			const EntityID swappedId = DestroyEntitySwap(loc);
+			loc = newLoc;
+			return swappedId;
 		}
 
 
 		void Chunk::ResetMemory(uint32_t capacity)
 		{
-			auto work = std::make_unique<uint8_t[]>(archetype_.GetArchetypeMemorySize() * capacity);
+			auto work = AllocBuffer(archetype_.GetArchetypeMemorySize() * capacity, archetype_.GetMaxAlign());
 
-			size_t offseBase = 0;
 			for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i) {
-				const auto offset = offseBase * capacity_;
-				const auto newOffset = offseBase * capacity;
-				memcpy(work.get() + newOffset, begin_.get() + offset, archetype_.GetSize(i) * size_);
+				const auto offsetBase = archetype_.GetOffsetByIndex(i);
+				const auto compSize   = archetype_.GetSize(i);
+				const auto mover      = archetype_.GetTypeInfo(i).GetMover();
+				const auto dtor       = archetype_.GetTypeInfo(i).GetDestructor();
 
-				offseBase += archetype_.GetSize(i);
+				for (uint32_t e = 0; e < size_; ++e) {
+					void* src = begin_.get() + offsetBase * capacity_ + compSize * e;
+					void* dst = work.get()   + offsetBase * capacity  + compSize * e;
+
+					if (mover) {
+						mover(dst, src);
+						if (dtor) dtor(src);
+					} else {
+						memcpy(dst, src, compSize);
+					}
+				}
 			}
 
 			capacity_ = capacity;
@@ -120,7 +147,7 @@ namespace engine
 			Chunk result;
 			result.capacity_ = capacity;
 			result.archetype_ = archetype;
-			result.begin_ = std::make_unique<uint8_t[]>(result.capacity_ * result.archetype_.GetArchetypeMemorySize());
+			result.begin_ = AllocBuffer(result.capacity_ * result.archetype_.GetArchetypeMemorySize(), result.archetype_.GetMaxAlign());
 			return result;
 		}
 	}

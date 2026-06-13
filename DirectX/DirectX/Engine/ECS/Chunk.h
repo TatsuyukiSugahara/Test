@@ -2,7 +2,10 @@
 #include "ComponentArray.h"
 #include "Archetype.h"
 #include "Entity.h"
+#include <cassert>
 #include <memory>
+#include <new>
+#include <vector>
 
 
 namespace engine
@@ -12,11 +15,26 @@ namespace engine
 		class Chunk
 		{
 		private:
+			// over-aligned component（alignas(N) で N > __STDCPP_DEFAULT_NEW_ALIGNMENT__）に対応した
+			// カスタムデリータ。AllocBuffer で確保したブロックを正しく解放する。
+			struct AlignedDeleter {
+				size_t align = __STDCPP_DEFAULT_NEW_ALIGNMENT__;
+				void operator()(uint8_t* p) const noexcept {
+					if (align > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+						::operator delete(static_cast<void*>(p), std::align_val_t(align));
+					else
+						::operator delete(static_cast<void*>(p));
+				}
+			};
+
 			Archetype archetype_;
-			std::unique_ptr<uint8_t[]> begin_;
+			std::unique_ptr<uint8_t, AlignedDeleter> begin_;
 			/** TODO: 特別に初期化 */
 			uint32_t size_ = 0;
 			uint32_t capacity_ = 1;
+
+			// 各行の EntityID を保持（swap-remove 時のスロット更新用）
+			std::vector<EntityID> entityIDs_;
 
 
 
@@ -39,80 +57,67 @@ namespace engine
 
 
 			/**
-			 * 現在のSizeにCapacityを詰める
+			 * エンティティを生成（EntityID を row に記録）
 			 */
-			void Fit() { ResetMemory(size_); }
+			EntityLocation CreateEntity(EntityID id);
+
+			/**
+			 * エンティティを swap-remove で削除
+			 * 最後尾エンティティが loc.index に移動した場合、その EntityID を返す
+			 * 移動がなければ INVALID_ENTITY_ID を返す
+			 */
+			EntityID DestroyEntitySwap(const EntityLocation& loc);
+
+			/**
+			 * エンティティを他チャンクに移動（EntityID 対応版）
+			 * src の swap-remove で移動した EntityID を返す
+			 */
+			EntityID MoveEntitySlot(EntityLocation& loc, Chunk& other, EntityID entityId);
 
 
 			/**
-			 * Otherを自分のチャンクにマージ
+			 * 指定行の EntityID を取得
 			 */
-			void Marge(Chunk&& other);
-
-
-			/**
-			 * エンティティを生成
-			 */
-			Entity CreateEntity();
-
-
-			/**
-			 * エンティティを削除
-			 */
-			void DestroyEntity(const Entity& entity);
-
-
-			/**
-			 * エンティティを他チャンクに移動
-			 */
-			void MoveEntity(Entity& entity, Chunk& other);
-
-
-			/**
-			 * コンポーネント追加
-			 */
-			template <typename ...Args>
-			Entity AddComponent(const Args&... value)
+			EntityID GetEntityID(uint32_t index) const
 			{
-				if (capacity_ == size_) {
-					ResetMemory(capacity_ * 2);
+				if (index >= static_cast<uint32_t>(entityIDs_.size()))
+				{
+					return INVALID_ENTITY_ID;
 				}
-
-				const auto entity = Entity(size_);
-
-				AddComponentImp(value...);
-				++size_;
-				return entity;
+				return entityIDs_[index];
 			}
 
-			
+
 			/**
 			 * コンポーネント取得
 			 */
 			template <typename T>
-			T* GetComponent(const Entity& entity)
+			T* GetComponent(const EntityLocation& loc)
 			{
-				if (entity.index >= size_) {
-					// EngineAssert(false);
-					return nullptr;
-				}
+				assert(loc.index < size_ && "GetComponent: index out of bounds");
+				if (loc.index >= size_) return nullptr;
 
 				using TType = std::remove_const_t<std::remove_reference_t<T>>;
 				const auto offset = archetype_.GetOffset<TType>() * capacity_;
-				const auto currentIndex = sizeof(TType) * entity.index;
+				const auto currentIndex = sizeof(TType) * loc.index;
 				return reinterpret_cast<T*>(begin_.get() + offset + currentIndex);
 			}
 
-			
+
 			/**
 			 * コンポーネントにデータ設定
 			 */
 			template <typename T>
-			void SetComponent(const Entity& entity, const T& component)
+			void SetComponent(const EntityLocation& loc, const T& component)
 			{
 				using TType = std::remove_const_t<std::remove_reference_t<T>>;
-				auto* p = GetComponent<T>(entity);
-				memcpy(p, &component, sizeof(TType));
+				auto* p = GetComponent<T>(loc);
+				if (!p) return;
+				if constexpr (std::is_trivially_copyable_v<TType>) {
+					memcpy(p, &component, sizeof(TType));
+				} else {
+					*p = component;
+				}
 			}
 
 
@@ -146,23 +151,13 @@ namespace engine
 
 
 		private:
-			/**
-			 * チャンクのメモリを再アロケート
-			 */
 			void ResetMemory(uint32_t capacity);
 
-
-		private:
-			template <typename Head, typename ...Types>
-			void AddComponentImpl(Head& head, Types&&... type)
+			static std::unique_ptr<uint8_t, AlignedDeleter> AllocBuffer(size_t bytes, size_t align)
 			{
-				using HeadType = std::remove_const_t<std::remove_reference_t<Head>>;
-				const auto offset = archetype_.GetOffset<HeadType>() * capacity_;
-				const auto currentIndex = sizeof(HeadType) * size_;
-				memcpy(begin_.get() + offset + currentIndex, &head, sizeof(HeadType));
-				if constexpr (sizeof...(Types) > 0) {
-					AddComponentImpl(type...);
-				}
+				if (align > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+					return { static_cast<uint8_t*>(::operator new(bytes, std::align_val_t(align))), AlignedDeleter{align} };
+				return { static_cast<uint8_t*>(::operator new(bytes)), AlignedDeleter{} };
 			}
 
 

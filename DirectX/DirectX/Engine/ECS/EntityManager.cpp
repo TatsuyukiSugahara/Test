@@ -1,3 +1,4 @@
+#include "../EnginePreCompile.h"
 #include "EntityManager.h"
 
 
@@ -9,52 +10,105 @@ namespace engine
 		EntityManager* EntityManager::instance_ = nullptr;
 
 
-		Entity EntityManager::CreateEntity(const Archetype& archetype)
+		Entity EntityManager::CreateEntityImpl(const Archetype& archetype)
 		{
 			uint32_t chunkIndex = GetChunkIndex(archetype);
 			if (chunkIndex == chunkList_.size()) {
 				chunkIndex = CreateChunk(archetype);
 			}
 
-			auto entity = chunkList_[chunkIndex].CreateEntity();
-			entity.chunkIndex = chunkIndex;
-
-			const uint32_t entityHandleIndex = static_cast<uint32_t>(entityHandles_.size());
-			entityHandles_.insert(std::pair<uint32_t, Entity>(entityHandleIndex, entity));
-
-			return entity;
-		}
-
-
-		void EntityManager::DestroyEntity(const Entity& entity)
-		{
-			DestroyEntity(GetHandle(entity));
-		}
-
-
-		void EntityManager::DestroyEntity(const EntityHandle& handle)
-		{
-			if (!IsValid(handle)) {
-				return;
+			// 空きスロットを確保
+			EntityID id;
+			if (freeListHead_ != INVALID_ENTITY_ID) {
+				id = freeListHead_;
+				freeListHead_ = slots_[id].nextFree;
+			} else {
+				id = static_cast<EntityID>(slots_.size());
+				slots_.emplace_back();
 			}
-			const auto& it = entityHandles_.find(handle.handleIndex);
-			auto entity = it->second;
 
-			chunkList_[entity.chunkIndex].DestroyEntity(entity);
+			EntityLocation loc = chunkList_[chunkIndex].CreateEntity(id);
+			loc.chunkIndex = chunkIndex;
 
-			entityHandles_.erase(handle.handleIndex);
+			slots_[id].location   = loc;
+			slots_[id].alive      = true;
+			slots_[id].nextFree   = INVALID_ENTITY_ID;
+
+			return MakeEntity(EntityHandle(id, slots_[id].generation));
+		}
+
+
+		Entity EntityManager::CreateEntity(const Archetype& archetype)
+		{
+			std::unique_lock<std::shared_mutex> lock(iterationMutex_);
+			return CreateEntityImpl(archetype);
+		}
+
+
+		bool EntityManager::IsValid(const EntityHandle& handle) const
+		{
+			if (!handle.IsValid()) return false;
+			if (handle.id >= static_cast<EntityID>(slots_.size())) return false;
+			const auto& slot = slots_[handle.id];
+			return slot.alive && slot.generation == handle.generation;
+		}
+
+
+		void EntityManager::DestroyEntityNow(const EntityHandle& handle)
+		{
+			if (!IsValid(handle)) return;
+
+			auto& slot = slots_[handle.id];
+			const EntityLocation loc = slot.location;
+			const uint32_t oldIndex  = loc.index;
+
+			// swap-remove（最後尾が oldIndex に移動）
+			const EntityID swappedId = chunkList_[loc.chunkIndex].DestroyEntitySwap(loc);
+
+			// 移動してきた entity のスロットを更新
+			if (swappedId != INVALID_ENTITY_ID) {
+				slots_[swappedId].location.index = oldIndex;
+			}
+
+			// スロットを無効化してフリーリストへ返却
+			slot.alive      = false;
+			slot.generation++;
+			slot.nextFree   = freeListHead_;
+			freeListHead_   = handle.id;
+		}
+
+
+		void EntityManager::RequestDestroyEntity(const EntityHandle& handle)
+		{
+			std::lock_guard<std::mutex> lock(commandMutex_);
+			pendingCommands_.push_back({ [this, handle]() { DestroyEntityNow(handle); } });
+		}
+
+
+		void EntityManager::FlushCommands()
+		{
+			std::unique_lock<std::shared_mutex> lock(iterationMutex_);
+
+			std::vector<EntityCommand> commands;
+			{
+				std::lock_guard<std::mutex> lock(commandMutex_);
+				commands = std::move(pendingCommands_);
+				pendingCommands_.clear();
+			}
+			for (auto& cmd : commands) {
+				cmd.action();
+			}
 		}
 
 
 		uint32_t EntityManager::CreateChunk(const Archetype& archetype)
 		{
-			const uint32_t chunkIndex = GetChunkIndex(archetype);
-
+			const uint32_t chunkIndex = static_cast<uint32_t>(chunkList_.size());
 			chunkList_.push_back(Chunk::Create(archetype));
 			return chunkIndex;
 		}
 
-		
+
 		uint32_t EntityManager::GetChunkIndex(const Archetype& archetype) const
 		{
 			auto chunkIndex = 0;

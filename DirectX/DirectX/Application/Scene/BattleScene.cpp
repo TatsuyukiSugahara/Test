@@ -44,25 +44,25 @@ namespace app
 			{
 				auto entity = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::StaticMeshComponent, app::ecs::StateMachineComponent>();
 
-				targetHandle = engine::ecs::EntityManager::Get().GetHandle(entity);
+				targetHandle = entity.GetHandle();
 
-				app::ecs::StateMachineComponent* stateMachineComponent = engine::ecs::EntityManager::Get().GetComponent<app::ecs::StateMachineComponent>(entity);
+				auto* stateMachineComponent = entity.GetComponent<app::ecs::StateMachineComponent>();
 				stateMachineComponent->GetStateMachine()->AddState<app::actor::IdleState>(EngineHash32("Idle"));
 				stateMachineComponent->GetStateMachine()->AddState<app::actor::MoveState>(EngineHash32("Move"));
 				stateMachineComponent->GetStateMachine()->RequestStateID(EngineHash32("Idle"));
 				stateMachineComponent->GetStateMachine()->SetTargetHandle(targetHandle);
 
-				engine::ecs::StaticMeshComponent* staticMeshComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::StaticMeshComponent>(entity);
+				auto* staticMeshComponent = entity.GetComponent<engine::ecs::StaticMeshComponent>();
 				staticMeshComponent->SetModelPath("../temp/Assets/unityChan.tkm");
 
-				engine::ecs::TransformComponent* transformComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::TransformComponent>(entity);
+				auto* transformComponent = entity.GetComponent<engine::ecs::TransformComponent>();
 				transformComponent->transform.localPosition.Set(0.0f);
 				transformComponent->transform.localAngle.Set(0.0f);
 				transformComponent->transform.localScale.Set(1.0f);
 			}
 			{
 				auto entity = engine::ecs::EntityManager::Get().CreateEntity<app::ecs::CharacterSteeringComponent>();
-				auto* component = engine::ecs::EntityManager::Get().GetComponent<app::ecs::CharacterSteeringComponent>(entity);
+				auto* component = entity.GetComponent<app::ecs::CharacterSteeringComponent>();
 				component->SetTarget(targetHandle);
 			}
 		}

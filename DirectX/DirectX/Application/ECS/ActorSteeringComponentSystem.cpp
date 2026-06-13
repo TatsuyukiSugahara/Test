@@ -1,6 +1,6 @@
 #include "ActorSteeringComponentSystem.h"
 #include "ActorComponentSystem.h"
-#include "../../Engine/HID/Input.h"
+#include "../GameInput.h"
 
 namespace app
 {
@@ -20,18 +20,11 @@ namespace app
 		{
 			engine::math::Vector3 direction(0.0f);
 			float speed = 0.01f;	// 入力速度だが一旦固定
-			if (engine::hid::InputManager::Get().GetKeyBoard().IsPressed(engine::hid::BUTTON_W)) {
-				++direction.y;
-			}
-			if (engine::hid::InputManager::Get().GetKeyBoard().IsPressed(engine::hid::BUTTON_A)) {
-				--direction.x;
-			}
-			if (engine::hid::InputManager::Get().GetKeyBoard().IsPressed(engine::hid::BUTTON_S)) {
-				--direction.y;
-			}
-			if (engine::hid::InputManager::Get().GetKeyBoard().IsPressed(engine::hid::BUTTON_D)) {
-				++direction.x;
-			}
+			const auto& input = GameInput::Get();
+			if (input.IsPressed(GameAction::MoveForward )) { ++direction.y; }
+			if (input.IsPressed(GameAction::MoveBackward)) { --direction.y; }
+			if (input.IsPressed(GameAction::MoveLeft    )) { --direction.x; }
+			if (input.IsPressed(GameAction::MoveRight   )) { ++direction.x; }
 
 
 			engine::ecs::Foreach<CharacterSteeringComponent>([direction, speed](const engine::ecs::Entity& entity, CharacterSteeringComponent* component)

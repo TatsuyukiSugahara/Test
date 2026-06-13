@@ -28,7 +28,6 @@ namespace app
 
 		void Register() override;
 
-
 	private:
 		void Render();
 

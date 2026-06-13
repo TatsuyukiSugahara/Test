@@ -51,7 +51,9 @@ namespace engine
 		}
 		util::ThreadPool::Initialize();
 
-		application_->Initialize(renderContext_);
+		if (!application_->Initialize(renderContext_)) {
+			return false;
+		}
 		application_->Register();
 
 		return true;

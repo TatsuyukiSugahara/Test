@@ -1,0 +1,45 @@
+#include "Utility.h"
+#include "GameInput.h"
+#include "../Engine/HID/InputBinding.h"
+
+namespace app
+{
+	GameInput* GameInput::sInstance_ = nullptr;
+
+
+	void GameInput::Initialize()
+	{
+		if (!sInstance_) sInstance_ = new GameInput();
+	}
+
+
+	void GameInput::Finalize()
+	{
+		if (sInstance_) { delete sInstance_; sInstance_ = nullptr; }
+	}
+
+
+	GameInput::GameInput()
+	{
+		SetupMaps();
+		UseKeyboardMap();
+	}
+
+
+	void GameInput::SetupMaps()
+	{
+		using namespace engine::hid;
+
+		keyboardMap_.Bind(GameAction::MoveLeft,     BindKey(KeyBoardType::A));
+		keyboardMap_.Bind(GameAction::MoveRight,    BindKey(KeyBoardType::D));
+		keyboardMap_.Bind(GameAction::MoveForward,  BindKey(KeyBoardType::W));
+		keyboardMap_.Bind(GameAction::MoveBackward, BindKey(KeyBoardType::S));
+
+		gamepadMap_.Bind(GameAction::MoveLeft,     BindPad(PadButton::DLeft));
+		gamepadMap_.Bind(GameAction::MoveRight,    BindPad(PadButton::DRight));
+		gamepadMap_.Bind(GameAction::MoveForward,  BindPad(PadButton::DUp));
+		gamepadMap_.Bind(GameAction::MoveBackward, BindPad(PadButton::DDown));
+		gamepadMap_.BindStick(GameAction::Move,    BindLStick());
+		gamepadMap_.BindStick(GameAction::Look,    BindRStick());
+	}
+}

@@ -1,6 +1,7 @@
 #include "Utility.h"
 #include "Application.h"
 #include "Scene/Scene.h"
+#include "GameInput.h"
 #include "../Engine/Engine.h"
 #include "../Engine/HID/Input.h"
 #include "../Engine/Graphics/Camera.h"
@@ -43,7 +44,11 @@ namespace app
 		engine::ecs::EntityContext::Initialize();
 		// Input
 		engine::hid::InputManager::Initialize();
-		engine::hid::InputManager::Get().Setup();
+		if (FAILED(engine::hid::InputManager::Get().Setup()))
+		{
+			EngineAssertMsg(false, "InputManager::Setup failed: DirectInput or device initialization failed");
+			return false;
+		}
 		// Camera
 		engine::CameraManager::Initialize();
 
@@ -54,6 +59,9 @@ namespace app
 		EngineAssertMsg(offscreenRTHandle_.IsValid(), "Failed to create offscreen render target");
 		engine::CameraManager::Get().GetCamera(engine::CameraType::Offscreen)
 			->SetViewportSize(kOffscreenRTWidth, kOffscreenRTHeight);
+
+		// GameInput (VirtualPad + ActionMap)
+		GameInput::Initialize();
 
 		// Scene
 		app::SceneManager::Create();
@@ -72,6 +80,8 @@ namespace app
 
 		// Scene
 		app::SceneManager::Release();
+		// GameInput
+		GameInput::Finalize();
 		// ECS
 		engine::ecs::EntityContext::Finalize();
 		// Resources
@@ -83,13 +93,14 @@ namespace app
 
 	void Application::Update()
 	{
+		// Input update — ECS/Scene より先に更新して今フレームの入力を同一フレームで使えるようにする
+		engine::hid::InputManager::Get().Update();
+
 		// System update
 		engine::ecs::EntityContext::Get().Update();
 
 		// Resource manager update
 		engine::res::ResourceManager::Get().Update();
-		// Input update
-		engine::hid::InputManager::Get().Update();
 		// Scene update
 		app::SceneManager::Get().Update();
 

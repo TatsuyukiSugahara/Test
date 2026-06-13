@@ -1,6 +1,5 @@
 #pragma once
-#include "EntityManager.h"
-#include "System.h"
+#include "EntityContext.h"
 #include <utility>
 
 
@@ -15,7 +14,7 @@ namespace engine
 		template<typename... Cs, typename Func>
 		void Foreach(Func&& func)
 		{
-			EntityManager::Get().GetView<Cs...>().ForEach(std::forward<Func>(func));
+			EntityContext::Get().GetView<Cs...>().ForEach(std::forward<Func>(func));
 		}
 	}
 }

@@ -37,6 +37,8 @@ namespace engine
 
 
 		private:
+			friend class EntityContext;
+
 			SystemManager() {}
 			~SystemManager()
 			{
@@ -64,6 +66,21 @@ namespace engine
 			}
 
 
+			/**
+			 * 型で System を取得する。登録されていない場合は nullptr を返す。
+			 */
+			template <typename T>
+			T* GetSystem()
+			{
+				for (auto& entry : systemEntries_) {
+					if (auto* system = dynamic_cast<T*>(entry.system.get())) {
+						return system;
+					}
+				}
+				return nullptr;
+			}
+
+
 		private:
 			template <typename... Types>
 			void ResolveDependencies(std::vector<size_t>& indices)
@@ -85,31 +102,6 @@ namespace engine
 			}
 
 
-			/**
-			 * インスタンス
-			 */
-		private:
-			static SystemManager* instance_;
-
-
-		public:
-			static void Initialize()
-			{
-				if (instance_ == nullptr) {
-					instance_ = new SystemManager();
-				}
-			}
-			static SystemManager& Get()
-			{
-				return *instance_;
-			}
-			static void Finalize()
-			{
-				if (instance_) {
-					delete instance_;
-					instance_ = nullptr;
-				}
-			}
 		};
 	}
 }

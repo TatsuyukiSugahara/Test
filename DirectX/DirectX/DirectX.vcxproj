@@ -161,6 +161,7 @@
     <ClCompile Include="Engine\Component\BodyComponentSystem.cpp" />
     <ClCompile Include="Engine\Component\TransformComponentSystem.cpp" />
     <ClCompile Include="Engine\ECS\Chunk.cpp" />
+    <ClCompile Include="Engine\ECS\EntityContext.cpp" />
     <ClCompile Include="Engine\ECS\EntityManager.cpp" />
     <ClCompile Include="Engine\ECS\System.cpp" />
     <ClCompile Include="Engine\Engine.cpp" />

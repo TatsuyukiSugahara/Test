@@ -39,8 +39,7 @@ namespace app
 		// Resource management
 		engine::res::ResourceManager::Initialize();
 		// ECS
-		engine::ecs::EntityManager::Initialize();
-		engine::ecs::SystemManager::Initialize();
+		engine::ecs::EntityContext::Initialize();
 		// Input
 		engine::hid::InputManager::Initialize();
 		engine::hid::InputManager::Get().Setup();
@@ -64,8 +63,7 @@ namespace app
 		// Scene
 		app::SceneManager::Release();
 		// ECS
-		engine::ecs::EntityManager::Finalize();
-		engine::ecs::SystemManager::Finalize();
+		engine::ecs::EntityContext::Finalize();
 		// Resources
 		engine::res::ResourceManager::Finalize();
 		// Input
@@ -76,7 +74,7 @@ namespace app
 	void Application::Update()
 	{
 		// System update
-		engine::ecs::SystemManager::Get().Update();
+		engine::ecs::EntityContext::Get().Update();
 
 		// Resource manager update
 		engine::res::ResourceManager::Get().Update();
@@ -105,10 +103,10 @@ namespace app
 
 
 		// System registration
-		engine::ecs::SystemManager::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
-		engine::ecs::SystemManager::Get().AddSystem<app::ecs::ActorStateMachineSystem>();
-		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::HierarcicalTransformSystem>();
-		engine::ecs::SystemManager::Get().AddSystem<engine::ecs::RenderSystem>();
+		engine::ecs::EntityContext::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
+		engine::ecs::EntityContext::Get().AddSystem<app::ecs::ActorStateMachineSystem>();
+		engine::ecs::EntityContext::Get().AddSystem<engine::ecs::HierarcicalTransformSystem>();
+		engine::ecs::EntityContext::Get().AddSystem<engine::ecs::RenderSystem>();
 	}
 
 

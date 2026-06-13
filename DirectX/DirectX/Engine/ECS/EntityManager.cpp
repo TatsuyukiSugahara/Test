@@ -7,10 +7,7 @@ namespace engine
 {
 	namespace ecs
 	{
-		EntityManager* EntityManager::instance_ = nullptr;
-
-
-		Entity EntityManager::CreateEntityImpl(const Archetype& archetype)
+Entity EntityManager::CreateEntityImpl(const Archetype& archetype)
 		{
 			uint32_t chunkIndex = GetChunkIndex(archetype);
 			if (chunkIndex == chunkList_.size()) {

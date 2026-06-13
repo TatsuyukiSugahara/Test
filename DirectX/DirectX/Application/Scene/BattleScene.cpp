@@ -42,7 +42,7 @@ namespace app
 			// 操作キャラクター生成
 			engine::ecs::EntityHandle targetHandle;
 			{
-				auto entity = engine::ecs::EntityManager::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::StaticMeshComponent, app::ecs::StateMachineComponent>();
+				auto entity = engine::ecs::EntityContext::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::StaticMeshComponent, app::ecs::StateMachineComponent>();
 
 				targetHandle = entity.GetHandle();
 
@@ -61,7 +61,7 @@ namespace app
 				transformComponent->transform.localScale.Set(1.0f);
 			}
 			{
-				auto entity = engine::ecs::EntityManager::Get().CreateEntity<app::ecs::CharacterSteeringComponent>();
+				auto entity = engine::ecs::EntityContext::Get().CreateEntity<app::ecs::CharacterSteeringComponent>();
 				auto* component = entity.GetComponent<app::ecs::CharacterSteeringComponent>();
 				component->SetTarget(targetHandle);
 			}

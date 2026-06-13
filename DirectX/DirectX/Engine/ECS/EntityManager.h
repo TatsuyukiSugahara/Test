@@ -39,6 +39,8 @@ namespace engine
 
 
 		private:
+			friend class EntityContext;
+
 			EntityManager() {}
 			~EntityManager()
 			{
@@ -278,31 +280,6 @@ namespace engine
 
 
 
-			/**
-			 * インスタンス
-			 */
-		private:
-			static EntityManager* instance_;
-
-
-		public:
-			static void Initialize()
-			{
-				if (instance_ == nullptr) {
-					instance_ = new EntityManager();
-				}
-			}
-			static EntityManager& Get()
-			{
-				return *instance_;
-			}
-			static void Finalize()
-			{
-				if (instance_) {
-					delete instance_;
-					instance_ = nullptr;
-				}
-			}
 		};
 	}
 }

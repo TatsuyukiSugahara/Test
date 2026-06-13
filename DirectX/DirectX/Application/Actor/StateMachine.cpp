@@ -79,8 +79,8 @@ namespace app
 				move.Scale(stateMachine_->GetSpeed());
 
 				const engine::ecs::EntityHandle& targetHandle = stateMachine_->GetTargetHandle();
-				if (engine::ecs::EntityManager::Get().IsValid(targetHandle)) {
-					auto* transformComponent = engine::ecs::EntityManager::Get().GetComponent<engine::ecs::TransformComponent>(targetHandle);
+				if (engine::ecs::EntityContext::Get().IsValid(targetHandle)) {
+					auto* transformComponent = engine::ecs::EntityContext::Get().GetComponent<engine::ecs::TransformComponent>(targetHandle);
 					transformComponent->transform.localPosition.Add(move);
 				}
 			} else {

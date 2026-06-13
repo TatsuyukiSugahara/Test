@@ -1,5 +1,4 @@
 #include "System.h"
-#include "EntityManager.h"
 #include "../Util/ThreadPool.h"
 
 
@@ -7,10 +6,7 @@ namespace engine
 {
 	namespace ecs
 	{
-		SystemManager* SystemManager::instance_ = nullptr;
-
-
-		void SystemManager::Update()
+void SystemManager::Update()
 		{
 			const size_t count = systemEntries_.size();
 			std::vector<std::shared_future<void>> futures(count);
@@ -40,9 +36,6 @@ namespace engine
 					fut.wait();
 				}
 			}
-
-			// System 並列実行中に積まれた破棄コマンドをここで一括処理
-			EntityManager::Get().FlushCommands();
 		}
 	}
 }

@@ -36,11 +36,11 @@ namespace app
 
 			engine::ecs::Foreach<CharacterSteeringComponent>([direction, speed](const engine::ecs::Entity& entity, CharacterSteeringComponent* component)
 				{
-					if (!engine::ecs::EntityManager::Get().IsValid(component->GetTarget())) {
+					if (!engine::ecs::EntityContext::Get().IsValid(component->GetTarget())) {
 						return;
 					}
 
-					auto* targetStateMachine = engine::ecs::EntityManager::Get().GetComponent<StateMachineComponent>(component->GetTarget());
+					auto* targetStateMachine = engine::ecs::EntityContext::Get().GetComponent<StateMachineComponent>(component->GetTarget());
 					if (targetStateMachine == nullptr) {
 						return;
 					}

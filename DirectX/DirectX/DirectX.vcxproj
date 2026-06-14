@@ -115,7 +115,7 @@
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <AdditionalIncludeDirectories>$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
@@ -137,7 +137,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -153,6 +153,7 @@
   <ItemGroup>
     <ClCompile Include="Application\Actor\StateMachine.cpp" />
     <ClCompile Include="Application\Application.cpp" />
+    <ClCompile Include="Application\GameInput.cpp" />
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
     <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp" />
     <ClCompile Include="Application\Main.cpp" />
@@ -174,6 +175,7 @@
     <ClCompile Include="Engine\Graphics\D3D11\D3D11Buffers.cpp" />
     <ClCompile Include="Engine\Graphics\D3D11\D3D11Shader.cpp" />
     <ClCompile Include="Engine\Graphics\StaticMesh.cpp" />
+    <ClCompile Include="Engine\HID\ActionMap.cpp" />
     <ClCompile Include="Engine\HID\Input.cpp" />
     <ClCompile Include="Engine\JobSystem.cpp" />
     <ClCompile Include="Engine\Util\ThreadPool.cpp" />
@@ -202,6 +204,8 @@
   <ItemGroup>
     <ClInclude Include="Application\Actor\StateMachine.h" />
     <ClInclude Include="Application\Application.h" />
+    <ClInclude Include="Application\GameAction.h" />
+    <ClInclude Include="Application\GameInput.h" />
     <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
     <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h" />
     <ClInclude Include="Application\Scene\BattleScene.h" />
@@ -234,7 +238,9 @@
     <ClInclude Include="Engine\Graphics\RenderContext.h" />
     <ClInclude Include="Engine\Graphics\Shader.h" />
     <ClInclude Include="Engine\Graphics\StaticMesh.h" />
+    <ClInclude Include="Engine\HID\ActionMap.h" />
     <ClInclude Include="Engine\HID\Input.h" />
+    <ClInclude Include="Engine\HID\InputBinding.h" />
     <ClInclude Include="Engine\JobSystem.h" />
     <ClInclude Include="Engine\Math\Matrix.h" />
     <ClInclude Include="Engine\Math\Utility.h" />

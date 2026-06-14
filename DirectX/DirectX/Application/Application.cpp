@@ -6,6 +6,7 @@
 #include "../Engine/HID/Input.h"
 #include "../Engine/Graphics/Camera.h"
 #include "../Engine/Graphics/GraphicsDevice.h"
+#include "../Engine/Graphics/LightManager.h"
 #include "../Engine/Resource/Resource.h"
 #include "../Engine/Rendering/RenderFrame.h"
 #include "../Engine/Rendering/RenderCommandList.h"
@@ -51,6 +52,8 @@ namespace app
 		}
 		// Camera
 		engine::CameraManager::Initialize();
+		// Light
+		engine::graphics::LightManager::Initialize();
 
 		// オフスクリーン RT を生成してオフスクリーンカメラのアスペクト比を設定する。
 		// サイズ変更時は RT を再生成し SetViewportSize() を再度呼ぶこと。
@@ -82,6 +85,8 @@ namespace app
 		app::SceneManager::Release();
 		// GameInput
 		GameInput::Finalize();
+		// Light
+		engine::graphics::LightManager::Finalize();
 		// ECS
 		engine::ecs::EntityContext::Finalize();
 		// Resources
@@ -140,6 +145,11 @@ namespace app
 		const float renderH = static_cast<float>(engine::Engine::Get().GetRenderHeight());
 		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
+		// カメラ座標をライトマネージャへ通知してからライティングデータを取得する
+		auto* mainCamera = engine::CameraManager::Get().GetCamera(engine::CameraType::Main);
+		if (mainCamera)
+			engine::graphics::LightManager::Get().SetCameraPosition(mainCamera->GetPosition());
+
 		// --- オフスクリーンパス ---
 		// displayRT に INVALID を渡すことで CopyToBackBuffer / Present をスキップする。
 		if (offscreenRTHandle_.IsValid())
@@ -150,9 +160,10 @@ namespace app
 			offscreenCmdList->Enqueue<engine::rendering::SetViewportCommand>(
 				0.0f, 0.0f, kOffscreenRTWidth, kOffscreenRTHeight);
 			engine::rendering::RenderFrame offscreenFrame;
+			offscreenFrame.lighting = engine::graphics::LightManager::Get().GetLightingData();
 			engine::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, engine::CameraType::Offscreen);
 			renderer_.BuildCommandList(offscreenFrame, *offscreenCmdList);
-			renderThread_.Submit(std::move(offscreenCmdList), engine::rendering::RenderTargetHandle{});
+			renderThread_.Submit(std::move(offscreenCmdList), engine::rendering::RenderTargetHandle{}, offscreenFrame.lighting);
 		}
 
 		// --- メインパス ---
@@ -163,9 +174,10 @@ namespace app
 		mainCmdList->Enqueue<engine::rendering::ClearRenderTargetCommand>(0u, clearColor);
 		mainCmdList->Enqueue<engine::rendering::SetViewportCommand>(0.0f, 0.0f, renderW, renderH);
 		engine::rendering::RenderFrame mainFrame;
+		mainFrame.lighting = engine::graphics::LightManager::Get().GetLightingData();
 		engine::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
 		renderer_.BuildCommandList(mainFrame, *mainCmdList);
-		renderThread_.Submit(std::move(mainCmdList), engine::Engine::Get().GetMainRenderTargetHandle());
+		renderThread_.Submit(std::move(mainCmdList), engine::Engine::Get().GetMainRenderTargetHandle(), mainFrame.lighting);
 	}
 
 

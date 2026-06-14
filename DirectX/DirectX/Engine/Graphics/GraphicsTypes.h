@@ -137,12 +137,16 @@ namespace engine
 		};
 
 
-		/** 頂点データ構造体 (API 非依存) */
+		/** 頂点データ構造体 (API 非依存)
+		 *  メモリレイアウト: position(12) + normal(12) + uv(8) + tangent(16) = 48 bytes
+		 *  uv の後に tangent を置くことで、TANGENT を宣言しない既存シェーダーのレイアウトを壊さない。
+		 */
 		struct VertexData
 		{
 			math::Vector3 position;
 			math::Vector3 normal;
 			math::Vector2 uv;
+			math::Vector4 tangent;  // xyz=接線, w=bitangent 符号 (+1 or -1)
 		};
 
 		/** 頂点シェーダー用定数バッファ構造体 */

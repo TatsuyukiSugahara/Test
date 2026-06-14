@@ -6,6 +6,7 @@
 #include "IShader.h"
 #include "ISamplerState.h"
 #include "RenderContext.h"
+#include "Lighting.h"
 #include "../Rendering/RenderFrame.h"
 
 
@@ -18,8 +19,9 @@ namespace engine
 		public:
 			enum class ShaderType
 			{
-				NormalModel,
-				SimpleBox,
+				NormalModel,  // Model.fx    (ライトなし、後方互換)
+				SimpleBox,    // SimpleBox.fx
+				ModelLit,     // ModelLit.fx (フルライティング)
 			};
 
 		private:
@@ -31,27 +33,49 @@ namespace engine
 			math::Matrix4x4                  localMatrix_;
 			bool                             isInitialized_;
 
-			engine::res::RefMeshResource meshResource_;
-			engine::res::RefGPUResource  gpuResource_;
+			engine::res::RefMeshResource  meshResource_;
 			engine::res::RefShaderResource vsShaderResource_;
 			engine::res::RefShaderResource psShaderResource_;
 
+			// テクスチャリソース t0-t3
+			engine::res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
+
+			MaterialCBData materialCB_;
 
 		public:
 			StaticMesh();
 			~StaticMesh();
 
-			void Initialize(engine::res::RefMeshResource meshResource, engine::res::RefGPUResource gpuResource, const ShaderType shaderType);
-			void Initialize(const void* vertexBuffer, const uint32_t vertexNum, const void* indexBuffer, const uint32_t indexNum, const ShaderType shaderType);
+			void Initialize(engine::res::RefMeshResource meshResource,
+			                engine::res::RefGPUResource  albedoResource,
+			                const ShaderType             shaderType);
+			void Initialize(const void* vertexBuffer, const uint32_t vertexNum,
+			                const void* indexBuffer,  const uint32_t indexNum,
+			                const ShaderType shaderType);
 			void SetLocalMatrix(const math::Matrix4x4& localMatrix);
 			void Update(const math::Vector3& translation, const math::Quaternion& rotation, const math::Vector3& scale);
+
+			/** テクスチャを個別スロットに設定する (Initialize 後に呼ぶ) */
+			void SetTexture(rendering::TextureSlot slot, engine::res::RefGPUResource resource);
+
+			/** ユーザー自由パラメータ (HLSL: params[index]) */
+			math::Vector4&       Param(uint32_t index)       { return materialCB_.params[index]; }
+			const math::Vector4& Param(uint32_t index) const { return materialCB_.params[index]; }
+
+			void SetSpecularIntensity(float v) { materialCB_.specularIntensity = v; }
+			void SetGloss(float v)             { materialCB_.gloss = v; }
+			void SetEmissiveScale(float v)     { materialCB_.emissiveScale = v; }
+			void SetMaterialFlag(MaterialFlags flag, bool enable)
+			{
+				if (enable) materialCB_.flags |=  static_cast<uint32_t>(flag);
+				else        materialCB_.flags &= ~static_cast<uint32_t>(flag);
+			}
 
 			/**
 			 * 描画に必要な情報を RenderItem へコピーする。
 			 * ロードが完了していない場合は false を返す。
 			 */
 			bool FillRenderItem(rendering::RenderItem& item) const;
-
 
 		private:
 			void Initialize(const ShaderType shaderType);

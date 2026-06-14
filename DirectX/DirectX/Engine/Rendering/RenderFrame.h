@@ -7,6 +7,7 @@
 #include "../Graphics/IShader.h"
 #include "../Graphics/ISamplerState.h"
 #include "../Graphics/IShaderResourceView.h"
+#include "../Graphics/Lighting.h"
 
 
 namespace engine
@@ -22,6 +23,17 @@ namespace engine
 		};
 
 
+		/** テクスチャスロット番号 (t0-t3) */
+		enum class TextureSlot : uint32_t
+		{
+			Albedo   = 0,
+			Normal   = 1,
+			Specular = 2,
+			Emissive = 3,
+			Count,
+		};
+
+
 		/**
 		 * One draw call worth of data.
 		 *
@@ -31,20 +43,24 @@ namespace engine
 		 * kept alive transitively.
 		 *
 		 * Constant buffer data (world/view/proj) is stored as plain matrices; the actual
-		 * IConstantBuffer is allocated per-draw from FrameContext::constantBufferPool at
+		 * IConstantBuffer is allocated per-draw from FrameContext::perDrawCBPool at
 		 * execute time, not bound to the mesh.
 		 */
 		struct RenderItem
 		{
-			std::shared_ptr<graphics::IVertexBuffer>       vertexBuffer;
-			std::shared_ptr<graphics::IIndexBuffer>        indexBuffer;
-			std::shared_ptr<graphics::ISamplerState>       samplerState;
-			std::shared_ptr<graphics::IShader>             vs;
-			std::shared_ptr<graphics::IShader>             ps;
-			std::shared_ptr<graphics::IShaderResourceView> texture;
-			uint32_t                                       indexCount   = 0;
-			math::Matrix4x4                                worldMatrix;
-			uint32_t                                       layer        = 0;
+			std::shared_ptr<graphics::IVertexBuffer>  vertexBuffer;
+			std::shared_ptr<graphics::IIndexBuffer>   indexBuffer;
+			std::shared_ptr<graphics::ISamplerState>  samplerState;
+			std::shared_ptr<graphics::IShader>        vs;
+			std::shared_ptr<graphics::IShader>        ps;
+
+			std::shared_ptr<graphics::IShaderResourceView>
+				textures[static_cast<uint32_t>(TextureSlot::Count)];
+
+			uint32_t                  indexCount  = 0;
+			math::Matrix4x4           worldMatrix;
+			uint32_t                  layer       = 0;
+			graphics::MaterialCBData  materialCB;
 		};
 
 
@@ -55,6 +71,7 @@ namespace engine
 		struct RenderFrame
 		{
 			CameraData              camera;
+			graphics::LightingData  lighting;
 			std::vector<RenderItem> items;
 
 			void Clear() { items.clear(); }

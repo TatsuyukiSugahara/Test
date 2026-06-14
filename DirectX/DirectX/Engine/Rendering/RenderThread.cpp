@@ -3,6 +3,7 @@
 #include "../Graphics/RenderContext.h"
 #include "../Graphics/GraphicsTypes.h"
 #include "../Graphics/GraphicsDevice.h"
+#include "../Graphics/Lighting.h"
 
 
 namespace engine
@@ -13,9 +14,15 @@ namespace engine
 		{
 			context_ = context;
 
+			graphics::LightingData defaultLighting{};
 			for (auto& slot : slots_)
 			{
-				slot = std::make_unique<FrameSlot>(sizeof(graphics::VSConstantBuffer));
+				slot = std::make_unique<FrameSlot>(
+					sizeof(graphics::VSConstantBuffer),
+					sizeof(graphics::MaterialCBData));
+
+				slot->lightingCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
+					&defaultLighting, sizeof(defaultLighting));
 			}
 
 			running_.store(true);
@@ -42,17 +49,20 @@ namespace engine
 		}
 
 
-		void RenderThread::Submit(std::unique_ptr<RenderCommandList> list, RenderTargetHandle displayRT)
+		void RenderThread::Submit(std::unique_ptr<RenderCommandList> list,
+		                          RenderTargetHandle                 displayRT,
+		                          const graphics::LightingData&      lighting)
 		{
 			{
 				std::unique_lock<std::mutex> lock(mutex_);
 				// 書き込み先スロットがレンダースレッドに処理されるまで待つ。
 				cvGame_.wait(lock, [this] { return slots_[writeSlot_]->done; });
 
-				slots_[writeSlot_]->list      = std::move(list);
-				slots_[writeSlot_]->displayRT  = displayRT;
-				slots_[writeSlot_]->ready      = true;
-				slots_[writeSlot_]->done       = false;
+				slots_[writeSlot_]->list         = std::move(list);
+				slots_[writeSlot_]->displayRT    = displayRT;
+				slots_[writeSlot_]->lightingData = lighting;
+				slots_[writeSlot_]->ready        = true;
+				slots_[writeSlot_]->done         = false;
 				writeSlot_ = (writeSlot_ + 1) % FRAMES_IN_FLIGHT;
 			}
 			cvRender_.notify_one();
@@ -112,8 +122,16 @@ namespace engine
 
 				if (list)
 				{
-					slots_[slot]->cbPool.Reset();
-					FrameContext fc { &slots_[slot]->cbPool };
+					// b1 ライティング CB をフレーム先頭で 1 回更新
+					context_->UpdateSubresource(*slots_[slot]->lightingCB, slots_[slot]->lightingData);
+
+					slots_[slot]->perDrawPool.Reset();
+					slots_[slot]->materialPool.Reset();
+					FrameContext fc {
+						&slots_[slot]->perDrawPool,
+						&slots_[slot]->materialPool,
+						slots_[slot]->lightingCB.get()
+					};
 					list->Execute(*context_, fc);
 					list->Reset();  // shared_ptr を解放し、アリーナカーソルをリセット
 

@@ -61,20 +61,22 @@ namespace engine
 			ComponentState componentState_;
 
 			engine::res::RefMeshResource meshResouce_;
-			engine::res::RefGPUResource gpuResource_;
+			engine::res::RefGPUResource  gpuResources_[static_cast<uint32_t>(engine::rendering::TextureSlot::Count)];
 			engine::graphics::StaticMesh staticMesh_;
 			std::string modelPath_;
 			std::string texturePath_;
 			engine::math::Matrix4x4 modelLocalMatrix_;
 			bool textureLoadRequested_;
+			engine::graphics::StaticMesh::ShaderType shaderType_;
 
-			
+
 		public:
 			StaticMeshComponent();
 			~StaticMeshComponent();
 			void Update();
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
 			void SetModelLocalMatrix(const engine::math::Matrix4x4& localMatrix);
+			void SetShaderType(engine::graphics::StaticMesh::ShaderType type) { shaderType_ = type; }
 
 
 		public:

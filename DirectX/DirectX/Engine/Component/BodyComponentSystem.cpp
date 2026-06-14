@@ -86,6 +86,7 @@ namespace engine
 			, texturePath_()
 			, modelLocalMatrix_(MakeZUpModelLocalMatrix(0.05f))
 			, textureLoadRequested_(false)
+			, shaderType_(engine::graphics::StaticMesh::ShaderType::ModelLit)
 		{
 		}
 
@@ -99,7 +100,7 @@ namespace engine
 			modelPath_ = modelPath ? modelPath : "";
 			texturePath_ = texturePath ? texturePath : "";
 			meshResouce_.reset();
-			gpuResource_.reset();
+			for (auto& r : gpuResources_) r.reset();
 			textureLoadRequested_ = false;
 			componentState_ = modelPath_.empty() ? ComponentState::Invalid : ComponentState::LoadRequest;
 		}
@@ -122,7 +123,7 @@ namespace engine
 				case ComponentState::LoadRequest:
 				{
 					meshResouce_ = engine::res::ResourceManager::Get().Load<engine::res::MeshResource>(modelPath_.c_str());
-					gpuResource_.reset();
+					for (auto& r : gpuResources_) r.reset();
 					textureLoadRequested_ = false;
 					componentState_ = ComponentState::Loading;
 					[[fallthrough]];
@@ -137,25 +138,47 @@ namespace engine
 						break;
 					}
 
+					// メッシュ完了後にテクスチャリクエストを一括発行
 					if (!textureLoadRequested_) {
-						const std::string& texturePath = texturePath_.empty() ? meshResouce_->GetTexturePath() : texturePath_;
-						if (!texturePath.empty()) {
-							gpuResource_ = engine::res::ResourceManager::Get().Load<engine::res::GPUResource>(texturePath.c_str());
-						}
+						using Slot = engine::rendering::TextureSlot;
+						auto& rm = engine::res::ResourceManager::Get();
+						const auto& mat = meshResouce_->GetMaterial();
+
+						// アルベド: SetModelPath で上書き指定があればそちらを優先
+						const std::string& albedoPath = texturePath_.empty() ? mat.albedo : texturePath_;
+						if (!albedoPath.empty())
+							gpuResources_[static_cast<uint32_t>(Slot::Albedo)] = rm.Load<engine::res::GPUResource>(albedoPath.c_str());
+
+						if (!mat.normal.empty())
+							gpuResources_[static_cast<uint32_t>(Slot::Normal)] = rm.Load<engine::res::GPUResource>(mat.normal.c_str());
+
+						if (!mat.specular.empty())
+							gpuResources_[static_cast<uint32_t>(Slot::Specular)] = rm.Load<engine::res::GPUResource>(mat.specular.c_str());
+
 						textureLoadRequested_ = true;
 					}
 
-					if (gpuResource_) {
-						if (gpuResource_->IsFailed()) {
-							gpuResource_.reset();
-						}
-						else if (!gpuResource_->IsCompleted()) {
-							break;
-						}
+					// 全テクスチャの完了を待つ
+					bool anyPending = false;
+					for (auto& r : gpuResources_) {
+						if (!r) continue;
+						if (r->IsFailed()) { r.reset(); continue; }
+						if (!r->IsCompleted()) { anyPending = true; }
+					}
+					if (anyPending) break;
+
+					// 初期化: アルベドで Initialize → 追加スロットを SetTexture
+					using Slot = engine::rendering::TextureSlot;
+					staticMesh_.SetLocalMatrix(modelLocalMatrix_);
+					staticMesh_.Initialize(meshResouce_, gpuResources_[static_cast<uint32_t>(Slot::Albedo)], shaderType_);
+
+					for (uint32_t i = static_cast<uint32_t>(Slot::Normal);
+					     i < static_cast<uint32_t>(Slot::Count); ++i)
+					{
+						if (gpuResources_[i])
+							staticMesh_.SetTexture(static_cast<Slot>(i), gpuResources_[i]);
 					}
 
-					staticMesh_.SetLocalMatrix(modelLocalMatrix_);
-					staticMesh_.Initialize(meshResouce_, gpuResource_, engine::graphics::StaticMesh::ShaderType::NormalModel);
 					componentState_ = ComponentState::Completed;
 					break;
 				}

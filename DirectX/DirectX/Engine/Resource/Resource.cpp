@@ -405,7 +405,7 @@ namespace engine
 
 				outMesh.vertics.clear();
 				outMesh.indices.clear();
-				outMesh.texturePath.clear();
+				outMesh.material = {};
 
 				for (uint32_t meshNo = 0; meshNo < header.numMeshParts; ++meshNo) {
 					tkm::MeshPartsHeader meshHeader = {};
@@ -425,9 +425,16 @@ namespace engine
 							return false;
 						}
 
-						if (outMesh.texturePath.empty() && !material.albedo.empty()) {
-							outMesh.texturePath = ReplaceExtension(ResolveSiblingPath(filePath, material.albedo), ".dds");
+						if (outMesh.material.albedo.empty() && !material.albedo.empty()) {
+							outMesh.material.albedo = ReplaceExtension(ResolveSiblingPath(filePath, material.albedo), ".dds");
 						}
+						if (outMesh.material.normal.empty() && !material.normal.empty()) {
+							outMesh.material.normal = ReplaceExtension(ResolveSiblingPath(filePath, material.normal), ".dds");
+						}
+						if (outMesh.material.specular.empty() && !material.specular.empty()) {
+							outMesh.material.specular = ReplaceExtension(ResolveSiblingPath(filePath, material.specular), ".dds");
+						}
+						// TKM フォーマットは emissive を持たないため省略
 					}
 
 					const uint32_t baseVertex = static_cast<uint32_t>(outMesh.vertics.size());
@@ -439,10 +446,13 @@ namespace engine
 							return false;
 						}
 
-						engine::graphics::VertexData dst;
+						engine::graphics::VertexData dst = {};
 						dst.position.Set(src.pos[0], src.pos[1], src.pos[2]);
 						dst.normal.Set(src.normal[0], src.normal[1], src.normal[2]);
 						dst.uv.Set(src.uv[0], src.uv[1]);
+						// TKM はタンジェントデータを持たないため安全なデフォルトを設定する
+						// (normalize(0,0,0) による NaN を防ぐ)
+						dst.tangent = { 1.0f, 0.0f, 0.0f, 1.0f };
 						outMesh.vertics.push_back(dst);
 					}
 

@@ -19,6 +19,7 @@ namespace engine
 			ShaderInformation shaderInformations[] = {
 				{ "Assets/Shader/Model.fx",     "VSMain", "Assets/Shader/Model.fx",     "PSMain" },
 				{ "Assets/Shader/SimpleBox.fx", "VSMain", "Assets/Shader/SimpleBox.fx", "PSMain" },
+				{ "Assets/Shader/ModelLit.fx",  "VSMain", "Assets/Shader/ModelLit.fx",  "PSMain" },
 			};
 		}
 
@@ -37,10 +38,12 @@ namespace engine
 		}
 
 
-		void StaticMesh::Initialize(engine::res::RefMeshResource meshResource, engine::res::RefGPUResource gpuResource, const ShaderType shaderType)
+		void StaticMesh::Initialize(engine::res::RefMeshResource meshResource,
+		                            engine::res::RefGPUResource  albedoResource,
+		                            const ShaderType             shaderType)
 		{
 			meshResource_ = meshResource;
-			gpuResource_  = gpuResource;
+			gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Albedo)] = albedoResource;
 			isInitialized_ = false;
 
 			if (!meshResource_ || meshResource_->GetVerticsSize() == 0 || meshResource_->GetIndicesSize() == 0) {
@@ -62,7 +65,9 @@ namespace engine
 		}
 
 
-		void StaticMesh::Initialize(const void* vertexBuffer, const uint32_t vertexNum, const void* indexBuffer, const uint32_t indexNum, const ShaderType shaderType)
+		void StaticMesh::Initialize(const void* vertexBuffer, const uint32_t vertexNum,
+		                            const void* indexBuffer,  const uint32_t indexNum,
+		                            const ShaderType shaderType)
 		{
 			isInitialized_ = false;
 			if (!vertexBuffer || vertexNum == 0 || !indexBuffer || indexNum == 0) {
@@ -83,7 +88,9 @@ namespace engine
 			vsShaderResource_ = engine::res::ResourceManager::Get().LoadShader(info.vsFilePath, info.vsFuncName, IShader::ShaderType::VS);
 			psShaderResource_ = engine::res::ResourceManager::Get().LoadShader(info.psFilePath, info.psFuncName, IShader::ShaderType::PS);
 
-			if (gpuResource_) {
+			const bool hasAlbedo = gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Albedo)] != nullptr;
+			if (hasAlbedo)
+			{
 				SamplerDesc samplerDesc;
 				samplerDesc.filter   = FilterMode::MinMagMipLinear;
 				samplerDesc.addressU = AddressMode::Clamp;
@@ -114,6 +121,24 @@ namespace engine
 		}
 
 
+		void StaticMesh::SetTexture(rendering::TextureSlot slot, engine::res::RefGPUResource resource)
+		{
+			const uint32_t idx = static_cast<uint32_t>(slot);
+			gpuResources_[idx] = resource;
+
+			// Normal/Specular/Emissive フラグを自動更新
+			MaterialFlags flag = MatFlag_HasNormal;
+			switch (slot)
+			{
+			case rendering::TextureSlot::Normal:   flag = MatFlag_HasNormal;   break;
+			case rendering::TextureSlot::Specular: flag = MatFlag_HasSpecular; break;
+			case rendering::TextureSlot::Emissive: flag = MatFlag_HasEmissive; break;
+			default: return;
+			}
+			SetMaterialFlag(flag, resource != nullptr);
+		}
+
+
 		bool StaticMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
 			if (!isInitialized_)                                       return false;
@@ -125,22 +150,37 @@ namespace engine
 			IShader* ps = psShaderResource_->GetShader();
 			if (!vs || !ps)                                            return false;
 
-			// shared_ptr copies keep GPU buffers alive for the duration of the RenderItem.
 			item.vertexBuffer = vertexBuffer_;
 			item.indexBuffer  = indexBuffer_;
 			item.samplerState = samplerState_;
 
-			// Aliasing constructor: keeps the ResourceBase (vsShaderResource_ / gpuResource_)
-			// alive while the stored pointer addresses the API object inside it.
+			// Aliasing constructor: keeps the ResourceBase alive while the stored
+			// pointer addresses the API object inside it.
 			item.vs = std::shared_ptr<IShader>(vsShaderResource_, vs);
 			item.ps = std::shared_ptr<IShader>(psShaderResource_, ps);
 
-			IShaderResourceView* srv = gpuResource_ ? gpuResource_->GetShaderResourceView() : nullptr;
-			item.texture = srv ? std::shared_ptr<IShaderResourceView>(gpuResource_, srv) : nullptr;
+			// テクスチャ t0-t3
+			constexpr uint32_t kCount = static_cast<uint32_t>(rendering::TextureSlot::Count);
+			for (uint32_t i = 0; i < kCount; ++i)
+			{
+				const auto& gpuRes = gpuResources_[i];
+				if (gpuRes)
+				{
+					IShaderResourceView* srv = gpuRes->GetShaderResourceView();
+					item.textures[i] = srv
+						? std::shared_ptr<IShaderResourceView>(gpuRes, srv)
+						: nullptr;
+				}
+				else
+				{
+					item.textures[i] = nullptr;
+				}
+			}
 
-			item.indexCount  = indicesSize_;
+			item.indexCount = indicesSize_;
 			item.worldMatrix = worldMatrix_;
 			item.layer       = 0;
+			item.materialCB  = materialCB_;
 			return true;
 		}
 	}

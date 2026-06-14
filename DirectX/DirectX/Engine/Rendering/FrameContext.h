@@ -47,11 +47,16 @@ namespace engine
 
 		/**
 		 * Per-frame render resources passed to every IRenderCommand::Execute() call.
-		 * Add more per-frame pools here as the engine grows (e.g. dynamic vertex scratch buffer).
+		 *
+		 * perDrawCBPool  : b0 用 (world/view/proj)、draw ごとに Allocate()
+		 * materialCBPool : b2 用 (MaterialCBData)、draw ごとに Allocate()
+		 * lightingCB     : b1 用、フレーム先頭で 1 回更新し全 draw で共有 (raw ptr, 寿命は FrameSlot)
 		 */
 		struct FrameContext
 		{
-			IConstantBufferPool* constantBufferPool = nullptr;
+			IConstantBufferPool*     perDrawCBPool  = nullptr;
+			IConstantBufferPool*     materialCBPool = nullptr;
+			graphics::IConstantBuffer* lightingCB   = nullptr;
 		};
 	}
 }

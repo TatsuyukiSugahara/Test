@@ -132,13 +132,25 @@ public:\
 
 
 		/**
+		 * マテリアルのテクスチャパス群
+		 * 各スロットは空文字列 = 未設定
+		 */
+		struct MaterialTexturePaths
+		{
+			std::string albedo;
+			std::string normal;
+			std::string specular;
+			std::string emissive;
+		};
+
+		/**
 		 * メッシュデータ
 		 */
 		struct MeshData
 		{
 			std::vector<graphics::VertexData> vertics;
-			std::vector<uint32_t> indices;
-			std::string texturePath;
+			std::vector<uint32_t>             indices;
+			MaterialTexturePaths              material;
 		};
 		class MeshResource : public ResourceBase
 		{
@@ -161,8 +173,10 @@ public:\
 			const uint32_t GetVerticsSize() const { return static_cast<uint32_t>(GetVertics()->size()); }
 			const std::vector<uint32_t>* GetIndices()  const { return &Get()->indices; };
 			const uint32_t GetIndicesSize()  const { return static_cast<uint32_t>(GetIndices()->size()); };
-			const std::string& GetTexturePath() const { return Get()->texturePath; }
-			bool HasTexturePath() const { return !Get()->texturePath.empty(); }
+
+			const MaterialTexturePaths& GetMaterial()     const { return Get()->material; }
+			const std::string& GetTexturePath()           const { return Get()->material.albedo; }
+			bool HasTexturePath()                         const { return !Get()->material.albedo.empty(); }
 
 		private:
 			inline MeshData* Get() const { return static_cast<MeshData*>(data_); }

@@ -170,6 +170,7 @@
     <ClCompile Include="Engine\Memory\MemoryTracker.cpp" />
     <ClCompile Include="Engine\Memory\GlobalNew.cpp" />
     <ClCompile Include="Engine\Graphics\Camera.cpp" />
+    <ClCompile Include="Engine\Graphics\LightManager.cpp" />
     <ClCompile Include="Engine\Graphics\RenderContext.cpp" />
     <ClCompile Include="Engine\Graphics\Shader.cpp" />
     <ClCompile Include="Engine\Graphics\D3D11\D3D11Buffers.cpp" />
@@ -206,6 +207,8 @@
     <ClInclude Include="Application\Application.h" />
     <ClInclude Include="Application\GameAction.h" />
     <ClInclude Include="Application\GameInput.h" />
+    <ClInclude Include="Engine\Graphics\Lighting.h" />
+    <ClInclude Include="Engine\Graphics\LightManager.h" />
     <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
     <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h" />
     <ClInclude Include="Application\Scene\BattleScene.h" />
@@ -291,6 +294,13 @@
     <ClInclude Include="Engine\Rendering\Renderer.h" />
     <ClInclude Include="Engine\Rendering\RenderTargetHandle.h" />
     <ClInclude Include="Engine\Rendering\RenderThread.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Assets\Shader\MaterialDef.h" />
+    <None Include="Assets\Shader\LightingCB.h" />
+    <None Include="Assets\Shader\MaterialCB.h" />
+    <None Include="Assets\Shader\Lighting.fx" />
+    <None Include="Assets\Shader\ModelLit.fx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

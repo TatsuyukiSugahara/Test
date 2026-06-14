@@ -3,6 +3,8 @@
 #include "FrameContext.h"
 #include "../Graphics/RenderContext.h"
 #include "../Graphics/GraphicsTypes.h"
+#include "../Graphics/GraphicsDevice.h"
+#include "../Graphics/Lighting.h"
 
 
 namespace engine
@@ -24,8 +26,14 @@ namespace engine
 			// デバッグ専用の同期実行パス。このフレーム専用の CB プールを一時生成する。
 			// プロダクションコードは BuildCommandList + RenderThread の永続プールを使うこと。
 			// 必ずレンダースレッドから呼ぶこと（D3D11 immediate context はスレッド非安全）。
-			ConstantBufferPool pool(sizeof(graphics::VSConstantBuffer));
-			FrameContext fc { &pool };
+			ConstantBufferPool perDrawPool(sizeof(graphics::VSConstantBuffer));
+			ConstantBufferPool materialPool(sizeof(graphics::MaterialCBData));
+
+			auto lightingCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
+				&frame.lighting, sizeof(frame.lighting));
+			context.UpdateSubresource(*lightingCB, frame.lighting);
+
+			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get() };
 
 			RenderCommandList list;
 			BuildCommandList(frame, list);

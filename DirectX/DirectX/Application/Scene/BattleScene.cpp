@@ -2,13 +2,14 @@
 
 #include "../Utility.h"
 
-#include "../../Engine/Component/TransformComponentSystem.h"
-#include "../../Engine/Component/BodyComponentSystem.h"
+#include "Engine/Component/TransformComponentSystem.h"
+#include "Engine/Component/BodyComponentSystem.h"
 #include "../ECS/ActorComponentSystem.h"
 #include "../ECS/ActorSteeringComponentSystem.h"
 
-#include "../../Engine/Graphics/Camera.h"
-#include "../../Engine/HID/Input.h"
+#include "Engine/Graphics/Camera.h"
+#include "Engine/Graphics/LightManager.h"
+#include "Engine/HID/Input.h"
 
 
 namespace app
@@ -35,7 +36,7 @@ namespace app
 		{
 			// メインカメラ
 			engine::Camera* camera = engine::CameraManager::Get().GetCamera(engine::CameraType::Main);
-			camera->SetPosition(engine::math::Vector3(0.0f, 0.0f, -50.0f));
+			camera->SetPosition(engine::math::Vector3(0.0f, 0.0f, -10.0f));
 			camera->SetTarget(engine::math::Vector3(0.0f, 0.0f, 0.0f));
 			camera->SetNear(0.01f);
 			camera->SetViewportSize(
@@ -47,9 +48,12 @@ namespace app
 			// アスペクト比は Application::Initialize() でオフスクリーン RT サイズから設定済み。
 			// TODO: シーンに応じた別アングルを設定する（現在はメインと同一位置）。
 			engine::Camera* offscreenCamera = engine::CameraManager::Get().GetCamera(engine::CameraType::Offscreen);
-			offscreenCamera->SetPosition(engine::math::Vector3(0.0f, 0.0f, -50.0f));
+			offscreenCamera->SetPosition(engine::math::Vector3(0.0f, 0.0f, -10.0f));
 			offscreenCamera->SetTarget(engine::math::Vector3(0.0f, 0.0f, 0.0f));
 			offscreenCamera->SetNear(0.01f);
+
+			// ライト設定
+			engine::graphics::LightManager::Get().SetDirectionalColor(engine::math::Vector3(1.0f, 0.6f, 0.6f));
 
 			// 操作キャラクター生成
 			engine::ecs::EntityHandle targetHandle;

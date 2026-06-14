@@ -7,6 +7,7 @@
 #include <thread>
 #include "FrameContext.h"
 #include "RenderTargetHandle.h"
+#include "../Graphics/Lighting.h"
 
 namespace engine
 {
@@ -40,14 +41,15 @@ namespace engine
 			void Finalize();
 
 			/**
-			 * コマンドリストを渡す。両スロットがまだ処理中の場合はブロックする。
+			 * コマンドリストとフレームのライティングデータを渡す。
+			 * 両スロットがまだ処理中の場合はブロックする。
 			 *
 			 * displayRT はこのリスト実行後にバックバッファへコピーする RT を示す。
-			 * レンダースレッドが描画コマンドと同じスレッドで CopyToBackBuffer と Present を
-			 * 呼び出すため、D3D11 immediate context は単一スレッドに保たれる。
 			 * オフスクリーンやコンピュートのみのフレームでは RenderTargetHandle{} (INVALID) を渡す。
 			 */
-			void Submit(std::unique_ptr<RenderCommandList> list, RenderTargetHandle displayRT);
+			void Submit(std::unique_ptr<RenderCommandList> list,
+			            RenderTargetHandle                 displayRT,
+			            const graphics::LightingData&      lighting);
 
 			/** 直近の Submit() が完了するまで待機する。 */
 			void WaitForCompletion();
@@ -72,13 +74,19 @@ namespace engine
 
 			struct FrameSlot
 			{
-				std::unique_ptr<RenderCommandList> list;
-				ConstantBufferPool                 cbPool;
-				RenderTargetHandle                 displayRT;
-				bool                               ready = false;
-				bool                               done  = true;
+				std::unique_ptr<RenderCommandList>   list;
+				ConstantBufferPool                   perDrawPool;
+				ConstantBufferPool                   materialPool;
+				std::unique_ptr<graphics::IConstantBuffer> lightingCB;
+				graphics::LightingData               lightingData;
+				RenderTargetHandle                   displayRT;
+				bool                                 ready = false;
+				bool                                 done  = true;
 
-				explicit FrameSlot(uint32_t cbSize) : cbPool(cbSize) {}
+				FrameSlot(uint32_t perDrawSize, uint32_t materialSize)
+					: perDrawPool(perDrawSize)
+					, materialPool(materialSize)
+				{}
 			};
 
 			std::unique_ptr<FrameSlot> slots_[FRAMES_IN_FLIGHT];

@@ -3,6 +3,7 @@
 #include "BodyComponentSystem.h"
 #include "TransformComponentSystem.h"
 #include "Graphics/Camera.h"
+#include "Terrain/TerrainComponent.h"
 
 namespace engine
 {
@@ -225,6 +226,13 @@ namespace engine
 						staticMeshComponent->GetStaticMesh()->Update(trasnformComponent->transform.position, trasnformComponent->transform.rotation, trasnformComponent->transform.scale);
 					}
 				});
+
+			engine::ecs::Foreach<TransformComponent, TerrainComponent>([](const engine::ecs::Entity&, TransformComponent* tc, TerrainComponent* terrain)
+				{
+					if (terrain->IsCompleted()) {
+						terrain->GetChunk()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
+					}
+				});
 		}
 
 
@@ -258,6 +266,15 @@ namespace engine
 					if (!comp->IsCompleted()) return;
 					engine::rendering::RenderItem item;
 					if (comp->GetStaticMesh()->FillRenderItem(item)) {
+						frame.items.push_back(item);
+					}
+				});
+
+			engine::ecs::Foreach<TerrainComponent>([&frame](const engine::ecs::Entity&, TerrainComponent* comp)
+				{
+					if (!comp->IsCompleted()) return;
+					engine::rendering::RenderItem item;
+					if (comp->GetChunk()->FillRenderItem(item)) {
 						frame.items.push_back(item);
 					}
 				});

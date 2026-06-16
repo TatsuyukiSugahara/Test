@@ -1,7 +1,6 @@
 #pragma once
 #include "Scene.h"
 
-
 namespace app
 {
 	namespace battle
@@ -9,9 +8,6 @@ namespace app
 		class BattleScene : public app::IScene
 		{
 		public:
-			BattleScene();
-			~BattleScene();
-
 			void Initialize() override;
 			void Update() override;
 			void Finalize() override;

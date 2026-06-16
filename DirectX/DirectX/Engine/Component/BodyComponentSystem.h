@@ -102,7 +102,6 @@ namespace engine
 			void BuildRenderFrame(engine::rendering::RenderFrame& frame);
 			void BuildRenderFrame(engine::rendering::RenderFrame& frame, engine::CameraType cameraType);
 
-
 		private:
 			static RenderSystem* instance_;
 

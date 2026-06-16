@@ -204,6 +204,8 @@
     <ClCompile Include="Engine\Rendering\RenderThread.cpp" />
     <ClCompile Include="Engine\Rendering\Shadow\ShadowPassCommand.cpp" />
     <ClCompile Include="Engine\Rendering\Shadow\HardShadowRenderer.cpp" />
+    <ClCompile Include="Engine\Terrain\HeightmapChunk.cpp" />
+    <ClCompile Include="Engine\Terrain\TerrainComponent.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application\Actor\StateMachine.h" />
@@ -303,6 +305,8 @@
     <ClInclude Include="Engine\Rendering\Shadow\ShadowData.h" />
     <ClInclude Include="Engine\Rendering\Shadow\ShadowPassCommand.h" />
     <ClInclude Include="Engine\Rendering\Shadow\HardShadowRenderer.h" />
+    <ClInclude Include="Engine\Terrain\HeightmapChunk.h" />
+    <ClInclude Include="Engine\Terrain\TerrainComponent.h" />
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

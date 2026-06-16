@@ -66,6 +66,7 @@ namespace engine
 
 			void SetCastShadow(bool v)    { castShadow_ = v; }
 			void SetReceiveShadow(bool v) { receiveShadow_ = v; SetMaterialFlag(MatFlag_ReceiveShadow, v); }
+			void SetSamplerState(std::unique_ptr<ISamplerState> sampler) { samplerState_ = std::move(sampler); }
 
 			void SetSpecularIntensity(float v) { materialCB_.specularIntensity = v; }
 			void SetGloss(float v)             { materialCB_.gloss = v; }

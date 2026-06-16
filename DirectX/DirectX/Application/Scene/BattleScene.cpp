@@ -1,15 +1,15 @@
 #include "BattleScene.h"
 
-#include "../Utility.h"
+#include "Utility.h"
 
-#include "Engine/Component/TransformComponentSystem.h"
-#include "Engine/Component/BodyComponentSystem.h"
-#include "../ECS/ActorComponentSystem.h"
-#include "../ECS/ActorSteeringComponentSystem.h"
+#include "Component/TransformComponentSystem.h"
+#include "Component/BodyComponentSystem.h"
+#include "ECS/ActorComponentSystem.h"
+#include "ECS/ActorSteeringComponentSystem.h"
 
-#include "Engine/Graphics/Camera.h"
-#include "Engine/Graphics/LightManager.h"
-#include "Engine/HID/Input.h"
+#include "Graphics/Camera.h"
+#include "Graphics/LightManager.h"
+#include "HID/Input.h"
 
 
 namespace app
@@ -70,6 +70,8 @@ namespace app
 
 				auto* staticMeshComponent = entity.GetComponent<engine::ecs::StaticMeshComponent>();
 				staticMeshComponent->SetModelPath("../temp/Assets/unityChan.tkm");
+				staticMeshComponent->GetStaticMesh()->SetCastShadow(true);
+				staticMeshComponent->GetStaticMesh()->SetReceiveShadow(true);
 
 				auto* transformComponent = entity.GetComponent<engine::ecs::TransformComponent>();
 				transformComponent->transform.localPosition.Set(0.0f);

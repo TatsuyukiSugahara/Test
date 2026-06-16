@@ -1,31 +1,46 @@
 #include "Renderer.h"
 #include "DrawItemCommand.h"
 #include "FrameContext.h"
-#include "../Graphics/RenderContext.h"
-#include "../Graphics/GraphicsTypes.h"
-#include "../Graphics/GraphicsDevice.h"
-#include "../Graphics/Lighting.h"
+#include "Graphics/RenderContext.h"
+#include "Graphics/GraphicsTypes.h"
+#include "Graphics/GraphicsDevice.h"
+#include "Graphics/Lighting.h"
 
 
 namespace engine
 {
 	namespace rendering
 	{
-		void Renderer::BuildCommandList(const RenderFrame& frame, RenderCommandList& outList) const
+		void Renderer::SetShadowRenderer(std::unique_ptr<IShadowRenderer> sr,
+		                                 float mainViewportW, float mainViewportH)
 		{
-			for (const RenderItem& item : frame.items)
-			{
+			shadowRenderer_ = std::move(sr);
+			mainViewportW_  = mainViewportW;
+			mainViewportH_  = mainViewportH;
+		}
+
+
+		void Renderer::BuildCommandList(RenderFrame& frame, RenderCommandList& outList) const
+		{
+			// Pass 1: シャドウパス
+			if (shadowRenderer_) {
+				shadowRenderer_->FillShadowCBData(frame.lighting.directional, frame.shadow);
+
+				auto* mainRT = &graphics::GraphicsDevice::Get().GetMainRenderTarget(0);
+				shadowRenderer_->BuildShadowCommandList(
+					frame, outList, mainRT, mainViewportW_, mainViewportH_);
+			}
+
+			// Pass 2: メインパス
+			for (const RenderItem& item : frame.items) {
 				RecordDrawItem(item, frame.camera, outList);
 			}
 		}
 
 
 #if _DEBUG
-		void Renderer::RenderDebugSync(graphics::RenderContext& context, const RenderFrame& frame)
+		void Renderer::RenderDebugSync(graphics::RenderContext& context, RenderFrame& frame)
 		{
-			// デバッグ専用の同期実行パス。このフレーム専用の CB プールを一時生成する。
-			// プロダクションコードは BuildCommandList + RenderThread の永続プールを使うこと。
-			// 必ずレンダースレッドから呼ぶこと（D3D11 immediate context はスレッド非安全）。
 			ConstantBufferPool perDrawPool(sizeof(graphics::VSConstantBuffer));
 			ConstantBufferPool materialPool(sizeof(graphics::MaterialCBData));
 
@@ -33,10 +48,14 @@ namespace engine
 				&frame.lighting, sizeof(frame.lighting));
 			context.UpdateSubresource(*lightingCB, frame.lighting);
 
-			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get() };
+			auto shadowCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
+				&frame.shadow, sizeof(frame.shadow));
+
+			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get(), shadowCB.get() };
 
 			RenderCommandList list;
 			BuildCommandList(frame, list);
+			context.UpdateSubresource(*shadowCB, frame.shadow);
 			list.Execute(context, fc);
 		}
 #endif

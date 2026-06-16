@@ -1,4 +1,4 @@
-#include "../../EnginePreCompile.h"
+#include "EnginePreCompile.h"
 #include "D3D11RenderResources.h"
 #include "D3D11Buffers.h"
 #include "D3D11GraphicsDeviceImpl.h"
@@ -67,8 +67,17 @@ namespace engine
 		bool SamplerState::Create(const SamplerDesc& desc)
 		{
 			Release();
-			D3D11_SAMPLER_DESC d3dDesc      = {};
-			d3dDesc.Filter        = ToD3D11Filter(desc.filter);
+			D3D11_SAMPLER_DESC d3dDesc = {};
+			if (desc.isComparison) {
+				// シャドウマップ用: 線形フィルタ + LESS_EQUAL 比較 + 境界=白 (範囲外は全て明るい)
+				d3dDesc.Filter         = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+				d3dDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
+				d3dDesc.BorderColor[0] = d3dDesc.BorderColor[1] =
+				d3dDesc.BorderColor[2] = d3dDesc.BorderColor[3] = 1.0f;
+			} else {
+				d3dDesc.Filter         = ToD3D11Filter(desc.filter);
+				d3dDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+			}
 			d3dDesc.AddressU      = ToD3D11Address(desc.addressU);
 			d3dDesc.AddressV      = ToD3D11Address(desc.addressV);
 			d3dDesc.AddressW      = ToD3D11Address(desc.addressW);

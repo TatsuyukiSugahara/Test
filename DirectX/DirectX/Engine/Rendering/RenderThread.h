@@ -7,7 +7,8 @@
 #include <thread>
 #include "FrameContext.h"
 #include "RenderTargetHandle.h"
-#include "../Graphics/Lighting.h"
+#include "Graphics/Lighting.h"
+#include "Shadow/ShadowData.h"
 
 namespace engine
 {
@@ -41,7 +42,7 @@ namespace engine
 			void Finalize();
 
 			/**
-			 * コマンドリストとフレームのライティングデータを渡す。
+			 * コマンドリストとフレームのライティング・シャドウデータを渡す。
 			 * 両スロットがまだ処理中の場合はブロックする。
 			 *
 			 * displayRT はこのリスト実行後にバックバッファへコピーする RT を示す。
@@ -49,7 +50,8 @@ namespace engine
 			 */
 			void Submit(std::unique_ptr<RenderCommandList> list,
 			            RenderTargetHandle                 displayRT,
-			            const graphics::LightingData&      lighting);
+			            const graphics::LightingData&      lighting,
+			            const ShadowCBData&                shadow = {});
 
 			/** 直近の Submit() が完了するまで待機する。 */
 			void WaitForCompletion();
@@ -74,14 +76,16 @@ namespace engine
 
 			struct FrameSlot
 			{
-				std::unique_ptr<RenderCommandList>   list;
-				ConstantBufferPool                   perDrawPool;
-				ConstantBufferPool                   materialPool;
+				std::unique_ptr<RenderCommandList>         list;
+				ConstantBufferPool                         perDrawPool;
+				ConstantBufferPool                         materialPool;
 				std::unique_ptr<graphics::IConstantBuffer> lightingCB;
-				graphics::LightingData               lightingData;
-				RenderTargetHandle                   displayRT;
-				bool                                 ready = false;
-				bool                                 done  = true;
+				std::unique_ptr<graphics::IConstantBuffer> shadowCB;
+				graphics::LightingData                     lightingData;
+				ShadowCBData                               shadowData;
+				RenderTargetHandle                         displayRT;
+				bool                                       ready = false;
+				bool                                       done  = true;
 
 				FrameSlot(uint32_t perDrawSize, uint32_t materialSize)
 					: perDrawPool(perDrawSize)

@@ -1,6 +1,6 @@
 #include "FrameCommands.h"
-#include "../Graphics/RenderContext.h"
-#include "../Graphics/GraphicsDevice.h"
+#include "Graphics/RenderContext.h"
+#include "Graphics/GraphicsDevice.h"
 #include <cassert>
 
 

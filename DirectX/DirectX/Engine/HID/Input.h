@@ -4,7 +4,7 @@
 #include <Xinput.h>
 #include <memory>
 #include <chrono>
-#include "../Math/Vector.h"
+#include "Math/Vector.h"
 
 namespace engine
 {

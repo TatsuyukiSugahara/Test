@@ -2,19 +2,20 @@
 #include "Application.h"
 #include "Scene/Scene.h"
 #include "GameInput.h"
-#include "../Engine/Engine.h"
-#include "../Engine/HID/Input.h"
-#include "../Engine/Graphics/Camera.h"
-#include "../Engine/Graphics/GraphicsDevice.h"
-#include "../Engine/Graphics/LightManager.h"
-#include "../Engine/Resource/Resource.h"
-#include "../Engine/Rendering/RenderFrame.h"
-#include "../Engine/Rendering/RenderCommandList.h"
-#include "../Engine/Rendering/FrameCommands.h"
+#include "Engine.h"
+#include "HID/Input.h"
+#include "Graphics/Camera.h"
+#include "Graphics/GraphicsDevice.h"
+#include "Graphics/LightManager.h"
+#include "Resource/Resource.h"
+#include "Rendering/RenderFrame.h"
+#include "Rendering/RenderCommandList.h"
+#include "Rendering/FrameCommands.h"
+#include "Rendering/Shadow/HardShadowRenderer.h"
 
-#include "../Engine/ECS/ECS.h"
-#include "../Engine/Component/TransformComponentSystem.h"
-#include "../Engine/Component/BodyComponentSystem.h"
+#include "ECS/ECS.h"
+#include "Component/TransformComponentSystem.h"
+#include "Component/BodyComponentSystem.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 
@@ -68,6 +69,27 @@ namespace app
 
 		// Scene
 		app::SceneManager::Create();
+
+		// Shadow renderer
+		{
+			const float renderW = static_cast<float>(engine::Engine::Get().GetRenderWidth());
+			const float renderH = static_cast<float>(engine::Engine::Get().GetRenderHeight());
+
+			engine::rendering::ShadowSettings shadowSettings;
+			shadowSettings.resolution  = 2048;
+			shadowSettings.orthoWidth  = 20.0f;
+			shadowSettings.orthoHeight = 20.0f;
+			shadowSettings.nearPlane   = 0.1f;
+			shadowSettings.farPlane    = 60.0f;
+			shadowSettings.sceneCenter = engine::math::Vector3(0.0f, 3.0f, 0.0f);
+			shadowSettings.depthBias   = 0.005f;
+
+			auto shadowRenderer = std::make_unique<engine::rendering::HardShadowRenderer>();
+			if (shadowRenderer->Create(shadowSettings, "Assets/Shader/ShadowDepth.fx"))
+			{
+				renderer_.SetShadowRenderer(std::move(shadowRenderer), renderW, renderH);
+			}
+		}
 
 		return true;
 	}
@@ -177,7 +199,7 @@ namespace app
 		mainFrame.lighting = engine::graphics::LightManager::Get().GetLightingData();
 		engine::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
 		renderer_.BuildCommandList(mainFrame, *mainCmdList);
-		renderThread_.Submit(std::move(mainCmdList), engine::Engine::Get().GetMainRenderTargetHandle(), mainFrame.lighting);
+		renderThread_.Submit(std::move(mainCmdList), engine::Engine::Get().GetMainRenderTargetHandle(), mainFrame.lighting, mainFrame.shadow);
 	}
 
 

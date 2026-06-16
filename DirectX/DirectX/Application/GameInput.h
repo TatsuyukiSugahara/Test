@@ -1,6 +1,6 @@
 #pragma once
-#include "../Engine/HID/ActionInput.h"
-#include "../Engine/HID/ActionMap.h"
+#include "HID/ActionInput.h"
+#include "HID/ActionMap.h"
 #include "GameAction.h"
 
 namespace app

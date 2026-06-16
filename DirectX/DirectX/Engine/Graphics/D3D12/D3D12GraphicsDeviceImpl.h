@@ -1,5 +1,5 @@
 #pragma once
-#include "../IGraphicsDeviceImpl.h"
+#include "Graphics/IGraphicsDeviceImpl.h"
 
 // D3D12/DXGI の COM インターフェースを前方宣言する。
 // d3d12.h は .cpp 実装側でのみ include する。

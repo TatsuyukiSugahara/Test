@@ -1,5 +1,5 @@
 #pragma once
-#include "../IShader.h"
+#include "Graphics/IShader.h"
 
 namespace engine
 {

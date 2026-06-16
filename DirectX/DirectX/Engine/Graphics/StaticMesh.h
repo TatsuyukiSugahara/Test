@@ -1,13 +1,13 @@
 #pragma once
 #include <memory>
-#include "../Resource/Resource.h"
-#include "../Math/Matrix.h"
+#include "Resource/Resource.h"
+#include "Math/Matrix.h"
 #include "IBuffer.h"
 #include "IShader.h"
 #include "ISamplerState.h"
 #include "RenderContext.h"
 #include "Lighting.h"
-#include "../Rendering/RenderFrame.h"
+#include "Rendering/RenderFrame.h"
 
 
 namespace engine
@@ -41,6 +41,8 @@ namespace engine
 			engine::res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 
 			MaterialCBData materialCB_;
+			bool           castShadow_    = false;
+			bool           receiveShadow_ = false;
 
 		public:
 			StaticMesh();
@@ -61,6 +63,9 @@ namespace engine
 			/** ユーザー自由パラメータ (HLSL: params[index]) */
 			math::Vector4&       Param(uint32_t index)       { return materialCB_.params[index]; }
 			const math::Vector4& Param(uint32_t index) const { return materialCB_.params[index]; }
+
+			void SetCastShadow(bool v)    { castShadow_ = v; }
+			void SetReceiveShadow(bool v) { receiveShadow_ = v; SetMaterialFlag(MatFlag_ReceiveShadow, v); }
 
 			void SetSpecularIntensity(float v) { materialCB_.specularIntensity = v; }
 			void SetGloss(float v)             { materialCB_.gloss = v; }

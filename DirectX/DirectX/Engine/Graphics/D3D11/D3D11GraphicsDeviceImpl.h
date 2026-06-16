@@ -1,6 +1,6 @@
 #pragma once
-#include "../IGraphicsDeviceImpl.h"
-#include "../RenderContext.h"
+#include "Graphics/IGraphicsDeviceImpl.h"
+#include "Graphics/RenderContext.h"
 #include "D3D11RenderResources.h"
 
 
@@ -43,6 +43,7 @@ namespace engine
 			std::unique_ptr<IShader>             CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type) override;
 			std::unique_ptr<ISamplerState>       CreateSamplerState(const SamplerDesc& desc) override;
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) override;
+			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) override;
 
 		private:
 			bool CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height); // HWND は D3D11 内部のみ

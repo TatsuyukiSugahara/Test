@@ -11,10 +11,11 @@ namespace engine
 
 		enum MaterialFlags : uint32_t
 		{
-			MatFlag_HasNormal   = 1u << 0,
-			MatFlag_HasSpecular = 1u << 1,
-			MatFlag_HasEmissive = 1u << 2,
-			MatFlag_User0       = 1u << 16,
+			MatFlag_HasNormal     = 1u << 0,
+			MatFlag_HasSpecular   = 1u << 1,
+			MatFlag_HasEmissive   = 1u << 2,
+			MatFlag_ReceiveShadow = 1u << 3,
+			MatFlag_User0         = 1u << 16,
 		};
 
 		// GPU レイアウト: HLSL LightingCB の各構造体と完全一致させる

@@ -5,6 +5,7 @@
 #include "IShader.h"
 #include "IShaderResourceView.h"
 #include "ISamplerState.h"
+#include "IDepthMap.h"
 #include "GraphicsTypes.h"
 
 
@@ -75,6 +76,7 @@ namespace engine
 			virtual std::unique_ptr<IShader>             CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type) = 0;
 			virtual std::unique_ptr<ISamplerState>       CreateSamplerState(const SamplerDesc& desc) = 0;
 			virtual std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) = 0;
+			virtual std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) = 0;
 		};
 	}
 }

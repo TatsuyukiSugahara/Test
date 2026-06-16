@@ -2,8 +2,8 @@
  * @brief アプリケーション側汎用処理群
  */
 #pragma once
-#include "../Engine/EnginePreCompile.h"
-#include "../Engine/Engine.h"
+#include "EnginePreCompile.h"
+#include "Engine.h"
 
 namespace app
 {

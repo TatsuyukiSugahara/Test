@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
-#include "../Math/Vector.h"
-#include "../Math/Matrix.h"
+#include "Math/Vector.h"
+#include "Math/Matrix.h"
 
 
 namespace engine
@@ -82,14 +82,16 @@ namespace engine
 		 */
 		struct SamplerDesc
 		{
-			FilterMode  filter     = FilterMode::MinMagMipLinear;
-			AddressMode addressU   = AddressMode::Clamp;
-			AddressMode addressV   = AddressMode::Clamp;
-			AddressMode addressW   = AddressMode::Clamp;
-			float       mipLODBias = 0.0f;
-			uint32_t    maxAniso   = 1;
-			float       minLOD     = 0.0f;
-			float       maxLOD     = 3.402823466e+38f;
+			FilterMode  filter        = FilterMode::MinMagMipLinear;
+			AddressMode addressU      = AddressMode::Clamp;
+			AddressMode addressV      = AddressMode::Clamp;
+			AddressMode addressW      = AddressMode::Clamp;
+			float       mipLODBias    = 0.0f;
+			uint32_t    maxAniso      = 1;
+			float       minLOD        = 0.0f;
+			float       maxLOD        = 3.402823466e+38f;
+			// true のとき COMPARISON_LESS_EQUAL フィルタを使用 (シャドウマップ用)
+			bool        isComparison  = false;
 		};
 
 

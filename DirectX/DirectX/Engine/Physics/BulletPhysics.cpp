@@ -1,5 +1,5 @@
 #include "BulletPhysics.h"
-#include "../Memory/IAllocator.h"
+#include "Memory/IAllocator.h"
 #include "LinearMath/btAlignedAllocator.h"
 #include <cassert>
 

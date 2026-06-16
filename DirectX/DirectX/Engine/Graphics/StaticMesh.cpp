@@ -1,4 +1,4 @@
-#include "../EnginePreCompile.h"
+#include "EnginePreCompile.h"
 #include "StaticMesh.h"
 #include "GraphicsDevice.h"
 
@@ -177,10 +177,12 @@ namespace engine
 				}
 			}
 
-			item.indexCount = indicesSize_;
-			item.worldMatrix = worldMatrix_;
-			item.layer       = 0;
-			item.materialCB  = materialCB_;
+			item.indexCount    = indicesSize_;
+			item.worldMatrix   = worldMatrix_;
+			item.layer         = 0;
+			item.materialCB    = materialCB_;
+			item.castShadow    = castShadow_;
+			item.receiveShadow = receiveShadow_;
 			return true;
 		}
 	}

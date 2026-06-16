@@ -1,5 +1,5 @@
 #pragma once
-#include "../IRenderContextImpl.h"
+#include "Graphics/IRenderContextImpl.h"
 
 
 namespace engine
@@ -48,6 +48,10 @@ namespace engine
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
 
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;
+
+			void OMSetDepthOnlyTarget(IDepthMap& depthMap) override;
+			void ClearDepthMap(IDepthMap& depthMap) override;
+			void PSUnsetShader() override;
 
 			/** D3D11 専用: ラスタライザーステート */
 			void RSSetState(ID3D11RasterizerState* state);

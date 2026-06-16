@@ -40,8 +40,9 @@ namespace engine
 
 		static TrackingData& GetData()
 		{
-			static TrackingData s_data;
-			return s_data;
+			// リーキーシングルトン: main() 後の静的デストラクタから呼ばれても map が有効なまま保たれる
+			static TrackingData* s_data = new TrackingData();
+			return *s_data;
 		}
 
 

@@ -1,8 +1,8 @@
-#include "../EnginePreCompile.h"
-#include "../Engine.h"
+#include "EnginePreCompile.h"
+#include "Engine.h"
 #include "BodyComponentSystem.h"
 #include "TransformComponentSystem.h"
-#include "../Graphics/Camera.h"
+#include "Graphics/Camera.h"
 
 namespace engine
 {

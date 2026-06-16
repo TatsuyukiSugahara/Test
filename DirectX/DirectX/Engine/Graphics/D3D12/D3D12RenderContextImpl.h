@@ -1,5 +1,5 @@
 #pragma once
-#include "../IRenderContextImpl.h"
+#include "Graphics/IRenderContextImpl.h"
 
 struct ID3D12GraphicsCommandList;
 

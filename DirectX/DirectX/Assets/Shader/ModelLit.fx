@@ -1,4 +1,5 @@
 #include "Lighting.fx"
+#include "ShadowCB.h"
 
 // VertexData メモリレイアウト順に宣言する（D3D11_APPEND_ALIGNED_ELEMENT 対応）
 // position(float3) → normal(float3) → uv(float2) → tangent(float4)
@@ -27,11 +28,22 @@ cbuffer PerDrawCB : register(b0)
     float4x4 projection;
 };
 
-Texture2D albedoTex   : register(t0);
-Texture2D normalTex   : register(t1);
-Texture2D specularTex : register(t2);
-Texture2D emissiveTex : register(t3);
-SamplerState samp     : register(s0);
+Texture2D      albedoTex      : register(t0);
+Texture2D      normalTex      : register(t1);
+Texture2D      specularTex    : register(t2);
+Texture2D      emissiveTex    : register(t3);
+Texture2DArray shadowMapArray : register(t4);
+SamplerState              samp         : register(s0);
+SamplerComparisonState    shadowSampler : register(s1);
+
+float SampleShadow(float3 worldPos)
+{
+    float4 lightClip = mul(lightViewProj[0], float4(worldPos, 1.0));
+    float3 ndc = lightClip.xyz / lightClip.w;
+    float2 uv  = ndc.xy * float2(0.5, -0.5) + 0.5;
+    float  d   = ndc.z - depthBias;
+    return shadowMapArray.SampleCmpLevelZero(shadowSampler, float3(uv, 0.0), d);
+}
 
 PSInput VSMain(VSInput input)
 {
@@ -78,5 +90,13 @@ float4 PSMain(PSInput input) : SV_TARGET
         : float3(0.0, 0.0, 0.0);
 
     float3 lit = ComputeLighting(input.worldPos, N, albedo, specMask, emissive);
+
+    if (ReceivesShadow())
+    {
+        float shadow = SampleShadow(input.worldPos);
+        float3 ambientOnly = ambient.color * ambient.intensity * albedo + emissive * emissiveScale;
+        lit = ambientOnly + (lit - ambientOnly) * shadow;
+    }
+
     return float4(lit, albedoSample.a);
 }

@@ -5,6 +5,7 @@
 #include "IShaderResourceView.h"
 #include "ISamplerState.h"
 #include "IUnorderedAccessView.h"
+#include "IDepthMap.h"
 
 
 namespace engine
@@ -54,6 +55,11 @@ namespace engine
 			virtual void Dispatch(uint32_t x, uint32_t y, uint32_t z) = 0;
 
 			virtual void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) = 0;
+
+			// シャドウパス用
+			virtual void OMSetDepthOnlyTarget(IDepthMap& depthMap) = 0;
+			virtual void ClearDepthMap(IDepthMap& depthMap) = 0;
+			virtual void PSUnsetShader() = 0;
 		};
 	}
 }

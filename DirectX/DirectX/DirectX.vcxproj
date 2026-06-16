@@ -115,7 +115,7 @@
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(ProjectDir)Engine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
@@ -137,7 +137,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(ProjectDir)Engine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -184,6 +184,7 @@
     <ClCompile Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.cpp" />
     <ClCompile Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.cpp" />
     <ClCompile Include="Engine\Graphics\D3D11\D3D11Resources.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11DepthMap.cpp" />
     <ClCompile Include="Engine\Math\Matrix.cpp" />
     <ClCompile Include="Engine\Math\Vector.cpp" />
     <ClCompile Include="Engine\Physics\BulletPhysics.cpp" />
@@ -201,6 +202,8 @@
     <ClCompile Include="Engine\Rendering\RenderCommandList.cpp" />
     <ClCompile Include="Engine\Rendering\Renderer.cpp" />
     <ClCompile Include="Engine\Rendering\RenderThread.cpp" />
+    <ClCompile Include="Engine\Rendering\Shadow\ShadowPassCommand.cpp" />
+    <ClCompile Include="Engine\Rendering\Shadow\HardShadowRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application\Actor\StateMachine.h" />
@@ -272,6 +275,8 @@
     <ClInclude Include="Engine\Graphics\GraphicsDevice.h" />
     <ClInclude Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.h" />
     <ClInclude Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11DepthMap.h" />
+    <ClInclude Include="Engine\Graphics\IDepthMap.h" />
     <ClInclude Include="Engine\Graphics\GraphicsTypes.h" />
     <ClInclude Include="Engine\Graphics\IRenderContextImpl.h" />
     <ClInclude Include="Engine\Graphics\IBuffer.h" />
@@ -294,14 +299,12 @@
     <ClInclude Include="Engine\Rendering\Renderer.h" />
     <ClInclude Include="Engine\Rendering\RenderTargetHandle.h" />
     <ClInclude Include="Engine\Rendering\RenderThread.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\IShadowRenderer.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\ShadowData.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\ShadowPassCommand.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\HardShadowRenderer.h" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="Assets\Shader\MaterialDef.h" />
-    <None Include="Assets\Shader\LightingCB.h" />
-    <None Include="Assets\Shader\MaterialCB.h" />
-    <None Include="Assets\Shader\Lighting.fx" />
-    <None Include="Assets\Shader\ModelLit.fx" />
-  </ItemGroup>
+
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

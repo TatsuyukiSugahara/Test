@@ -1,7 +1,7 @@
-#include "../EnginePreCompile.h"
-#include "../Graphics/GraphicsDevice.h"
+#include "EnginePreCompile.h"
+#include "Graphics/GraphicsDevice.h"
 #include "Resource.h"
-#include "../Engine.h"
+#include "Engine.h"
 #include <cctype>
 #include <cstring>
 #include <cstdio>

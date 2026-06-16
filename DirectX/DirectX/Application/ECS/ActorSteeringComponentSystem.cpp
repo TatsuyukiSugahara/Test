@@ -1,6 +1,6 @@
 #include "ActorSteeringComponentSystem.h"
 #include "ActorComponentSystem.h"
-#include "../GameInput.h"
+#include "GameInput.h"
 
 namespace app
 {

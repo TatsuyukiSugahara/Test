@@ -1,9 +1,10 @@
-#include "../../EnginePreCompile.h"
+#include "EnginePreCompile.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include "D3D11RenderContextImpl.h"
 #include "D3D11Buffers.h"
 #include "D3D11Shader.h"
-#include "../GraphicsDevice.h"
+#include "D3D11DepthMap.h"
+#include "Graphics/GraphicsDevice.h"
 
 
 namespace engine
@@ -231,6 +232,13 @@ namespace engine
 			auto ss = std::make_unique<SamplerState>();
 			if (!ss->Create(desc)) return nullptr;
 			return ss;
+		}
+
+		std::unique_ptr<IDepthMap> D3D11GraphicsDeviceImpl::CreateDepthMap(uint32_t width, uint32_t height)
+		{
+			auto dm = std::make_unique<D3D11DepthMap>();
+			if (!dm->Create(width)) return nullptr;
+			return dm;
 		}
 
 

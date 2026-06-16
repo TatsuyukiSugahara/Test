@@ -1,6 +1,6 @@
-#include "../EnginePreCompile.h"
+#include "EnginePreCompile.h"
 #include "Input.h"
-#include "../Engine.h"
+#include "Engine.h"
 #pragma comment(lib, "xinput.lib")
 
 

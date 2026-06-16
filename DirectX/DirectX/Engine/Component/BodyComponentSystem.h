@@ -1,10 +1,10 @@
 #pragma once
 #include <string>
-#include "../ECS/ECS.h"
-#include "../Graphics/Camera.h"
-#include "../Graphics/StaticMesh.h"
-#include "../Graphics/RenderContext.h"
-#include "../Rendering/RenderFrame.h"
+#include "ECS/ECS.h"
+#include "Graphics/Camera.h"
+#include "Graphics/StaticMesh.h"
+#include "Graphics/RenderContext.h"
+#include "Rendering/RenderFrame.h"
 
 
 namespace engine

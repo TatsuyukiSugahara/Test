@@ -5,6 +5,7 @@
 #include "IShaderResourceView.h"
 #include "ISamplerState.h"
 #include "IUnorderedAccessView.h"
+#include "IDepthMap.h"
 #include "GraphicsTypes.h"
 #include "IRenderContextImpl.h"
 // D3D11 concrete resources (SamplerState/ShaderResourceView/UnorderedAccessView/RenderTarget):
@@ -139,6 +140,19 @@ namespace engine
 			void UpdateSubresource(IConstantBuffer& buf, const SrcData& data)
 			{
 				impl_->UpdateConstantBuffer(buf, &data);
+			}
+
+			void OMSetDepthOnlyTarget(IDepthMap& depthMap)
+			{
+				impl_->OMSetDepthOnlyTarget(depthMap);
+			}
+			void ClearDepthMap(IDepthMap& depthMap)
+			{
+				impl_->ClearDepthMap(depthMap);
+			}
+			void PSUnsetShader()
+			{
+				impl_->PSUnsetShader();
 			}
 
 		private:

@@ -1,5 +1,5 @@
 #include "FrameContext.h"
-#include "../Graphics/GraphicsDevice.h"
+#include "Graphics/GraphicsDevice.h"
 
 
 namespace engine

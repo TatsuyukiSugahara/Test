@@ -1,4 +1,4 @@
-#include "../EnginePreCompile.h"
+#include "EnginePreCompile.h"
 #include "Camera.h"
 
 namespace engine

@@ -1,6 +1,8 @@
 #pragma once
+#include <memory>
 #include "RenderFrame.h"
 #include "RenderCommandList.h"
+#include "Shadow/IShadowRenderer.h"
 
 
 namespace engine
@@ -22,8 +24,20 @@ namespace engine
 		class Renderer
 		{
 		public:
-			/** ゲームスレッドでフレームデータを outList に記録する。*/
-			void BuildCommandList(const RenderFrame& frame, RenderCommandList& outList) const;
+			/**
+			 * シャドウレンダラーを設定する。nullptr を渡すと影なしになる。
+			 * メインビューポートのサイズも合わせて指定する（シャドウパス後の復元用）。
+			 */
+			void SetShadowRenderer(std::unique_ptr<IShadowRenderer> sr,
+			                       float mainViewportW, float mainViewportH);
+
+			IShadowRenderer* GetShadowRenderer() const { return shadowRenderer_.get(); }
+
+			/**
+			 * ゲームスレッドでフレームデータを outList に記録する。
+			 * シャドウレンダラーが設定されている場合は frame.shadow を自動的に埋める。
+			 */
+			void BuildCommandList(RenderFrame& frame, RenderCommandList& outList) const;
 
 #if _DEBUG
 			/**
@@ -31,13 +45,17 @@ namespace engine
 			 * 必ずレンダースレッドから呼ぶこと。メインスレッドから呼ぶと
 			 * D3D11 immediate context の単一スレッド規則に違反する。
 			 */
-			void RenderDebugSync(graphics::RenderContext& context, const RenderFrame& frame);
+			void RenderDebugSync(graphics::RenderContext& context, RenderFrame& frame);
 #endif
 
 		private:
 			void RecordDrawItem(const RenderItem&  item,
 			                    const CameraData&  camera,
 			                    RenderCommandList& outList) const;
+
+			std::unique_ptr<IShadowRenderer> shadowRenderer_;
+			float                            mainViewportW_ = 0.f;
+			float                            mainViewportH_ = 0.f;
 		};
 	}
 }

@@ -4,7 +4,7 @@
 #include "BulletCollision/CollisionDispatch/btGhostObject.h"
 #include "Collider.h"
 #include "PhysicsTypes.h"
-#include "../EnginePreCompile.h"
+#include "EnginePreCompile.h"
 
 
 namespace engine

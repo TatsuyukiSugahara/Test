@@ -1,8 +1,9 @@
-#include "../../EnginePreCompile.h"
+#include "EnginePreCompile.h"
 #include "D3D11RenderContextImpl.h"
 #include "D3D11RenderResources.h"
 #include "D3D11Buffers.h"
 #include "D3D11Shader.h"
+#include "D3D11DepthMap.h"
 
 
 namespace engine
@@ -201,6 +202,29 @@ namespace engine
 			if (d3dBuf) {
 				context_->UpdateSubresource(d3dBuf, 0, nullptr, data, 0, 0);
 			}
+		}
+
+
+		void D3D11RenderContextImpl::OMSetDepthOnlyTarget(IDepthMap& depthMap)
+		{
+			auto& d3dDM = static_cast<D3D11DepthMap&>(depthMap);
+			ID3D11RenderTargetView* nullRTV = nullptr;
+			depthStencilView_ = d3dDM.GetDSV();
+			context_->OMSetRenderTargets(0, &nullRTV, depthStencilView_);
+			renderTargetViewNum_ = 0;
+		}
+
+
+		void D3D11RenderContextImpl::ClearDepthMap(IDepthMap& depthMap)
+		{
+			auto& d3dDM = static_cast<D3D11DepthMap&>(depthMap);
+			context_->ClearDepthStencilView(d3dDM.GetDSV(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+		}
+
+
+		void D3D11RenderContextImpl::PSUnsetShader()
+		{
+			context_->PSSetShader(nullptr, nullptr, 0);
 		}
 
 

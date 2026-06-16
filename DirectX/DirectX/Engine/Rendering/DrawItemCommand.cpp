@@ -1,8 +1,8 @@
 #include "DrawItemCommand.h"
 #include "FrameContext.h"
-#include "../Graphics/RenderContext.h"
-#include "../Graphics/GraphicsTypes.h"
-#include "../Graphics/Lighting.h"
+#include "Graphics/RenderContext.h"
+#include "Graphics/GraphicsTypes.h"
+#include "Graphics/Lighting.h"
 
 
 namespace engine
@@ -34,6 +34,13 @@ namespace engine
 			{
 				ctx.VSSetConstantBuffer(1, *fc.lightingCB);
 				ctx.PSSetConstantBuffer(1, *fc.lightingCB);
+			}
+
+			// b3: per-frame shadow (lightViewProj など)
+			if (fc.shadowCB)
+			{
+				ctx.VSSetConstantBuffer(3, *fc.shadowCB);
+				ctx.PSSetConstantBuffer(3, *fc.shadowCB);
 			}
 
 			// b2: per-draw material

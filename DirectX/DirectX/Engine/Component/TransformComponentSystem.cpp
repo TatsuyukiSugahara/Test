@@ -1,5 +1,5 @@
-#include "../EnginePreCompile.h"
-#include "../Engine.h"
+#include "EnginePreCompile.h"
+#include "Engine.h"
 #include "TransformComponentSystem.h"
 
 namespace engine

@@ -97,6 +97,11 @@ namespace engine
 			{
 				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixLookAtLH(position, target, up));
 			}
+			/** 平行投影行列を作成 (DirectionLight シャドウ用) */
+			void MakeOrthographic(float width, float height, float nearZ, float farZ)
+			{
+				DirectX::XMStoreFloat4x4(&matrix, DirectX::XMMatrixOrthographicLH(width, height, nearZ, farZ));
+			}
 			/** 行列同士の乗算 */
 			void Mull(const Matrix4x4& m0, const Matrix4x4& m1)
 			{

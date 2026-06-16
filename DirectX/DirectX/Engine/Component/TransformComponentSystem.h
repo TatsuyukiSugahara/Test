@@ -1,5 +1,5 @@
 #pragma once
-#include "../ECS/ECS.h"
+#include "ECS/ECS.h"
 
 namespace engine
 {

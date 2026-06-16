@@ -1,13 +1,14 @@
 #pragma once
 #include <memory>
 #include <vector>
-#include "../Math/Matrix.h"
-#include "../Math/Vector.h"
-#include "../Graphics/IBuffer.h"
-#include "../Graphics/IShader.h"
-#include "../Graphics/ISamplerState.h"
-#include "../Graphics/IShaderResourceView.h"
-#include "../Graphics/Lighting.h"
+#include "Math/Matrix.h"
+#include "Math/Vector.h"
+#include "Graphics/IBuffer.h"
+#include "Graphics/IShader.h"
+#include "Graphics/ISamplerState.h"
+#include "Graphics/IShaderResourceView.h"
+#include "Graphics/Lighting.h"
+#include "Shadow/ShadowData.h"
 
 
 namespace engine
@@ -61,6 +62,8 @@ namespace engine
 			math::Matrix4x4           worldMatrix;
 			uint32_t                  layer       = 0;
 			graphics::MaterialCBData  materialCB;
+			bool                      castShadow    = false;
+			bool                      receiveShadow = false;
 		};
 
 
@@ -72,6 +75,7 @@ namespace engine
 		{
 			CameraData              camera;
 			graphics::LightingData  lighting;
+			ShadowCBData            shadow;
 			std::vector<RenderItem> items;
 
 			void Clear() { items.clear(); }

@@ -1,7 +1,7 @@
 #pragma once
-#include "../Engine/Application.h"
-#include "../Engine/Rendering/Renderer.h"
-#include "../Engine/Rendering/RenderThread.h"
+#include "Engine/Application.h"
+#include "Rendering/Renderer.h"
+#include "Rendering/RenderThread.h"
 
 namespace app
 {

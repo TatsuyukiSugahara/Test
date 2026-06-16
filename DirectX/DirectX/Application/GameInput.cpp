@@ -1,6 +1,6 @@
 #include "Utility.h"
 #include "GameInput.h"
-#include "../Engine/HID/InputBinding.h"
+#include "HID/InputBinding.h"
 
 namespace app
 {

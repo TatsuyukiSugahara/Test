@@ -1,9 +1,9 @@
 #pragma once
-#include "../ISamplerState.h"
-#include "../IShaderResourceView.h"
-#include "../IUnorderedAccessView.h"
-#include "../IRenderTarget.h"
-#include "../GraphicsTypes.h"
+#include "Graphics/ISamplerState.h"
+#include "Graphics/IShaderResourceView.h"
+#include "Graphics/IUnorderedAccessView.h"
+#include "Graphics/IRenderTarget.h"
+#include "Graphics/GraphicsTypes.h"
 
 namespace engine
 {

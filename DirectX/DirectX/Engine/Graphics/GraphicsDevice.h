@@ -2,7 +2,7 @@
 #include <memory>
 #include <cstdint>
 #include "IGraphicsDeviceImpl.h"
-#include "../Rendering/RenderTargetHandle.h"
+#include "Rendering/RenderTargetHandle.h"
 
 
 namespace engine
@@ -76,6 +76,7 @@ namespace engine
 			std::unique_ptr<IShader>             CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type);
 			std::unique_ptr<ISamplerState>       CreateSamplerState(const SamplerDesc& desc);
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data);
+			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height);
 
 
 		private:

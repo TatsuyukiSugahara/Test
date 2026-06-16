@@ -1,5 +1,5 @@
 #pragma once
-#include "../IBuffer.h"
+#include "Graphics/IBuffer.h"
 
 namespace engine
 {

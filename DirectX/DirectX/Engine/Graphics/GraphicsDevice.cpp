@@ -1,7 +1,7 @@
-#include "../../Engine/EnginePreCompile.h"
+#include "EnginePreCompile.h"
 #include "GraphicsDevice.h"
 #include "RenderContext.h"
-#include "../Rendering/RenderTargetHandle.h"
+#include "Rendering/RenderTargetHandle.h"
 
 
 namespace engine
@@ -111,6 +111,11 @@ namespace engine
 		std::unique_ptr<IShaderResourceView> GraphicsDevice::CreateTexture2D(const Texture2DDesc& desc, const ImageData& data)
 		{
 			return impl_->CreateTexture2D(desc, data);
+		}
+
+		std::unique_ptr<IDepthMap> GraphicsDevice::CreateDepthMap(uint32_t width, uint32_t height)
+		{
+			return impl_->CreateDepthMap(width, height);
 		}
 	}
 }

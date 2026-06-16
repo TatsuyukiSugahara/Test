@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
-#include "../Graphics/IBuffer.h"
+#include "Graphics/IBuffer.h"
 
 namespace engine
 {
@@ -54,9 +54,10 @@ namespace engine
 		 */
 		struct FrameContext
 		{
-			IConstantBufferPool*     perDrawCBPool  = nullptr;
-			IConstantBufferPool*     materialCBPool = nullptr;
-			graphics::IConstantBuffer* lightingCB   = nullptr;
+			IConstantBufferPool*       perDrawCBPool  = nullptr;
+			IConstantBufferPool*       materialCBPool = nullptr;
+			graphics::IConstantBuffer* lightingCB     = nullptr;
+			graphics::IConstantBuffer* shadowCB       = nullptr; // b3: per-frame shadow data
 		};
 	}
 }

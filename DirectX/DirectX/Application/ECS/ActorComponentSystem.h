@@ -1,7 +1,7 @@
 #pragma once
-#include "../Utility.h"
-#include "../../Engine/ECS/ECS.h"
-#include "../Actor/StateMachine.h"
+#include "Utility.h"
+#include "ECS/ECS.h"
+#include "Actor/StateMachine.h"
 
 
 namespace app

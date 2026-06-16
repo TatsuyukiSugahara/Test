@@ -10,12 +10,12 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include "../Graphics/GraphicsTypes.h"
-#include "../Graphics/IShader.h"
-#include "../Graphics/IShaderResourceView.h"
-#include "../Graphics/Shader.h"
-#include "../Util/CRC32.h"
-#include "../Util/ThreadPool.h"
+#include "Graphics/GraphicsTypes.h"
+#include "Graphics/IShader.h"
+#include "Graphics/IShaderResourceView.h"
+#include "Graphics/Shader.h"
+#include "Util/CRC32.h"
+#include "Util/ThreadPool.h"
 
 //#include <fbxsdk.h>
 //#pragma comment(lib, "libfbxsdk-md.lib")

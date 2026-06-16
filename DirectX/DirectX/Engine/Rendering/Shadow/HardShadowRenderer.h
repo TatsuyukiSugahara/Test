@@ -28,11 +28,11 @@ namespace engine
 
 			// IShadowRenderer
 			void BuildShadowCommandList(
-				const RenderFrame&       frame,
-				RenderCommandList&       outList,
-				graphics::IRenderTarget* mainRT,
-				float                    mainViewportW,
-				float                    mainViewportH) override;
+				const RenderFrame& frame,
+				RenderCommandList& outList,
+				RenderTargetHandle prevHandle,
+				float              prevViewportW,
+				float              prevViewportH) override;
 
 			void FillShadowCBData(
 				const graphics::DirectionalLight& light,

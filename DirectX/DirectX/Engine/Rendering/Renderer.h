@@ -2,6 +2,7 @@
 #include <memory>
 #include "RenderFrame.h"
 #include "RenderCommandList.h"
+#include "RenderTargetHandle.h"
 #include "Shadow/IShadowRenderer.h"
 
 
@@ -26,9 +27,11 @@ namespace engine
 		public:
 			/**
 			 * シャドウレンダラーを設定する。nullptr を渡すと影なしになる。
-			 * メインビューポートのサイズも合わせて指定する（シャドウパス後の復元用）。
+			 * mainRTHandle / mainViewportW / mainViewportH は RenderDebugSync 専用
+			 * （デバッグ同期パスでメイン RT に描画する際に使う）。
 			 */
 			void SetShadowRenderer(std::unique_ptr<IShadowRenderer> sr,
+			                       RenderTargetHandle mainRTHandle,
 			                       float mainViewportW, float mainViewportH);
 
 			IShadowRenderer* GetShadowRenderer() const { return shadowRenderer_.get(); }
@@ -36,8 +39,11 @@ namespace engine
 			/**
 			 * ゲームスレッドでフレームデータを outList に記録する。
 			 * シャドウレンダラーが設定されている場合は frame.shadow を自動的に埋める。
+			 * rtHandle / viewportW / viewportH はシャドウパス後に復元するRTとビューポートを指定する。
 			 */
-			void BuildCommandList(RenderFrame& frame, RenderCommandList& outList) const;
+			void BuildCommandList(RenderFrame& frame, RenderCommandList& outList,
+			                      RenderTargetHandle rtHandle,
+			                      float viewportW, float viewportH) const;
 
 #if _DEBUG
 			/**
@@ -54,6 +60,7 @@ namespace engine
 			                    RenderCommandList& outList) const;
 
 			std::unique_ptr<IShadowRenderer> shadowRenderer_;
+			RenderTargetHandle               mainRTHandle_;
 			float                            mainViewportW_ = 0.f;
 			float                            mainViewportH_ = 0.f;
 		};

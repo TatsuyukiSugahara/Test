@@ -2,7 +2,7 @@
 #include "ShadowData.h"
 #include "Graphics/Lighting.h"
 #include "Graphics/IDepthMap.h"
-#include "Graphics/IRenderTarget.h"
+#include "Rendering/RenderTargetHandle.h"
 
 
 namespace engine
@@ -23,14 +23,15 @@ namespace engine
 
 			/**
 			 * シャドウパスのコマンドを outList に記録する。
-			 * mainRT / mainW / mainH はシャドウパス終了後にメイン RT を復元するために使う。
+			 * prevHandle / prevW / prevH はシャドウパス終了後に直前の RT を復元するために使う。
+			 * ハンドルの解決は Execute 時に行う。
 			 */
 			virtual void BuildShadowCommandList(
-				const RenderFrame&       frame,
-				RenderCommandList&       outList,
-				graphics::IRenderTarget* mainRT,
-				float                    mainViewportW,
-				float                    mainViewportH) = 0;
+				const RenderFrame& frame,
+				RenderCommandList& outList,
+				RenderTargetHandle prevHandle,
+				float              prevViewportW,
+				float              prevViewportH) = 0;
 
 			/**
 			 * フレームの DirectionalLight 設定から ShadowCBData を計算する。

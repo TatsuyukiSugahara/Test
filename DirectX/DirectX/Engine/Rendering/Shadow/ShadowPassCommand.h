@@ -2,8 +2,8 @@
 #include <memory>
 #include "Rendering/IRenderCommand.h"
 #include "Rendering/RenderFrame.h"
+#include "Rendering/RenderTargetHandle.h"
 #include "Graphics/IDepthMap.h"
-#include "Graphics/IRenderTarget.h"
 
 
 namespace engine
@@ -34,20 +34,20 @@ namespace engine
 		};
 
 
-		/** シャドウパス終了: メイン RT 復元 + シャドウ SRV を t4/s1 にバインド */
+		/** シャドウパス終了: 直前の RT を復元 + シャドウ SRV を t4/s1 にバインド */
 		class ShadowEndCommand final : public IRenderCommand
 		{
 		public:
-			ShadowEndCommand(graphics::IDepthMap&     depthMap,
-			                 graphics::IRenderTarget* mainRT,
-			                 float                    mainW,
-			                 float                    mainH);
+			ShadowEndCommand(graphics::IDepthMap& depthMap,
+			                 RenderTargetHandle   prevHandle,
+			                 float                prevW,
+			                 float                prevH);
 			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;
 		private:
-			graphics::IDepthMap*     depthMap_;
-			graphics::IRenderTarget* mainRT_;
-			float                    mainW_;
-			float                    mainH_;
+			graphics::IDepthMap* depthMap_;
+			RenderTargetHandle   prevHandle_;
+			float                prevW_;
+			float                prevH_;
 		};
 	}
 }

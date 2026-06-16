@@ -40,10 +40,12 @@ namespace engine
 			if (FAILED(hr)) { EngineAssert(false); return false; }
 
 			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-			srvDesc.Format                    = DXGI_FORMAT_R32_FLOAT;
-			srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MostDetailedMip = 0;
-			srvDesc.Texture2D.MipLevels       = 1;
+			srvDesc.Format                          = DXGI_FORMAT_R32_FLOAT;
+			srvDesc.ViewDimension                   = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+			srvDesc.Texture2DArray.MostDetailedMip  = 0;
+			srvDesc.Texture2DArray.MipLevels        = 1;
+			srvDesc.Texture2DArray.FirstArraySlice  = 0;
+			srvDesc.Texture2DArray.ArraySize        = 1;
 			hr = device->CreateShaderResourceView(texture_, &srvDesc, &srv_.GetBody());
 			if (FAILED(hr)) { EngineAssert(false); return false; }
 

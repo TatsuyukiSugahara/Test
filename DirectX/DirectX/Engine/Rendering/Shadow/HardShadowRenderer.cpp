@@ -29,11 +29,11 @@ namespace engine
 
 
 		void HardShadowRenderer::BuildShadowCommandList(
-			const RenderFrame&       frame,
-			RenderCommandList&       outList,
-			graphics::IRenderTarget* mainRT,
-			float                    mainViewportW,
-			float                    mainViewportH)
+			const RenderFrame& frame,
+			RenderCommandList& outList,
+			RenderTargetHandle prevHandle,
+			float              prevViewportW,
+			float              prevViewportH)
 		{
 			outList.Enqueue<ShadowBeginCommand>(*depthMap_, settings_.resolution);
 
@@ -43,7 +43,7 @@ namespace engine
 				}
 			}
 
-			outList.Enqueue<ShadowEndCommand>(*depthMap_, mainRT, mainViewportW, mainViewportH);
+			outList.Enqueue<ShadowEndCommand>(*depthMap_, prevHandle, prevViewportW, prevViewportH);
 		}
 
 
@@ -51,9 +51,11 @@ namespace engine
 			const graphics::DirectionalLight& light,
 			ShadowCBData&                     outData) const
 		{
-			// ライト方向を正規化 (1 回のみ)
+			// ライト方向を正規化。ゼロベクトルの場合は真下方向にフォールバック
 			math::Vector3 normDir = light.direction;
-			normDir.Normalize();
+			if (!normDir.TryNormalize()) {
+				normDir = math::Vector3(0.f, -1.f, 0.f);
+			}
 
 			float dotY = std::abs(normDir.y);
 

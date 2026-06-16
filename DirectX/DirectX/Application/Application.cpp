@@ -87,7 +87,9 @@ namespace app
 			auto shadowRenderer = std::make_unique<engine::rendering::HardShadowRenderer>();
 			if (shadowRenderer->Create(shadowSettings, "Assets/Shader/ShadowDepth.fx"))
 			{
-				renderer_.SetShadowRenderer(std::move(shadowRenderer), renderW, renderH);
+				renderer_.SetShadowRenderer(std::move(shadowRenderer),
+				                            engine::Engine::Get().GetMainRenderTargetHandle(),
+				                            renderW, renderH);
 			}
 		}
 
@@ -184,8 +186,9 @@ namespace app
 			engine::rendering::RenderFrame offscreenFrame;
 			offscreenFrame.lighting = engine::graphics::LightManager::Get().GetLightingData();
 			engine::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, engine::CameraType::Offscreen);
-			renderer_.BuildCommandList(offscreenFrame, *offscreenCmdList);
-			renderThread_.Submit(std::move(offscreenCmdList), engine::rendering::RenderTargetHandle{}, offscreenFrame.lighting);
+			renderer_.BuildCommandList(offscreenFrame, *offscreenCmdList,
+			                          offscreenRTHandle_, kOffscreenRTWidth, kOffscreenRTHeight);
+			renderThread_.Submit(std::move(offscreenCmdList), engine::rendering::RenderTargetHandle{}, offscreenFrame.lighting, offscreenFrame.shadow);
 		}
 
 		// --- メインパス ---
@@ -198,7 +201,8 @@ namespace app
 		engine::rendering::RenderFrame mainFrame;
 		mainFrame.lighting = engine::graphics::LightManager::Get().GetLightingData();
 		engine::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
-		renderer_.BuildCommandList(mainFrame, *mainCmdList);
+		renderer_.BuildCommandList(mainFrame, *mainCmdList,
+		                          engine::Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
 		renderThread_.Submit(std::move(mainCmdList), engine::Engine::Get().GetMainRenderTargetHandle(), mainFrame.lighting, mainFrame.shadow);
 	}
 

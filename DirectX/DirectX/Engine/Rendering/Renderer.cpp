@@ -12,23 +12,25 @@ namespace engine
 	namespace rendering
 	{
 		void Renderer::SetShadowRenderer(std::unique_ptr<IShadowRenderer> sr,
+		                                 RenderTargetHandle mainRTHandle,
 		                                 float mainViewportW, float mainViewportH)
 		{
 			shadowRenderer_ = std::move(sr);
+			mainRTHandle_   = mainRTHandle;
 			mainViewportW_  = mainViewportW;
 			mainViewportH_  = mainViewportH;
 		}
 
 
-		void Renderer::BuildCommandList(RenderFrame& frame, RenderCommandList& outList) const
+		void Renderer::BuildCommandList(RenderFrame& frame, RenderCommandList& outList,
+		                                RenderTargetHandle rtHandle,
+		                                float viewportW, float viewportH) const
 		{
 			// Pass 1: シャドウパス
 			if (shadowRenderer_) {
 				shadowRenderer_->FillShadowCBData(frame.lighting.directional, frame.shadow);
 
-				auto* mainRT = &graphics::GraphicsDevice::Get().GetMainRenderTarget(0);
-				shadowRenderer_->BuildShadowCommandList(
-					frame, outList, mainRT, mainViewportW_, mainViewportH_);
+				shadowRenderer_->BuildShadowCommandList(frame, outList, rtHandle, viewportW, viewportH);
 			}
 
 			// Pass 2: メインパス
@@ -54,7 +56,7 @@ namespace engine
 			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get(), shadowCB.get() };
 
 			RenderCommandList list;
-			BuildCommandList(frame, list);
+			BuildCommandList(frame, list, mainRTHandle_, mainViewportW_, mainViewportH_);
 			context.UpdateSubresource(*shadowCB, frame.shadow);
 			list.Execute(context, fc);
 		}

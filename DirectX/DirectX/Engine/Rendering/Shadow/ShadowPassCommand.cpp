@@ -1,6 +1,7 @@
 #include "ShadowPassCommand.h"
 #include "Rendering/FrameContext.h"
 #include "Graphics/RenderContext.h"
+#include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 
 
@@ -20,6 +21,8 @@ namespace engine
 
 		void ShadowBeginCommand::Execute(graphics::RenderContext& ctx, FrameContext& fc) const
 		{
+			// 前フレームで t4 に bind したシャドウ SRV を先に解放してから DSV として使う
+			ctx.PSUnsetShaderResource(4);
 			ctx.OMSetDepthOnlyTarget(*depthMap_);
 			ctx.RSSetViewport(0.f, 0.f, static_cast<float>(resolution_), static_cast<float>(resolution_));
 			ctx.ClearDepthMap(*depthMap_);
@@ -66,22 +69,23 @@ namespace engine
 		// ShadowEndCommand
 		// ----------------------------------------------------------------
 
-		ShadowEndCommand::ShadowEndCommand(graphics::IDepthMap&     depthMap,
-		                                   graphics::IRenderTarget* mainRT,
-		                                   float                    mainW,
-		                                   float                    mainH)
+		ShadowEndCommand::ShadowEndCommand(graphics::IDepthMap& depthMap,
+		                                   RenderTargetHandle   prevHandle,
+		                                   float                prevW,
+		                                   float                prevH)
 			: depthMap_(&depthMap)
-			, mainRT_(mainRT)
-			, mainW_(mainW)
-			, mainH_(mainH)
+			, prevHandle_(prevHandle)
+			, prevW_(prevW)
+			, prevH_(prevH)
 		{}
 
 
 		void ShadowEndCommand::Execute(graphics::RenderContext& ctx, FrameContext& fc) const
 		{
-			// メイン RT を復元 (これにより DSV がアンバインドされ SRV として使用可能になる)
-			ctx.OMSetRenderTargets(1, mainRT_);
-			ctx.RSSetViewport(0.f, 0.f, mainW_, mainH_);
+			// 直前の RT を Execute 時に解決して復元 (DSV がアンバインドされ SRV として使用可能になる)
+			auto* prevRT = graphics::GraphicsDevice::Get().GetRenderTarget(prevHandle_);
+			ctx.OMSetRenderTargets(1, prevRT);
+			ctx.RSSetViewport(0.f, 0.f, prevW_, prevH_);
 
 			// t4: シャドウマップ SRV、s1: 比較サンプラー
 			if (auto* srv = depthMap_->GetSRV()) {

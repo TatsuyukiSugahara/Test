@@ -30,12 +30,15 @@ namespace app
 			engine::ecs::TerrainComponent* terrainComp = nullptr;
 			{
 				engine::terrain::HeightmapChunk::Desc desc;
-				desc.heightmapPath = "Assets/Terrain/heightmap.png";
-				desc.albedoPath    = "Assets/Terrain/grass.dds";
-				desc.resolution    = 128;
-				desc.heightScale   = 10.0f;
-				desc.terrainSize   = 100.0f;
-				desc.uvTiling      = 20.0f;
+				desc.heightmapPath  = "Assets/Terrain/heightmap.png";
+				desc.splatmapPath   = "Assets/Terrain/splatmap.png";
+				desc.layerPaths[0]  = "Assets/Terrain/grass.dds";
+				desc.layerPaths[1]  = "Assets/Terrain/rock.dds";
+				desc.layerPaths[2]  = "Assets/Terrain/dirt.dds";
+				desc.resolution     = 128;
+				desc.heightScale    = 10.0f;
+				desc.terrainSize    = 100.0f;
+				desc.layerTiling    = 20.0f;
 
 				auto entity = engine::ecs::EntityContext::Get().CreateEntity<engine::ecs::TransformComponent, engine::ecs::TerrainComponent>();
 

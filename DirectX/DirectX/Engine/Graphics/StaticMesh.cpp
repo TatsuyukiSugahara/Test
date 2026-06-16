@@ -17,9 +17,10 @@ namespace engine
 				const char* psFuncName;
 			};
 			ShaderInformation shaderInformations[] = {
-				{ "Assets/Shader/Model.fx",     "VSMain", "Assets/Shader/Model.fx",     "PSMain" },
-				{ "Assets/Shader/SimpleBox.fx", "VSMain", "Assets/Shader/SimpleBox.fx", "PSMain" },
-				{ "Assets/Shader/ModelLit.fx",  "VSMain", "Assets/Shader/ModelLit.fx",  "PSMain" },
+				{ "Assets/Shader/Model.fx",      "VSMain", "Assets/Shader/Model.fx",      "PSMain" },
+				{ "Assets/Shader/SimpleBox.fx",  "VSMain", "Assets/Shader/SimpleBox.fx",  "PSMain" },
+				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain" },
+				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain" },
 			};
 		}
 

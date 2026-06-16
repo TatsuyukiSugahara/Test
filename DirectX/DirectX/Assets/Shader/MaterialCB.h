@@ -4,6 +4,7 @@
 #define MAT_HAS_SPECULAR   (1u << 1)
 #define MAT_HAS_EMISSIVE   (1u << 2)
 #define MAT_RECEIVE_SHADOW (1u << 3)
+#define MAT_HAS_SPLATMAP   (1u << 4)
 
 cbuffer MaterialCB : register(b2)
 {
@@ -18,3 +19,4 @@ bool HasNormalMap()   { return (materialFlags & MAT_HAS_NORMAL)     != 0; }
 bool HasSpecularMap() { return (materialFlags & MAT_HAS_SPECULAR)   != 0; }
 bool HasEmissiveMap() { return (materialFlags & MAT_HAS_EMISSIVE)   != 0; }
 bool ReceivesShadow() { return (materialFlags & MAT_RECEIVE_SHADOW) != 0; }
+bool HasSplatMap()    { return (materialFlags & MAT_HAS_SPLATMAP)   != 0; }

@@ -97,26 +97,44 @@ namespace engine
 			heightScale_ = desc.heightScale;
 
 			// ハイトマップを CPU で読み込む (DirectXTex 直接使用)
-			// TextureLoader (GPUResource) の FinalizeLoading() は CPU ピクセルを破棄するため
-			// メッシュ生成目的では直接 DirectXTex で読む。
 			if (!LoadHeightValues(desc.heightmapPath, heightData_, hmapWidth_, hmapHeight_))
 			{
-				// フォールバック: フラットな地形
 				hmapWidth_ = hmapHeight_ = desc.resolution + 1;
 				heightData_.assign(static_cast<size_t>(hmapWidth_) * hmapHeight_, 0.0f);
 			}
 
 			BuildMesh(heightData_, hmapWidth_, hmapHeight_, desc);
 
-			// アルベドテクスチャは ResourceManager (TextureLoader) 経由で非同期ロード
-			if (desc.albedoPath && desc.albedoPath[0])
+			auto& rm = res::ResourceManager::Get();
+
+			// t0: スプラットマップ (Albedo スロット)
+			// フラグが立っているときのみシェーダーでスプラット合成を行う
+			if (desc.splatmapPath && desc.splatmapPath[0])
 			{
-				auto albedo = res::ResourceManager::Get().Load<res::GPUResource>(desc.albedoPath);
-				mesh_.SetTexture(rendering::TextureSlot::Albedo, albedo);
+				mesh_.SetTexture(rendering::TextureSlot::Albedo,
+				                 rm.Load<res::GPUResource>(desc.splatmapPath));
+				mesh_.SetMaterialFlag(graphics::MatFlag_HasSplatMap, true);
 			}
 
-			// テクスチャタイリング用に Wrap サンプラーを設定
-			// StaticMesh::Initialize() は Clamp サンプラーを生成するため上書きする
+			// t1-t3: レイヤーテクスチャ (Normal/Specular/Emissive スロットを流用)
+			static constexpr rendering::TextureSlot kLayerSlots[3] = {
+				rendering::TextureSlot::Normal,
+				rendering::TextureSlot::Specular,
+				rendering::TextureSlot::Emissive,
+			};
+			for (int i = 0; i < 3; ++i)
+			{
+				if (desc.layerPaths[i] && desc.layerPaths[i][0])
+				{
+					mesh_.SetTexture(kLayerSlots[i],
+					                 rm.Load<res::GPUResource>(desc.layerPaths[i]));
+				}
+			}
+
+			// シェーダーに渡すレイヤーUV倍率
+			mesh_.Param(0).x = desc.layerTiling;
+
+			// Wrap サンプラー (タイリング用)
 			graphics::SamplerDesc sd;
 			sd.filter   = graphics::FilterMode::MinMagMipLinear;
 			sd.addressU = graphics::AddressMode::Wrap;
@@ -147,7 +165,9 @@ namespace engine
 					v.position.Set(nx * desc.terrainSize,
 					               BilinearSample(heights, mapW, mapH, nx, nz) * desc.heightScale,
 					               nz * desc.terrainSize);
-					v.uv.Set(nx * desc.uvTiling, nz * desc.uvTiling);
+					// UV は [0,1] 正規化で保持。タイリングはシェーダー (params[0].x) で適用する。
+					// スプラットマップは正規化 UV をそのまま使い、レイヤーはシェーダー内で倍率をかける。
+					v.uv.Set(nx, nz);
 				}
 			}
 
@@ -205,7 +225,7 @@ namespace engine
 
 			mesh_.Initialize(verts.data(),   static_cast<uint32_t>(verts.size()),
 			                 indices.data(),  static_cast<uint32_t>(indices.size()),
-			                 graphics::StaticMesh::ShaderType::ModelLit);
+			                 graphics::StaticMesh::ShaderType::TerrainLit);
 		}
 
 

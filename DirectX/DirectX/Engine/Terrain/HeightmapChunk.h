@@ -11,33 +11,39 @@ namespace engine
 	{
 		/**
 		 * ハイトマップから生成される地形メッシュ。
+		 * ECS からは TerrainComponent 経由で使う。
 		 *
 		 * 使い方:
 		 *   HeightmapChunk::Desc desc;
-		 *   desc.heightmapPath = "Assets/Terrain/heightmap.png";  // Rチャンネルが高さ
-		 *   desc.albedoPath    = "Assets/Terrain/grass.dds";
-		 *   desc.resolution    = 128;
-		 *   desc.heightScale   = 20.0f;
-		 *   desc.terrainSize   = 200.0f;
-		 *   desc.uvTiling      = 20.0f;
+		 *   desc.heightmapPath  = "Assets/Terrain/heightmap.png"; // R=高さ
+		 *   desc.splatmapPath   = "Assets/Terrain/splatmap.png";  // R=layer0, G=layer1, B=layer2
+		 *   desc.layerPaths[0]  = "Assets/Terrain/grass.dds";
+		 *   desc.layerPaths[1]  = "Assets/Terrain/rock.dds";
+		 *   desc.layerPaths[2]  = "Assets/Terrain/dirt.dds";
+		 *   desc.resolution     = 128;
+		 *   desc.heightScale    = 10.0f;
+		 *   desc.terrainSize    = 100.0f;
+		 *   desc.layerTiling    = 20.0f;
 		 *   chunk.Initialize(desc);
 		 *
-		 *   // 毎フレーム
-		 *   chunk.Update(pos, rot, scale);
-		 *   rendering::RenderItem item;
-		 *   if (chunk.FillRenderItem(item)) { frame.items.push_back(item); }
+		 * splatmapPath を null にすると layer0 のみで描画する。
+		 * 必要なアセット: heightmap.png / splatmap.png / grass.dds / rock.dds / dirt.dds
 		 */
 		class HeightmapChunk
 		{
 		public:
 			struct Desc
 			{
-				const char* heightmapPath = nullptr;  // Rチャンネルが高さ (PNG/DDS等)
-				const char* albedoPath    = nullptr;  // 地面テクスチャ (ResourceManager経由)
-				uint32_t    resolution    = 128;      // グリッド分割数 (頂点数 = (N+1)^2)
-				float       heightScale   = 10.0f;    // R=1.0 のときの最大高さ (m)
-				float       terrainSize   = 100.0f;   // XZ 一辺の長さ (m)
-				float       uvTiling      = 10.0f;    // テクスチャのタイリング回数
+				const char* heightmapPath = nullptr;   // Rチャンネルが高さ (PNG/DDS等)
+				// スプラットマップ: R=layer0, G=layer1, B=layer2 の混合比率
+				// null のときは layer0 のみ使用
+				const char* splatmapPath  = nullptr;
+				// レイヤーテクスチャ (grass/rock/dirt など、最大3枚)
+				const char* layerPaths[3] = {};
+				uint32_t    resolution    = 128;       // グリッド分割数
+				float       heightScale   = 10.0f;     // R=1.0 のときの最大高さ (m)
+				float       terrainSize   = 100.0f;    // XZ 一辺の長さ (m)
+				float       layerTiling   = 10.0f;     // レイヤーテクスチャのUV倍率
 			};
 
 			void Initialize(const Desc& desc);

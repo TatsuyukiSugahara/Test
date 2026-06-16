@@ -15,6 +15,7 @@ namespace engine
 			MatFlag_HasSpecular   = 1u << 1,
 			MatFlag_HasEmissive   = 1u << 2,
 			MatFlag_ReceiveShadow = 1u << 3,
+			MatFlag_HasSplatMap   = 1u << 4,  // t0=splatmap, t1-t3=layers
 			MatFlag_User0         = 1u << 16,
 		};
 

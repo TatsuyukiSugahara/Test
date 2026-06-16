@@ -55,6 +55,9 @@
     <Filter Include="Engine\Util">
       <UniqueIdentifier>{ec0fba07-4c22-4637-9849-565ebf6dd4aa}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Engine\Terrain">
+      <UniqueIdentifier>{a7b8c9d0-e1f2-3456-789a-bcdef0123456}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Engine\Graphics\RenderContext.cpp">
@@ -215,6 +218,12 @@
     </ClCompile>
     <ClCompile Include="Engine\Rendering\Shadow\HardShadowRenderer.cpp">
       <Filter>Engine\Rendering\Shadow</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Terrain\HeightmapChunk.cpp">
+      <Filter>Engine\Terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\Terrain\TerrainComponent.cpp">
+      <Filter>Engine\Terrain</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -508,6 +517,12 @@
     </ClInclude>
     <ClInclude Include="Engine\Rendering\Shadow\HardShadowRenderer.h">
       <Filter>Engine\Rendering\Shadow</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Terrain\HeightmapChunk.h">
+      <Filter>Engine\Terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\Terrain\TerrainComponent.h">
+      <Filter>Engine\Terrain</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

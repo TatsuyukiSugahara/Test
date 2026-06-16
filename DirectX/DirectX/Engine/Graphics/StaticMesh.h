@@ -22,6 +22,7 @@ namespace engine
 				NormalModel,  // Model.fx    (ライトなし、後方互換)
 				SimpleBox,    // SimpleBox.fx
 				ModelLit,     // ModelLit.fx (フルライティング)
+				TerrainLit,   // TerrainLit.fx (スプラットマップ地形)
 			};
 
 		private:

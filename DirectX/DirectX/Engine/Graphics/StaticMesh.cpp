@@ -184,6 +184,24 @@ namespace engine
 			item.materialCB    = materialCB_;
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
+
+			// HasSplatMap が要求されている地形メッシュ向けのロード待機ガード。
+			// - t1 (layer0/grass) は splat あり/なし両ブランチで必須 → 未ロードなら描画スキップ。
+			// - t0/t2/t3 のいずれかが未ロードなら HasSplatMap を落として grass 単色で安全描画。
+			// - materialCB_ 本体は変更せず、次フレームに SRV が揃えば自動的に復活する。
+			if (materialCB_.flags & static_cast<uint32_t>(MatFlag_HasSplatMap))
+			{
+				const bool t0 = item.textures[static_cast<uint32_t>(rendering::TextureSlot::Albedo)]   != nullptr;
+				const bool t1 = item.textures[static_cast<uint32_t>(rendering::TextureSlot::Normal)]   != nullptr;
+				const bool t2 = item.textures[static_cast<uint32_t>(rendering::TextureSlot::Specular)] != nullptr;
+				const bool t3 = item.textures[static_cast<uint32_t>(rendering::TextureSlot::Emissive)] != nullptr;
+
+				if (!t1)
+					return false;  // layer0 未ロード: 両ブランチ共に描画不可
+
+				if (!t0 || !t2 || !t3)
+					item.materialCB.flags &= ~static_cast<uint32_t>(MatFlag_HasSplatMap);
+			}
 			return true;
 		}
 	}

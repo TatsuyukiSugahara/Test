@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <cstdint>
 #include "Assets/Shader/MaterialDef.h"
-#include "Engine/Math/Vector.h"
+#include "Math/Vector.h"
 
 namespace aq
 {

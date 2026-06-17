@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.4.33213.308
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Game", "DirectX\DirectX.vcxproj", "{D74D377F-F66D-4FE6-B957-12AC3B2D00ED}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Game", "Game\DirectX.vcxproj", "{D74D377F-F66D-4FE6-B957-12AC3B2D00ED}"
 	ProjectSection(ProjectDependencies) = postProject
 		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12} = {D5A06DB3-5460-46E4-8D0D-39823C8D0D12}
 		{D801A1D8-1CAF-CE40-89B8-55D48072BA71} = {D801A1D8-1CAF-CE40-89B8-55D48072BA71}
@@ -11,7 +11,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Game", "DirectX\DirectX.vcx
 		{7DEE0732-F52F-6846-9E26-CAB27AA098F5} = {7DEE0732-F52F-6846-9E26-CAB27AA098F5}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "aqEngine", "DirectX\Engine.vcxproj", "{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "aqEngine", "aqEngine\Engine.vcxproj", "{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BulletCollision", "ThirdParty\BulletPhysics\src\BulletCollision\BulletCollision.vcxproj", "{D801A1D8-1CAF-CE40-89B8-55D48072BA71}"
 EndProject

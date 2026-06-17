@@ -42,6 +42,7 @@ namespace engine
 			engine::res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 
 			MaterialCBData materialCB_;
+			ShaderType     shaderType_    = ShaderType::NormalModel;
 			bool           castShadow_    = false;
 			bool           receiveShadow_ = false;
 

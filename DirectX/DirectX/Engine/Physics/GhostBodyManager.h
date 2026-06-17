@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 #include "IBroadphase.h"
 #include "IGhostNarrowphase.h"
 #include <memory>
 #include <vector>
 
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{

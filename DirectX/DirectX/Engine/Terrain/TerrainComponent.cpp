@@ -1,7 +1,7 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "TerrainComponent.h"
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

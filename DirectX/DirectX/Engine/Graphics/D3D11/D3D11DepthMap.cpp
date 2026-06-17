@@ -1,10 +1,10 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "D3D11DepthMap.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include "Graphics/GraphicsTypes.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

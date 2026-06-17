@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Utility.h"
 #include "GameInput.h"
 #include "HID/InputBinding.h"
@@ -28,7 +29,7 @@ namespace app
 
 	void GameInput::SetupMaps()
 	{
-		using namespace engine::hid;
+		using namespace aq::hid;
 
 		keyboardMap_.Bind(GameAction::MoveLeft,     BindKey(KeyBoardType::A));
 		keyboardMap_.Bind(GameAction::MoveRight,    BindKey(KeyBoardType::D));

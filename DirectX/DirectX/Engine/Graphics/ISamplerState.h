@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 #include "GraphicsTypes.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

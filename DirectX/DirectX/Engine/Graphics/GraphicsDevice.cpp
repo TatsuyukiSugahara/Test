@@ -1,10 +1,10 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "GraphicsDevice.h"
 #include "RenderContext.h"
 #include "Rendering/RenderTargetHandle.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

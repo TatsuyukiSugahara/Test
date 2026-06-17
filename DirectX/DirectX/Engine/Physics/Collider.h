@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 
 class btCollisionShape; // Bullet headers は実装側でインクルード
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{

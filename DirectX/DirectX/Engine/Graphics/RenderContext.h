@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include "IBuffer.h"
 #include "IShader.h"
@@ -12,7 +12,7 @@
 //   Graphics/D3D11/D3D11RenderResources.h
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

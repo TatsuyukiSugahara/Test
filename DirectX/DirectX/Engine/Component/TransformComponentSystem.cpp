@@ -1,22 +1,22 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Engine.h"
 #include "TransformComponentSystem.h"
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{
 		Transform::Transform()
-			: position(engine::math::Vector3::Zero)
-			, localPosition(engine::math::Vector3::Zero)
-			, scale(engine::math::Vector3::One)
-			, localScale(engine::math::Vector3::One)
-			, angle(engine::math::Vector3::Zero)
-			, localAngle(engine::math::Vector3::Zero)
-			, rotation(engine::math::Quaternion::Identity)
-			, localRotation(engine::math::Quaternion::Identity)
-			, rotationMatrix(engine::math::Matrix4x4::Identity)
-			, worldMatrix(engine::math::Matrix4x4::Identity)
+			: position(aq::math::Vector3::Zero)
+			, localPosition(aq::math::Vector3::Zero)
+			, scale(aq::math::Vector3::One)
+			, localScale(aq::math::Vector3::One)
+			, angle(aq::math::Vector3::Zero)
+			, localAngle(aq::math::Vector3::Zero)
+			, rotation(aq::math::Quaternion::Identity)
+			, localRotation(aq::math::Quaternion::Identity)
+			, rotationMatrix(aq::math::Matrix4x4::Identity)
+			, worldMatrix(aq::math::Matrix4x4::Identity)
 			, parent(nullptr)
 		{
 			children.clear();
@@ -36,10 +36,10 @@ namespace engine
 		{
 			if (parent) {
 				// 座標計算
-				engine::math::Matrix4x4 localPos;
+				aq::math::Matrix4x4 localPos;
 				localPos.MakeTranslation(localPosition);
 
-				engine::math::Matrix4x4 pos;
+				aq::math::Matrix4x4 pos;
 				pos.Mull(localPos, parent->worldMatrix);
 
 				position.x = pos.m[0][3];
@@ -67,7 +67,7 @@ namespace engine
 
 		void Transform::UpdateWorldMatrix()
 		{
-			engine::math::Matrix4x4 scal, pos, world;
+			aq::math::Matrix4x4 scal, pos, world;
 			scal.MakeScaling(scale);
 			pos.MakeTranslation(position);
 
@@ -147,7 +147,7 @@ namespace engine
 
 		void HierarcicalTransformSystem::Update()
 		{
-			engine::ecs::Foreach<TransformComponent>([](const engine::ecs::Entity& entity, TransformComponent* component)
+			aq::ecs::Foreach<TransformComponent>([](const aq::ecs::Entity& entity, TransformComponent* component)
 				{
 					component->transform.UpdateTransform();
 				});

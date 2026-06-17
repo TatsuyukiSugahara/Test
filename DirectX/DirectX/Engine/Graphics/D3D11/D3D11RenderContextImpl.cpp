@@ -1,4 +1,4 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "D3D11RenderContextImpl.h"
 #include "D3D11RenderResources.h"
 #include "D3D11Buffers.h"
@@ -6,7 +6,7 @@
 #include "D3D11DepthMap.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

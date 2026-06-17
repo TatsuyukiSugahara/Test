@@ -1,9 +1,9 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "StaticMesh.h"
 #include "GraphicsDevice.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{
@@ -39,8 +39,8 @@ namespace engine
 		}
 
 
-		void StaticMesh::Initialize(engine::res::RefMeshResource meshResource,
-		                            engine::res::RefGPUResource  albedoResource,
+		void StaticMesh::Initialize(aq::res::RefMeshResource meshResource,
+		                            aq::res::RefGPUResource  albedoResource,
 		                            const ShaderType             shaderType)
 		{
 			meshResource_ = meshResource;
@@ -53,7 +53,7 @@ namespace engine
 
 			vertexBuffer_ = GraphicsDevice::Get().CreateVertexBuffer(
 				meshResource_->GetVerticsSize(),
-				sizeof(engine::graphics::VertexData),
+				sizeof(aq::graphics::VertexData),
 				meshResource_->GetVertics()->data()
 			);
 			indexBuffer_ = GraphicsDevice::Get().CreateIndexBuffer(
@@ -75,7 +75,7 @@ namespace engine
 				return;
 			}
 
-			vertexBuffer_ = GraphicsDevice::Get().CreateVertexBuffer(vertexNum, sizeof(engine::graphics::VertexData), vertexBuffer);
+			vertexBuffer_ = GraphicsDevice::Get().CreateVertexBuffer(vertexNum, sizeof(aq::graphics::VertexData), vertexBuffer);
 			indexBuffer_  = GraphicsDevice::Get().CreateIndexBuffer(indexNum, indexBuffer);
 			indicesSize_  = indexNum;
 
@@ -87,8 +87,8 @@ namespace engine
 		{
 			shaderType_ = shaderType;
 			const ShaderInformation& info = shaderInformations[static_cast<uint8_t>(shaderType)];
-			vsShaderResource_ = engine::res::ResourceManager::Get().LoadShader(info.vsFilePath, info.vsFuncName, IShader::ShaderType::VS);
-			psShaderResource_ = engine::res::ResourceManager::Get().LoadShader(info.psFilePath, info.psFuncName, IShader::ShaderType::PS);
+			vsShaderResource_ = aq::res::ResourceManager::Get().LoadShader(info.vsFilePath, info.vsFuncName, IShader::ShaderType::VS);
+			psShaderResource_ = aq::res::ResourceManager::Get().LoadShader(info.psFilePath, info.psFuncName, IShader::ShaderType::PS);
 
 			const bool hasAlbedo = gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Albedo)] != nullptr;
 			if (hasAlbedo)
@@ -123,7 +123,7 @@ namespace engine
 		}
 
 
-		void StaticMesh::SetTexture(rendering::TextureSlot slot, engine::res::RefGPUResource resource)
+		void StaticMesh::SetTexture(rendering::TextureSlot slot, aq::res::RefGPUResource resource)
 		{
 			const uint32_t idx = static_cast<uint32_t>(slot);
 			gpuResources_[idx] = resource;

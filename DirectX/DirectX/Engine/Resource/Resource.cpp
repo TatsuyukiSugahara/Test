@@ -1,4 +1,4 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Resource.h"
 #include "Engine.h"
@@ -7,7 +7,7 @@
 #include <cstdio>
 
 
-namespace engine
+namespace aq
 {
 	namespace res
 	{
@@ -205,9 +205,9 @@ namespace engine
 				return path;
 			}
 
-			engine::graphics::PixelFormat PixelFormatFromDXGI(DXGI_FORMAT fmt)
+			aq::graphics::PixelFormat PixelFormatFromDXGI(DXGI_FORMAT fmt)
 			{
-				using PF = engine::graphics::PixelFormat;
+				using PF = aq::graphics::PixelFormat;
 				switch (fmt) {
 					case DXGI_FORMAT_R8G8B8A8_UNORM:      return PF::R8G8B8A8_Unorm;
 					case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: return PF::R8G8B8A8_Unorm_SRGB;
@@ -348,7 +348,7 @@ namespace engine
 				return true;
 			}
 
-			void BuildNormals(std::vector<engine::graphics::VertexData>& vertices, const std::vector<uint32_t>& indices)
+			void BuildNormals(std::vector<aq::graphics::VertexData>& vertices, const std::vector<uint32_t>& indices)
 			{
 				for (auto& vertex : vertices) {
 					vertex.normal.Set(0.0f, 0.0f, 0.0f);
@@ -364,7 +364,7 @@ namespace engine
 
 					const auto edge01 = vertices[i1].position - vertices[i0].position;
 					const auto edge02 = vertices[i2].position - vertices[i0].position;
-					engine::math::Vector3 normal;
+					aq::math::Vector3 normal;
 					normal.Cross(edge01, edge02);
 					if (!normal.TryNormalize()) {
 						continue;
@@ -446,7 +446,7 @@ namespace engine
 							return false;
 						}
 
-						engine::graphics::VertexData dst = {};
+						aq::graphics::VertexData dst = {};
 						dst.position.Set(src.pos[0], src.pos[1], src.pos[2]);
 						dst.normal.Set(src.normal[0], src.normal[1], src.normal[2]);
 						dst.uv.Set(src.uv[0], src.uv[1]);
@@ -580,7 +580,7 @@ namespace engine
 				return false;
 			}
 
-			engine::graphics::ImageData imgData;
+			aq::graphics::ImageData imgData;
 			imgData.pixels     = textureData->pixels.data();
 			imgData.rowPitch   = textureData->rowPitch;
 			imgData.slicePitch = textureData->slicePitch;
@@ -589,7 +589,7 @@ namespace engine
 				: textureData->subresources.data();
 			imgData.subresourceCount = static_cast<uint32_t>(textureData->subresources.size());
 
-			auto srv = engine::graphics::GraphicsDevice::Get().CreateTexture2D(textureData->desc, imgData);
+			auto srv = aq::graphics::GraphicsDevice::Get().CreateTexture2D(textureData->desc, imgData);
 			if (!srv) {
 				return false;
 			}
@@ -622,7 +622,7 @@ namespace engine
 			if (!shaderData) {
 				return false;
 			}
-			return engine::graphics::ParseShaderResourceKey(requestPath_, shaderData->desc);
+			return aq::graphics::ParseShaderResourceKey(requestPath_, shaderData->desc);
 		}
 
 
@@ -633,7 +633,7 @@ namespace engine
 				return false;
 			}
 
-			shaderData->shader = engine::graphics::GraphicsDevice::Get().CreateShader(
+			shaderData->shader = aq::graphics::GraphicsDevice::Get().CreateShader(
 				shaderData->desc.filePath.c_str(),
 				shaderData->desc.entryFuncName.c_str(),
 				shaderData->desc.shaderType);

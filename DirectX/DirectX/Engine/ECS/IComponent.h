@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include "TypeInfo.h"
 
 #define ecsComponent(T) TYPE_INFO(T)
 
 /** コンポーネントクラスに必要 */
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

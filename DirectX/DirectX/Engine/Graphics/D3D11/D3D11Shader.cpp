@@ -1,8 +1,8 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "D3D11Shader.h"
 #include "D3D11GraphicsDeviceImpl.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

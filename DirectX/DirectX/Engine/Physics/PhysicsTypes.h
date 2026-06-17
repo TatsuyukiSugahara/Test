@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include "Math/Vector.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{

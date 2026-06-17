@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}</ProjectGuid>
+    <RootNamespace>aqEngine</RootNamespace>
+    <ProjectName>aqEngine</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Engine\aq.cpp">
+      <PrecompiledHeader Condition="'$(Platform)'=='x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Platform)'=='x64'">aq.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <ClCompile Include="Engine\Application.cpp" />
+    <ClCompile Include="Engine\Component\BodyComponentSystem.cpp" />
+    <ClCompile Include="Engine\Component\TransformComponentSystem.cpp" />
+    <ClCompile Include="Engine\ECS\Chunk.cpp" />
+    <ClCompile Include="Engine\ECS\EntityContext.cpp" />
+    <ClCompile Include="Engine\ECS\EntityManager.cpp" />
+    <ClCompile Include="Engine\ECS\System.cpp" />
+    <ClCompile Include="Engine\Engine.cpp" />
+    <ClCompile Include="Engine\Memory\MemoryManager.cpp" />
+    <ClCompile Include="Engine\Memory\MemoryTracker.cpp" />
+    <ClCompile Include="Engine\Memory\GlobalNew.cpp" />
+    <ClCompile Include="Engine\Graphics\Camera.cpp" />
+    <ClCompile Include="Engine\Graphics\LightManager.cpp" />
+    <ClCompile Include="Engine\Graphics\RenderContext.cpp" />
+    <ClCompile Include="Engine\Graphics\Shader.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11Buffers.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11Shader.cpp" />
+    <ClCompile Include="Engine\Graphics\StaticMesh.cpp" />
+    <ClCompile Include="Engine\HID\ActionMap.cpp" />
+    <ClCompile Include="Engine\HID\Input.cpp" />
+    <ClCompile Include="Engine\JobSystem.cpp" />
+    <ClCompile Include="Engine\Util\ThreadPool.cpp" />
+    <ClCompile Include="Engine\Graphics\GraphicsDevice.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11Resources.cpp" />
+    <ClCompile Include="Engine\Graphics\D3D11\D3D11DepthMap.cpp" />
+    <ClCompile Include="Engine\Math\Matrix.cpp" />
+    <ClCompile Include="Engine\Math\Vector.cpp" />
+    <ClCompile Include="Engine\Physics\BulletPhysics.cpp" />
+    <ClCompile Include="Engine\Physics\Collider.cpp" />
+    <ClCompile Include="Engine\Physics\Physics.cpp" />
+    <ClCompile Include="Engine\Physics\PhysicsBody.cpp" />
+    <ClCompile Include="Engine\Physics\GhostBody.cpp" />
+    <ClCompile Include="Engine\Physics\GhostBodyManager.cpp" />
+    <ClCompile Include="Engine\Physics\BulletGhostNarrowphase.cpp" />
+    <ClCompile Include="Engine\Physics\CharacterController.cpp" />
+    <ClCompile Include="Engine\Resource\Resource.cpp" />
+    <ClCompile Include="Engine\Rendering\DrawItemCommand.cpp" />
+    <ClCompile Include="Engine\Rendering\FrameCommands.cpp" />
+    <ClCompile Include="Engine\Rendering\FrameContext.cpp" />
+    <ClCompile Include="Engine\Rendering\RenderCommandList.cpp" />
+    <ClCompile Include="Engine\Rendering\Renderer.cpp" />
+    <ClCompile Include="Engine\Rendering\RenderThread.cpp" />
+    <ClCompile Include="Engine\Rendering\Shadow\ShadowPassCommand.cpp" />
+    <ClCompile Include="Engine\Rendering\Shadow\HardShadowRenderer.cpp" />
+    <ClCompile Include="Engine\Terrain\HeightmapChunk.cpp" />
+    <ClCompile Include="Engine\Terrain\TerrainComponent.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Engine\Application.h" />
+    <ClInclude Include="Engine\IApplication.h" />
+    <ClInclude Include="Engine\Component\BodyComponentSystem.h" />
+    <ClInclude Include="Engine\Component\TransformComponentSystem.h" />
+    <ClInclude Include="Engine\ECS\Archetype.h" />
+    <ClInclude Include="Engine\ECS\Chunk.h" />
+    <ClInclude Include="Engine\ECS\ComponentArray.h" />
+    <ClInclude Include="Engine\ECS\ECS.h" />
+    <ClInclude Include="Engine\ECS\Entity.h" />
+    <ClInclude Include="Engine\ECS\EntityContext.h" />
+    <ClInclude Include="Engine\ECS\EntityManager.h" />
+    <ClInclude Include="Engine\ECS\EntityView.h" />
+    <ClInclude Include="Engine\ECS\IComponent.h" />
+    <ClInclude Include="Engine\ECS\System.h" />
+    <ClInclude Include="Engine\ECS\TypeInfo.h" />
+    <ClInclude Include="Engine\Engine.h" />
+    <ClInclude Include="Engine\aq.h" />
+    <ClInclude Include="Engine\Graphics\Camera.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11Buffers.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11DepthMap.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11RenderResources.h" />
+    <ClInclude Include="Engine\Graphics\D3D11\D3D11Shader.h" />
+    <ClInclude Include="Engine\Graphics\D3D12\D3D12GraphicsDeviceImpl.h" />
+    <ClInclude Include="Engine\Graphics\D3D12\D3D12RenderContextImpl.h" />
+    <ClInclude Include="Engine\Graphics\GPUBuffer.h" />
+    <ClInclude Include="Engine\Graphics\GraphicsDevice.h" />
+    <ClInclude Include="Engine\Graphics\GraphicsTypes.h" />
+    <ClInclude Include="Engine\Graphics\IBuffer.h" />
+    <ClInclude Include="Engine\Graphics\IDepthMap.h" />
+    <ClInclude Include="Engine\Graphics\IGraphicsDeviceImpl.h" />
+    <ClInclude Include="Engine\Graphics\IRenderContextImpl.h" />
+    <ClInclude Include="Engine\Graphics\IRenderTarget.h" />
+    <ClInclude Include="Engine\Graphics\ISamplerState.h" />
+    <ClInclude Include="Engine\Graphics\IShader.h" />
+    <ClInclude Include="Engine\Graphics\IShaderResourceView.h" />
+    <ClInclude Include="Engine\Graphics\IUnorderedAccessView.h" />
+    <ClInclude Include="Engine\Graphics\Lighting.h" />
+    <ClInclude Include="Engine\Graphics\LightManager.h" />
+    <ClInclude Include="Engine\Graphics\RenderContext.h" />
+    <ClInclude Include="Engine\Graphics\Shader.h" />
+    <ClInclude Include="Engine\Graphics\StaticMesh.h" />
+    <ClInclude Include="Engine\HID\ActionMap.h" />
+    <ClInclude Include="Engine\HID\Input.h" />
+    <ClInclude Include="Engine\HID\InputBinding.h" />
+    <ClInclude Include="Engine\JobSystem.h" />
+    <ClInclude Include="Engine\Math\Matrix.h" />
+    <ClInclude Include="Engine\Math\Utility.h" />
+    <ClInclude Include="Engine\Math\Vector.h" />
+    <ClInclude Include="Engine\Memory\AllocatedArray.h" />
+    <ClInclude Include="Engine\Memory\HeapAllocator.h" />
+    <ClInclude Include="Engine\Memory\IAllocator.h" />
+    <ClInclude Include="Engine\Memory\Memory.h" />
+    <ClInclude Include="Engine\Memory\MemoryManager.h" />
+    <ClInclude Include="Engine\Memory\MemoryTracker.h" />
+    <ClInclude Include="Engine\Memory\StackAllocator.h" />
+    <ClInclude Include="Engine\Memory\StdAllocatorAdapter.h" />
+    <ClInclude Include="Engine\Physics\BoxCollider.h" />
+    <ClInclude Include="Engine\Physics\BulletDbvtBroadphase.h" />
+    <ClInclude Include="Engine\Physics\BulletGhostNarrowphase.h" />
+    <ClInclude Include="Engine\Physics\BulletPhysics.h" />
+    <ClInclude Include="Engine\Physics\CapsuleCollider.h" />
+    <ClInclude Include="Engine\Physics\CharacterController.h" />
+    <ClInclude Include="Engine\Physics\Collider.h" />
+    <ClInclude Include="Engine\Physics\GhostBody.h" />
+    <ClInclude Include="Engine\Physics\GhostBodyManager.h" />
+    <ClInclude Include="Engine\Physics\GhostPrimitive.h" />
+    <ClInclude Include="Engine\Physics\IBroadphase.h" />
+    <ClInclude Include="Engine\Physics\IGhostNarrowphase.h" />
+    <ClInclude Include="Engine\Physics\Physics.h" />
+    <ClInclude Include="Engine\Physics\PhysicsBody.h" />
+    <ClInclude Include="Engine\Physics\PhysicsTypes.h" />
+    <ClInclude Include="Engine\Physics\SphereCollider.h" />
+    <ClInclude Include="Engine\Rendering\DrawItemCommand.h" />
+    <ClInclude Include="Engine\Rendering\FrameCommands.h" />
+    <ClInclude Include="Engine\Rendering\FrameContext.h" />
+    <ClInclude Include="Engine\Rendering\IRenderCommand.h" />
+    <ClInclude Include="Engine\Rendering\RenderCommandList.h" />
+    <ClInclude Include="Engine\Rendering\RenderFrame.h" />
+    <ClInclude Include="Engine\Rendering\Renderer.h" />
+    <ClInclude Include="Engine\Rendering\RenderTargetHandle.h" />
+    <ClInclude Include="Engine\Rendering\RenderThread.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\HardShadowRenderer.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\IShadowRenderer.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\ShadowData.h" />
+    <ClInclude Include="Engine\Rendering\Shadow\ShadowPassCommand.h" />
+    <ClInclude Include="Engine\Resource\Resource.h" />
+    <ClInclude Include="Engine\Terrain\HeightmapChunk.h" />
+    <ClInclude Include="Engine\Terrain\TerrainComponent.h" />
+    <ClInclude Include="Engine\Util\CRC32.h" />
+    <ClInclude Include="Engine\Util\ThreadPool.h" />
+    <ClInclude Include="Engine\Utility.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Utility.h"
 #include "ECS/ECS.h"
 
@@ -80,10 +80,10 @@ namespace app
 			uint32_t requestStateId_;
 
 			/** 状態操作対象 */
-			engine::ecs::EntityHandle targetHandle_;
+			aq::ecs::EntityHandle targetHandle_;
 
 			/** 移動関連 */
-			engine::math::Vector3 direction_;
+			aq::math::Vector3 direction_;
 			float speed_;
 
 
@@ -114,9 +114,9 @@ namespace app
 
 		public:
 			/** 操作対象設定 */
-			inline void SetTargetHandle(const engine::ecs::EntityHandle& target) { targetHandle_ = target; }
+			inline void SetTargetHandle(const aq::ecs::EntityHandle& target) { targetHandle_ = target; }
 			/** 操作対象取得 */
-			inline const engine::ecs::EntityHandle& GetTargetHandle() const { return targetHandle_; }
+			inline const aq::ecs::EntityHandle& GetTargetHandle() const { return targetHandle_; }
 
 
 			/**
@@ -124,11 +124,11 @@ namespace app
 			 */
 		public:
 			/** 移動方向 */
-			inline void SetDirection(const engine::math::Vector3& dir)
+			inline void SetDirection(const aq::math::Vector3& dir)
 			{
 				direction_.Set(dir);
 			}
-			inline const engine::math::Vector3& GetDirection() const
+			inline const aq::math::Vector3& GetDirection() const
 			{
 				return direction_;
 			}

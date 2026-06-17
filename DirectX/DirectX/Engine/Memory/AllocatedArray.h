@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "IAllocator.h"
 #include <cstddef>
 #include <type_traits>
@@ -6,7 +6,7 @@
 #include <new>
 
 
-namespace engine
+namespace aq
 {
 	namespace memory
 	{

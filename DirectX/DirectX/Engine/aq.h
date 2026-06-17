@@ -2,11 +2,6 @@
 
 #pragma warning (disable  : 4201)
 
-// #define DEBUG_MASTER		0	// ?f?o?b?O?r???h
-// #define RELEASE_MASTER		1	// ?????[?X?r???h
-// #define PREVIEW_MASTER		2	// ?}?X?^?[?r???h
-
-
 // Graphics API selection.
 // Define ENGINE_GRAPHICS_D3D11 here, or pass it via project preprocessor settings.
 #define ENGINE_GRAPHICS_D3D11

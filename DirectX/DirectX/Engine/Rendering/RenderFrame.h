@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include <vector>
 #include "Math/Matrix.h"
@@ -11,7 +11,7 @@
 #include "Shadow/ShadowData.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace rendering
 	{

@@ -1,24 +1,24 @@
-#pragma once
+﻿#pragma once
 #include "ECS/ECS.h"
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{
 		struct Transform
 		{
 		public:
-			engine::math::Vector3 position;
-			engine::math::Vector3 localPosition;
-			engine::math::Vector3 scale;
-			engine::math::Vector3 localScale;
-			engine::math::Vector3 angle;
-			engine::math::Vector3 localAngle;
-			engine::math::Quaternion rotation;
-			engine::math::Quaternion localRotation;
+			aq::math::Vector3 position;
+			aq::math::Vector3 localPosition;
+			aq::math::Vector3 scale;
+			aq::math::Vector3 localScale;
+			aq::math::Vector3 angle;
+			aq::math::Vector3 localAngle;
+			aq::math::Quaternion rotation;
+			aq::math::Quaternion localRotation;
 
-			engine::math::Matrix4x4 rotationMatrix;
-			engine::math::Matrix4x4 worldMatrix;
+			aq::math::Matrix4x4 rotationMatrix;
+			aq::math::Matrix4x4 worldMatrix;
 
 			Transform* parent;
 			std::vector<Transform*> children;
@@ -44,7 +44,7 @@ namespace engine
 
 		struct TransformComponent : public IComponent
 		{
-			ecsComponent(engine::ecs::TransformComponent);
+			ecsComponent(aq::ecs::TransformComponent);
 
 
 		public:
@@ -63,7 +63,7 @@ namespace engine
 			}
 
 		public:
-			//engine::math::Vector3 GetFront() const;
+			//aq::math::Vector3 GetFront() const;
 		};
 
 

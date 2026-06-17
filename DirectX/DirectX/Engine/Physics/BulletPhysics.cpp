@@ -1,10 +1,11 @@
+#include "aq.h"
 #include "BulletPhysics.h"
 #include "Memory/IAllocator.h"
 #include "LinearMath/btAlignedAllocator.h"
 #include <cassert>
 
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{
@@ -212,11 +213,11 @@ namespace engine
 			// aligned_malloc/_free が btScalar(double) の SIMD 要件を満たすアライメントを保証する。
 			btAlignedAllocSetCustomAligned(
 				[](size_t size, int alignment) -> void* {
-					return engine::memory::GetDefaultAllocator().Allocate(
+					return aq::memory::GetDefaultAllocator().Allocate(
 						size, static_cast<size_t>(alignment));
 				},
 				[](void* ptr) {
-					engine::memory::GetDefaultAllocator().Deallocate(ptr);
+					aq::memory::GetDefaultAllocator().Deallocate(ptr);
 				}
 			);
 		}

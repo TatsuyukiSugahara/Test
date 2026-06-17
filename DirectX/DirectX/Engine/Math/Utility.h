@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Mathの汎用処理群
  */
 #pragma once
 
-namespace engine
+namespace aq
 {
 	namespace math
 	{

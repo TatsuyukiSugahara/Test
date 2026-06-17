@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "StateMachine.h"
 #include "Component/TransformComponentSystem.h"
 
@@ -74,13 +75,13 @@ namespace app
 
 		void MoveState::Update()
 		{
-			engine::math::Vector3 move = stateMachine_->GetDirection();
+			aq::math::Vector3 move = stateMachine_->GetDirection();
 			if (!move.IsZero()) {
 				move.Scale(stateMachine_->GetSpeed());
 
-				const engine::ecs::EntityHandle& targetHandle = stateMachine_->GetTargetHandle();
-				if (engine::ecs::EntityContext::Get().IsValid(targetHandle)) {
-					auto* transformComponent = engine::ecs::EntityContext::Get().GetComponent<engine::ecs::TransformComponent>(targetHandle);
+				const aq::ecs::EntityHandle& targetHandle = stateMachine_->GetTargetHandle();
+				if (aq::ecs::EntityContext::Get().IsValid(targetHandle)) {
+					auto* transformComponent = aq::ecs::EntityContext::Get().GetComponent<aq::ecs::TransformComponent>(targetHandle);
 					transformComponent->transform.localPosition.Add(move);
 				}
 			} else {

@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 
-namespace engine
+namespace aq
 {
 	enum class CameraType : uint8_t
 	{

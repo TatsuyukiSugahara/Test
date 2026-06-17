@@ -1,8 +1,8 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "D3D11/D3D11Buffers.h"
 #include "D3D11/D3D11GraphicsDeviceImpl.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{
@@ -188,7 +188,7 @@ namespace engine
 		{
 			Release();
 			D3D11_BUFFER_DESC desc;
-			engine::memory::Clear(&desc, sizeof(desc));
+			aq::memory::Clear(&desc, sizeof(desc));
 			desc.Usage = D3D11_USAGE_DEFAULT;
 			desc.ByteWidth = sizeof(uint32_t) * indexNum;
 			desc.BindFlags = D3D11_BIND_INDEX_BUFFER;

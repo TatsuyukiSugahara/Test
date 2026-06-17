@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "IAllocator.h"
 #include <cstdint>
 #include <atomic>
@@ -6,7 +6,7 @@
 #include <malloc.h>
 
 
-namespace engine
+namespace aq
 {
 	namespace memory
 	{

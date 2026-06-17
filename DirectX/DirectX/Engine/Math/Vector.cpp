@@ -1,8 +1,8 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Vector.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace math
 	{
@@ -12,12 +12,12 @@ namespace engine
 
 		Quaternion Quaternion::Identity = Quaternion(0.0f, 0.0f, 0.0f, 1.0f);
 
-		void Quaternion::SetEuler(const engine::math::Vector3& rot)
+		void Quaternion::SetEuler(const aq::math::Vector3& rot)
 		{
-			engine::math::Vector3 rotation;
-			rotation.x = engine::math::DegToRadian(rot.x);
-			rotation.y = engine::math::DegToRadian(rot.y);
-			rotation.z = engine::math::DegToRadian(rot.z);
+			aq::math::Vector3 rotation;
+			rotation.x = aq::math::DegToRadian(rot.x);
+			rotation.y = aq::math::DegToRadian(rot.y);
+			rotation.z = aq::math::DegToRadian(rot.z);
 			DirectX::XMVECTOR xv = DirectX::XMQuaternionRotationRollPitchYawFromVector(rotation);
 			DirectX::XMStoreFloat4(&vector, xv);
 		}

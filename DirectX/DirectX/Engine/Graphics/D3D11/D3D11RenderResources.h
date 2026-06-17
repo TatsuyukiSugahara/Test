@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 #include "Graphics/ISamplerState.h"
 #include "Graphics/IShaderResourceView.h"
 #include "Graphics/IUnorderedAccessView.h"
 #include "Graphics/IRenderTarget.h"
 #include "Graphics/GraphicsTypes.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

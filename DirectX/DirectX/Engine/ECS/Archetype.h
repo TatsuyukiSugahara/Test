@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include "IComponent.h"
 #include <algorithm>
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

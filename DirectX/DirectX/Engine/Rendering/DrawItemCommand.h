@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 #include "IRenderCommand.h"
 #include "RenderFrame.h"
 
-namespace engine
+namespace aq
 {
 	namespace rendering
 	{

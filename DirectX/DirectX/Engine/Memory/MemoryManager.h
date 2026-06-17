@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include "HeapAllocator.h"
 #include "StackAllocator.h"
 #include <memory>
 
 
-namespace engine
+namespace aq
 {
 	namespace memory
 	{
@@ -25,9 +25,9 @@ namespace engine
 		/**
 		 * エンジン管理のアロケータを保持するシングルトン。
 		 *
-		 * Engine::Initialize() → MemoryManager::Initialize(config)
-		 * Engine::Finalize()   → MemoryManager::Finalize()
-		 * Engine::Update() 末尾 → ResetStackAllocator()  ← オフセットを先頭に戻すだけ
+		 * aq::Initialize() → MemoryManager::Initialize(config)
+		 * aq::Finalize()   → MemoryManager::Finalize()
+		 * aq::Update() 末尾 → ResetStackAllocator()  ← オフセットを先頭に戻すだけ
 		 */
 		class MemoryManager
 		{

@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include "Graphics/IRenderContextImpl.h"
 
 struct ID3D12GraphicsCommandList;
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CRC32
  * 参考：https://shobomaru.wordpress.com/2014/07/20/constexpr/
  */
@@ -9,10 +9,10 @@
 #include <string>
 
 
-#define EngineHash32(str) engine::util::ComputeCrc32(str)
+#define EngineHash32(str) aq::util::ComputeCrc32(str)
 
 
-namespace engine
+namespace aq
 {
 	namespace util
 	{

@@ -1,4 +1,4 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "D3D11RenderResources.h"
 #include "D3D11Buffers.h"
 #include "D3D11GraphicsDeviceImpl.h"
@@ -8,7 +8,7 @@
 
 namespace
 {
-	using namespace engine::graphics;
+	using namespace aq::graphics;
 
 	D3D11_FILTER ToD3D11Filter(FilterMode f)
 	{
@@ -60,7 +60,7 @@ namespace
 }
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

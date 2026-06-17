@@ -1,10 +1,10 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Input.h"
 #include "Engine.h"
 #pragma comment(lib, "xinput.lib")
 
 
-namespace engine
+namespace aq
 {
 	namespace hid
 	{
@@ -38,14 +38,14 @@ namespace engine
 
 		void KeyBoard::Update(float dt)
 		{
-			engine::memory::Copy(old_, now_, sizeof(old_));
+			aq::memory::Copy(old_, now_, sizeof(old_));
 
 			HRESULT hr = device_->GetDeviceState(sizeof(now_), &now_);
 			if (FAILED(hr))
 			{
 				device_->Acquire();
 				if (FAILED(device_->GetDeviceState(sizeof(now_), &now_)))
-					engine::memory::Clear(now_, sizeof(now_));
+					aq::memory::Clear(now_, sizeof(now_));
 			}
 
 			for (uint32_t i = 0; i < KEY_COUNT; ++i)
@@ -126,14 +126,14 @@ namespace engine
 		void Mouse::Update(float dt)
 		{
 			old_ = now_;
-			engine::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
+			aq::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
 
 			HRESULT hr = device_->GetDeviceState(sizeof(DIMOUSESTATE2), &now_);
 			if (FAILED(hr))
 			{
 				device_->Acquire();
 				if (FAILED(device_->GetDeviceState(sizeof(DIMOUSESTATE2), &now_)))
-					engine::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
+					aq::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
 			}
 
 			for (uint32_t i = 0; i < 3; ++i)
@@ -228,7 +228,7 @@ namespace engine
 			{
 				now_  = {};
 				old_  = {};
-				engine::memory::Clear(holdTimers_, sizeof(holdTimers_));
+				aq::memory::Clear(holdTimers_, sizeof(holdTimers_));
 				return;
 			}
 

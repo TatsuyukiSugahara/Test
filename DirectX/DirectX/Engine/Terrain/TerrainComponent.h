@@ -1,14 +1,14 @@
-#pragma once
+﻿#pragma once
 #include "ECS/ECS.h"
 #include "Terrain/HeightmapChunk.h"
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{
 		class TerrainComponent : public IComponent
 		{
-			ecsComponent(engine::ecs::TerrainComponent);
+			ecsComponent(aq::ecs::TerrainComponent);
 
 		public:
 			void SetDesc(const terrain::HeightmapChunk::Desc& desc);

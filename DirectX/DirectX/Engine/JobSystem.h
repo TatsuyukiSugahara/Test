@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include <thread>
 #include <vector>
@@ -9,7 +9,7 @@
 #include <future>
 
 
-namespace engine
+namespace aq
 {
 	using JobHandle = std::shared_future<void>;
 

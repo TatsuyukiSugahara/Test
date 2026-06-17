@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <type_traits>
 #include <utility>
 #include <string_view>
@@ -23,7 +23,7 @@ public:													\
 	}													\
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

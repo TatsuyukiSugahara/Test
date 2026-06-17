@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include "EntityManager.h"
 #include "System.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 #include "Graphics/IBuffer.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

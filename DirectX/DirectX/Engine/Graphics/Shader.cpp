@@ -1,9 +1,9 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Shader.h"
 #include <utility>
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

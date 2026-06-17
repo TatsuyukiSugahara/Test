@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Graphics/IGraphicsDeviceImpl.h"
 
 // D3D12/DXGI の COM インターフェースを前方宣言する。
@@ -12,7 +12,7 @@ struct IDXGISwapChain3;
 struct IDXGIFactory4;
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

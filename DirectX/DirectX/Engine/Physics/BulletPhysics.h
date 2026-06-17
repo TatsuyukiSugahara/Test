@@ -1,13 +1,13 @@
-#pragma once
+﻿#pragma once
 #include "btBulletCollisionCommon.h"
 #include "btBulletDynamicsCommon.h"
 #include "BulletCollision/CollisionDispatch/btGhostObject.h"
 #include "Collider.h"
 #include "PhysicsTypes.h"
-#include "EnginePreCompile.h"
+#include "aq.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{
@@ -106,11 +106,11 @@ namespace engine
 		 * BulletPhysics を使った物理ワールドのシングルトン。
 		 *
 		 * ========== 使い方 ==========
-		 * // 初期化 (Engine::Initialize の中で呼ぶ)
-		 * engine::physics::BulletPhysicsWorld::Initialize();
+		 * // 初期化 (aq::Initialize の中で呼ぶ)
+		 * aq::physics::BulletPhysicsWorld::Initialize();
 		 *
 		 * // 毎フレーム更新
-		 * engine::physics::BulletPhysicsWorld::Get().Update(deltaTime);
+		 * aq::physics::BulletPhysicsWorld::Get().Update(deltaTime);
 		 *
 		 * // Raycast
 		 * RaycastHit hit;

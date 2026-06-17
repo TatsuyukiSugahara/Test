@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include "Resource/Resource.h"
 #include "Math/Matrix.h"
@@ -10,7 +10,7 @@
 #include "Rendering/RenderFrame.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{
@@ -34,12 +34,12 @@ namespace engine
 			math::Matrix4x4                  localMatrix_;
 			bool                             isInitialized_;
 
-			engine::res::RefMeshResource  meshResource_;
-			engine::res::RefShaderResource vsShaderResource_;
-			engine::res::RefShaderResource psShaderResource_;
+			aq::res::RefMeshResource  meshResource_;
+			aq::res::RefShaderResource vsShaderResource_;
+			aq::res::RefShaderResource psShaderResource_;
 
 			// テクスチャリソース t0-t3
-			engine::res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
+			aq::res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 
 			MaterialCBData materialCB_;
 			ShaderType     shaderType_    = ShaderType::NormalModel;
@@ -50,8 +50,8 @@ namespace engine
 			StaticMesh();
 			~StaticMesh();
 
-			void Initialize(engine::res::RefMeshResource meshResource,
-			                engine::res::RefGPUResource  albedoResource,
+			void Initialize(aq::res::RefMeshResource meshResource,
+			                aq::res::RefGPUResource  albedoResource,
 			                const ShaderType             shaderType);
 			void Initialize(const void* vertexBuffer, const uint32_t vertexNum,
 			                const void* indexBuffer,  const uint32_t indexNum,
@@ -60,7 +60,7 @@ namespace engine
 			void Update(const math::Vector3& translation, const math::Quaternion& rotation, const math::Vector3& scale);
 
 			/** テクスチャを個別スロットに設定する (Initialize 後に呼ぶ) */
-			void SetTexture(rendering::TextureSlot slot, engine::res::RefGPUResource resource);
+			void SetTexture(rendering::TextureSlot slot, aq::res::RefGPUResource resource);
 
 			/** ユーザー自由パラメータ (HLSL: params[index]) */
 			math::Vector4&       Param(uint32_t index)       { return materialCB_.params[index]; }

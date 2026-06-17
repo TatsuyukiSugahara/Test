@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 #include "ActionMap.h"
 
-namespace engine
+namespace aq
 {
 	namespace hid
 	{

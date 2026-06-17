@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include "RenderFrame.h"
 #include "RenderCommandList.h"
@@ -6,7 +6,7 @@
 #include "Shadow/IShadowRenderer.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics { class RenderContext; }
 

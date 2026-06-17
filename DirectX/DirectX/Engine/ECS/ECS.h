@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "EntityContext.h"
 #include <utility>
 
@@ -7,7 +7,7 @@
  * 参考：https://qiita.com/harayuu10/items/e15b02e3b0f3081d729b
  */
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

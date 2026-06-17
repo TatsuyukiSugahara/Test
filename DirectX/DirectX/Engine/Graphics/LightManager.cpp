@@ -1,7 +1,7 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "LightManager.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

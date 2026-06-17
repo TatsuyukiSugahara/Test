@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 #include <string>
 #include "IShader.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

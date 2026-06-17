@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include "GhostPrimitive.h"
 #include "PhysicsTypes.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{

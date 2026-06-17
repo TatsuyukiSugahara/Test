@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 汎用処理群
  */
 #pragma once
@@ -25,7 +25,7 @@
 
 // デバッグ出力
 #ifdef _DEBUG
-#define EnginePrintf( fmt , ... ) engine::debug::Printf(fmt, __VA_ARGS__ )
+#define EnginePrintf( fmt , ... ) aq::debug::Printf(fmt, __VA_ARGS__ )
 #else
 #define EnginePrintf( fmt , ... ) ((void)0)
 #endif
@@ -33,7 +33,7 @@
 
 
 
-namespace engine
+namespace aq
 {
 	namespace memory
 	{

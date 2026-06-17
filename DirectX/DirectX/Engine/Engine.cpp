@@ -1,6 +1,6 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Engine.h"
-#include "Application.h"
+#include "IApplication.h"
 #include "Util/ThreadPool.h"
 #include "Physics/PhysicsBackend.h"
 #ifdef ENGINE_GRAPHICS_D3D11
@@ -36,12 +36,10 @@ namespace engine
 	{
 		// メモリマネージャを最初に初期化することで、ウィンドウ・グラフィクス初期化中の
 		// new/delete もエンジンアロケータ管理下に置く。
-		memory::MemoryManager::Initialize(initializeParameter.memoryConfig);
+		aq::memory::MemoryManager::Initialize(initializeParameter.memoryConfig);
 
 		// Bullet allocator hook は MemoryManager 直後、かつ Bullet 型が一切生成される前に設定する。
-		// GhostBodyManager や BulletDbvtBroadphase が BulletPhysicsWorld より先に作られる場合も含め
-		// 全 Bullet 確保をエンジンアロケータへ流す。
-		physics::PhysicsWorld::InstallAllocatorHook();
+		aq::physics::PhysicsWorld::InstallAllocatorHook();
 
 		if (!InitializeWindow(initializeParameter)) {
 			return false;
@@ -49,7 +47,7 @@ namespace engine
 		if (!InitializeGraphicsAPI(initializeParameter)) {
 			return false;
 		}
-		util::ThreadPool::Initialize();
+		aq::util::ThreadPool::Initialize();
 
 		if (!application_->Initialize(renderContext_)) {
 			return false;
@@ -68,11 +66,11 @@ namespace engine
 			application_ = nullptr;
 		}
 
-		graphics::GraphicsDevice::Get().Finalize();
-		graphics::GraphicsDevice::Release();
+		aq::graphics::GraphicsDevice::Get().Finalize();
+		aq::graphics::GraphicsDevice::Release();
 
-		util::ThreadPool::Finalize();
-		memory::MemoryManager::Finalize();
+		aq::util::ThreadPool::Finalize();
+		aq::memory::MemoryManager::Finalize();
 	}
 
 
@@ -126,19 +124,19 @@ namespace engine
 
 		// 選択された API の実装を注入 (将来 D3D12 / Vulkan に替える場合は define を変えてここを追加する)
 #ifdef ENGINE_GRAPHICS_D3D11
-		graphics::GraphicsDevice::Create<graphics::D3D11GraphicsDeviceImpl>();
+		aq::graphics::GraphicsDevice::Create<aq::graphics::D3D11GraphicsDeviceImpl>();
 #endif // ENGINE_GRAPHICS_D3D11
 
-		if (!graphics::GraphicsDevice::Get().Initialize({ hWnd_ }, renderWidth_, renderHeight_)) {
+		if (!aq::graphics::GraphicsDevice::Get().Initialize({ hWnd_ }, renderWidth_, renderHeight_)) {
 			return false;
 		}
 
-		graphics::GraphicsDevice::Get().SetupRenderContext(renderContext_);
-		graphics::GraphicsDevice::Get().SetupDefaultRenderState(renderContext_);
+		aq::graphics::GraphicsDevice::Get().SetupRenderContext(renderContext_);
+		aq::graphics::GraphicsDevice::Get().SetupDefaultRenderState(renderContext_);
 
 		renderContext_.OMSetRenderTargets(
 			1,
-			&graphics::GraphicsDevice::Get().GetMainRenderTarget(0)
+			&aq::graphics::GraphicsDevice::Get().GetMainRenderTarget(0)
 		);
 		renderContext_.RSSetViewport(
 			0.0f, 0.0f,
@@ -157,7 +155,7 @@ namespace engine
 		// 完了するまで待機する。描画に関わるすべての D3D11 コンテキスト呼び出しは
 		// レンダースレッド側に集約され、メインスレッドは Submit() 以降コンテキストに触れない。
 		application_->FlushRender();
-		memory::MemoryManager::Get().ResetStackAllocator();
+		aq::memory::MemoryManager::Get().ResetStackAllocator();
 	}
 
 

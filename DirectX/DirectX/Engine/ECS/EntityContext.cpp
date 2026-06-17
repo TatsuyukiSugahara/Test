@@ -1,8 +1,8 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "EntityContext.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

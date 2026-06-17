@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <array>
 #include <atomic>
 #include <condition_variable>
@@ -10,7 +10,7 @@
 #include "Graphics/Lighting.h"
 #include "Shadow/ShadowData.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics { class RenderContext; }
 

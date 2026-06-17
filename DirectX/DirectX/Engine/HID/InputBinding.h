@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 #include "Input.h"
 
-namespace engine
+namespace aq
 {
 	namespace hid
 	{

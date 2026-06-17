@@ -20,7 +20,7 @@ namespace engine
 		int32_t   renderHeight;
 		int32_t   nCmdShow;
 		uint8_t   gameObjectPriortyMax;
-		memory::MemoryConfig memoryConfig; // アロケータサイズ設定 (デフォルト値あり)
+		aq::memory::MemoryConfig memoryConfig; // アロケータサイズ設定 (デフォルト値あり)
 	};
 
 	class Engine
@@ -29,7 +29,7 @@ namespace engine
 		HINSTANCE hInstance_;
 		HWND      hWnd_;
 
-		graphics::RenderContext renderContext_;
+		aq::graphics::RenderContext renderContext_;
 
 		uint32_t currentMainRenderTarget_;
 		uint32_t screenWidth_;
@@ -61,14 +61,14 @@ namespace engine
 		inline int32_t GetRenderHeight() const { return renderHeight_; }
 
 		inline void ToggleMainRenderTarget() { currentMainRenderTarget_ ^= 1; }
-		inline graphics::IRenderTarget& GetMainRenderTarget()
+		inline aq::graphics::IRenderTarget& GetMainRenderTarget()
 		{
-			return graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
+			return aq::graphics::GraphicsDevice::Get().GetMainRenderTarget(currentMainRenderTarget_);
 		}
 		/** 現在のメインRTへの RenderTargetHandle を返す。コマンド記録時に使う。 */
-		inline rendering::RenderTargetHandle GetMainRenderTargetHandle() const
+		inline aq::rendering::RenderTargetHandle GetMainRenderTargetHandle() const
 		{
-			return rendering::RenderTargetHandle{ currentMainRenderTarget_ };
+			return aq::rendering::RenderTargetHandle{ currentMainRenderTarget_ };
 		}
 
 	public:

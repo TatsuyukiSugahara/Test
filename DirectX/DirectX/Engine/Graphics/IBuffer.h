@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

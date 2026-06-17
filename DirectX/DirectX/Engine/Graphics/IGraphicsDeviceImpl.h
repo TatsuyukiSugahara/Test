@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include <memory>
 #include "IBuffer.h"
@@ -9,7 +9,7 @@
 #include "GraphicsTypes.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

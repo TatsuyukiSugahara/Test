@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include "Lighting.h"
 #include "Math/Vector.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

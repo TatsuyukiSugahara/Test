@@ -1,7 +1,7 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Camera.h"
 
-namespace engine
+namespace aq
 {
 	Camera::Camera()
 		: near_(1.0f)

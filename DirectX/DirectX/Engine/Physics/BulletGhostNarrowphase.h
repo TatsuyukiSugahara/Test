@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "IGhostNarrowphase.h"
 #include "GhostPrimitive.h"
 #include "btBulletCollisionCommon.h"
@@ -7,7 +7,7 @@
 #include <memory>
 
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{

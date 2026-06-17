@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "ActorComponentSystem.h"
 
 
@@ -17,7 +18,7 @@ namespace app
 
 		void ActorStateMachineSystem::Update()
 		{
-			engine::ecs::Foreach<StateMachineComponent>([](const engine::ecs::Entity& entity, StateMachineComponent* component)
+			aq::ecs::Foreach<StateMachineComponent>([](const aq::ecs::Entity& entity, StateMachineComponent* component)
 				{
 					component->GetStateMachine()->Update();
 				});

@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
 #include "IRenderCommand.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics { class RenderContext; }
 

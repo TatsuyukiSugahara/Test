@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Chunk.h"
 #include "EntityView.h"
 #include <functional>
@@ -10,7 +10,7 @@
 #include <shared_mutex>
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{
@@ -286,7 +286,7 @@ namespace engine
 
 
 // Entity インライン実装（EntityManager の完全定義が必要なためここで定義する）
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

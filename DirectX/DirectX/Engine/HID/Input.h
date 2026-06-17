@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 #include <Xinput.h>
@@ -6,7 +6,7 @@
 #include <chrono>
 #include "Math/Vector.h"
 
-namespace engine
+namespace aq
 {
 	namespace hid
 	{

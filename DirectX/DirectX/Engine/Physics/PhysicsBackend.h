@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /**
  * ============================================================
@@ -20,7 +20,7 @@
 #include "SphereCollider.h"
 #include "CapsuleCollider.h"
 
-namespace engine
+namespace aq
 {
 	namespace physics
 	{
@@ -38,7 +38,7 @@ namespace engine
 
 // #include "PhysXPhysics.h"
 // ...
-// namespace engine { namespace physics {
+// namespace aq { namespace physics {
 //     using PhysicsWorld    = PhysXPhysicsWorld;
 //     using RigidBody       = PhysXRigidBody;
 //     using BoxCollider     = PhysXBoxCollider;

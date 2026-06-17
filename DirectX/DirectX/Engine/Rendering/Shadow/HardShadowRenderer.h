@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include "IShadowRenderer.h"
 #include "Graphics/IDepthMap.h"
 #include "Graphics/IShader.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace rendering
 	{

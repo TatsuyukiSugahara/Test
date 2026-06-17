@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include "IAllocator.h"
 #include <vector>
 
 
-namespace engine
+namespace aq
 {
 	namespace memory
 	{
@@ -12,8 +12,8 @@ namespace engine
 		 * デフォルトコンストラクタでエンジンデフォルトアロケータ (HeapAllocator) を使用。
 		 *
 		 * 使用例:
-		 *   engine::memory::vector<int> v;                                       // デフォルト (heap)
-		 *   engine::memory::vector<int> v2(StdAllocatorAdapter<int>(myAlloc));   // カスタム
+		 *   aq::memory::vector<int> v;                                       // デフォルト (heap)
+		 *   aq::memory::vector<int> v2(StdAllocatorAdapter<int>(myAlloc));   // カスタム
 		 */
 		template <typename T>
 		class StdAllocatorAdapter
@@ -63,7 +63,7 @@ namespace engine
 		 * deallocate は no-op。解放は ResetStackAllocator() (= オフセットを先頭に戻す) で行う。
 		 *
 		 * 使用例:
-		 *   engine::memory::stackVector<int> v; // 引数なしで OK
+		 *   aq::memory::stackVector<int> v; // 引数なしで OK
 		 */
 		template <typename T>
 		class StackAllocatorStdAdapter

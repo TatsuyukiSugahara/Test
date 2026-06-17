@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include "Rendering/IRenderCommand.h"
 #include "Rendering/RenderFrame.h"
@@ -6,7 +6,7 @@
 #include "Graphics/IDepthMap.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace rendering
 	{

@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include "IAllocator.h"
 #include <malloc.h>
 #include <cassert>
 
 
-namespace engine
+namespace aq
 {
 	namespace memory
 	{

@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include "TypeInfo.h"
 #include <functional>
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

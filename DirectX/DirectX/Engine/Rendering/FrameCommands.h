@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include <cstring>
 #include "IRenderCommand.h"
 #include "RenderTargetHandle.h"
 
-namespace engine
+namespace aq
 {
 	namespace rendering
 	{

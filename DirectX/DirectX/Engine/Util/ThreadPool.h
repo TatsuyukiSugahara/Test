@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include <thread>
 #include <vector>
@@ -10,7 +10,7 @@
 #include <atomic>
 
 
-namespace engine
+namespace aq
 {
 	namespace util
 	{

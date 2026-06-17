@@ -1,3 +1,4 @@
+#include "aq.h"
 #include "HardShadowRenderer.h"
 #include "ShadowPassCommand.h"
 #include "Rendering/RenderCommandList.h"
@@ -7,7 +8,7 @@
 #include <cmath>
 
 
-namespace engine
+namespace aq
 {
 	namespace rendering
 	{

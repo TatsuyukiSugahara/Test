@@ -22,7 +22,8 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{d74d377f-f66d-4fe6-b957-12ac3b2d00ed}</ProjectGuid>
-    <RootNamespace>DirectX</RootNamespace>
+    <RootNamespace>Game</RootNamespace>
+    <ProjectName>Game</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -114,7 +115,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(ProjectDir)Engine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -137,6 +139,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(ProjectDir)Engine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
@@ -151,6 +155,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Application\stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Platform)'=='x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Platform)'=='x64'">stdafx.h</PrecompiledHeaderFile>
+    </ClCompile>
     <ClCompile Include="Application\Actor\StateMachine.cpp" />
     <ClCompile Include="Application\Application.cpp" />
     <ClCompile Include="Application\GameInput.cpp" />
@@ -159,154 +167,23 @@
     <ClCompile Include="Application\Main.cpp" />
     <ClCompile Include="Application\Scene\BattleScene.cpp" />
     <ClCompile Include="Application\Scene\Scene.cpp" />
-    <ClCompile Include="Engine\Component\BodyComponentSystem.cpp" />
-    <ClCompile Include="Engine\Component\TransformComponentSystem.cpp" />
-    <ClCompile Include="Engine\ECS\Chunk.cpp" />
-    <ClCompile Include="Engine\ECS\EntityContext.cpp" />
-    <ClCompile Include="Engine\ECS\EntityManager.cpp" />
-    <ClCompile Include="Engine\ECS\System.cpp" />
-    <ClCompile Include="Engine\Engine.cpp" />
-    <ClCompile Include="Engine\Memory\MemoryManager.cpp" />
-    <ClCompile Include="Engine\Memory\MemoryTracker.cpp" />
-    <ClCompile Include="Engine\Memory\GlobalNew.cpp" />
-    <ClCompile Include="Engine\Graphics\Camera.cpp" />
-    <ClCompile Include="Engine\Graphics\LightManager.cpp" />
-    <ClCompile Include="Engine\Graphics\RenderContext.cpp" />
-    <ClCompile Include="Engine\Graphics\Shader.cpp" />
-    <ClCompile Include="Engine\Graphics\D3D11\D3D11Buffers.cpp" />
-    <ClCompile Include="Engine\Graphics\D3D11\D3D11Shader.cpp" />
-    <ClCompile Include="Engine\Graphics\StaticMesh.cpp" />
-    <ClCompile Include="Engine\HID\ActionMap.cpp" />
-    <ClCompile Include="Engine\HID\Input.cpp" />
-    <ClCompile Include="Engine\JobSystem.cpp" />
-    <ClCompile Include="Engine\Util\ThreadPool.cpp" />
-    <ClCompile Include="Engine\Graphics\GraphicsDevice.cpp" />
-    <ClCompile Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.cpp" />
-    <ClCompile Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.cpp" />
-    <ClCompile Include="Engine\Graphics\D3D11\D3D11Resources.cpp" />
-    <ClCompile Include="Engine\Graphics\D3D11\D3D11DepthMap.cpp" />
-    <ClCompile Include="Engine\Math\Matrix.cpp" />
-    <ClCompile Include="Engine\Math\Vector.cpp" />
-    <ClCompile Include="Engine\Physics\BulletPhysics.cpp" />
-    <ClCompile Include="Engine\Physics\Collider.cpp" />
-    <ClCompile Include="Engine\Physics\Physics.cpp" />
-    <ClCompile Include="Engine\Physics\PhysicsBody.cpp" />
-    <ClCompile Include="Engine\Physics\GhostBody.cpp" />
-    <ClCompile Include="Engine\Physics\GhostBodyManager.cpp" />
-    <ClCompile Include="Engine\Physics\BulletGhostNarrowphase.cpp" />
-    <ClCompile Include="Engine\Physics\CharacterController.cpp" />
-    <ClCompile Include="Engine\Resource\Resource.cpp" />
-    <ClCompile Include="Engine\Rendering\DrawItemCommand.cpp" />
-    <ClCompile Include="Engine\Rendering\FrameCommands.cpp" />
-    <ClCompile Include="Engine\Rendering\FrameContext.cpp" />
-    <ClCompile Include="Engine\Rendering\RenderCommandList.cpp" />
-    <ClCompile Include="Engine\Rendering\Renderer.cpp" />
-    <ClCompile Include="Engine\Rendering\RenderThread.cpp" />
-    <ClCompile Include="Engine\Rendering\Shadow\ShadowPassCommand.cpp" />
-    <ClCompile Include="Engine\Rendering\Shadow\HardShadowRenderer.cpp" />
-    <ClCompile Include="Engine\Terrain\HeightmapChunk.cpp" />
-    <ClCompile Include="Engine\Terrain\TerrainComponent.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application\Actor\StateMachine.h" />
     <ClInclude Include="Application\Application.h" />
     <ClInclude Include="Application\GameAction.h" />
     <ClInclude Include="Application\GameInput.h" />
-    <ClInclude Include="Engine\Graphics\Lighting.h" />
-    <ClInclude Include="Engine\Graphics\LightManager.h" />
     <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
     <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h" />
     <ClInclude Include="Application\Scene\BattleScene.h" />
     <ClInclude Include="Application\Scene\Scene.h" />
+    <ClInclude Include="Application\stdafx.h" />
     <ClInclude Include="Application\Utility.h" />
-    <ClInclude Include="Engine\Application.h" />
-    <ClInclude Include="Engine\Component\BodyComponentSystem.h" />
-    <ClInclude Include="Engine\Component\TransformComponentSystem.h" />
-    <ClInclude Include="Engine\ECS\Archetype.h" />
-    <ClInclude Include="Engine\ECS\Chunk.h" />
-    <ClInclude Include="Engine\ECS\ComponentArray.h" />
-    <ClInclude Include="Engine\ECS\ECS.h" />
-    <ClInclude Include="Engine\ECS\Entity.h" />
-    <ClInclude Include="Engine\ECS\EntityManager.h" />
-    <ClInclude Include="Engine\ECS\IComponent.h" />
-    <ClInclude Include="Engine\ECS\System.h" />
-    <ClInclude Include="Engine\ECS\TypeInfo.h" />
-    <ClInclude Include="Engine\Engine.h" />
-    <ClInclude Include="Engine\Memory\IAllocator.h" />
-    <ClInclude Include="Engine\Memory\HeapAllocator.h" />
-    <ClInclude Include="Engine\Memory\StackAllocator.h" />
-    <ClInclude Include="Engine\Memory\MemoryManager.h" />
-    <ClInclude Include="Engine\Memory\StdAllocatorAdapter.h" />
-    <ClInclude Include="Engine\Memory\AllocatedArray.h" />
-    <ClInclude Include="Engine\Memory\Memory.h" />
-    <ClInclude Include="Engine\Memory\MemoryTracker.h" />
-    <ClInclude Include="Engine\EnginePreCompile.h" />
-    <ClInclude Include="Engine\Graphics\Camera.h" />
-    <ClInclude Include="Engine\Graphics\GPUBuffer.h" />
-    <ClInclude Include="Engine\Graphics\RenderContext.h" />
-    <ClInclude Include="Engine\Graphics\Shader.h" />
-    <ClInclude Include="Engine\Graphics\StaticMesh.h" />
-    <ClInclude Include="Engine\HID\ActionMap.h" />
-    <ClInclude Include="Engine\HID\Input.h" />
-    <ClInclude Include="Engine\HID\InputBinding.h" />
-    <ClInclude Include="Engine\JobSystem.h" />
-    <ClInclude Include="Engine\Math\Matrix.h" />
-    <ClInclude Include="Engine\Math\Utility.h" />
-    <ClInclude Include="Engine\Math\Vector.h" />
-    <ClInclude Include="Engine\Physics\BulletPhysics.h" />
-    <ClInclude Include="Engine\Physics\BoxCollider.h" />
-    <ClInclude Include="Engine\Physics\SphereCollider.h" />
-    <ClInclude Include="Engine\Physics\CapsuleCollider.h" />
-    <ClInclude Include="Engine\Physics\Collider.h" />
-    <ClInclude Include="Engine\Physics\PhysicsTypes.h" />
-    <ClInclude Include="Engine\Physics\Physics.h" />
-    <ClInclude Include="Engine\Physics\PhysicsBody.h" />
-    <ClInclude Include="Engine\Physics\GhostPrimitive.h" />
-    <ClInclude Include="Engine\Physics\IBroadphase.h" />
-    <ClInclude Include="Engine\Physics\BulletDbvtBroadphase.h" />
-    <ClInclude Include="Engine\Physics\GhostBody.h" />
-    <ClInclude Include="Engine\Physics\GhostBodyManager.h" />
-    <ClInclude Include="Engine\Physics\IGhostNarrowphase.h" />
-    <ClInclude Include="Engine\Physics\BulletGhostNarrowphase.h" />
-    <ClInclude Include="Engine\Physics\CharacterController.h" />
-    <ClInclude Include="Engine\Resource\Resource.h" />
-    <ClInclude Include="Engine\Utility.h" />
-    <ClInclude Include="Engine\Util\CRC32.h" />
-    <ClInclude Include="Engine\Util\ThreadPool.h" />
-    <ClInclude Include="Engine\Graphics\IGraphicsDeviceImpl.h" />
-    <ClInclude Include="Engine\Graphics\GraphicsDevice.h" />
-    <ClInclude Include="Engine\Graphics\D3D11\D3D11GraphicsDeviceImpl.h" />
-    <ClInclude Include="Engine\Graphics\D3D11\D3D11RenderContextImpl.h" />
-    <ClInclude Include="Engine\Graphics\D3D11\D3D11DepthMap.h" />
-    <ClInclude Include="Engine\Graphics\IDepthMap.h" />
-    <ClInclude Include="Engine\Graphics\GraphicsTypes.h" />
-    <ClInclude Include="Engine\Graphics\IRenderContextImpl.h" />
-    <ClInclude Include="Engine\Graphics\IBuffer.h" />
-    <ClInclude Include="Engine\Graphics\IShader.h" />
-    <ClInclude Include="Engine\Graphics\IShaderResourceView.h" />
-    <ClInclude Include="Engine\Graphics\ISamplerState.h" />
-    <ClInclude Include="Engine\Graphics\IUnorderedAccessView.h" />
-    <ClInclude Include="Engine\Graphics\IRenderTarget.h" />
-    <ClInclude Include="Engine\Graphics\D3D11\D3D11RenderResources.h" />
-    <ClInclude Include="Engine\Graphics\D3D11\D3D11Buffers.h" />
-    <ClInclude Include="Engine\Graphics\D3D11\D3D11Shader.h" />
-    <ClInclude Include="Engine\Graphics\D3D12\D3D12GraphicsDeviceImpl.h" />
-    <ClInclude Include="Engine\Graphics\D3D12\D3D12RenderContextImpl.h" />
-    <ClInclude Include="Engine\Rendering\DrawItemCommand.h" />
-    <ClInclude Include="Engine\Rendering\FrameCommands.h" />
-    <ClInclude Include="Engine\Rendering\FrameContext.h" />
-    <ClInclude Include="Engine\Rendering\IRenderCommand.h" />
-    <ClInclude Include="Engine\Rendering\RenderCommandList.h" />
-    <ClInclude Include="Engine\Rendering\RenderFrame.h" />
-    <ClInclude Include="Engine\Rendering\Renderer.h" />
-    <ClInclude Include="Engine\Rendering\RenderTargetHandle.h" />
-    <ClInclude Include="Engine\Rendering\RenderThread.h" />
-    <ClInclude Include="Engine\Rendering\Shadow\IShadowRenderer.h" />
-    <ClInclude Include="Engine\Rendering\Shadow\ShadowData.h" />
-    <ClInclude Include="Engine\Rendering\Shadow\ShadowPassCommand.h" />
-    <ClInclude Include="Engine\Rendering\Shadow\HardShadowRenderer.h" />
-    <ClInclude Include="Engine\Terrain\HeightmapChunk.h" />
-    <ClInclude Include="Engine\Terrain\TerrainComponent.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Engine.vcxproj">
+      <Project>{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}</Project>
+    </ProjectReference>
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

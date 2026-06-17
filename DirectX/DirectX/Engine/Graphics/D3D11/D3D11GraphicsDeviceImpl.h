@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include "Graphics/IGraphicsDeviceImpl.h"
 #include "Graphics/RenderContext.h"
 #include "D3D11RenderResources.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

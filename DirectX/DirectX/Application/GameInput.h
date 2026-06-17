@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "HID/ActionInput.h"
 #include "HID/ActionMap.h"
 #include "GameAction.h"
@@ -16,11 +16,11 @@ namespace app
 		bool IsPressed  (GameAction action) const                        { return vpad_.IsPressed(action);            }
 		bool IsReleased (GameAction action) const                        { return vpad_.IsReleased(action);           }
 		bool IsLongPress(GameAction action, float threshold = 0.5f) const { return vpad_.IsLongPress(action, threshold); }
-		engine::math::Vector2 GetStick(GameAction action) const          { return vpad_.GetStick(action);               }
+		aq::math::Vector2 GetStick(GameAction action) const          { return vpad_.GetStick(action);               }
 
 		// left: 低周波モーター (重い振動)  right: 高周波モーター (細かい振動)  各 [0, 1]
-		void Vibrate     (float left, float right, uint32_t padIndex = 0) { engine::hid::InputManager::Get().Vibrate(padIndex, left, right); }
-		void StopVibration(uint32_t padIndex = 0)                         { engine::hid::InputManager::Get().StopVibration(padIndex);        }
+		void Vibrate     (float left, float right, uint32_t padIndex = 0) { aq::hid::InputManager::Get().Vibrate(padIndex, left, right); }
+		void StopVibration(uint32_t padIndex = 0)                         { aq::hid::InputManager::Get().StopVibration(padIndex);        }
 
 		void UseKeyboardMap() { vpad_.SetActionMap(&keyboardMap_); }
 		void UseGamepadMap () { vpad_.SetActionMap(&gamepadMap_);  }
@@ -30,9 +30,9 @@ namespace app
 		void SetupMaps();
 
 	private:
-		engine::hid::ActionMap              keyboardMap_;
-		engine::hid::ActionMap              gamepadMap_;
-		engine::hid::ActionInput<GameAction> vpad_;
+		aq::hid::ActionMap              keyboardMap_;
+		aq::hid::ActionMap              gamepadMap_;
+		aq::hid::ActionInput<GameAction> vpad_;
 		static GameInput*                   sInstance_;
 	};
 }

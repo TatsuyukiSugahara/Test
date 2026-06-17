@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include "IShaderResourceView.h"
 #include "ISamplerState.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

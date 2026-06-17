@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <string>
 #include "ECS/ECS.h"
 #include "Graphics/Camera.h"
@@ -7,13 +7,13 @@
 #include "Rendering/RenderFrame.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{
-		class BoxStaticMeshComponent : public engine::ecs::IComponent
+		class BoxStaticMeshComponent : public aq::ecs::IComponent
 		{
-			ecsComponent(engine::ecs::BoxStaticMeshComponent);
+			ecsComponent(aq::ecs::BoxStaticMeshComponent);
 
 		private:
 			enum class ComponentState : uint8_t
@@ -25,7 +25,7 @@ namespace engine
 		private:
 			ComponentState componentState_;
 
-			engine::graphics::StaticMesh staticMesh_;
+			aq::graphics::StaticMesh staticMesh_;
 
 
 		public:
@@ -39,12 +39,12 @@ namespace engine
 
 
 		public:
-			inline engine::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
+			inline aq::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
 		};
 
-		class StaticMeshComponent : public engine::ecs::IComponent
+		class StaticMeshComponent : public aq::ecs::IComponent
 		{
-			ecsComponent(engine::ecs::StaticMeshComponent);
+			ecsComponent(aq::ecs::StaticMeshComponent);
 
 
 		private:
@@ -60,14 +60,14 @@ namespace engine
 		private:
 			ComponentState componentState_;
 
-			engine::res::RefMeshResource meshResouce_;
-			engine::res::RefGPUResource  gpuResources_[static_cast<uint32_t>(engine::rendering::TextureSlot::Count)];
-			engine::graphics::StaticMesh staticMesh_;
+			aq::res::RefMeshResource meshResouce_;
+			aq::res::RefGPUResource  gpuResources_[static_cast<uint32_t>(aq::rendering::TextureSlot::Count)];
+			aq::graphics::StaticMesh staticMesh_;
 			std::string modelPath_;
 			std::string texturePath_;
-			engine::math::Matrix4x4 modelLocalMatrix_;
+			aq::math::Matrix4x4 modelLocalMatrix_;
 			bool textureLoadRequested_;
-			engine::graphics::StaticMesh::ShaderType shaderType_;
+			aq::graphics::StaticMesh::ShaderType shaderType_;
 
 
 		public:
@@ -75,8 +75,8 @@ namespace engine
 			~StaticMeshComponent();
 			void Update();
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
-			void SetModelLocalMatrix(const engine::math::Matrix4x4& localMatrix);
-			void SetShaderType(engine::graphics::StaticMesh::ShaderType type) { shaderType_ = type; }
+			void SetModelLocalMatrix(const aq::math::Matrix4x4& localMatrix);
+			void SetShaderType(aq::graphics::StaticMesh::ShaderType type) { shaderType_ = type; }
 
 
 		public:
@@ -84,14 +84,14 @@ namespace engine
 
 
 		public:
-			inline engine::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
+			inline aq::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
 		};
 
 
 
 
 
-		class RenderSystem : public engine::ecs::SystemBase
+		class RenderSystem : public aq::ecs::SystemBase
 		{
 		public:
 			RenderSystem();
@@ -99,8 +99,8 @@ namespace engine
 			void Update() override;
 
 			/** ECS を走査して RenderFrame を構築する。描画は行わない。 */
-			void BuildRenderFrame(engine::rendering::RenderFrame& frame);
-			void BuildRenderFrame(engine::rendering::RenderFrame& frame, engine::CameraType cameraType);
+			void BuildRenderFrame(aq::rendering::RenderFrame& frame);
+			void BuildRenderFrame(aq::rendering::RenderFrame& frame, aq::CameraType cameraType);
 
 		private:
 			static RenderSystem* instance_;
@@ -116,7 +116,7 @@ namespace engine
 		/**
 		 * 物体を衝突させる際に使用するコンポーネント
 		 */
-		class PhysicalBodyComponent : public engine::ecs::IComponent
+		class PhysicalBodyComponent : public aq::ecs::IComponent
 		{
 
 		};
@@ -124,7 +124,7 @@ namespace engine
 		/**
 		 * 衝突判定に使用するコンポーネント
 		 */
-		class GhostBodyComponent : public engine::ecs::IComponent
+		class GhostBodyComponent : public aq::ecs::IComponent
 		{
 
 		};

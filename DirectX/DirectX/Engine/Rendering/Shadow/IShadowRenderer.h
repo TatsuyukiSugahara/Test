@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 #include "ShadowData.h"
 #include "Graphics/Lighting.h"
 #include "Graphics/IDepthMap.h"
 #include "Rendering/RenderTargetHandle.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace rendering
 	{

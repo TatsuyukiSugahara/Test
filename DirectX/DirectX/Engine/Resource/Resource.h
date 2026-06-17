@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -23,14 +23,14 @@
 //#pragma comment(lib, "zlib-md.lib")
 
 
-namespace engine
+namespace aq
 {
 	namespace res
 	{
 		/** リソースクラスに定義 */
 #define engineResource(name) \
 public:\
-	static int32_t ID() { return engine::util::ComputeCrc32(#name); }
+	static int32_t ID() { return aq::util::ComputeCrc32(#name); }
 
 
 
@@ -154,7 +154,7 @@ public:\
 		};
 		class MeshResource : public ResourceBase
 		{
-			engineResource(engine::res::MeshResource);
+			engineResource(aq::res::MeshResource);
 
 		public:
 			MeshResource()
@@ -257,7 +257,7 @@ public:\
 		};
 		class PMDResource : public ResourceBase
 		{
-			engineResource(engine::res::PMDResource);
+			engineResource(aq::res::PMDResource);
 
 		public:
 			PMDResource()
@@ -344,7 +344,7 @@ public:\
 		};
 		class GPUResource : public ResourceBase
 		{
-			engineResource(engine::res::GPUResource);
+			engineResource(aq::res::GPUResource);
 
 		public:
 			GPUResource()
@@ -400,7 +400,7 @@ public:\
 		};
 		class ShaderResource : public ResourceBase
 		{
-			engineResource(engine::res::ShaderResource);
+			engineResource(aq::res::ShaderResource);
 
 		public:
 			ShaderResource()

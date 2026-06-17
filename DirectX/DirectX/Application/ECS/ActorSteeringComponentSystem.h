@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Utility.h"
 #include "ECS/ECS.h"
 
@@ -7,23 +7,23 @@ namespace app
 {
 	namespace ecs
 	{
-		class CharacterSteeringComponent : public engine::ecs::IComponent
+		class CharacterSteeringComponent : public aq::ecs::IComponent
 		{
 			ecsComponent(app::ecs::CharacterSteeringComponent);
 
 		private:
-			engine::ecs::EntityHandle targetHandle_;
+			aq::ecs::EntityHandle targetHandle_;
 
 
 		public:
 			CharacterSteeringComponent() {}
 			virtual~CharacterSteeringComponent() {}
 
-			inline void SetTarget(const engine::ecs::EntityHandle target)
+			inline void SetTarget(const aq::ecs::EntityHandle target)
 			{
 				targetHandle_ = target;
 			}
-			inline const engine::ecs::EntityHandle& GetTarget() const
+			inline const aq::ecs::EntityHandle& GetTarget() const
 			{
 				return targetHandle_;
 			}
@@ -32,7 +32,7 @@ namespace app
 
 
 
-		class CharacterSteeringSystem : public engine::ecs::SystemBase
+		class CharacterSteeringSystem : public aq::ecs::SystemBase
 		{
 		public:
 			CharacterSteeringSystem();

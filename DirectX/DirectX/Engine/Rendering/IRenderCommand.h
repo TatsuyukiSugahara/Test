@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 
-namespace engine
+namespace aq
 {
 	namespace graphics  { class RenderContext; }
 	namespace rendering { struct FrameContext;  }

@@ -1,10 +1,10 @@
-/**
+﻿/**
  * @brief ベクトル
  */
 #pragma once
 #include <DirectXMath.h>
 
-namespace engine
+namespace aq
 {
 	namespace math
 	{
@@ -401,7 +401,7 @@ namespace engine
 				y = axis.z * s;
 			}
 
-			void SetEuler(const engine::math::Vector3& rot);
+			void SetEuler(const aq::math::Vector3& rot);
 		};
 
 

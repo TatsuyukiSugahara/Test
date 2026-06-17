@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ComponentArray.h"
 #include "Archetype.h"
 #include "Entity.h"
@@ -8,7 +8,7 @@
 #include <vector>
 
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{

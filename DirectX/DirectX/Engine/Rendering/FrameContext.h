@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include <memory>
 #include <vector>
 #include "Graphics/IBuffer.h"
 
-namespace engine
+namespace aq
 {
 	namespace graphics { class GraphicsDevice; }
 

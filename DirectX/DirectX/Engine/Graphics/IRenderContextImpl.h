@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "GraphicsTypes.h"
 #include "IBuffer.h"
 #include "IShader.h"
@@ -8,7 +8,7 @@
 #include "IDepthMap.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

@@ -1,7 +1,7 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Matrix.h"
 
-namespace engine
+namespace aq
 {
 	namespace math
 	{

@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "ActorSteeringComponentSystem.h"
 #include "ActorComponentSystem.h"
 #include "GameInput.h"
@@ -18,7 +19,7 @@ namespace app
 
 		void CharacterSteeringSystem::Update()
 		{
-			engine::math::Vector3 direction(0.0f);
+			aq::math::Vector3 direction(0.0f);
 			float speed = 0.01f;	// 入力速度だが一旦固定
 			const auto& input = GameInput::Get();
 			if (input.IsPressed(GameAction::MoveForward )) { ++direction.y; }
@@ -27,13 +28,13 @@ namespace app
 			if (input.IsPressed(GameAction::MoveRight   )) { ++direction.x; }
 
 
-			engine::ecs::Foreach<CharacterSteeringComponent>([direction, speed](const engine::ecs::Entity& entity, CharacterSteeringComponent* component)
+			aq::ecs::Foreach<CharacterSteeringComponent>([direction, speed](const aq::ecs::Entity& entity, CharacterSteeringComponent* component)
 				{
-					if (!engine::ecs::EntityContext::Get().IsValid(component->GetTarget())) {
+					if (!aq::ecs::EntityContext::Get().IsValid(component->GetTarget())) {
 						return;
 					}
 
-					auto* targetStateMachine = engine::ecs::EntityContext::Get().GetComponent<StateMachineComponent>(component->GetTarget());
+					auto* targetStateMachine = aq::ecs::EntityContext::Get().GetComponent<StateMachineComponent>(component->GetTarget());
 					if (targetStateMachine == nullptr) {
 						return;
 					}

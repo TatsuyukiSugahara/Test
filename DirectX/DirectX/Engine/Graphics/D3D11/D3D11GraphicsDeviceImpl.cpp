@@ -1,4 +1,4 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include "D3D11RenderContextImpl.h"
 #include "D3D11Buffers.h"
@@ -7,7 +7,7 @@
 #include "Graphics/GraphicsDevice.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

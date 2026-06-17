@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 #include "Math/Vector.h"
 #include "Math/Matrix.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{

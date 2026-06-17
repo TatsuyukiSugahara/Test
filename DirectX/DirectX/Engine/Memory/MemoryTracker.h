@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #ifdef _DEBUG
 #include <cstddef>
 
 
-namespace engine
+namespace aq
 {
 	namespace memory
 	{

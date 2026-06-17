@@ -1,37 +1,37 @@
-#include "EnginePreCompile.h"
+#include "aq.h"
 #include "Engine.h"
 #include "BodyComponentSystem.h"
 #include "TransformComponentSystem.h"
 #include "Graphics/Camera.h"
 #include "Terrain/TerrainComponent.h"
 
-namespace engine
+namespace aq
 {
 	namespace ecs
 	{
 		namespace
 		{
 			// ボックスの頂点データ
-			//const engine::math::Vector3 BOX_VERTEX_BUFFER[] = {
-			//	engine::math::Vector3(0.5f, 0.5f, 0.5f),
-			//	engine::math::Vector3(0.5f, 0.5f, -0.5f),
-			//	engine::math::Vector3(0.5f, -0.5f, 0.5f),
-			//	engine::math::Vector3(0.5f, -0.5f, -0.5f),
-			//	engine::math::Vector3(-0.5f, 0.5f, 0.5f),
-			//	engine::math::Vector3(-0.5f, 0.5f, -0.5f),
-			//	engine::math::Vector3(-0.5f, -0.5f, 0.5f),
-			//	engine::math::Vector3(-0.5f, -0.5f, -0.5f),
+			//const aq::math::Vector3 BOX_VERTEX_BUFFER[] = {
+			//	aq::math::Vector3(0.5f, 0.5f, 0.5f),
+			//	aq::math::Vector3(0.5f, 0.5f, -0.5f),
+			//	aq::math::Vector3(0.5f, -0.5f, 0.5f),
+			//	aq::math::Vector3(0.5f, -0.5f, -0.5f),
+			//	aq::math::Vector3(-0.5f, 0.5f, 0.5f),
+			//	aq::math::Vector3(-0.5f, 0.5f, -0.5f),
+			//	aq::math::Vector3(-0.5f, -0.5f, 0.5f),
+			//	aq::math::Vector3(-0.5f, -0.5f, -0.5f),
 			//};
 
-			const engine::graphics::VertexData BOX_VERTEX_BUFFER[] = {
-				{ engine::math::Vector3(0.5f, 0.5f, 0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
-				{ engine::math::Vector3(0.5f, 0.5f, -0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
-				{ engine::math::Vector3(0.5f, -0.5f, 0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
-				{ engine::math::Vector3(0.5f, -0.5f, -0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
-				{ engine::math::Vector3(-0.5f, 0.5f, 0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
-				{ engine::math::Vector3(-0.5f, 0.5f, -0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
-				{ engine::math::Vector3(-0.5f, -0.5f, 0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
-				{ engine::math::Vector3(-0.5f, -0.5f, -0.5f), engine::math::Vector3(0.0f, 0.0f, 0.0f), engine::math::Vector2(0.0f, 0.0f) },
+			const aq::graphics::VertexData BOX_VERTEX_BUFFER[] = {
+				{ aq::math::Vector3(0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
 			};
 
 			constexpr uint32_t BOX_INDEX_BUFFER[] = {
@@ -43,11 +43,11 @@ namespace engine
 				2,3,6, 3,7,6,	// 面6
 			};
 
-			engine::math::Matrix4x4 MakeZUpModelLocalMatrix(float modelScale)
+			aq::math::Matrix4x4 MakeZUpModelLocalMatrix(float modelScale)
 			{
-				engine::math::Matrix4x4 axisMatrix, scaleMatrix, localMatrix;
+				aq::math::Matrix4x4 axisMatrix, scaleMatrix, localMatrix;
 				axisMatrix.MakeRotationX(-1.57079632679f);
-				scaleMatrix.MakeScaling(engine::math::Vector3(modelScale));
+				scaleMatrix.MakeScaling(aq::math::Vector3(modelScale));
 				localMatrix.Mull(axisMatrix, scaleMatrix);
 				return localMatrix;
 			}
@@ -69,7 +69,7 @@ namespace engine
 			{
 				case ComponentState::Loading:
 				{
-					staticMesh_.Initialize(BOX_VERTEX_BUFFER, ArraySize(BOX_VERTEX_BUFFER), BOX_INDEX_BUFFER, ArraySize(BOX_INDEX_BUFFER), engine::graphics::StaticMesh::ShaderType::SimpleBox);
+					staticMesh_.Initialize(BOX_VERTEX_BUFFER, ArraySize(BOX_VERTEX_BUFFER), BOX_INDEX_BUFFER, ArraySize(BOX_INDEX_BUFFER), aq::graphics::StaticMesh::ShaderType::SimpleBox);
 					componentState_ = ComponentState::Completed;
 					break;
 				}
@@ -87,7 +87,7 @@ namespace engine
 			, texturePath_()
 			, modelLocalMatrix_(MakeZUpModelLocalMatrix(0.05f))
 			, textureLoadRequested_(false)
-			, shaderType_(engine::graphics::StaticMesh::ShaderType::ModelLit)
+			, shaderType_(aq::graphics::StaticMesh::ShaderType::ModelLit)
 		{
 		}
 
@@ -105,7 +105,7 @@ namespace engine
 			textureLoadRequested_ = false;
 			componentState_ = modelPath_.empty() ? ComponentState::Invalid : ComponentState::LoadRequest;
 		}
-		void StaticMeshComponent::SetModelLocalMatrix(const engine::math::Matrix4x4& localMatrix)
+		void StaticMeshComponent::SetModelLocalMatrix(const aq::math::Matrix4x4& localMatrix)
 		{
 			modelLocalMatrix_ = localMatrix;
 			if (componentState_ == ComponentState::Completed) {
@@ -123,7 +123,7 @@ namespace engine
 				}
 				case ComponentState::LoadRequest:
 				{
-					meshResouce_ = engine::res::ResourceManager::Get().Load<engine::res::MeshResource>(modelPath_.c_str());
+					meshResouce_ = aq::res::ResourceManager::Get().Load<aq::res::MeshResource>(modelPath_.c_str());
 					for (auto& r : gpuResources_) r.reset();
 					textureLoadRequested_ = false;
 					componentState_ = ComponentState::Loading;
@@ -141,20 +141,20 @@ namespace engine
 
 					// メッシュ完了後にテクスチャリクエストを一括発行
 					if (!textureLoadRequested_) {
-						using Slot = engine::rendering::TextureSlot;
-						auto& rm = engine::res::ResourceManager::Get();
+						using Slot = aq::rendering::TextureSlot;
+						auto& rm = aq::res::ResourceManager::Get();
 						const auto& mat = meshResouce_->GetMaterial();
 
 						// アルベド: SetModelPath で上書き指定があればそちらを優先
 						const std::string& albedoPath = texturePath_.empty() ? mat.albedo : texturePath_;
 						if (!albedoPath.empty())
-							gpuResources_[static_cast<uint32_t>(Slot::Albedo)] = rm.Load<engine::res::GPUResource>(albedoPath.c_str());
+							gpuResources_[static_cast<uint32_t>(Slot::Albedo)] = rm.Load<aq::res::GPUResource>(albedoPath.c_str());
 
 						if (!mat.normal.empty())
-							gpuResources_[static_cast<uint32_t>(Slot::Normal)] = rm.Load<engine::res::GPUResource>(mat.normal.c_str());
+							gpuResources_[static_cast<uint32_t>(Slot::Normal)] = rm.Load<aq::res::GPUResource>(mat.normal.c_str());
 
 						if (!mat.specular.empty())
-							gpuResources_[static_cast<uint32_t>(Slot::Specular)] = rm.Load<engine::res::GPUResource>(mat.specular.c_str());
+							gpuResources_[static_cast<uint32_t>(Slot::Specular)] = rm.Load<aq::res::GPUResource>(mat.specular.c_str());
 
 						textureLoadRequested_ = true;
 					}
@@ -169,7 +169,7 @@ namespace engine
 					if (anyPending) break;
 
 					// 初期化: アルベドで Initialize → 追加スロットを SetTexture
-					using Slot = engine::rendering::TextureSlot;
+					using Slot = aq::rendering::TextureSlot;
 					staticMesh_.SetLocalMatrix(modelLocalMatrix_);
 					staticMesh_.Initialize(meshResouce_, gpuResources_[static_cast<uint32_t>(Slot::Albedo)], shaderType_);
 
@@ -212,13 +212,13 @@ namespace engine
 
 		void RenderSystem::Update()
 		{
-			engine::ecs::Foreach<TransformComponent, BoxStaticMeshComponent>([](const engine::ecs::Entity& entity, TransformComponent* transformComponent, BoxStaticMeshComponent* boxStaticMeshComponent)
+			aq::ecs::Foreach<TransformComponent, BoxStaticMeshComponent>([](const aq::ecs::Entity& entity, TransformComponent* transformComponent, BoxStaticMeshComponent* boxStaticMeshComponent)
 				{
 					boxStaticMeshComponent->Update();
 					boxStaticMeshComponent->GetStaticMesh()->Update(transformComponent->transform.position, transformComponent->transform.rotation, transformComponent->transform.scale);
 				});
 
-			engine::ecs::Foreach<TransformComponent, StaticMeshComponent>([](const engine::ecs::Entity& entity, TransformComponent* trasnformComponent, StaticMeshComponent* staticMeshComponent)
+			aq::ecs::Foreach<TransformComponent, StaticMeshComponent>([](const aq::ecs::Entity& entity, TransformComponent* trasnformComponent, StaticMeshComponent* staticMeshComponent)
 				{
 					// リソース読み込み
 					staticMeshComponent->Update();
@@ -227,7 +227,7 @@ namespace engine
 					}
 				});
 
-			engine::ecs::Foreach<TransformComponent, TerrainComponent>([](const engine::ecs::Entity&, TransformComponent* tc, TerrainComponent* terrain)
+			aq::ecs::Foreach<TransformComponent, TerrainComponent>([](const aq::ecs::Entity&, TransformComponent* tc, TerrainComponent* terrain)
 				{
 					if (terrain->IsCompleted()) {
 						terrain->GetChunk()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
@@ -236,13 +236,13 @@ namespace engine
 		}
 
 
-		void RenderSystem::BuildRenderFrame(engine::rendering::RenderFrame& frame)
+		void RenderSystem::BuildRenderFrame(aq::rendering::RenderFrame& frame)
 		{
 			BuildRenderFrame(frame, CameraType::Main);
 		}
 
 
-		void RenderSystem::BuildRenderFrame(engine::rendering::RenderFrame& frame, engine::CameraType cameraType)
+		void RenderSystem::BuildRenderFrame(aq::rendering::RenderFrame& frame, aq::CameraType cameraType)
 		{
 			const auto* camera = CameraManager::Get().GetCamera(cameraType);
 			frame.camera.viewMatrix       = camera->GetViewMatrix();
@@ -252,28 +252,28 @@ namespace engine
 			// 現在の方針: 同じ描画対象を cameraType で指定した別カメラから映す。
 			// カメラごとに描画対象を絞りたい場合は RenderItem / Component 側に
 			// RenderLayer 等を追加して検討する。
-			engine::ecs::Foreach<BoxStaticMeshComponent>([&frame](const engine::ecs::Entity&, BoxStaticMeshComponent* comp)
+			aq::ecs::Foreach<BoxStaticMeshComponent>([&frame](const aq::ecs::Entity&, BoxStaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
-					engine::rendering::RenderItem item;
+					aq::rendering::RenderItem item;
 					if (comp->GetStaticMesh()->FillRenderItem(item)) {
 						frame.items.push_back(item);
 					}
 				});
 
-			engine::ecs::Foreach<StaticMeshComponent>([&frame](const engine::ecs::Entity&, StaticMeshComponent* comp)
+			aq::ecs::Foreach<StaticMeshComponent>([&frame](const aq::ecs::Entity&, StaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
-					engine::rendering::RenderItem item;
+					aq::rendering::RenderItem item;
 					if (comp->GetStaticMesh()->FillRenderItem(item)) {
 						frame.items.push_back(item);
 					}
 				});
 
-			engine::ecs::Foreach<TerrainComponent>([&frame](const engine::ecs::Entity&, TerrainComponent* comp)
+			aq::ecs::Foreach<TerrainComponent>([&frame](const aq::ecs::Entity&, TerrainComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
-					engine::rendering::RenderItem item;
+					aq::rendering::RenderItem item;
 					if (comp->GetChunk()->FillRenderItem(item)) {
 						frame.items.push_back(item);
 					}

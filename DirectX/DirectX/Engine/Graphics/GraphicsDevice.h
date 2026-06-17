@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include <cstdint>
 #include "IGraphicsDeviceImpl.h"
 #include "Rendering/RenderTargetHandle.h"
 
 
-namespace engine
+namespace aq
 {
 	namespace graphics
 	{
@@ -85,7 +85,7 @@ namespace engine
 
 			/**
 			 * Singleton
-			 * Engine::Create() のタイミングで GraphicsDevice::Create() を呼ぶ。
+			 * aq::Create() のタイミングで GraphicsDevice::Create() を呼ぶ。
 			 */
 		private:
 			static GraphicsDevice* instance_;

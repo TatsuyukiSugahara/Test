@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 #include "Vector.h"
 
-namespace engine
+namespace aq
 {
 	namespace math
 	{

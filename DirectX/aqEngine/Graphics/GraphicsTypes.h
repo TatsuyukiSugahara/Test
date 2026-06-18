@@ -151,6 +151,22 @@ namespace aq
 			math::Vector4 tangent;  // xyz=接線, w=bitangent 符号 (+1 or -1)
 		};
 
+		/** 1頂点に影響するボーンの最大数 */
+		constexpr uint32_t MAX_BONE_INFLUENCES = 4;
+
+		/** スキニング用頂点データ (SkeletalMesh 専用)
+		 *  メモリレイアウト: VertexData(48) + boneWeights(16) + boneIndices(16) = 80 bytes
+		 */
+		struct SkinnedVertexData
+		{
+			math::Vector3 position;
+			math::Vector3 normal;
+			math::Vector2 uv;
+			math::Vector4 tangent;
+			math::Vector4 boneWeights;                    // 各ボーンのウェイト (合計 = 1.0)
+			uint32_t      boneIndices[MAX_BONE_INFLUENCES]; // ボーンインデックス
+		};
+
 		/** 頂点シェーダー用定数バッファ構造体 */
 		struct VSConstantBuffer
 		{

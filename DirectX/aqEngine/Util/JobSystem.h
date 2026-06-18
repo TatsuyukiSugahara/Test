@@ -7,18 +7,21 @@
 #include <mutex>
 #include <functional>
 #include <future>
+#include <atomic>
 
 
 namespace aq
 {
-	using JobHandle = std::shared_future<void>;
-
-
-	class JobSystem
+	namespace util
 	{
-	private:
-		using JobFunction = std::function<void()>;
-		using JobPackagedTask = std::packaged_task<void()>;
+		using JobHandle = std::shared_future<void>;
+
+
+		class JobSystem
+		{
+		private:
+			using JobFunction = std::function<void()>;
+			using JobPackagedTask = std::packaged_task<void()>;
 
 	private:
 		/** ジョブ */
@@ -158,5 +161,6 @@ namespace aq
 				instance_ = nullptr;
 			}
 		}
-	};
+		};
+	}
 }

@@ -77,11 +77,15 @@ namespace app
 		aq::res::ResourceManager::RegisterBank<aq::res::MeshResource, aq::res::TResourceBank<aq::res::MeshResource>>();
 		aq::res::ResourceManager::RegisterBank<aq::res::PMDResource, aq::res::TResourceBank<aq::res::PMDResource>>();
 		aq::res::ResourceManager::RegisterBank<aq::res::ShaderResource, aq::res::TResourceBank<aq::res::ShaderResource>>();
+		aq::res::ResourceManager::RegisterBank<aq::res::SkeletalMeshResource, aq::res::TResourceBank<aq::res::SkeletalMeshResource>>();
+		aq::res::ResourceManager::RegisterBank<aq::res::AnimationResource, aq::res::TResourceBank<aq::res::AnimationResource>>();
 
 		aq::res::ResourceManager::Reflection<aq::res::GPUResource, aq::res::TextureLoader>();
 		aq::res::ResourceManager::Reflection<aq::res::MeshResource, aq::res::MeshLoader>();
 		aq::res::ResourceManager::Reflection<aq::res::PMDResource, aq::res::PMDLoader>();
 		aq::res::ResourceManager::Reflection<aq::res::ShaderResource, aq::res::ShaderLoader>();
+		aq::res::ResourceManager::Reflection<aq::res::SkeletalMeshResource, aq::res::SkeletalMeshLoader>();
+		aq::res::ResourceManager::Reflection<aq::res::AnimationResource, aq::res::AnimationLoader>();
 
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::ActorStateMachineSystem>();

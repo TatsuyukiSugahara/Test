@@ -4,6 +4,9 @@
     <Filter Include="Component">
       <UniqueIdentifier>{f18c6081-967b-412a-9a63-05fc31ae981a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{aa2d4d26-6a4c-4be4-83f5-6492d6f0c892}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ECS">
       <UniqueIdentifier>{d90cc128-47d8-4d9f-8ac5-59ba19967b65}</UniqueIdentifier>
     </Filter>
@@ -46,9 +49,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="aq.cpp" />
-    <ClCompile Include="Application.cpp" />
+    <ClCompile Include="Core\Application.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
     <ClCompile Include="Engine.cpp" />
-    <ClCompile Include="JobSystem.cpp" />
+    <ClCompile Include="Util\JobSystem.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
     <ClCompile Include="Component\BodyComponentSystem.cpp">
       <Filter>Component</Filter>
     </ClCompile>
@@ -80,6 +87,12 @@
       <Filter>Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\Shader.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\AnimationClip.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\SkeletalMesh.cpp">
       <Filter>Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\StaticMesh.cpp">
@@ -178,19 +191,25 @@
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
     </ClCompile>
-    <ClCompile Include="Terrain\TerrainComponent.cpp">
-      <Filter>Terrain</Filter>
+    <ClCompile Include="Component\TerrainComponent.cpp">
+      <Filter>Component</Filter>
     </ClCompile>
     <ClCompile Include="Util\ThreadPool.cpp">
       <Filter>Util</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Application.h" />
+    <ClInclude Include="Core\Application.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Engine.h" />
     <ClInclude Include="aq.h" />
-    <ClInclude Include="IApplication.h" />
-    <ClInclude Include="JobSystem.h" />
+    <ClInclude Include="Core\IApplication.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\JobSystem.h">
+      <Filter>Util</Filter>
+    </ClInclude>
     <ClInclude Include="Utility.h" />
     <ClInclude Include="Component\BodyComponentSystem.h">
       <Filter>Component</Filter>
@@ -232,6 +251,9 @@
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\Camera.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\AnimationClip.h">
       <Filter>Graphics</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\GPUBuffer.h">
@@ -280,6 +302,9 @@
       <Filter>Graphics</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\Shader.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\SkeletalMesh.h">
       <Filter>Graphics</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\StaticMesh.h">
@@ -444,8 +469,8 @@
     <ClInclude Include="Terrain\HeightmapChunk.h">
       <Filter>Terrain</Filter>
     </ClInclude>
-    <ClInclude Include="Terrain\TerrainComponent.h">
-      <Filter>Terrain</Filter>
+    <ClInclude Include="Component\TerrainComponent.h">
+      <Filter>Component</Filter>
     </ClInclude>
     <ClInclude Include="Util\CRC32.h">
       <Filter>Util</Filter>

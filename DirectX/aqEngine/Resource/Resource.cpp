@@ -5,6 +5,10 @@
 #include <cctype>
 #include <cstring>
 #include <cstdio>
+#include <DirectXMath.h>
+#include <algorithm>
+#include <cmath>
+#include <filesystem>
 
 
 namespace aq
@@ -15,6 +19,8 @@ namespace aq
 		{
 			std::string GetLowerExtension(const std::string& path);
 			bool LoadTkmMeshFile(const std::string& filePath, MeshData& outMesh);
+			bool LoadTkmSkeletalMeshFile(const std::string& filePath, SkeletalMeshData& outMesh);
+			bool LoadTkaAnimationFile(const std::string& filePath, AnimationClipData& outClip);
 		}
 
 		/*******************************************/
@@ -149,6 +155,38 @@ namespace aq
 		/*******************************************/
 
 
+		bool SkeletalMeshLoader::Loading()
+		{
+			SkeletalMeshData* meshData = static_cast<SkeletalMeshData*>(resource_->data_);
+			if (!meshData) return false;
+
+			const std::string extension = GetLowerExtension(requestPath_);
+			if (extension == ".tkm") {
+				return LoadTkmSkeletalMeshFile(requestPath_, *meshData);
+			}
+			return false;
+		}
+
+
+		/*******************************************/
+
+
+		bool AnimationLoader::Loading()
+		{
+			AnimationClipData* clipData = static_cast<AnimationClipData*>(resource_->data_);
+			if (!clipData) return false;
+
+			const std::string extension = GetLowerExtension(requestPath_);
+			if (extension == ".tka") {
+				return LoadTkaAnimationFile(requestPath_, *clipData);
+			}
+			return false;
+		}
+
+
+		/*******************************************/
+
+
 		TextureLoader::TextureLoader()
 		{
 		}
@@ -176,6 +214,87 @@ namespace aq
 					return std::string();
 				}
 				return ToLowerString(path.substr(dotPos));
+			}
+
+			void PushUniquePath(std::vector<std::string>& paths, const std::string& path)
+			{
+				if (!path.empty() && std::find(paths.begin(), paths.end(), path) == paths.end()) {
+					paths.push_back(path);
+				}
+			}
+
+			std::string FindProjectRoot()
+			{
+				static std::string cachedRoot;
+				if (!cachedRoot.empty()) {
+					return cachedRoot;
+				}
+
+				std::error_code ec;
+				std::filesystem::path dir = std::filesystem::current_path(ec);
+				if (ec) {
+					return std::string();
+				}
+
+				while (!dir.empty()) {
+					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
+						cachedRoot = dir.generic_string();
+						return cachedRoot;
+					}
+					if (dir == dir.root_path()) {
+						break;
+					}
+					dir = dir.parent_path();
+				}
+
+				cachedRoot = std::filesystem::current_path(ec).generic_string();
+				return cachedRoot;
+			}
+
+			std::vector<std::string> BuildResourcePathCandidates(std::string path)
+			{
+				std::replace(path.begin(), path.end(), '\\', '/');
+
+				std::vector<std::string> paths;
+				PushUniquePath(paths, path);
+
+				std::filesystem::path fsPath(path);
+				if (fsPath.is_absolute()) {
+					return paths;
+				}
+
+				const std::filesystem::path root(FindProjectRoot());
+				if (path.rfind("Assets/", 0) == 0) {
+					PushUniquePath(paths, (root / "Game" / path).generic_string());
+				}
+				else if (path.rfind("Game/Assets/", 0) == 0) {
+					PushUniquePath(paths, (root / path).generic_string());
+				}
+				else {
+					PushUniquePath(paths, (root / path).generic_string());
+				}
+				return paths;
+			}
+
+			bool OpenBinaryReadWithFallback(
+				const std::string& filePath,
+				FILE** fp,
+				std::string* openedPath = nullptr)
+			{
+				if (!fp) {
+					return false;
+				}
+
+				*fp = nullptr;
+				for (const std::string& path : BuildResourcePathCandidates(filePath)) {
+					if (fopen_s(fp, path.c_str(), "rb") == 0 && *fp) {
+						if (openedPath) {
+							*openedPath = path;
+						}
+						return true;
+					}
+				}
+				return false;
 			}
 
 			std::string ResolveSiblingPath(const std::string& basePath, const std::string& fileName)
@@ -231,9 +350,11 @@ namespace aq
 				}
 			}
 
+
 			namespace tkm
 			{
 				constexpr std::uint8_t VERSION = 100;
+				constexpr std::uint8_t VERSION_SKELETAL = 101;
 
 #pragma pack(push, 1)
 				struct Header
@@ -346,6 +467,34 @@ namespace aq
 
 				outIndices.push_back(baseVertex + zeroBasedIndex);
 				return true;
+			}
+
+			void BuildSkinnedNormals(std::vector<aq::graphics::SkinnedVertexData>& vertices, const std::vector<uint32_t>& indices)
+			{
+				for (auto& vertex : vertices) {
+					vertex.normal.Set(0.0f, 0.0f, 0.0f);
+				}
+				for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+					const uint32_t i0 = indices[i + 0];
+					const uint32_t i1 = indices[i + 1];
+					const uint32_t i2 = indices[i + 2];
+					if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) continue;
+
+					const auto edge01 = vertices[i1].position - vertices[i0].position;
+					const auto edge02 = vertices[i2].position - vertices[i0].position;
+					aq::math::Vector3 normal;
+					normal.Cross(edge01, edge02);
+					if (!normal.TryNormalize()) continue;
+
+					vertices[i0].normal.Add(normal);
+					vertices[i1].normal.Add(normal);
+					vertices[i2].normal.Add(normal);
+				}
+				for (auto& vertex : vertices) {
+					if (!vertex.normal.TryNormalize()) {
+						vertex.normal.Set(0.0f, 1.0f, 0.0f);
+					}
+				}
 			}
 
 			void BuildNormals(std::vector<aq::graphics::VertexData>& vertices, const std::vector<uint32_t>& indices)
@@ -481,6 +630,270 @@ namespace aq
 				}
 
 				BuildNormals(outMesh.vertics, outMesh.indices);
+				return true;
+			}
+
+			bool LoadTksSkeletonFile(const std::string& filePath, std::vector<aq::res::BoneData>& outBones)
+			{
+				FILE* fp = nullptr;
+				if (!OpenBinaryReadWithFallback(filePath, &fp)) return false;
+
+				uint32_t numBones = 0;
+				if (fread(&numBones, 4, 1, fp) != 1 || numBones == 0 || numBones > 1024) {
+					fclose(fp);
+					return false;
+				}
+
+				outBones.resize(numBones);
+				for (uint32_t i = 0; i < numBones; ++i) {
+					uint8_t nameLen = 0;
+					if (fread(&nameLen, 1, 1, fp) != 1) { fclose(fp); return false; }
+
+					std::vector<char> nameBuf(static_cast<size_t>(nameLen) + 1);
+					if (fread(nameBuf.data(), nameLen + 1, 1, fp) != 1) { fclose(fp); return false; }
+					nameBuf[nameLen] = '\0';
+					outBones[i].name = nameBuf.data();
+
+					if (fread(&outBones[i].parentIndex, 4, 1, fp) != 1) { fclose(fp); return false; }
+
+					float skip[12];
+					if (fread(skip, sizeof(skip), 1, fp) != 1) { fclose(fp); return false; }
+
+					float f[12];
+					if (fread(f, sizeof(f), 1, fp) != 1) { fclose(fp); return false; }
+
+					// Unity col-major 3x3 + translation → DirectX row-major Matrix4x4
+					outBones[i].inverseBindPose = aq::math::Matrix4x4(
+						f[0], f[1], f[2], 0.0f,
+						f[3], f[4], f[5], 0.0f,
+						f[6], f[7], f[8], 0.0f,
+						f[9], f[10], f[11], 1.0f
+					);
+				}
+
+				fclose(fp);
+				return true;
+			}
+
+			bool LoadTkmSkeletalMeshFile(const std::string& filePath, SkeletalMeshData& outMesh)
+			{
+				FILE* fp = nullptr;
+				std::string openedPath;
+				if (!OpenBinaryReadWithFallback(filePath, &fp, &openedPath)) return false;
+				const std::string& assetBasePath = openedPath.empty() ? filePath : openedPath;
+
+				auto closeFile = [&fp]() {
+					if (fp) { std::fclose(fp); fp = nullptr; }
+				};
+
+				tkm::Header header = {};
+				if (!ReadValue(fp, header) ||
+				    (header.version != tkm::VERSION && header.version != tkm::VERSION_SKELETAL) ||
+				    header.numMeshParts == 0) {
+					closeFile();
+					return false;
+				}
+
+				outMesh.vertices.clear();
+				outMesh.indices.clear();
+				outMesh.bones.clear();
+				outMesh.material = {};
+
+				for (uint32_t meshNo = 0; meshNo < header.numMeshParts; ++meshNo) {
+					tkm::MeshPartsHeader meshHeader = {};
+					if (!ReadValue(fp, meshHeader) || meshHeader.numVertex == 0 || meshHeader.numMaterial == 0) {
+						closeFile();
+						return false;
+					}
+					if (meshHeader.indexSize != 2 && meshHeader.indexSize != 4) {
+						closeFile();
+						return false;
+					}
+
+					std::vector<tkm::MaterialNames> materials(meshHeader.numMaterial);
+					for (auto& material : materials) {
+						if (!ReadTkmMaterial(fp, material)) { closeFile(); return false; }
+						if (outMesh.material.albedo.empty() && !material.albedo.empty()) {
+							outMesh.material.albedo = ReplaceExtension(ResolveSiblingPath(assetBasePath, material.albedo), ".dds");
+						}
+						if (outMesh.material.normal.empty() && !material.normal.empty()) {
+							outMesh.material.normal = ReplaceExtension(ResolveSiblingPath(assetBasePath, material.normal), ".dds");
+						}
+						if (outMesh.material.specular.empty() && !material.specular.empty()) {
+							outMesh.material.specular = ReplaceExtension(ResolveSiblingPath(assetBasePath, material.specular), ".dds");
+						}
+					}
+
+					const uint32_t baseVertex = static_cast<uint32_t>(outMesh.vertices.size());
+					outMesh.vertices.reserve(outMesh.vertices.size() + meshHeader.numVertex);
+					for (uint32_t vertexNo = 0; vertexNo < meshHeader.numVertex; ++vertexNo) {
+						tkm::Vertex src = {};
+						if (!ReadValue(fp, src)) { closeFile(); return false; }
+
+						aq::graphics::SkinnedVertexData dst = {};
+						dst.position.Set(src.pos[0], src.pos[1], src.pos[2]);
+						dst.normal.Set(src.normal[0], src.normal[1], src.normal[2]);
+						dst.uv.Set(src.uv[0], src.uv[1]);
+						dst.tangent = { 1.0f, 0.0f, 0.0f, 1.0f };
+						dst.boneWeights.Set(src.weights[0], src.weights[1], src.weights[2], src.weights[3]);
+						// TKM uses -1 for unused bone slots; clamp to 0 (weight is 0 so contribution is zero)
+						dst.boneIndices[0] = src.indices[0] < 0 ? 0u : static_cast<uint32_t>(src.indices[0]);
+						dst.boneIndices[1] = src.indices[1] < 0 ? 0u : static_cast<uint32_t>(src.indices[1]);
+						dst.boneIndices[2] = src.indices[2] < 0 ? 0u : static_cast<uint32_t>(src.indices[2]);
+						dst.boneIndices[3] = src.indices[3] < 0 ? 0u : static_cast<uint32_t>(src.indices[3]);
+						outMesh.vertices.push_back(dst);
+					}
+
+					const bool is16BitIndex = meshHeader.indexSize == 2;
+					for (uint32_t materialNo = 0; materialNo < meshHeader.numMaterial; ++materialNo) {
+						std::int32_t numPolygon = 0;
+						if (!ReadValue(fp, numPolygon) || numPolygon < 0) { closeFile(); return false; }
+
+						const uint32_t numIndex = static_cast<uint32_t>(numPolygon) * 3;
+						outMesh.indices.reserve(outMesh.indices.size() + numIndex);
+						for (uint32_t indexNo = 0; indexNo < numIndex; ++indexNo) {
+							if (!ReadTkmIndex(fp, is16BitIndex, baseVertex, meshHeader.numVertex, outMesh.indices)) {
+								closeFile();
+								return false;
+							}
+						}
+					}
+				}
+
+				closeFile();
+				if (outMesh.vertices.empty() || outMesh.indices.empty()) return false;
+
+				BuildSkinnedNormals(outMesh.vertices, outMesh.indices);
+
+				const std::string tksPath = ReplaceExtension(assetBasePath, ".tks");
+				if (!LoadTksSkeletonFile(tksPath, outMesh.bones) || outMesh.bones.empty()) {
+					return false;
+				}
+
+				return true;
+			}
+
+			bool LoadTkaAnimationFile(const std::string& filePath, AnimationClipData& outClip)
+			{
+				FILE* fp = nullptr;
+				if (!OpenBinaryReadWithFallback(filePath, &fp)) return false;
+
+				int32_t numEntries = 0, padding = 0;
+				if (fread(&numEntries, 4, 1, fp) != 1 || numEntries <= 0) { fclose(fp); return false; }
+				fread(&padding, 4, 1, fp);
+
+#pragma pack(push, 1)
+				struct TkaEntry {
+					int32_t boneIdx;
+					float   time;
+					float   rot[9];
+					float   trans[3];
+				};
+#pragma pack(pop)
+				static_assert(sizeof(TkaEntry) == 56, "TkaEntry size mismatch");
+
+				std::vector<TkaEntry> entries(static_cast<size_t>(numEntries));
+				if (fread(entries.data(), sizeof(TkaEntry), static_cast<size_t>(numEntries), fp)
+					!= static_cast<size_t>(numEntries)) {
+					fclose(fp);
+					return false;
+				}
+				fclose(fp);
+
+				uint32_t numBones = 0;
+				for (int32_t i = 1; i < numEntries; ++i) {
+					if (entries[i].boneIdx == 0) {
+						numBones = static_cast<uint32_t>(i);
+						break;
+					}
+				}
+				if (numBones == 0) return false;
+
+				const uint32_t numFrames = static_cast<uint32_t>(numEntries) / numBones;
+				if (numFrames == 0) return false;
+				constexpr float kFps = 30.0f;
+
+				const auto isRootAxisCorrection = [](const TkaEntry& e) {
+					constexpr float kRotEpsilon = 0.001f;
+					constexpr float kTransEpsilon = 0.001f;
+					const float expected[9] = {
+						1.0f, 0.0f,  0.0f,
+						0.0f, 0.0f, -1.0f,
+						0.0f, 1.0f,  0.0f
+					};
+					if (e.boneIdx != 0) {
+						return false;
+					}
+					if (std::fabs(e.trans[0]) > kTransEpsilon ||
+					    std::fabs(e.trans[1]) > kTransEpsilon ||
+					    std::fabs(e.trans[2]) > kTransEpsilon) {
+						return false;
+					}
+					for (int i = 0; i < 9; ++i) {
+						if (std::fabs(e.rot[i] - expected[i]) > kRotEpsilon) {
+							return false;
+						}
+					}
+					return true;
+				};
+
+				bool stripRootAxisCorrection = true;
+				for (uint32_t frame = 0; frame < numFrames; ++frame) {
+					const TkaEntry& e = entries[static_cast<size_t>(frame) * numBones];
+					if (!isRootAxisCorrection(e)) {
+						stripRootAxisCorrection = false;
+						break;
+					}
+				}
+
+				outClip.boneCount = numBones;
+				outClip.duration  = static_cast<float>(numFrames) / kFps;
+				outClip.boneKeyframes.assign(numBones, {});
+				float maxKeyTime = 0.0f;
+
+				for (uint32_t frame = 0; frame < numFrames; ++frame) {
+					for (uint32_t bone = 0; bone < numBones; ++bone) {
+						const TkaEntry& e = entries[static_cast<size_t>(frame) * numBones + bone];
+
+						aq::res::AnimationKeyframe kf;
+						kf.time = e.time;
+						kf.translation.Set(e.trans[0], e.trans[1], e.trans[2]);
+						kf.scale.Set(1.0f, 1.0f, 1.0f);
+
+						// Unity col-major 3x3 rotation → DirectX row-major → quaternion
+						DirectX::XMFLOAT4X4 rotMat(
+							e.rot[0], e.rot[1], e.rot[2], 0.0f,
+							e.rot[3], e.rot[4], e.rot[5], 0.0f,
+							e.rot[6], e.rot[7], e.rot[8], 0.0f,
+							0.0f,     0.0f,     0.0f,     1.0f
+						);
+						DirectX::XMVECTOR qv =
+							DirectX::XMQuaternionRotationMatrix(DirectX::XMLoadFloat4x4(&rotMat));
+						qv = DirectX::XMQuaternionNormalize(qv);
+						if (stripRootAxisCorrection && bone == 0) {
+							kf.translation.Set(0.0f, 0.0f, 0.0f);
+							qv = DirectX::XMQuaternionIdentity();
+						}
+						if (!outClip.boneKeyframes[bone].empty()) {
+							const auto& prevRot = outClip.boneKeyframes[bone].back().rotation;
+							const DirectX::XMVECTOR prevQ = DirectX::XMLoadFloat4(
+								reinterpret_cast<const DirectX::XMFLOAT4*>(&prevRot));
+							if (DirectX::XMVectorGetX(DirectX::XMVector4Dot(prevQ, qv)) < 0.0f) {
+								qv = DirectX::XMVectorNegate(qv);
+							}
+						}
+						DirectX::XMStoreFloat4(
+							reinterpret_cast<DirectX::XMFLOAT4*>(&kf.rotation), qv);
+
+						maxKeyTime = std::max(maxKeyTime, kf.time);
+						outClip.boneKeyframes[bone].push_back(kf);
+					}
+				}
+
+				if (maxKeyTime > 0.0f && numFrames > 1) {
+					outClip.duration = maxKeyTime + (maxKeyTime / static_cast<float>(numFrames - 1));
+				}
+
 				return true;
 			}
 		}

@@ -64,6 +64,10 @@ namespace aq
 			graphics::MaterialCBData  materialCB;
 			bool                      castShadow    = false;
 			bool                      receiveShadow = false;
+
+			// SkeletalMesh 用ボーン行列。nullptr = StaticMesh (スキンなし)
+			// shared_ptr で共有することでフレーム跨ぎのコピーコストを抑える
+			std::shared_ptr<std::vector<math::Matrix4x4>> boneMatrices;
 		};
 
 

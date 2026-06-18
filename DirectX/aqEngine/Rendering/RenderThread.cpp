@@ -17,11 +17,13 @@ namespace aq
 
 			graphics::LightingData defaultLighting{};
 			ShadowCBData           defaultShadow{};
+			constexpr uint32_t kBonesCBSize = 128u * 64u; // 128 × sizeof(Matrix4x4)
 			for (auto& slot : slots_)
 			{
 				slot = std::make_unique<FrameSlot>(
 					sizeof(graphics::VSConstantBuffer),
-					sizeof(graphics::MaterialCBData));
+					sizeof(graphics::MaterialCBData),
+					kBonesCBSize);
 
 				slot->lightingCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
 					&defaultLighting, sizeof(defaultLighting));
@@ -135,11 +137,13 @@ namespace aq
 
 					slots_[slot]->perDrawPool.Reset();
 					slots_[slot]->materialPool.Reset();
+					slots_[slot]->bonesPool.Reset();
 					FrameContext fc {
 						&slots_[slot]->perDrawPool,
 						&slots_[slot]->materialPool,
 						slots_[slot]->lightingCB.get(),
-						slots_[slot]->shadowCB.get()
+						slots_[slot]->shadowCB.get(),
+						&slots_[slot]->bonesPool
 					};
 					list->Execute(*context_, fc);
 					list->Reset();  // shared_ptr を解放し、アリーナカーソルをリセット

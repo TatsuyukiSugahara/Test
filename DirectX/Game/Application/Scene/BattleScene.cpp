@@ -2,7 +2,7 @@
 #include "BattleScene.h"
 
 #include "Utility.h"
-#include "Terrain/TerrainComponent.h"  // Utility.h (EngineAssert) より後に include する
+#include "Component/TerrainComponent.h"  // Utility.h (EngineAssert) より後に include する
 
 #include "Component/TransformComponentSystem.h"
 #include "Component/BodyComponentSystem.h"
@@ -75,29 +75,37 @@ namespace app
 			// ライト設定
 			aq::graphics::LightManager::Get().SetDirectionalColor(aq::math::Vector3(1.0f, 0.6f, 0.6f));
 
-			// 操作キャラクター生成
+			// スケルタルメッシュキャラクター生成 (Idle アニメーション確認用)
 			aq::ecs::EntityHandle targetHandle;
+
 			{
-				auto entity = aq::ecs::EntityContext::Get().CreateEntity<aq::ecs::TransformComponent, aq::ecs::StaticMeshComponent, app::ecs::StateMachineComponent>();
+				auto entity = aq::ecs::EntityContext::Get().CreateEntity<
+					aq::ecs::TransformComponent,
+					aq::ecs::SkeletalMeshComponent,
+					aq::ecs::AnimationComponent,
+					app::ecs::StateMachineComponent>();
 
 				targetHandle = entity.GetHandle();
+
+				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+				tc->transform.localPosition.Set(0.0f, spawnY, 0.0f);
+				tc->transform.localAngle.Set(0.0f);
+				tc->transform.localScale.Set(1.0f);
+
+				auto* skelComp = entity.GetComponent<aq::ecs::SkeletalMeshComponent>();
+				skelComp->SetModelPath("Assets/unityChan.tkm");
+
+				auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
+				animComp->SetAnimationPath("Assets/animData/idle.tka");
+				animComp->Play(true);
 
 				auto* stateMachineComponent = entity.GetComponent<app::ecs::StateMachineComponent>();
 				stateMachineComponent->GetStateMachine()->AddState<app::actor::IdleState>(EngineHash32("Idle"));
 				stateMachineComponent->GetStateMachine()->AddState<app::actor::MoveState>(EngineHash32("Move"));
 				stateMachineComponent->GetStateMachine()->RequestStateID(EngineHash32("Idle"));
 				stateMachineComponent->GetStateMachine()->SetTargetHandle(targetHandle);
-
-				auto* staticMeshComponent = entity.GetComponent<aq::ecs::StaticMeshComponent>();
-				staticMeshComponent->SetModelPath("../temp/Assets/unityChan.tkm");
-				staticMeshComponent->GetStaticMesh()->SetCastShadow(true);
-				staticMeshComponent->GetStaticMesh()->SetReceiveShadow(true);
-
-				auto* transformComponent = entity.GetComponent<aq::ecs::TransformComponent>();
-				transformComponent->transform.localPosition.Set(0.0f, spawnY, 0.0f);
-				transformComponent->transform.localAngle.Set(0.0f);
-				transformComponent->transform.localScale.Set(1.0f);
 			}
+
 			{
 				auto entity = aq::ecs::EntityContext::Get().CreateEntity<app::ecs::CharacterSteeringComponent>();
 				auto* component = entity.GetComponent<app::ecs::CharacterSteeringComponent>();

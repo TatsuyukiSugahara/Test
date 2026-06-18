@@ -227,6 +227,135 @@ public:\
 		};
 
 
+		/*******************************************/
+
+
+		/**
+		 * ボーン情報
+		 */
+		struct BoneData
+		{
+			std::string     name;
+			int32_t         parentIndex;       // -1 = ルートボーン
+			math::Matrix4x4 inverseBindPose;   // 逆バインドポーズ行列 (スキニング計算用)
+		};
+
+		/**
+		 * スケルタルメッシュデータ (ボーンあり)
+		 */
+		struct SkeletalMeshData
+		{
+			std::vector<graphics::SkinnedVertexData> vertices;
+			std::vector<uint32_t>                   indices;
+			std::vector<BoneData>                   bones;
+			MaterialTexturePaths                    material;
+		};
+
+		class SkeletalMeshResource : public ResourceBase
+		{
+			engineResource(aq::res::SkeletalMeshResource);
+
+		public:
+			SkeletalMeshResource() : ResourceBase() { data_ = new SkeletalMeshData(); }
+
+			virtual ~SkeletalMeshResource()
+			{
+				delete static_cast<SkeletalMeshData*>(data_);
+				data_ = nullptr;
+			}
+
+			uint32_t GetVertexCount() const { return static_cast<uint32_t>(Get()->vertices.size()); }
+			uint32_t GetIndexCount()  const { return static_cast<uint32_t>(Get()->indices.size());  }
+			uint32_t GetBoneCount()   const { return static_cast<uint32_t>(Get()->bones.size());    }
+			const std::vector<graphics::SkinnedVertexData>& GetVertices() const { return Get()->vertices; }
+			const std::vector<uint32_t>&                    GetIndices()  const { return Get()->indices;  }
+			const std::vector<BoneData>&                    GetBones()    const { return Get()->bones;    }
+			const MaterialTexturePaths&                     GetMaterial() const { return Get()->material; }
+
+		private:
+			inline SkeletalMeshData* Get() const { return static_cast<SkeletalMeshData*>(data_); }
+		};
+		using RefSkeletalMeshResource = std::shared_ptr<SkeletalMeshResource>;
+
+		/**
+		 * スケルタルメッシュ読み込み (TKM v101 形式: ボーン情報付き)
+		 */
+		class SkeletalMeshLoader : public ResourceLoaderBase
+		{
+		public:
+			SkeletalMeshLoader() = default;
+			~SkeletalMeshLoader() = default;
+			virtual ResourceBase* Create() override { return new SkeletalMeshResource(); }
+
+		private:
+			bool Loading() override;
+		};
+
+
+		/*******************************************/
+
+
+		/**
+		 * アニメーションキーフレーム
+		 */
+		struct AnimationKeyframe
+		{
+			float            time;
+			math::Vector3    translation;
+			math::Quaternion rotation;
+			math::Vector3    scale;
+		};
+
+		/**
+		 * アニメーションクリップデータ
+		 */
+		struct AnimationClipData
+		{
+			float                                       duration;
+			uint32_t                                    boneCount;
+			std::vector<std::vector<AnimationKeyframe>> boneKeyframes; // [boneIndex][keyframeIndex]
+		};
+
+		class AnimationResource : public ResourceBase
+		{
+			engineResource(aq::res::AnimationResource);
+
+		public:
+			AnimationResource() : ResourceBase() { data_ = new AnimationClipData(); }
+
+			virtual ~AnimationResource()
+			{
+				delete static_cast<AnimationClipData*>(data_);
+				data_ = nullptr;
+			}
+
+			const AnimationClipData* GetClipData() const
+			{
+				return static_cast<const AnimationClipData*>(data_);
+			}
+			float    GetDuration()  const { return GetClipData()->duration;  }
+			uint32_t GetBoneCount() const { return GetClipData()->boneCount; }
+
+		private:
+			inline AnimationClipData* Get() const { return static_cast<AnimationClipData*>(data_); }
+		};
+		using RefAnimationResource = std::shared_ptr<AnimationResource>;
+
+		/**
+		 * アニメーション読み込み (TKA 形式)
+		 */
+		class AnimationLoader : public ResourceLoaderBase
+		{
+		public:
+			AnimationLoader() = default;
+			~AnimationLoader() = default;
+			virtual ResourceBase* Create() override { return new AnimationResource(); }
+
+		private:
+			bool Loading() override;
+		};
+
+
 
 
 		/*******************************************/

@@ -79,6 +79,7 @@ namespace aq
 				std::unique_ptr<RenderCommandList>         list;
 				ConstantBufferPool                         perDrawPool;
 				ConstantBufferPool                         materialPool;
+				ConstantBufferPool                         bonesPool;
 				std::unique_ptr<graphics::IConstantBuffer> lightingCB;
 				std::unique_ptr<graphics::IConstantBuffer> shadowCB;
 				graphics::LightingData                     lightingData;
@@ -87,9 +88,10 @@ namespace aq
 				bool                                       ready = false;
 				bool                                       done  = true;
 
-				FrameSlot(uint32_t perDrawSize, uint32_t materialSize)
+				FrameSlot(uint32_t perDrawSize, uint32_t materialSize, uint32_t bonesSize)
 					: perDrawPool(perDrawSize)
 					, materialPool(materialSize)
+					, bonesPool(bonesSize)
 				{}
 			};
 

@@ -46,6 +46,7 @@ namespace aq
 		{
 			ConstantBufferPool perDrawPool(sizeof(graphics::VSConstantBuffer));
 			ConstantBufferPool materialPool(sizeof(graphics::MaterialCBData));
+			ConstantBufferPool bonesPool(128u * 64u);
 
 			auto lightingCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
 				&frame.lighting, sizeof(frame.lighting));
@@ -54,7 +55,7 @@ namespace aq
 			auto shadowCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
 				&frame.shadow, sizeof(frame.shadow));
 
-			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get(), shadowCB.get() };
+			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get(), shadowCB.get(), &bonesPool };
 
 			RenderCommandList list;
 			BuildCommandList(frame, list, mainRTHandle_, mainViewportW_, mainViewportH_);

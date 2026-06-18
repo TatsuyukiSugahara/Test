@@ -4,6 +4,9 @@
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/Lighting.h"
+#include <array>
+#include <cstring>
+#include <algorithm>
 
 
 namespace aq
@@ -50,6 +53,23 @@ namespace aq
 			{
 				ctx.UpdateSubresource(*matCB, item_.materialCB);
 				ctx.PSSetConstantBuffer(2, *matCB);
+			}
+
+			// b4: bone matrices (skeletal mesh only)
+			if (item_.boneMatrices && !item_.boneMatrices->empty() && fc.bonesCBPool)
+			{
+				graphics::IConstantBuffer* bonesCB = fc.bonesCBPool->Allocate();
+				if (bonesCB)
+				{
+					std::array<math::Matrix4x4, 128> bonesData;
+					bonesData.fill(math::Matrix4x4::Identity);
+					const uint32_t count = std::min(
+						static_cast<uint32_t>(item_.boneMatrices->size()), 128u);
+					std::memcpy(bonesData.data(), item_.boneMatrices->data(),
+						count * sizeof(math::Matrix4x4));
+					ctx.UpdateSubresource(*bonesCB, bonesData);
+					ctx.VSSetConstantBuffer(4, *bonesCB);
+				}
 			}
 
 			// t0-t3: テクスチャ

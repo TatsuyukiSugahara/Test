@@ -22,8 +22,8 @@ namespace app
 			aq::math::Vector3 direction(0.0f);
 			float speed = 0.01f;	// 入力速度だが一旦固定
 			const auto& input = GameInput::Get();
-			if (input.IsPressed(GameAction::MoveForward )) { ++direction.y; }
-			if (input.IsPressed(GameAction::MoveBackward)) { --direction.y; }
+			if (input.IsPressed(GameAction::MoveForward )) { ++direction.z; }
+			if (input.IsPressed(GameAction::MoveBackward)) { --direction.z; }
 			if (input.IsPressed(GameAction::MoveLeft    )) { --direction.x; }
 			if (input.IsPressed(GameAction::MoveRight   )) { ++direction.x; }
 

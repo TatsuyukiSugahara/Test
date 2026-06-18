@@ -51,6 +51,7 @@ namespace aq
 		 * perDrawCBPool  : b0 用 (world/view/proj)、draw ごとに Allocate()
 		 * materialCBPool : b2 用 (MaterialCBData)、draw ごとに Allocate()
 		 * lightingCB     : b1 用、フレーム先頭で 1 回更新し全 draw で共有 (raw ptr, 寿命は FrameSlot)
+		 * bonesCBPool    : b4 用 (128 × Matrix4x4 = 8192 bytes)、skeletal draw ごとに Allocate()
 		 */
 		struct FrameContext
 		{
@@ -58,6 +59,7 @@ namespace aq
 			IConstantBufferPool*       materialCBPool = nullptr;
 			graphics::IConstantBuffer* lightingCB     = nullptr;
 			graphics::IConstantBuffer* shadowCB       = nullptr; // b3: per-frame shadow data
+			IConstantBufferPool*       bonesCBPool    = nullptr; // b4: bone matrices (skeletal mesh)
 		};
 	}
 }

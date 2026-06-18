@@ -1,6 +1,10 @@
 #include "aq.h"
 #include "D3D11Shader.h"
 #include "D3D11GraphicsDeviceImpl.h"
+#include <algorithm>
+#include <filesystem>
+#include <string>
+#include <vector>
 
 namespace aq
 {
@@ -9,10 +13,84 @@ namespace aq
 		namespace
 		{
 			/** ファイル読み込み。戻り値 false = ファイルが開けなかった */
-			bool ReadFile(const char* filePath, char* readBuffer, uint32_t& fileSize)
+			void PushUniquePath(std::vector<std::string>& paths, const std::string& path)
+			{
+				if (!path.empty() && std::find(paths.begin(), paths.end(), path) == paths.end()) {
+					paths.push_back(path);
+				}
+			}
+
+			std::string FindProjectRoot()
+			{
+				static std::string cachedRoot;
+				if (!cachedRoot.empty()) {
+					return cachedRoot;
+				}
+
+				std::error_code ec;
+				std::filesystem::path dir = std::filesystem::current_path(ec);
+				if (ec) {
+					return std::string();
+				}
+
+				while (!dir.empty()) {
+					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
+						cachedRoot = dir.generic_string();
+						return cachedRoot;
+					}
+					if (dir == dir.root_path()) {
+						break;
+					}
+					dir = dir.parent_path();
+				}
+
+				cachedRoot = std::filesystem::current_path(ec).generic_string();
+				return cachedRoot;
+			}
+
+			std::vector<std::string> BuildPathCandidates(std::string path)
+			{
+				std::replace(path.begin(), path.end(), '\\', '/');
+
+				std::vector<std::string> paths;
+				PushUniquePath(paths, path);
+
+				std::filesystem::path fsPath(path);
+				if (fsPath.is_absolute()) {
+					return paths;
+				}
+
+				const std::filesystem::path root(FindProjectRoot());
+				if (path.rfind("Assets/", 0) == 0) {
+					PushUniquePath(paths, (root / "Game" / path).generic_string());
+				}
+				else if (path.rfind("Game/Assets/", 0) == 0) {
+					PushUniquePath(paths, (root / path).generic_string());
+				}
+				else {
+					PushUniquePath(paths, (root / path).generic_string());
+				}
+				return paths;
+			}
+
+			std::string GetDirectoryPath(const std::string& path)
+			{
+				const size_t slash = path.find_last_of('/');
+				if (slash == std::string::npos) {
+					return ".";
+				}
+				return path.substr(0, slash);
+			}
+
+			bool ReadFile(const char* filePath, char* readBuffer, uint32_t& fileSize, std::string& openedPath)
 			{
 				FILE* fp = nullptr;
-				fopen_s(&fp, filePath, "r");
+				for (const std::string& path : BuildPathCandidates(filePath ? filePath : "")) {
+					if (fopen_s(&fp, path.c_str(), "rb") == 0 && fp) {
+						openedPath = path;
+						break;
+					}
+				}
 				if (!fp) return false;
 				fseek(fp, 0, SEEK_END);
 				fpos_t fPos;
@@ -120,18 +198,21 @@ namespace aq
 #endif
 			static char shaderBuffer[5 * 1024 * 1024];
 			uint32_t fileSize = 0;
-			if (!ReadFile(filePath, shaderBuffer, fileSize)) return false;
+			std::string openedPath;
+			if (!ReadFile(filePath, shaderBuffer, fileSize, openedPath)) return false;
 
 			static const char* shaderModelNames[] = { "vs_5_0", "ps_5_0", "cs_5_0" };
 
 			ID3DBlob* errorBlob = nullptr;
-			SetCurrentDirectory(_T("Assets/Shader"));
+			char currentDirectory[MAX_PATH] = {};
+			GetCurrentDirectoryA(MAX_PATH, currentDirectory);
+			SetCurrentDirectoryA(GetDirectoryPath(openedPath).c_str());
 			HRESULT hr = D3DCompile(
 				shaderBuffer, fileSize, nullptr, nullptr,
 				((ID3DInclude*)(UINT_PTR)1), entryFuncName,
 				shaderModelNames[static_cast<uint32_t>(shaderType_)],
 				dwordShaderFlags, 0, &blob_, &errorBlob);
-			SetCurrentDirectory(_T("../../"));
+			SetCurrentDirectoryA(currentDirectory);
 
 			if (FAILED(hr)) {
 				if (errorBlob) {

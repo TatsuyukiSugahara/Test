@@ -4,6 +4,8 @@
 
 namespace aq
 {
+	namespace util
+	{
 
 
 	JobSystem* JobSystem::instance_ = nullptr;
@@ -32,4 +34,5 @@ namespace aq
 			}
 		}
 	}
+}
 }

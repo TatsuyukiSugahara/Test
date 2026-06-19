@@ -170,6 +170,7 @@
     <ClCompile Include="Application\GameInput.cpp" />
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
     <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp" />
+    <ClCompile Include="Application\ECS\CameraSteeringComponentSystem.cpp" />
     <ClCompile Include="Application\Main.cpp" />
     <ClCompile Include="Application\Scene\BattleScene.cpp" />
     <ClCompile Include="Application\Scene\Scene.cpp" />
@@ -181,6 +182,7 @@
     <ClInclude Include="Application\GameInput.h" />
     <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
     <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h" />
+    <ClInclude Include="Application\ECS\CameraSteeringComponentSystem.h" />
     <ClInclude Include="Application\Scene\BattleScene.h" />
     <ClInclude Include="Application\Scene\Scene.h" />
     <ClInclude Include="Application\stdafx.h" />

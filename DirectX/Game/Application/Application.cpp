@@ -14,6 +14,7 @@
 #include "ECS/ECS.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
+#include "ECS/CameraSteeringComponentSystem.h"
 #include "Component/TransformComponentSystem.h"
 #include "Graphics/Camera.h"
 #include "Component/BodyComponentSystem.h"
@@ -93,6 +94,12 @@ namespace app
 
 		aq::ecs::EntityContext::Get().AddDependency<app::ecs::ActorStateMachineSystem, app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::HierarcicalTransformSystem, app::ecs::ActorStateMachineSystem>();
+
+		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CameraSteeringSystem,
+			aq::ecs::HierarcicalTransformSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CameraEffectSystem,
+			app::ecs::CameraSteeringSystem>();
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, app::ecs::CameraEffectSystem>();
 	}
 
 

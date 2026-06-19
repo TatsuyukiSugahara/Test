@@ -28,6 +28,9 @@
     <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
+    <ClCompile Include="Application\ECS\CameraSteeringComponentSystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
     <ClCompile Include="Application\Actor\StateMachine.cpp">
       <Filter>Actor</Filter>
     </ClCompile>
@@ -48,6 +51,9 @@
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\ECS\CameraSteeringComponentSystem.h">
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="Application\Actor\StateMachine.h">

@@ -132,8 +132,14 @@ namespace engine
 	{
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::AnimationSystem>();
-		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::RenderSystem, aq::ecs::AnimationSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::RenderSystem>();
+
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::HierarcicalTransformSystem>();
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::AnimationSystem>();
+
 		OnRegister();
+
+		aq::ecs::EntityContext::Get().FinalizeRegistration();
 	}
 
 

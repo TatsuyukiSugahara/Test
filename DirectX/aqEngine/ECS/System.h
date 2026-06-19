@@ -1,9 +1,10 @@
-﻿#pragma once
+#pragma once
 #include <cstdint>
 #include <memory>
 #include <vector>
 #include <future>
 #include <string>
+#include <algorithm>
 
 
 namespace aq
@@ -40,6 +41,8 @@ namespace aq
 			};
 
 			std::vector<SystemEntry> systemEntries_;
+			std::vector<size_t>      updateOrder_;
+			bool                     registrationFinalized_ = false;
 
 
 		private:
@@ -53,7 +56,7 @@ namespace aq
 
 
 		public:
-			/** System更新(依存関係を考慮して並列実行) */
+			/** System更新(依存関係を考慮して並列実行)。FinalizeRegistration 済みであること。 */
 			void Update();
 
 #ifdef AQ_DEBUG_IMGUI
@@ -74,20 +77,67 @@ namespace aq
 
 
 			/**
-			 * System追加
-			 * Dependencies... に依存するSystemの型を指定すると、
-			 * そのSystemの完了を待ってから実行される。
+			 * System 追加。既に登録済みの場合は Dependencies の追加のみ行う。
+			 * 後方互換として Dependencies... を指定することもできる。
 			 */
 			template <typename T, typename... Dependencies>
-			void AddSystem()
+			T* AddSystem()
 			{
+				EngineAssertMsg(!registrationFinalized_, "AddSystem: called after FinalizeRegistration");
+
+				if (HasSystem<T>()) {
+					if constexpr (sizeof...(Dependencies) > 0)
+						AddDependencies<T, Dependencies...>();
+					return GetSystem<T>();
+				}
+
 				SystemEntry entry;
 				entry.system      = std::make_unique<T>();
 				entry.displayName = typeid(T).name();
-				ResolveDependencies<Dependencies...>(entry.dependencyIndices);
+				T* ptr            = static_cast<T*>(entry.system.get());
 				systemEntries_.push_back(std::move(entry));
+
+				if constexpr (sizeof...(Dependencies) > 0)
+					AddDependencies<T, Dependencies...>();
+
+				return ptr;
 			}
 
+
+			/**
+			 * TSystem が TDependency の完了を待つ依存を追加する。
+			 * 両方とも AddSystem 済みであること（未登録の場合は assert + Release ガード）。
+			 */
+			template <typename TSystem, typename TDependency>
+			void AddDependency()
+			{
+				EngineAssertMsg(!registrationFinalized_, "AddDependency: called after FinalizeRegistration");
+
+				const size_t sysIdx = FindIndex<TSystem>();
+				const size_t depIdx = FindIndex<TDependency>();
+				EngineAssertMsg(sysIdx != SIZE_MAX, "AddDependency: TSystem is not registered");
+				EngineAssertMsg(depIdx != SIZE_MAX, "AddDependency: TDependency is not registered");
+				if (sysIdx == SIZE_MAX || depIdx == SIZE_MAX) return;
+
+				auto& deps = systemEntries_[sysIdx].dependencyIndices;
+				if (std::find(deps.begin(), deps.end(), depIdx) == deps.end())
+					deps.push_back(depIdx);
+			}
+
+			/** 複数の依存をまとめて追加する */
+			template <typename TSystem, typename... TDependencies>
+			void AddDependencies()
+			{
+				if constexpr (sizeof...(TDependencies) > 0)
+					(AddDependency<TSystem, TDependencies>(), ...);
+			}
+
+			/** 型 T の System が登録済みか */
+			template <typename T>
+			bool HasSystem() const
+			{
+				return FindIndex<T>() != SIZE_MAX;
+			}
 
 			/** 登録済み System の数 */
 			size_t GetSystemCount() const { return systemEntries_.size(); }
@@ -115,26 +165,22 @@ namespace aq
 
 
 		private:
-			template <typename... Types>
-			void ResolveDependencies(std::vector<size_t>& indices)
-			{
-				if constexpr (sizeof...(Types) > 0) {
-					(ResolveOne<Types>(indices), ...);
-				}
-			}
+			/**
+			 * 全 System の登録と依存設定が終わったら呼ぶ。
+			 * EntityContext::FinalizeRegistration() 経由でのみ呼ぶこと。
+			 * トポロジカルソートで実行順を確定し、以降の登録系呼び出しを禁止する。
+			 */
+			void BuildSchedule();
 
 			template <typename T>
-			void ResolveOne(std::vector<size_t>& indices)
+			size_t FindIndex() const
 			{
 				for (size_t i = 0; i < systemEntries_.size(); ++i) {
-					if (dynamic_cast<T*>(systemEntries_[i].system.get()) != nullptr) {
-						indices.push_back(i);
-						return;
-					}
+					if (dynamic_cast<T*>(systemEntries_[i].system.get()) != nullptr)
+						return i;
 				}
+				return SIZE_MAX;
 			}
-
-
 		};
 	}
 }

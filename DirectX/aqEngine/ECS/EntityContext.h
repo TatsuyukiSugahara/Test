@@ -84,9 +84,36 @@ namespace aq
 			// --- System 操作 ---
 
 			template <typename T, typename... Dependencies>
-			void AddSystem()
+			T* AddSystem()
 			{
-				systemManager_.AddSystem<T, Dependencies...>();
+				return systemManager_.AddSystem<T, Dependencies...>();
+			}
+
+			template <typename TSystem, typename TDependency>
+			void AddDependency()
+			{
+				systemManager_.AddDependency<TSystem, TDependency>();
+			}
+
+			template <typename TSystem, typename... TDependencies>
+			void AddDependencies()
+			{
+				systemManager_.AddDependencies<TSystem, TDependencies...>();
+			}
+
+			template <typename T>
+			bool HasSystem() const
+			{
+				return systemManager_.HasSystem<T>();
+			}
+
+			/**
+			 * 全 System の登録と依存設定が終わったら呼ぶ。
+			 * Register() / OnRegister() の末尾で一度だけ実行すること。
+			 */
+			void FinalizeRegistration()
+			{
+				systemManager_.BuildSchedule();
 			}
 
 			template <typename T>

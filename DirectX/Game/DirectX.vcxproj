@@ -117,7 +117,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;AQ_DEBUG_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
@@ -141,7 +141,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
@@ -189,6 +189,9 @@
   <ItemGroup>
     <ProjectReference Include="..\aqEngine\Engine.vcxproj">
       <Project>{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\ThirdParty\imgui\imgui.vcxproj">
+      <Project>{EDAFA9B5-E723-4C02-9FE8-998CD822A808}</Project>
     </ProjectReference>
   </ItemGroup>
 

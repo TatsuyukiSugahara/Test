@@ -36,8 +36,16 @@ namespace engine
 		virtual void OnRegister() {}
 		/** メインパス Submit 前に呼ばれる（オフスクリーンパス等を Submit する） */
 		virtual void OnPreRender() {}
+#ifdef AQ_DEBUG_IMGUI
+		/** ImGui ウィンドウ構築（EntityContext::DebugRender() の後に呼ばれる） */
+		virtual void OnDebugRender() {}
+#endif
 
 	private:
 		void Render();
+
+#ifdef AQ_IMGUI
+		bool imguiReady_ = false;
+#endif
 	};
 }

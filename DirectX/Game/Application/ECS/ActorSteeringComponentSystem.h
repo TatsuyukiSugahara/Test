@@ -39,6 +39,12 @@ namespace app
 			virtual	~CharacterSteeringSystem();
 
 			void Update() override;
+#ifdef AQ_DEBUG_IMGUI
+			void DebugRender() override;
+#endif
+
+		private:
+			float speed_ = 0.01f;
 		};
 	}
 }

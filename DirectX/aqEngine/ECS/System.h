@@ -18,6 +18,9 @@ namespace aq
 			virtual ~SystemBase() {}
 
 			virtual void Update() = 0;
+#ifdef AQ_DEBUG_IMGUI
+			virtual void DebugRender() {}
+#endif
 		};
 
 
@@ -49,6 +52,15 @@ namespace aq
 		public:
 			/** System更新(依存関係を考慮して並列実行) */
 			void Update();
+
+#ifdef AQ_DEBUG_IMGUI
+			/** 全 System の DebugRender をメインスレッドで直列実行 */
+			void DebugRenderAll()
+			{
+				for (auto& entry : systemEntries_)
+					entry.system->DebugRender();
+			}
+#endif
 
 
 			/**

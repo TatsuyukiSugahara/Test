@@ -169,6 +169,13 @@ namespace aq
 			void      Vibrate      (uint32_t padIndex, float left, float right);
 			void      StopVibration(uint32_t padIndex);
 
+			/** ImGui がキーボード入力を使用中は true に設定する。wrapper 関数が false/0 を返す。 */
+			void SuppressKeyboard(bool suppress) { suppressKeyboard_ = suppress; }
+			/** ImGui がマウス入力を使用中は true に設定する。wrapper 関数が false/0 を返す。 */
+			void SuppressMouse   (bool suppress) { suppressMouse_    = suppress; }
+			bool IsKeyboardSuppressed() const    { return suppressKeyboard_; }
+			bool IsMouseSuppressed()    const    { return suppressMouse_;    }
+
 			static void          Initialize() { if (!sInstance_) sInstance_ = new InputManager(); }
 			static InputManager& Get()        { return *sInstance_; }
 			static void          Finalize()   { if (sInstance_) { delete sInstance_; sInstance_ = nullptr; } }
@@ -181,6 +188,9 @@ namespace aq
 
 			using Clock = std::chrono::high_resolution_clock;
 			Clock::time_point lastTime_;
+
+			bool suppressKeyboard_ = false;
+			bool suppressMouse_    = false;
 
 			static InputManager* sInstance_;
 		};

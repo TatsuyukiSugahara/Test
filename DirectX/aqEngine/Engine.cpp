@@ -6,6 +6,12 @@
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
 #endif
+#ifdef AQ_IMGUI
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_win32.h>
+// header 内で #if 0 されているため、使用する .cpp で前方宣言が必要
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
 
 
 namespace engine
@@ -164,6 +170,11 @@ namespace engine
 
 	LRESULT CALLBACK Engine::MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	{
+#ifdef AQ_IMGUI
+		if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+			return true;
+#endif
+
 		PAINTSTRUCT ps;
 		HDC hdc;
 

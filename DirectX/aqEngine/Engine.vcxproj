@@ -103,11 +103,11 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;AQ_DEBUG_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Game;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Game;$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
@@ -120,11 +120,11 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Game;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)Game;$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
@@ -184,6 +184,7 @@
     <ClCompile Include="Rendering\RenderCommandList.cpp" />
     <ClCompile Include="Rendering\Renderer.cpp" />
     <ClCompile Include="Rendering\RenderThread.cpp" />
+    <ClCompile Include="Rendering\ImGuiRenderCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
@@ -291,4 +292,9 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ThirdParty\imgui\imgui.vcxproj">
+      <Project>{EDAFA9B5-E723-4C02-9FE8-998CD822A808}</Project>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

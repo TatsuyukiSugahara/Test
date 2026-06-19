@@ -33,6 +33,8 @@ namespace aq
 
 			/** D3D11 固有: デバイスが必要な箇所（バッファ生成など）向け */
 			ID3D11Device* GetDevice() const { return device_; }
+			/** D3D11 固有: imgui など context が必要な箇所向け */
+			ID3D11DeviceContext* GetDeviceContext() const { return deviceContext_; }
 
 			/** SamplerState / RenderTarget / Texture 等 D3D11 リソースクラス向け静的アクセサ */
 			static ID3D11Device* GetStaticDevice();

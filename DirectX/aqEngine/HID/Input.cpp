@@ -405,17 +405,67 @@ namespace aq
 		// Free function wrappers
 		// ==========================================
 
-		bool IsKeyTriggered(KeyBoardType key) { const auto* kb = InputManager::Get().GetKeyBoardPtr(); return kb && kb->IsTriggered(key); }
-		bool IsKeyPressed  (KeyBoardType key) { const auto* kb = InputManager::Get().GetKeyBoardPtr(); return kb && kb->IsPressed(key);   }
-		bool IsKeyReleased (KeyBoardType key) { const auto* kb = InputManager::Get().GetKeyBoardPtr(); return kb && kb->IsReleased(key);  }
-		bool IsKeyLongPress(KeyBoardType key, float thresholdSec) { const auto* kb = InputManager::Get().GetKeyBoardPtr(); return kb && kb->IsLongPress(key, thresholdSec); }
+		bool IsKeyTriggered(KeyBoardType key)
+		{
+			if (InputManager::Get().IsKeyboardSuppressed()) return false;
+			const auto* kb = InputManager::Get().GetKeyBoardPtr();
+			return kb && kb->IsTriggered(key);
+		}
+		bool IsKeyPressed(KeyBoardType key)
+		{
+			if (InputManager::Get().IsKeyboardSuppressed()) return false;
+			const auto* kb = InputManager::Get().GetKeyBoardPtr();
+			return kb && kb->IsPressed(key);
+		}
+		bool IsKeyReleased(KeyBoardType key)
+		{
+			if (InputManager::Get().IsKeyboardSuppressed()) return false;
+			const auto* kb = InputManager::Get().GetKeyBoardPtr();
+			return kb && kb->IsReleased(key);
+		}
+		bool IsKeyLongPress(KeyBoardType key, float thresholdSec)
+		{
+			if (InputManager::Get().IsKeyboardSuppressed()) return false;
+			const auto* kb = InputManager::Get().GetKeyBoardPtr();
+			return kb && kb->IsLongPress(key, thresholdSec);
+		}
 
-		bool IsMouseTriggered(MouseButton btn) { const auto* m = InputManager::Get().GetMousePtr(); return m && m->IsTriggered(btn); }
-		bool IsMousePressed  (MouseButton btn) { const auto* m = InputManager::Get().GetMousePtr(); return m && m->IsPressed(btn);   }
-		bool IsMouseReleased (MouseButton btn) { const auto* m = InputManager::Get().GetMousePtr(); return m && m->IsReleased(btn);  }
-		bool IsMouseLongPress(MouseButton btn, float thresholdSec) { const auto* m = InputManager::Get().GetMousePtr(); return m && m->IsLongPress(btn, thresholdSec); }
-		float         GetMouseAxis    (MouseAxis axis) { const auto* m = InputManager::Get().GetMousePtr(); return m ? m->GetAxis(axis) : 0.0f;           }
-		math::Vector2 GetMouseCursorPos()              { const auto* m = InputManager::Get().GetMousePtr(); return m ? m->GetCursorPos() : math::Vector2{}; }
+		bool IsMouseTriggered(MouseButton btn)
+		{
+			if (InputManager::Get().IsMouseSuppressed()) return false;
+			const auto* m = InputManager::Get().GetMousePtr();
+			return m && m->IsTriggered(btn);
+		}
+		bool IsMousePressed(MouseButton btn)
+		{
+			if (InputManager::Get().IsMouseSuppressed()) return false;
+			const auto* m = InputManager::Get().GetMousePtr();
+			return m && m->IsPressed(btn);
+		}
+		bool IsMouseReleased(MouseButton btn)
+		{
+			if (InputManager::Get().IsMouseSuppressed()) return false;
+			const auto* m = InputManager::Get().GetMousePtr();
+			return m && m->IsReleased(btn);
+		}
+		bool IsMouseLongPress(MouseButton btn, float thresholdSec)
+		{
+			if (InputManager::Get().IsMouseSuppressed()) return false;
+			const auto* m = InputManager::Get().GetMousePtr();
+			return m && m->IsLongPress(btn, thresholdSec);
+		}
+		float GetMouseAxis(MouseAxis axis)
+		{
+			if (InputManager::Get().IsMouseSuppressed()) return 0.0f;
+			const auto* m = InputManager::Get().GetMousePtr();
+			return m ? m->GetAxis(axis) : 0.0f;
+		}
+		math::Vector2 GetMouseCursorPos()
+		{
+			if (InputManager::Get().IsMouseSuppressed()) return {};
+			const auto* m = InputManager::Get().GetMousePtr();
+			return m ? m->GetCursorPos() : math::Vector2{};
+		}
 
 		bool IsPadTriggered(uint32_t padIndex, PadButton btn)
 		{

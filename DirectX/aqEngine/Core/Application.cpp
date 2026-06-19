@@ -13,6 +13,15 @@
 #include "Component/TransformComponentSystem.h"
 #include "Component/BodyComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
+#ifdef AQ_IMGUI
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_win32.h>
+#include "Rendering/ImGuiRenderCommand.h"
+#ifdef ENGINE_GRAPHICS_D3D11
+#include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
+#include <imgui/imgui_impl_dx11.h>
+#endif
+#endif
 
 
 namespace engine
@@ -33,6 +42,32 @@ namespace engine
 		aq::CameraManager::Initialize();
 		aq::graphics::LightManager::Initialize();
 
+#ifdef AQ_IMGUI
+#ifdef ENGINE_GRAPHICS_D3D11
+		{
+			auto* d3d = dynamic_cast<aq::graphics::D3D11GraphicsDeviceImpl*>(
+				aq::graphics::GraphicsDevice::Get().GetImplRaw());
+			EngineAssertMsg(d3d != nullptr, "AQ_IMGUI requires D3D11GraphicsDeviceImpl");
+			if (d3d)
+			{
+				ImGui::CreateContext();
+				const bool winOk  = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
+				const bool dx11Ok = winOk && ImGui_ImplDX11_Init(d3d->GetDevice(), d3d->GetDeviceContext());
+				if (dx11Ok)
+				{
+					imguiReady_ = true;
+				}
+				else
+				{
+					if (winOk) ImGui_ImplWin32_Shutdown();
+					ImGui::DestroyContext();
+					EngineAssertMsg(false, "ImGui backend initialization failed");
+				}
+			}
+		}
+#endif
+#endif
+
 		return OnInitialize();
 	}
 
@@ -43,9 +78,23 @@ namespace engine
 
 		if (renderThreadReady_)
 		{
+			FlushRender();             // 最後のフレームを描き切ってから停止
 			renderThread_.Finalize();
 			renderThreadReady_ = false;
 		}
+
+#ifdef AQ_IMGUI
+		if (imguiReady_)
+		{
+#ifdef ENGINE_GRAPHICS_D3D11
+			ImGui_ImplDX11_Shutdown();
+#endif
+			ImGui_ImplWin32_Shutdown();
+			ImGui::DestroyContext();
+			imguiReady_ = false;
+		}
+#endif
+
 		aq::graphics::LightManager::Finalize();
 		aq::ecs::EntityContext::Finalize();
 		aq::res::ResourceManager::Finalize();
@@ -55,6 +104,14 @@ namespace engine
 
 	void Application::Update()
 	{
+#ifdef AQ_IMGUI
+		if (imguiReady_)
+		{
+			const auto& io = ImGui::GetIO();
+			aq::hid::InputManager::Get().SuppressKeyboard(io.WantCaptureKeyboard);
+			aq::hid::InputManager::Get().SuppressMouse(io.WantCaptureMouse);
+		}
+#endif
 		aq::hid::InputManager::Get().Update();
 		aq::ecs::EntityContext::Get().Update();
 		aq::res::ResourceManager::Get().Update();
@@ -90,6 +147,26 @@ namespace engine
 		if (mainCamera)
 			aq::graphics::LightManager::Get().SetCameraPosition(mainCamera->GetPosition());
 
+#ifdef AQ_IMGUI
+		ImDrawData* imguiDrawData = nullptr;
+		if (imguiReady_)
+		{
+			ImGui_ImplWin32_NewFrame();
+#ifdef ENGINE_GRAPHICS_D3D11
+			ImGui_ImplDX11_NewFrame();
+#endif
+			ImGui::NewFrame();
+
+#ifdef AQ_DEBUG_IMGUI
+			aq::ecs::EntityContext::Get().DebugRender();
+			OnDebugRender();
+#endif
+
+			ImGui::Render();
+			imguiDrawData = ImGui::GetDrawData();
+		}
+#endif
+
 		OnPreRender();
 
 		auto mainCmdList = std::make_unique<aq::rendering::RenderCommandList>();
@@ -101,6 +178,10 @@ namespace engine
 		aq::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
 		renderer_.BuildCommandList(mainFrame, *mainCmdList,
 		                          Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+#ifdef AQ_IMGUI
+		if (imguiDrawData)
+			mainCmdList->Enqueue<aq::rendering::ImGuiRenderCommand>(imguiDrawData);
+#endif
 		renderThread_.Submit(std::move(mainCmdList), Engine::Get().GetMainRenderTargetHandle(),
 		                    mainFrame.lighting, mainFrame.shadow);
 	}

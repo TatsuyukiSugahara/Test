@@ -92,6 +92,13 @@ namespace aq
 				return systemManager_.GetSystem<T>();
 			}
 
+#ifdef AQ_DEBUG_IMGUI
+			void DebugRender()
+			{
+				systemManager_.DebugRenderAll();
+			}
+#endif
+
 
 		private:
 			static EntityContext* instance_;

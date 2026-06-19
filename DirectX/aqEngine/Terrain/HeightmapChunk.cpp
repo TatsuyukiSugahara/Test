@@ -207,8 +207,8 @@ namespace aq
 			}
 
 			// --- インデックス生成 ---
-			// D3D11 デフォルト: 時計回り (CW) = 表面。カメラ上方から見て CW になるよう i00→i10→i01 とする。
-			// (i00→i01→i10 は上方から見ると CCW になり、バックフェースカリングで消える)
+			// D3D11 デフォルト: 時計回り (CW) = 表面。
+			// i00→i01→i10 の順にすると法線が +Y（上向き）になりフロントフェースとなる。
 			std::vector<uint32_t> indices;
 			indices.reserve(static_cast<size_t>(N) * N * 6);
 			for (uint32_t zi = 0; zi < N; ++zi)
@@ -220,8 +220,8 @@ namespace aq
 					const uint32_t i01 = (zi + 1) * vN + xi;
 					const uint32_t i11 = (zi + 1) * vN + (xi + 1);
 
-					indices.push_back(i00); indices.push_back(i10); indices.push_back(i01);
-					indices.push_back(i10); indices.push_back(i11); indices.push_back(i01);
+					indices.push_back(i00); indices.push_back(i01); indices.push_back(i10);
+					indices.push_back(i10); indices.push_back(i01); indices.push_back(i11);
 				}
 			}
 

@@ -38,6 +38,35 @@ SamplerComparisonState    shadowSampler : register(s1);
 
 // params[0].x = layer UV tiling  (set via StaticMesh::Param(0).x)
 
+// ----------------------------------------------------------------
+// No-tile サンプリング
+// テクスチャタイルより低周波のスムーズノイズで UV を連続的に歪ませる。
+// 離散パッチを作らないため、タイル境界の色差が生じない。
+// ----------------------------------------------------------------
+float2 HashUV(float2 p)
+{
+    float2 q = float2(dot(p, float2(127.1, 311.7)),
+                      dot(p, float2(269.5, 183.3)));
+    return frac(sin(q) * 43758.5453) * 2.0 - 1.0;
+}
+
+// テクスチャタイルより低周波 (scale 倍) の連続スムーズノイズを返す
+float2 SmoothNoise2(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(HashUV(i),               HashUV(i + float2(1, 0)), u.x),
+                lerp(HashUV(i + float2(0, 1)), HashUV(i + float2(1, 1)), u.x), u.y);
+}
+
+float3 SampleNoTile(Texture2D tex, SamplerState s, float2 uv)
+{
+    // テクスチャタイルの 1/5 の周波数でゆっくり変化するノイズで UV を歪ませる
+    float2 distort = SmoothNoise2(uv * 0.2) * 0.45;
+    return tex.Sample(s, uv + distort).rgb;
+}
+
 float SampleShadow(float3 worldPos)
 {
     float4 lightClip = mul(lightViewProj[0], float4(worldPos, 1.0));
@@ -78,15 +107,15 @@ float4 PSMain(PSInput input) : SV_TARGET
         {
             splat /= total;
         }
-        float3 c0 = layer0.Sample(samp, layerUV).rgb;
-        float3 c1 = layer1.Sample(samp, layerUV).rgb;
-        float3 c2 = layer2.Sample(samp, layerUV).rgb;
+        float3 c0 = SampleNoTile(layer0, samp, layerUV);
+        float3 c1 = SampleNoTile(layer1, samp, layerUV);
+        float3 c2 = SampleNoTile(layer2, samp, layerUV);
         albedo = c0 * splat.r + c1 * splat.g + c2 * splat.b;
     }
     else
     {
         // スプラットマップなし: layer0 (t1) のみ使用
-        albedo = layer0.Sample(samp, layerUV).rgb;
+        albedo = SampleNoTile(layer0, samp, layerUV);
     }
 
     float3 N   = normalize(input.N);

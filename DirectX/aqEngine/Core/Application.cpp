@@ -158,6 +158,13 @@ namespace engine
 			ImGui::NewFrame();
 
 #ifdef AQ_DEBUG_IMGUI
+			if (ImGui::BeginMainMenuBar())
+			{
+				aq::ecs::EntityContext::Get().DebugRenderMenu();
+				aq::ecs::EntityContext::Get().DebugRenderSystemMenus();
+				OnDebugRenderMenu();
+				ImGui::EndMainMenuBar();
+			}
 			aq::ecs::EntityContext::Get().DebugRender();
 			OnDebugRender();
 #endif

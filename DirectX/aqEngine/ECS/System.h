@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <future>
+#include <string>
 
 
 namespace aq
@@ -19,6 +20,7 @@ namespace aq
 
 			virtual void Update() = 0;
 #ifdef AQ_DEBUG_IMGUI
+			virtual void DebugRenderMenu() {}
 			virtual void DebugRender() {}
 #endif
 		};
@@ -34,6 +36,7 @@ namespace aq
 			{
 				std::unique_ptr<SystemBase> system;
 				std::vector<size_t> dependencyIndices;
+				std::string          displayName;
 			};
 
 			std::vector<SystemEntry> systemEntries_;
@@ -54,6 +57,13 @@ namespace aq
 			void Update();
 
 #ifdef AQ_DEBUG_IMGUI
+			/** 全 System の DebugRenderMenu をメインメニューバー内で呼ぶ */
+			void DebugRenderMenuAll()
+			{
+				for (auto& entry : systemEntries_)
+					entry.system->DebugRenderMenu();
+			}
+
 			/** 全 System の DebugRender をメインスレッドで直列実行 */
 			void DebugRenderAll()
 			{
@@ -72,10 +82,21 @@ namespace aq
 			void AddSystem()
 			{
 				SystemEntry entry;
-				entry.system = std::make_unique<T>();
+				entry.system      = std::make_unique<T>();
+				entry.displayName = typeid(T).name();
 				ResolveDependencies<Dependencies...>(entry.dependencyIndices);
 				systemEntries_.push_back(std::move(entry));
 			}
+
+
+			/** 登録済み System の数 */
+			size_t GetSystemCount() const { return systemEntries_.size(); }
+
+			/** インデックス i の System の短いクラス名 */
+			const std::string& GetSystemDisplayName(size_t i) const { return systemEntries_[i].displayName; }
+
+			/** インデックス i の System が依存するインデックス列 */
+			const std::vector<size_t>& GetSystemDependencies(size_t i) const { return systemEntries_[i].dependencyIndices; }
 
 
 			/**

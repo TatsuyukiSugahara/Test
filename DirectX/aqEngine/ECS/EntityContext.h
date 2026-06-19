@@ -20,6 +20,9 @@ namespace aq
 			EntityContext() {}
 			~EntityContext() {}
 
+#ifdef AQ_DEBUG_IMGUI
+			bool showSystemGraph_ = false;
+#endif
 
 		public:
 			/** System を一括更新し、積まれたコマンドをフラッシュする */
@@ -93,10 +96,12 @@ namespace aq
 			}
 
 #ifdef AQ_DEBUG_IMGUI
-			void DebugRender()
-			{
-				systemManager_.DebugRenderAll();
-			}
+			/** メインメニューバー内に ECS メニューを追加する（BeginMainMenuBar 済み前提） */
+			void DebugRenderMenu();
+			/** 各 System の DebugRenderMenu をメニューバー直下で呼ぶ（BeginMainMenuBar 済み前提） */
+			void DebugRenderSystemMenus() { systemManager_.DebugRenderMenuAll(); }
+			/** 各 System のデバッグウィンドウ + 依存グラフウィンドウを描画する */
+			void DebugRender();
 #endif
 
 

@@ -40,11 +40,15 @@ namespace app
 
 			void Update() override;
 #ifdef AQ_DEBUG_IMGUI
+			void DebugRenderMenu() override;
 			void DebugRender() override;
 #endif
 
 		private:
 			float speed_ = 0.01f;
+#ifdef AQ_DEBUG_IMGUI
+			bool show_ = false;
+#endif
 		};
 	}
 }

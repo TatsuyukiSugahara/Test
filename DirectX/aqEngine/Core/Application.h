@@ -37,6 +37,8 @@ namespace engine
 		/** メインパス Submit 前に呼ばれる（オフスクリーンパス等を Submit する） */
 		virtual void OnPreRender() {}
 #ifdef AQ_DEBUG_IMGUI
+		/** メインメニューバー内にゲーム固有のメニュー項目を追加する */
+		virtual void OnDebugRenderMenu() {}
 		/** ImGui ウィンドウ構築（EntityContext::DebugRender() の後に呼ばれる） */
 		virtual void OnDebugRender() {}
 #endif

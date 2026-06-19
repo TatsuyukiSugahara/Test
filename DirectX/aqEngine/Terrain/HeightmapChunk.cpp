@@ -132,7 +132,9 @@ namespace aq
 			}
 
 			// シェーダーに渡すレイヤーUV倍率
-			mesh_.Param(0).x = desc.layerTiling;
+			math::Vector4 tiling = mesh_.GetParameter(0);
+			tiling.x = desc.layerTiling;
+			mesh_.SetParameter(0, tiling);
 
 			// Wrap サンプラー (タイリング用)
 			graphics::SamplerDesc sd;

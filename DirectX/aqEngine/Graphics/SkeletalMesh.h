@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <vector>
+#include <functional>
 #include "Resource/Resource.h"
 #include "Math/Matrix.h"
 #include "IBuffer.h"
@@ -48,7 +49,9 @@ namespace aq
 			res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 
 			MaterialCBData materialCB_;
-			ShaderType     shaderType_ = ShaderType::SkeletalModelLit;
+			ShaderType     shaderType_     = ShaderType::SkeletalModelLit;
+			bool           castShadow_    = false;
+			bool           receiveShadow_ = false;
 
 			// AnimationComponent から毎フレーム更新される。nullptr = バインドポーズ (単位行列)
 			std::shared_ptr<std::vector<math::Matrix4x4>> boneMatrices_;
@@ -65,6 +68,26 @@ namespace aq
 			void Update(const math::Vector3& translation, const math::Quaternion& rotation, const math::Vector3& scale);
 
 			void SetTexture(rendering::TextureSlot slot, res::RefGPUResource resource);
+
+			void SetCastShadow(bool v)    { castShadow_ = v; }
+			void SetReceiveShadow(bool v) { receiveShadow_ = v; SetMaterialFlag(MatFlag_ReceiveShadow, v); }
+
+			void SetSpecularIntensity(float v) { materialCB_.specularIntensity = v; }
+			void SetGloss(float v)             { materialCB_.gloss = v; }
+			void SetEmissiveScale(float v)     { materialCB_.emissiveScale = v; }
+			void SetMaterialFlag(MaterialFlags flag, bool enable)
+			{
+				if (enable) materialCB_.flags |=  static_cast<uint32_t>(flag);
+				else        materialCB_.flags &= ~static_cast<uint32_t>(flag);
+			}
+
+			const math::Vector4& GetParameter(uint32_t index) const { return materialCB_.params[index]; }
+			void                 SetParameter(uint32_t index, const math::Vector4& v) { materialCB_.params[index] = v; }
+			void ForEachParameter(const std::function<void(uint32_t, math::Vector4&)>& fn)
+			{
+				for (uint32_t i = 0; i < MATERIAL_PARAMETER_NUM; ++i)
+					fn(i, materialCB_.params[i]);
+			}
 
 			/** AnimationComponent からボーン行列を注入する */
 			void SetBoneMatrices(std::shared_ptr<std::vector<math::Matrix4x4>> matrices)

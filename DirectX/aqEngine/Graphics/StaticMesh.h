@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <memory>
+#include <functional>
 #include "Resource/Resource.h"
 #include "Math/Matrix.h"
 #include "IBuffer.h"
@@ -62,9 +63,13 @@ namespace aq
 			/** テクスチャを個別スロットに設定する (Initialize 後に呼ぶ) */
 			void SetTexture(rendering::TextureSlot slot, aq::res::RefGPUResource resource);
 
-			/** ユーザー自由パラメータ (HLSL: params[index]) */
-			math::Vector4&       Param(uint32_t index)       { return materialCB_.params[index]; }
-			const math::Vector4& Param(uint32_t index) const { return materialCB_.params[index]; }
+			const math::Vector4& GetParameter(uint32_t index) const { return materialCB_.params[index]; }
+			void                 SetParameter(uint32_t index, const math::Vector4& v) { materialCB_.params[index] = v; }
+			void ForEachParameter(const std::function<void(uint32_t, math::Vector4&)>& fn)
+			{
+				for (uint32_t i = 0; i < MATERIAL_PARAMETER_NUM; ++i)
+					fn(i, materialCB_.params[i]);
+			}
 
 			void SetCastShadow(bool v)    { castShadow_ = v; }
 			void SetReceiveShadow(bool v) { receiveShadow_ = v; SetMaterialFlag(MatFlag_ReceiveShadow, v); }

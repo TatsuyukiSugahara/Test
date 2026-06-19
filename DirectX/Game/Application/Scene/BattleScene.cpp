@@ -95,6 +95,8 @@ namespace app
 
 				auto* skelComp = entity.GetComponent<aq::ecs::SkeletalMeshComponent>();
 				skelComp->SetModelPath("Assets/unityChan.tkm");
+				skelComp->GetSkeletalMesh()->SetCastShadow(true);
+				skelComp->GetSkeletalMesh()->SetReceiveShadow(true);
 
 				auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
 				animComp->AddAnimation(aqHash32("idle"), "Assets/animData/idle.tka");

@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "StaticMesh.h"
+#include "MeshRenderHelper.h"
 #include "GraphicsDevice.h"
 
 
@@ -143,46 +144,12 @@ namespace aq
 
 		bool StaticMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
-			if (!isInitialized_)                                       return false;
-			if (!vsShaderResource_ || !psShaderResource_)              return false;
-			if (!vsShaderResource_->IsCompleted() ||
-			    !psShaderResource_->IsCompleted())                     return false;
+			if (!FillRenderItemBase(item, isInitialized_,
+			        vsShaderResource_, psShaderResource_,
+			        vertexBuffer_, indexBuffer_, samplerState_,
+			        gpuResources_, indicesSize_, worldMatrix_, materialCB_))
+				return false;
 
-			IShader* vs = vsShaderResource_->GetShader();
-			IShader* ps = psShaderResource_->GetShader();
-			if (!vs || !ps)                                            return false;
-
-			item.vertexBuffer = vertexBuffer_;
-			item.indexBuffer  = indexBuffer_;
-			item.samplerState = samplerState_;
-
-			// Aliasing constructor: keeps the ResourceBase alive while the stored
-			// pointer addresses the API object inside it.
-			item.vs = std::shared_ptr<IShader>(vsShaderResource_, vs);
-			item.ps = std::shared_ptr<IShader>(psShaderResource_, ps);
-
-			// テクスチャ t0-t3
-			constexpr uint32_t kCount = static_cast<uint32_t>(rendering::TextureSlot::Count);
-			for (uint32_t i = 0; i < kCount; ++i)
-			{
-				const auto& gpuRes = gpuResources_[i];
-				if (gpuRes)
-				{
-					IShaderResourceView* srv = gpuRes->GetShaderResourceView();
-					item.textures[i] = srv
-						? std::shared_ptr<IShaderResourceView>(gpuRes, srv)
-						: nullptr;
-				}
-				else
-				{
-					item.textures[i] = nullptr;
-				}
-			}
-
-			item.indexCount    = indicesSize_;
-			item.worldMatrix   = worldMatrix_;
-			item.layer         = 0;
-			item.materialCB    = materialCB_;
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
 

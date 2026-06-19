@@ -5,6 +5,7 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Memory/MemoryManager.h"
 #include "Rendering/RenderTargetHandle.h"
+#include "Util/GameTimer.h"
 
 
 namespace engine
@@ -39,6 +40,8 @@ namespace engine
 
 		IApplication* application_;
 
+		aq::util::GameTimer gameTimer_;
+
 
 	private:
 		Engine();
@@ -59,6 +62,14 @@ namespace engine
 	public:
 		inline int32_t GetRenderWidth()  const { return renderWidth_; }
 		inline int32_t GetRenderHeight() const { return renderHeight_; }
+
+		inline aq::util::GameTimer& GetTimer() { return gameTimer_; }
+
+		// static ラッパー (Engine::Get() を省略して呼べる)
+		static float GetDeltaTime() { return Get().gameTimer_.GetDeltaTime(); }
+		static float GetTotalTime() { return Get().gameTimer_.GetTotalTime(); }
+		static float GetFPS()       { return Get().gameTimer_.GetFPS(); }
+		static void  SetFPSLimit(float fps) { Get().gameTimer_.SetFPSLimit(fps); }
 
 		inline void ToggleMainRenderTarget() { currentMainRenderTarget_ ^= 1; }
 		inline aq::graphics::IRenderTarget& GetMainRenderTarget()

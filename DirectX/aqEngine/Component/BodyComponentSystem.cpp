@@ -1,5 +1,4 @@
 #include "aq.h"
-#include "Engine.h"
 #include "BodyComponentSystem.h"
 #include "TransformComponentSystem.h"
 #include "Graphics/Camera.h"
@@ -319,74 +318,6 @@ namespace aq
 		/*******************************************/
 
 
-		AnimationComponent::AnimationComponent()
-			: currentTime_(0.0f)
-			, playSpeed_(1.0f)
-			, isPlaying_(false)
-			, isLooping_(true)
-			, loadRequested_(false)
-		{
-		}
-
-
-		void AnimationComponent::SetAnimationPath(const char* path)
-		{
-			animationPath_     = path ? path : "";
-			animationResource_.reset();
-			loadRequested_     = false;
-			animationClip_.Initialize(nullptr);
-		}
-
-
-		void AnimationComponent::Play(bool looping)
-		{
-			isLooping_   = looping;
-			isPlaying_   = true;
-			currentTime_ = 0.0f;
-		}
-
-
-		void AnimationComponent::Update(float deltaTime, SkeletalMeshComponent* skelMeshComp)
-		{
-			// アニメーションリソースの非同期ロード
-			if (!loadRequested_ && !animationPath_.empty()) {
-				animationResource_ = aq::res::ResourceManager::Get().Load<aq::res::AnimationResource>(animationPath_.c_str());
-				animationClip_.Initialize(animationResource_);
-				loadRequested_ = true;
-			}
-
-			if (!animationClip_.IsLoaded()) return;
-			if (!skelMeshComp || !skelMeshComp->IsCompleted()) return;
-
-			const auto* bones = skelMeshComp->GetSkeletalMesh()->GetBones();
-			if (!bones || bones->empty()) return;
-
-			// 時刻を進める
-			if (isPlaying_) {
-				currentTime_ += deltaTime * playSpeed_;
-				const float duration = animationClip_.GetDuration();
-				if (duration > 0.0f) {
-					if (isLooping_) {
-						while (currentTime_ >= duration) currentTime_ -= duration;
-					} else {
-						if (currentTime_ >= duration) {
-							currentTime_ = duration;
-							isPlaying_   = false;
-						}
-					}
-				}
-			}
-
-			// ボーン行列を計算して SkeletalMesh に注入
-			auto boneMatrices = std::make_shared<std::vector<aq::math::Matrix4x4>>();
-			animationClip_.CalcBoneMatrices(currentTime_, *bones, *boneMatrices);
-			skelMeshComp->GetSkeletalMesh()->SetBoneMatrices(boneMatrices);
-		}
-
-
-		/*******************************************/
-
-
 		RenderSystem* RenderSystem::instance_ = nullptr;
 
 
@@ -426,14 +357,6 @@ namespace aq
 					if (skelComp->IsCompleted()) {
 						skelComp->GetSkeletalMesh()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
 					}
-				});
-
-			// アニメーション更新: SkeletalMeshComponent + AnimationComponent を持つエンティティ
-			// deltaTime を簡易的に固定値で渡す (後で Engine::GetDeltaTime() などに置き換え可能)
-			constexpr float kFixedDeltaTime = 1.0f / 60.0f;
-			aq::ecs::Foreach<SkeletalMeshComponent, AnimationComponent>([](const aq::ecs::Entity&, SkeletalMeshComponent* skelComp, AnimationComponent* animComp)
-				{
-					animComp->Update(kFixedDeltaTime, skelComp);
 				});
 
 			aq::ecs::Foreach<TransformComponent, TerrainComponent>([](const aq::ecs::Entity&, TransformComponent* tc, TerrainComponent* terrain)

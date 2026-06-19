@@ -4,7 +4,6 @@
 #include "Graphics/Camera.h"
 #include "Graphics/StaticMesh.h"
 #include "Graphics/SkeletalMesh.h"
-#include "Graphics/AnimationClip.h"
 #include "Graphics/RenderContext.h"
 #include "Rendering/RenderFrame.h"
 
@@ -141,49 +140,6 @@ namespace aq
 
 
 		
-		/**
-		 * アニメーションコンポーネント
-		 *
-		 * UE の AnimInstance に相当。TKA ファイルからアニメーションを読み込み、
-		 * SkeletalMeshComponent のボーン行列を毎フレーム更新する。
-		 */
-		class AnimationComponent : public aq::ecs::IComponent
-		{
-			ecsComponent(aq::ecs::AnimationComponent);
-
-		private:
-			aq::graphics::AnimationClip animationClip_;
-			aq::res::RefAnimationResource animationResource_;
-			std::string  animationPath_;
-			float        currentTime_;
-			float        playSpeed_;
-			bool         isPlaying_;
-			bool         isLooping_;
-			bool         loadRequested_;
-
-		public:
-			AnimationComponent();
-			~AnimationComponent() = default;
-
-			/** アニメーションファイルパス (TKA) を設定する */
-			void SetAnimationPath(const char* path);
-
-			/** アニメーションを再生する */
-			void Play(bool looping = true);
-			void Stop() { isPlaying_ = false; }
-
-			float GetCurrentTime() const { return currentTime_; }
-			float GetPlaySpeed()   const { return playSpeed_;   }
-			void  SetPlaySpeed(float speed) { playSpeed_ = speed; }
-
-			/**
-			 * アニメーション更新。SkeletalMeshComponent と連携してボーン行列を計算する。
-			 * RenderSystem::Update() から呼ばれる。
-			 */
-			void Update(float deltaTime, SkeletalMeshComponent* skelMeshComp);
-		};
-
-
 
 
 

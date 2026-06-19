@@ -54,6 +54,8 @@ namespace engine
 		}
 		application_->Register();
 
+		gameTimer_.Initialize();
+
 		return true;
 	}
 
@@ -150,6 +152,7 @@ namespace engine
 
 	void Engine::Update()
 	{
+		gameTimer_.Tick();
 		application_->Update();
 		// FlushRender() はレンダースレッドがコマンドリストの実行・RT コピー・Present を
 		// 完了するまで待機する。描画に関わるすべての D3D11 コンテキスト呼び出しは

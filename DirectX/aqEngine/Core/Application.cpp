@@ -12,6 +12,7 @@
 #include "Rendering/FrameCommands.h"
 #include "Component/TransformComponentSystem.h"
 #include "Component/BodyComponentSystem.h"
+#include "Component/AnimationComponentSystem.h"
 
 
 namespace engine
@@ -73,7 +74,8 @@ namespace engine
 	void Application::Register()
 	{
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::HierarcicalTransformSystem>();
-		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::RenderSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::AnimationSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::RenderSystem, aq::ecs::AnimationSystem>();
 		OnRegister();
 	}
 

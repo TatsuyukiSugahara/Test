@@ -137,6 +137,7 @@
       <PrecompiledHeaderFile Condition="'$(Platform)'=='x64'">aq.h</PrecompiledHeaderFile>
     </ClCompile>
     <ClCompile Include="Core\Application.cpp" />
+    <ClCompile Include="Component\AnimationComponentSystem.cpp" />
     <ClCompile Include="Component\BodyComponentSystem.cpp" />
     <ClCompile Include="Component\TransformComponentSystem.cpp" />
     <ClCompile Include="ECS\Chunk.cpp" />
@@ -158,6 +159,7 @@
     <ClCompile Include="Graphics\StaticMesh.cpp" />
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
+    <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\JobSystem.cpp" />
     <ClCompile Include="Util\ThreadPool.cpp" />
     <ClCompile Include="Graphics\GraphicsDevice.cpp" />
@@ -190,6 +192,7 @@
   <ItemGroup>
     <ClInclude Include="Core\Application.h" />
     <ClInclude Include="Core\IApplication.h" />
+    <ClInclude Include="Component\AnimationComponentSystem.h" />
     <ClInclude Include="Component\BodyComponentSystem.h" />
     <ClInclude Include="Component\TransformComponentSystem.h" />
     <ClInclude Include="ECS\Archetype.h" />
@@ -281,6 +284,7 @@
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Component\TerrainComponent.h" />
     <ClInclude Include="Util\CRC32.h" />
+    <ClInclude Include="Util\GameTimer.h" />
     <ClInclude Include="Util\ThreadPool.h" />
     <ClInclude Include="Utility.h" />
   </ItemGroup>

@@ -9,7 +9,7 @@
 #include <string>
 
 
-#define EngineHash32(str) aq::util::ComputeCrc32(str)
+#define aqHash32(str) aq::util::ComputeCrc32(str)
 
 
 namespace aq

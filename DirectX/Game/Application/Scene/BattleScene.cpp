@@ -97,13 +97,13 @@ namespace app
 				skelComp->SetModelPath("Assets/unityChan.tkm");
 
 				auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
-				animComp->AddAnimation(EngineHash32("idle"), "Assets/animData/idle.tka");
-				animComp->Play(EngineHash32("idle"), true);
+				animComp->AddAnimation(aqHash32("idle"), "Assets/animData/idle.tka");
+				animComp->Play(aqHash32("idle"), true);
 
 				auto* stateMachineComponent = entity.GetComponent<app::ecs::StateMachineComponent>();
-				stateMachineComponent->GetStateMachine()->AddState<app::actor::IdleState>(EngineHash32("Idle"));
-				stateMachineComponent->GetStateMachine()->AddState<app::actor::MoveState>(EngineHash32("Move"));
-				stateMachineComponent->GetStateMachine()->RequestStateID(EngineHash32("Idle"));
+				stateMachineComponent->GetStateMachine()->AddState<app::actor::IdleState>(aqHash32("Idle"));
+				stateMachineComponent->GetStateMachine()->AddState<app::actor::MoveState>(aqHash32("Move"));
+				stateMachineComponent->GetStateMachine()->RequestStateID(aqHash32("Idle"));
 				stateMachineComponent->GetStateMachine()->SetTargetHandle(targetHandle);
 			}
 

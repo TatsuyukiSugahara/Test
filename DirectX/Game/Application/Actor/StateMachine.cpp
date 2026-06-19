@@ -36,7 +36,7 @@ namespace app
 		{
 			// 移動
 			if (!stateMachine_->GetDirection().IsZero()) {
-				stateMachine_->RequestStateID(EngineHash32("Move"));
+				stateMachine_->RequestStateID(aqHash32("Move"));
 			}
 		}
 
@@ -85,7 +85,7 @@ namespace app
 					transformComponent->transform.localPosition.Add(move);
 				}
 			} else {
-				stateMachine_->RequestStateID(EngineHash32("Idle"));
+				stateMachine_->RequestStateID(aqHash32("Idle"));
 			}
 		}
 

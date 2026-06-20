@@ -37,6 +37,9 @@
     <Filter Include="Rendering\Shadow">
       <UniqueIdentifier>{f0e1d2c3-b4a5-9678-01ef-234567890abc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\PostProcess">
+      <UniqueIdentifier>{a1e2f3b4-c5d6-7890-ef12-34567890abcd}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Resource">
       <UniqueIdentifier>{0dd3f527-688b-4000-a85f-54637f175461}</UniqueIdentifier>
     </Filter>
@@ -184,6 +187,15 @@
     </ClCompile>
     <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp">
       <Filter>Rendering\Shadow</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\BloomPassCommand.cpp">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\BloomRenderer.cpp">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp">
+      <Filter>Rendering\PostProcess</Filter>
     </ClCompile>
     <ClCompile Include="Resource\Resource.cpp">
       <Filter>Resource</Filter>
@@ -462,6 +474,18 @@
     </ClInclude>
     <ClInclude Include="Rendering\Shadow\ShadowPassCommand.h">
       <Filter>Rendering\Shadow</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\BloomPassCommand.h">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\BloomRenderer.h">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\BloomDebugPanel.h">
+      <Filter>Rendering\PostProcess</Filter>
     </ClInclude>
     <ClInclude Include="Resource\Resource.h">
       <Filter>Resource</Filter>

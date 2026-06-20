@@ -10,8 +10,10 @@
 #include "Rendering/RenderCommandList.h"
 #include "Rendering/FrameCommands.h"
 #include "Rendering/Shadow/HardShadowRenderer.h"
+#include "Rendering/PostProcess/BloomRenderer.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
+#include "Rendering/PostProcess/BloomDebugPanel.h"
 #endif
 #include "Resource/Resource.h"
 #include "ECS/ECS.h"
@@ -65,6 +67,23 @@ namespace app
 			}
 		}
 
+		// Bloom
+		{
+			const uint32_t renderW = engine::Engine::Get().GetRenderWidth();
+			const uint32_t renderH = engine::Engine::Get().GetRenderHeight();
+
+			auto bloom = std::make_unique<aq::rendering::BloomRenderer>();
+			if (bloom->Initialize(renderW, renderH))
+			{
+				bloomRenderer_ = bloom.get(); // 所有権は renderer_ へ移す前に生ポインタを保存
+				renderer_.SetPostProcessRenderer(std::move(bloom));
+#ifdef AQ_DEBUG_IMGUI
+				bloomDebugPanel_ = std::make_unique<aq::rendering::BloomDebugPanel>(*bloomRenderer_);
+				aq::DebugUI::Get().Register(bloomDebugPanel_.get());
+#endif
+			}
+		}
+
 		return true;
 	}
 
@@ -72,6 +91,11 @@ namespace app
 	void Application::OnFinalize()
 	{
 #ifdef AQ_DEBUG_IMGUI
+		if (bloomDebugPanel_)
+		{
+			aq::DebugUI::Get().Unregister(bloomDebugPanel_.get());
+			bloomDebugPanel_.reset();
+		}
 		if (shadowDebugPanel_)
 		{
 			aq::DebugUI::Get().Unregister(shadowDebugPanel_.get());
@@ -145,7 +169,7 @@ namespace app
 		offscreenFrame.lighting = aq::graphics::LightManager::Get().GetLightingData();
 		aq::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, aq::CameraType::Offscreen);
 		renderer_.BuildCommandList(offscreenFrame, *offscreenCmdList,
-		                          offscreenRTHandle_, kOffscreenRTWidth, kOffscreenRTHeight);
+		                          offscreenRTHandle_, kOffscreenRTWidth, kOffscreenRTHeight, false);
 		renderThread_.Submit(std::move(offscreenCmdList), aq::rendering::RenderTargetHandle{},
 		                    offscreenFrame.lighting, offscreenFrame.shadow);
 	}

@@ -4,6 +4,7 @@
 #include "RenderCommandList.h"
 #include "RenderTargetHandle.h"
 #include "Shadow/IShadowRenderer.h"
+#include "PostProcess/IPostProcessRenderer.h"
 
 
 namespace aq
@@ -36,6 +37,15 @@ namespace aq
 
 			IShadowRenderer* GetShadowRenderer() const { return shadowRenderer_.get(); }
 
+			void SetPostProcessRenderer(std::unique_ptr<IPostProcessRenderer> pp);
+			IPostProcessRenderer* GetPostProcessRenderer() const { return postProcessRenderer_.get(); }
+
+			/**
+			 * ポストプロセスが設定されている場合はその最終出力 RT を、そうでなければ sceneRT を返す。
+			 * RenderThread::Submit の displayRT に渡す値を決めるために使う。
+			 */
+			RenderTargetHandle GetDisplayRTHandle(RenderTargetHandle sceneRT) const;
+
 			/**
 			 * ゲームスレッドでフレームデータを outList に記録する。
 			 * シャドウレンダラーが設定されている場合は frame.shadow を自動的に埋める。
@@ -43,7 +53,8 @@ namespace aq
 			 */
 			void BuildCommandList(RenderFrame& frame, RenderCommandList& outList,
 			                      RenderTargetHandle rtHandle,
-			                      float viewportW, float viewportH) const;
+			                      float viewportW, float viewportH,
+			                      bool applyPostProcess = true) const;
 
 #if _DEBUG
 			/**
@@ -59,10 +70,11 @@ namespace aq
 			                    const CameraData&  camera,
 			                    RenderCommandList& outList) const;
 
-			std::unique_ptr<IShadowRenderer> shadowRenderer_;
-			RenderTargetHandle               mainRTHandle_;
-			float                            mainViewportW_ = 0.f;
-			float                            mainViewportH_ = 0.f;
+			std::unique_ptr<IShadowRenderer>      shadowRenderer_;
+			std::unique_ptr<IPostProcessRenderer> postProcessRenderer_;
+			RenderTargetHandle                    mainRTHandle_;
+			float                                 mainViewportW_ = 0.f;
+			float                                 mainViewportH_ = 0.f;
 		};
 	}
 }

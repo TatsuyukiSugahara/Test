@@ -102,9 +102,17 @@ namespace aq
 			{
 				impl_->CSSetShader(shader);
 			}
+			void CSUnsetShader()
+			{
+				impl_->CSUnsetShader();
+			}
 			void CSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer)
 			{
 				impl_->CSSetConstantBuffer(startSlot, constantBuffer);
+			}
+			void CSSetSampler(uint32_t startSlot, ISamplerState& samplerState)
+			{
+				impl_->CSSetSampler(startSlot, samplerState);
 			}
 			void CSSetShaderResource(uint32_t startSlot, IShaderResourceView& shaderResourceView)
 			{

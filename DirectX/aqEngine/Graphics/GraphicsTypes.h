@@ -206,6 +206,16 @@ namespace aq
 		};
 
 
+		/** オフスクリーン RT 生成記述子 (API 非依存) */
+		struct RenderTargetDesc
+		{
+			uint32_t    width       = 0;
+			uint32_t    height      = 0;
+			PixelFormat colorFormat = PixelFormat::R8G8B8A8_Unorm;
+			bool        hasDepth    = false;
+		};
+
+
 		/**
 		 * プラットフォーム非依存のウィンドウハンドル
 		 * Win32:  handle に HWND を void* キャストして格納

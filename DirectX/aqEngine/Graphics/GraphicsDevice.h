@@ -53,6 +53,7 @@ namespace aq
 
 			/** オフスクリーン RT を生成してハンドルを返す。失敗時は INVALID ハンドル */
 			rendering::RenderTargetHandle CreateOffscreenRenderTarget(uint32_t width, uint32_t height);
+			rendering::RenderTargetHandle CreateOffscreenRenderTarget(const graphics::RenderTargetDesc& desc);
 
 			/** 描画結果を画面に出す */
 			void Present();

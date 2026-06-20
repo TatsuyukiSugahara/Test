@@ -23,9 +23,25 @@ namespace aq
 		}
 
 
+		void Renderer::SetPostProcessRenderer(std::unique_ptr<IPostProcessRenderer> pp)
+		{
+			postProcessRenderer_ = std::move(pp);
+		}
+
+
+		RenderTargetHandle Renderer::GetDisplayRTHandle(RenderTargetHandle sceneRT) const
+		{
+			if (postProcessRenderer_) {
+				return postProcessRenderer_->GetFinalRT();
+			}
+			return sceneRT;
+		}
+
+
 		void Renderer::BuildCommandList(RenderFrame& frame, RenderCommandList& outList,
 		                                RenderTargetHandle rtHandle,
-		                                float viewportW, float viewportH) const
+		                                float viewportW, float viewportH,
+		                                bool applyPostProcess) const
 		{
 			// Pass 1: シャドウパス
 			if (shadowRenderer_) {
@@ -37,6 +53,14 @@ namespace aq
 			// Pass 2: メインパス
 			for (const RenderItem& item : frame.items) {
 				RecordDrawItem(item, frame.camera, outList);
+			}
+
+			// Pass 3: ポストプロセス（メインパスのみ）
+			if (postProcessRenderer_ && applyPostProcess) {
+				postProcessRenderer_->BuildPostProcessCommandList(
+					outList, rtHandle,
+					static_cast<uint32_t>(viewportW),
+					static_cast<uint32_t>(viewportH));
 			}
 		}
 

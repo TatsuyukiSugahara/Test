@@ -189,6 +189,9 @@
     <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp" />
     <ClCompile Include="Rendering\Shadow\ShadowDebugPanel.cpp" />
+    <ClCompile Include="Rendering\PostProcess\BloomPassCommand.cpp" />
+    <ClCompile Include="Rendering\PostProcess\BloomRenderer.cpp" />
+    <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Component\TerrainComponent.cpp" />
   </ItemGroup>

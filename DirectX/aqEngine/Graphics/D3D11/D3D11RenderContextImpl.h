@@ -37,7 +37,9 @@ namespace aq
 			void PSSetSampler(uint32_t startSlot, ISamplerState& samplerState) override;
 
 			void CSSetShader(IShader& shader) override;
+			void CSUnsetShader() override;
 			void CSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer) override;
+			void CSSetSampler(uint32_t startSlot, ISamplerState& samplerState) override;
 			void CSSetShaderResource(uint32_t startSlot, IShaderResourceView& shaderResourceView) override;
 			void CSUnsetShaderResource(uint32_t slot) override;
 			void CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& unorderedAccessView) override;

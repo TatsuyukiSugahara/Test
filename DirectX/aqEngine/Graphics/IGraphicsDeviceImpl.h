@@ -56,6 +56,7 @@ namespace aq
 			 * 失敗時は ~0u (INVALID) を返す。
 			 */
 			virtual uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) = 0;
+			virtual uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& desc) = 0;
 
 			/** 描画結果を画面に出す */
 			virtual void Present() = 0;

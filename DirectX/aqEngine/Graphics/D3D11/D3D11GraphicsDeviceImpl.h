@@ -27,6 +27,7 @@ namespace aq
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;
 			IRenderTarget* GetRenderTarget(uint32_t index) override;
 			uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
+			uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& desc) override;
 			void Present() override;
 			void CopyToBackBuffer(IRenderTarget& src) override;
 			void SetupDefaultRenderState(RenderContext& context) override;

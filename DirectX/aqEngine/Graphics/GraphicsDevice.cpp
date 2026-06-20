@@ -65,6 +65,12 @@ namespace aq
 		}
 
 
+		rendering::RenderTargetHandle GraphicsDevice::CreateOffscreenRenderTarget(const graphics::RenderTargetDesc& desc)
+		{
+			return rendering::RenderTargetHandle{ impl_->CreateOffscreenRenderTarget(desc) };
+		}
+
+
 		void GraphicsDevice::Present()
 		{
 			impl_->Present();

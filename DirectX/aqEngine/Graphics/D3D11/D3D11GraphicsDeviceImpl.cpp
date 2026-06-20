@@ -99,12 +99,21 @@ namespace aq
 
 		uint32_t D3D11GraphicsDeviceImpl::CreateOffscreenRenderTarget(uint32_t width, uint32_t height)
 		{
+			RenderTargetDesc desc;
+			desc.width    = width;
+			desc.height   = height;
+			desc.hasDepth = true;
+			return CreateOffscreenRenderTarget(desc);
+		}
+
+
+		uint32_t D3D11GraphicsDeviceImpl::CreateOffscreenRenderTarget(const RenderTargetDesc& desc)
+		{
 			auto rt = std::make_unique<RenderTarget>();
 			SampleDesc sampleDesc;
-			if (!rt->Create(static_cast<int32_t>(width), static_cast<int32_t>(height), 1,
-				PixelFormat::R8G8B8A8_Unorm,
-				PixelFormat::D24_Unorm_S8_Uint,
-				sampleDesc))
+			PixelFormat depthFmt = desc.hasDepth ? PixelFormat::D24_Unorm_S8_Uint : PixelFormat::Unknown;
+			if (!rt->Create(static_cast<int32_t>(desc.width), static_cast<int32_t>(desc.height), 1,
+				desc.colorFormat, depthFmt, sampleDesc))
 			{
 				return ~0u;
 			}

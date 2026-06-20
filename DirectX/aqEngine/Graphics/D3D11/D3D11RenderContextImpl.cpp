@@ -143,10 +143,23 @@ namespace aq
 		}
 
 
+		void D3D11RenderContextImpl::CSUnsetShader()
+		{
+			context_->CSSetShader(nullptr, nullptr, 0);
+		}
+
+
 		void D3D11RenderContextImpl::CSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& cb)
 		{
 			auto* d3dBuf = static_cast<ConstantBuffer&>(cb).GetBody();
 			context_->CSSetConstantBuffers(startSlot, 1, &d3dBuf);
+		}
+
+
+		void D3D11RenderContextImpl::CSSetSampler(uint32_t startSlot, ISamplerState& ss)
+		{
+			auto* d3dSS = static_cast<SamplerState&>(ss).GetBody();
+			context_->CSSetSamplers(startSlot, 1, &d3dSS);
 		}
 
 

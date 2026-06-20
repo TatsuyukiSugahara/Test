@@ -153,12 +153,14 @@ namespace aq
 					// メインスレッドは下の done = true が設定されるまで FlushRender() 内で
 					// ブロックしているため、コンテキストへの同時アクセスは発生しない。
 					const RenderTargetHandle displayRT = slots_[slot]->displayRT;
-					const uint32_t rtCount = graphics::GraphicsDevice::Get().GetMainRenderTargetCount();
-					if (displayRT.IsValid() && displayRT.index < rtCount)
+					if (displayRT.IsValid())
 					{
-						auto& rt = graphics::GraphicsDevice::Get().GetMainRenderTarget(displayRT.index);
-						graphics::GraphicsDevice::Get().CopyToBackBuffer(rt);
-						graphics::GraphicsDevice::Get().Present();
+						auto* rt = graphics::GraphicsDevice::Get().GetRenderTarget(displayRT);
+						if (rt)
+						{
+							graphics::GraphicsDevice::Get().CopyToBackBuffer(*rt);
+							graphics::GraphicsDevice::Get().Present();
+						}
 					}
 				}
 

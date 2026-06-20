@@ -206,7 +206,8 @@ namespace engine
 		if (imguiDrawData)
 			mainCmdList->Enqueue<aq::rendering::ImGuiRenderCommand>(imguiDrawData);
 #endif
-		renderThread_.Submit(std::move(mainCmdList), Engine::Get().GetMainRenderTargetHandle(),
+		const auto sceneRT = Engine::Get().GetMainRenderTargetHandle();
+		renderThread_.Submit(std::move(mainCmdList), renderer_.GetDisplayRTHandle(sceneRT),
 		                    mainFrame.lighting, mainFrame.shadow);
 	}
 }

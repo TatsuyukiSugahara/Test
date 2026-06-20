@@ -44,7 +44,9 @@ namespace aq
 			virtual void PSSetSampler(uint32_t startSlot, ISamplerState& samplerState) = 0;
 
 			virtual void CSSetShader(IShader& shader) = 0;
+			virtual void CSUnsetShader() = 0;
 			virtual void CSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer) = 0;
+			virtual void CSSetSampler(uint32_t startSlot, ISamplerState& samplerState) = 0;
 			virtual void CSSetShaderResource(uint32_t startSlot, IShaderResourceView& shaderResourceView) = 0;
 			virtual void CSUnsetShaderResource(uint32_t slot) = 0;
 			virtual void CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& unorderedAccessView) = 0;

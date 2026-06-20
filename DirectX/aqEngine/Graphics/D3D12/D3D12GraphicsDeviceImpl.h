@@ -54,6 +54,7 @@ namespace aq
 			// TODO: D3D12 オフスクリーン RT 未実装。D3D12 バックエンド移行時に実装する。
 			IRenderTarget* GetRenderTarget(uint32_t index) override { return nullptr; }
 			uint32_t CreateOffscreenRenderTarget(uint32_t /*width*/, uint32_t /*height*/) override { return ~0u; }
+			uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& /*desc*/) override { return ~0u; }
 
 			std::unique_ptr<IVertexBuffer>       CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
 			std::unique_ptr<IIndexBuffer>        CreateIndexBuffer(uint32_t indexNum, const void* data) override;

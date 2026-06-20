@@ -1,5 +1,5 @@
 #include "Lighting.fx"
-#include "ShadowCB.h"
+#include "ShadowSampling.fx"
 
 // VertexData メモリレイアウト順に宣言する（D3D11_APPEND_ALIGNED_ELEMENT 対応）
 // position(float3) → normal(float3) → uv(float2) → tangent(float4)
@@ -28,22 +28,11 @@ cbuffer PerDrawCB : register(b0)
     float4x4 projection;
 };
 
-Texture2D      albedoTex      : register(t0);
-Texture2D      normalTex      : register(t1);
-Texture2D      specularTex    : register(t2);
-Texture2D      emissiveTex    : register(t3);
-Texture2DArray shadowMapArray : register(t4);
-SamplerState              samp         : register(s0);
-SamplerComparisonState    shadowSampler : register(s1);
-
-float SampleShadow(float3 worldPos)
-{
-    float4 lightClip = mul(lightViewProj[0], float4(worldPos, 1.0));
-    float3 ndc = lightClip.xyz / lightClip.w;
-    float2 uv  = ndc.xy * float2(0.5, -0.5) + 0.5;
-    float  d   = ndc.z - depthBias;
-    return shadowMapArray.SampleCmpLevelZero(shadowSampler, float3(uv, 0.0), d);
-}
+Texture2D albedoTex   : register(t0);
+Texture2D normalTex   : register(t1);
+Texture2D specularTex : register(t2);
+Texture2D emissiveTex : register(t3);
+SamplerState samp     : register(s0);
 
 PSInput VSMain(VSInput input)
 {
@@ -93,7 +82,8 @@ float4 PSMain(PSInput input) : SV_TARGET
 
     if (ReceivesShadow())
     {
-        float shadow = SampleShadow(input.worldPos);
+        float viewDepth = mul(view, float4(input.worldPos, 1.0)).z;
+        float shadow = SampleShadow(input.worldPos, viewDepth);
         float3 ambientOnly = ambient.color * ambient.intensity * albedo + emissive * emissiveScale;
         lit = ambientOnly + (lit - ambientOnly) * shadow;
     }

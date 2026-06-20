@@ -38,6 +38,10 @@ namespace aq
 				const graphics::DirectionalLight& light,
 				ShadowCBData&                     outData) const override;
 
+			void SetSceneCenter(const math::Vector3& center) override { settings_.sceneCenter = center; }
+
+			ShadowSettings& GetSettingsRef() override { return settings_; }
+
 			graphics::IDepthMap* GetDepthMap() const override { return depthMap_.get(); }
 
 		private:

@@ -137,6 +137,7 @@
       <PrecompiledHeaderFile Condition="'$(Platform)'=='x64'">aq.h</PrecompiledHeaderFile>
     </ClCompile>
     <ClCompile Include="Core\Application.cpp" />
+    <ClCompile Include="Core\DebugUI.cpp" />
     <ClCompile Include="Component\AnimationComponentSystem.cpp" />
     <ClCompile Include="Component\BodyComponentSystem.cpp" />
     <ClCompile Include="Component\TransformComponentSystem.cpp" />
@@ -187,12 +188,15 @@
     <ClCompile Include="Rendering\ImGuiRenderCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp" />
+    <ClCompile Include="Rendering\Shadow\ShadowDebugPanel.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Component\TerrainComponent.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Application.h" />
     <ClInclude Include="Core\IApplication.h" />
+    <ClInclude Include="Core\DebugUI.h" />
+    <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Component\AnimationComponentSystem.h" />
     <ClInclude Include="Component\BodyComponentSystem.h" />
     <ClInclude Include="Component\TransformComponentSystem.h" />
@@ -279,6 +283,7 @@
     <ClInclude Include="Rendering\RenderThread.h" />
     <ClInclude Include="Rendering\Shadow\HardShadowRenderer.h" />
     <ClInclude Include="Rendering\Shadow\IShadowRenderer.h" />
+    <ClInclude Include="Rendering\Shadow\ShadowDebugPanel.h" />
     <ClInclude Include="Rendering\Shadow\ShadowData.h" />
     <ClInclude Include="Rendering\Shadow\ShadowPassCommand.h" />
     <ClInclude Include="Resource\Resource.h" />

@@ -22,6 +22,9 @@
 #include <imgui/imgui_impl_dx11.h>
 #endif
 #endif
+#ifdef AQ_DEBUG_IMGUI
+#include "DebugUI.h"
+#endif
 
 
 namespace engine
@@ -41,6 +44,9 @@ namespace engine
 		}
 		aq::CameraManager::Initialize();
 		aq::graphics::LightManager::Initialize();
+#ifdef AQ_DEBUG_IMGUI
+		aq::DebugUI::Initialize();
+#endif
 
 #ifdef AQ_IMGUI
 #ifdef ENGINE_GRAPHICS_D3D11
@@ -95,6 +101,9 @@ namespace engine
 		}
 #endif
 
+#ifdef AQ_DEBUG_IMGUI
+		aq::DebugUI::Finalize();
+#endif
 		aq::graphics::LightManager::Finalize();
 		aq::ecs::EntityContext::Finalize();
 		aq::res::ResourceManager::Finalize();
@@ -168,10 +177,12 @@ namespace engine
 			{
 				aq::ecs::EntityContext::Get().DebugRenderMenu();
 				aq::ecs::EntityContext::Get().DebugRenderSystemMenus();
+				aq::DebugUI::Get().DebugRenderMenuAll();
 				OnDebugRenderMenu();
 				ImGui::EndMainMenuBar();
 			}
 			aq::ecs::EntityContext::Get().DebugRender();
+			aq::DebugUI::Get().DebugRenderAll();
 			OnDebugRender();
 #endif
 

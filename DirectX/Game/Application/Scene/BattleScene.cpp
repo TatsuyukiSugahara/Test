@@ -25,6 +25,15 @@ namespace app
 		}
 
 
+		aq::math::Vector3 BattleScene::GetFocusPosition() const
+		{
+			if (!playerHandle_.IsValid()) return aq::math::Vector3(0.f, 0.f, 0.f);
+			auto* tc = aq::ecs::EntityContext::Get().GetComponent<aq::ecs::TransformComponent>(playerHandle_);
+			if (!tc) return aq::math::Vector3(0.f, 0.f, 0.f);
+			return tc->transform.position;
+		}
+
+
 		void BattleScene::Initialize()
 		{
 			// 地形エンティティ生成
@@ -85,6 +94,7 @@ namespace app
 					app::ecs::StateMachineComponent>();
 
 				targetHandle = entity.GetHandle();
+				playerHandle_ = targetHandle;
 
 				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
 				tc->transform.localPosition.Set(0.0f, spawnY, 0.0f);

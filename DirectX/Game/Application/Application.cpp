@@ -10,6 +10,9 @@
 #include "Rendering/RenderCommandList.h"
 #include "Rendering/FrameCommands.h"
 #include "Rendering/Shadow/HardShadowRenderer.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Core/DebugUI.h"
+#endif
 #include "Resource/Resource.h"
 #include "ECS/ECS.h"
 #include "ECS/ActorComponentSystem.h"
@@ -40,12 +43,13 @@ namespace app
 
 			aq::rendering::ShadowSettings shadowSettings;
 			shadowSettings.resolution  = 2048;
-			shadowSettings.orthoWidth  = 20.0f;
-			shadowSettings.orthoHeight = 20.0f;
+			shadowSettings.orthoWidth  = 50.0f;
+			shadowSettings.orthoHeight = 50.0f;
 			shadowSettings.nearPlane   = 0.1f;
 			shadowSettings.farPlane    = 60.0f;
 			shadowSettings.sceneCenter = aq::math::Vector3(0.0f, 3.0f, 0.0f);
 			shadowSettings.depthBias   = 0.005f;
+			shadowSettings.softness    = 2.0f;
 
 			auto shadowRenderer = std::make_unique<aq::rendering::HardShadowRenderer>();
 			if (shadowRenderer->Create(shadowSettings, "Assets/Shader/ShadowDepth.fx"))
@@ -53,6 +57,11 @@ namespace app
 				renderer_.SetShadowRenderer(std::move(shadowRenderer),
 				                            engine::Engine::Get().GetMainRenderTargetHandle(),
 				                            renderW, renderH);
+#ifdef AQ_DEBUG_IMGUI
+				shadowDebugPanel_ = std::make_unique<aq::rendering::ShadowDebugPanel>(
+					renderer_.GetShadowRenderer()->GetSettingsRef());
+				aq::DebugUI::Get().Register(shadowDebugPanel_.get());
+#endif
 			}
 		}
 
@@ -62,6 +71,13 @@ namespace app
 
 	void Application::OnFinalize()
 	{
+#ifdef AQ_DEBUG_IMGUI
+		if (shadowDebugPanel_)
+		{
+			aq::DebugUI::Get().Unregister(shadowDebugPanel_.get());
+			shadowDebugPanel_.reset();
+		}
+#endif
 		app::SceneManager::Release();
 		GameInput::Finalize();
 	}
@@ -70,6 +86,17 @@ namespace app
 	void Application::OnUpdate()
 	{
 		app::SceneManager::Get().Update();
+
+		if (renderer_.GetShadowRenderer())
+		{
+			auto* scene = app::SceneManager::Get().GetCurrentScene();
+			if (scene)
+			{
+				auto pos = scene->GetFocusPosition();
+				pos.y += 2.0f;
+				renderer_.GetShadowRenderer()->SetSceneCenter(pos);
+			}
+		}
 	}
 
 

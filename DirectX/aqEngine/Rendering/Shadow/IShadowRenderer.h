@@ -41,6 +41,12 @@ namespace aq
 				const graphics::DirectionalLight& light,
 				ShadowCBData&                     outData) const = 0;
 
+			/** 影の投影中心（シーン中心）を毎フレーム更新する。キャラクター追従に使用。 */
+			virtual void SetSceneCenter(const math::Vector3& center) = 0;
+
+			/** 実行時に設定値を直接編集するための参照を返す（ImGui 等のデバッグ用途）。 */
+			virtual ShadowSettings& GetSettingsRef() = 0;
+
 			/** メインパスで SRV (t4) にバインドするデプスマップ */
 			virtual graphics::IDepthMap* GetDepthMap() const = 0;
 		};

@@ -1,5 +1,5 @@
 #include "Lighting.fx"
-#include "ShadowCB.h"
+#include "ShadowSampling.fx"
 
 struct VSInput
 {
@@ -32,9 +32,7 @@ Texture2D      splatMap      : register(t0);
 Texture2D      layer0        : register(t1);
 Texture2D      layer1        : register(t2);
 Texture2D      layer2        : register(t3);
-Texture2DArray shadowMapArray : register(t4);
-SamplerState              samp         : register(s0);
-SamplerComparisonState    shadowSampler : register(s1);
+SamplerState samp : register(s0);
 
 // params[0].x = layer UV tiling  (set via StaticMesh::Param(0).x)
 
@@ -65,15 +63,6 @@ float3 SampleNoTile(Texture2D tex, SamplerState s, float2 uv)
     // テクスチャタイルの 1/5 の周波数でゆっくり変化するノイズで UV を歪ませる
     float2 distort = SmoothNoise2(uv * 0.2) * 0.45;
     return tex.Sample(s, uv + distort).rgb;
-}
-
-float SampleShadow(float3 worldPos)
-{
-    float4 lightClip = mul(lightViewProj[0], float4(worldPos, 1.0));
-    float3 ndc = lightClip.xyz / lightClip.w;
-    float2 uv  = ndc.xy * float2(0.5, -0.5) + 0.5;
-    float  d   = ndc.z - depthBias;
-    return shadowMapArray.SampleCmpLevelZero(shadowSampler, float3(uv, 0.0), d);
 }
 
 PSInput VSMain(VSInput input)
@@ -123,7 +112,8 @@ float4 PSMain(PSInput input) : SV_TARGET
 
     if (ReceivesShadow())
     {
-        float  shadow      = SampleShadow(input.worldPos);
+        float  viewDepth   = mul(view, float4(input.worldPos, 1.0)).z;
+        float  shadow      = SampleShadow(input.worldPos, viewDepth);
         float3 ambientOnly = ambient.color * ambient.intensity * albedo;
         lit = ambientOnly + (lit - ambientOnly) * shadow;
     }

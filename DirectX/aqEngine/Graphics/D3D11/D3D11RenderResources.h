@@ -42,6 +42,7 @@ namespace aq
 			bool Create(StructuredBuffer& structuredBuffer);
 			bool Create(ID3D11Texture2D* texture);
 			void Release() override;
+			void* GetNativeHandle() const override { return shaderResourceView_; }
 
 			inline ID3D11ShaderResourceView*& GetBody() { return shaderResourceView_; }
 		};

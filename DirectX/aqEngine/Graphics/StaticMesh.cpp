@@ -85,6 +85,24 @@ namespace aq
 		}
 
 
+		void StaticMesh::InitializeDynamic(const void* vb, const uint32_t vCount,
+		                                   const void* ib, const uint32_t iCount,
+		                                   const ShaderType shaderType)
+		{
+			isInitialized_ = false;
+			if (!vb || vCount == 0 || !ib || iCount == 0) return;
+			vertexBuffer_ = GraphicsDevice::Get().CreateDynamicVertexBuffer(vCount, sizeof(VertexData), vb);
+			indexBuffer_  = GraphicsDevice::Get().CreateIndexBuffer(iCount, ib);
+			indicesSize_  = iCount;
+			Initialize(shaderType);
+		}
+
+		void StaticMesh::UpdateVertices(const VertexData* verts, uint32_t count)
+		{
+			if (!vertexBuffer_) return;
+			vertexBuffer_->Update(verts, count * sizeof(VertexData));
+		}
+
 		void StaticMesh::Initialize(const ShaderType shaderType)
 		{
 			shaderType_ = shaderType;

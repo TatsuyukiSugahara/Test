@@ -88,11 +88,69 @@ namespace aq
 				return (h00 + (h10 - h00) * fx) * (1.0f - fz)
 				     + (h01 + (h11 - h01) * fx) *         fz;
 			}
+
+			/** heightData_ から頂点配列を構築する (法線・タンジェントを含む) */
+			void ComputeVertices(const std::vector<float>& heights,
+			                     uint32_t mapW, uint32_t mapH,
+			                     const HeightmapChunk::Desc& desc,
+			                     std::vector<graphics::VertexData>& verts)
+			{
+				const uint32_t N        = desc.resolution;
+				const uint32_t vN       = N + 1;
+				const float    cellSize = desc.terrainSize / static_cast<float>(N);
+
+				verts.resize(static_cast<size_t>(vN) * vN);
+
+				// 位置・UV
+				for (uint32_t zi = 0; zi < vN; ++zi)
+				{
+					for (uint32_t xi = 0; xi < vN; ++xi)
+					{
+						const float nx = static_cast<float>(xi) / N;
+						const float nz = static_cast<float>(zi) / N;
+						auto& v = verts[zi * vN + xi];
+						v.position.Set(nx * desc.terrainSize,
+						               BilinearSample(heights, mapW, mapH, nx, nz) * desc.heightScale,
+						               nz * desc.terrainSize);
+						v.uv.Set(nx, nz);
+					}
+				}
+
+				// 法線・タンジェント (中心差分)
+				for (uint32_t zi = 0; zi < vN; ++zi)
+				{
+					for (uint32_t xi = 0; xi < vN; ++xi)
+					{
+						const uint32_t xL = (xi > 0) ? xi - 1 : xi;
+						const uint32_t xR = (xi < N) ? xi + 1 : xi;
+						const uint32_t zU = (zi > 0) ? zi - 1 : zi;
+						const uint32_t zD = (zi < N) ? zi + 1 : zi;
+
+						const float hL = verts[zi  * vN + xL].position.y;
+						const float hR = verts[zi  * vN + xR].position.y;
+						const float hU = verts[zU  * vN + xi].position.y;
+						const float hD = verts[zD  * vN + xi].position.y;
+
+						const float scaleX = static_cast<float>(xR - xL);
+						const float scaleZ = static_cast<float>(zD - zU);
+						const float dydx   = (hR - hL) / (scaleX * cellSize);
+						const float dydz   = (hD - hU) / (scaleZ * cellSize);
+
+						math::Vector3 n(-dydx, 1.0f, -dydz);
+						n.Normalize();
+						verts[zi * vN + xi].normal = n;
+
+						const float tlen = std::sqrt(1.0f + dydx * dydx);
+						verts[zi * vN + xi].tangent.Set(1.0f / tlen, dydx / tlen, 0.0f, 1.0f);
+					}
+				}
+			}
 		}
 
 
 		void HeightmapChunk::Initialize(const Desc& desc)
 		{
+			desc_        = desc;
 			terrainSize_ = desc.terrainSize;
 			heightScale_ = desc.heightScale;
 
@@ -108,7 +166,6 @@ namespace aq
 			auto& rm = res::ResourceManager::Get();
 
 			// t0: スプラットマップ (Albedo スロット)
-			// フラグが立っているときのみシェーダーでスプラット合成を行う
 			if (desc.splatmapPath && desc.splatmapPath[0])
 			{
 				mesh_.SetTexture(rendering::TextureSlot::Albedo,
@@ -150,65 +207,13 @@ namespace aq
 		                               uint32_t mapW, uint32_t mapH,
 		                               const Desc& desc)
 		{
-			const uint32_t N        = desc.resolution;
-			const uint32_t vN       = N + 1;            // 1辺の頂点数
-			const float    cellSize = desc.terrainSize / static_cast<float>(N);
+			const uint32_t N  = desc.resolution;
+			const uint32_t vN = N + 1;
 
-			// --- 頂点位置・UV 生成 ---
-			std::vector<graphics::VertexData> verts(static_cast<size_t>(vN) * vN);
-			for (uint32_t zi = 0; zi < vN; ++zi)
-			{
-				for (uint32_t xi = 0; xi < vN; ++xi)
-				{
-					const float nx = static_cast<float>(xi) / N;
-					const float nz = static_cast<float>(zi) / N;
+			// 頂点生成 (vertCache_ に保持して RebuildFromHeights でも再利用)
+			ComputeVertices(heights, mapW, mapH, desc, vertCache_);
 
-					auto& v = verts[zi * vN + xi];
-					v.position.Set(nx * desc.terrainSize,
-					               BilinearSample(heights, mapW, mapH, nx, nz) * desc.heightScale,
-					               nz * desc.terrainSize);
-					// UV は [0,1] 正規化で保持。タイリングはシェーダー (params[0].x) で適用する。
-					// スプラットマップは正規化 UV をそのまま使い、レイヤーはシェーダー内で倍率をかける。
-					v.uv.Set(nx, nz);
-				}
-			}
-
-			// --- 法線・タンジェント計算 (中心差分) ---
-			for (uint32_t zi = 0; zi < vN; ++zi)
-			{
-				for (uint32_t xi = 0; xi < vN; ++xi)
-				{
-					// 隣接インデックス (端は同じ頂点でクランプ)
-					const uint32_t xL = (xi > 0) ? xi - 1 : xi;
-					const uint32_t xR = (xi < N) ? xi + 1 : xi;
-					const uint32_t zU = (zi > 0) ? zi - 1 : zi;
-					const uint32_t zD = (zi < N) ? zi + 1 : zi;
-
-					const float hL = verts[zi  * vN + xL].position.y;
-					const float hR = verts[zi  * vN + xR].position.y;
-					const float hU = verts[zU  * vN + xi].position.y;
-					const float hD = verts[zD  * vN + xi].position.y;
-
-					// X/Z 方向の勾配 (中心差分。端は片側差分になる)
-					const float scaleX  = static_cast<float>(xR - xL);
-					const float scaleZ  = static_cast<float>(zD - zU);
-					const float dydx    = (hR - hL) / (scaleX * cellSize);
-					const float dydz    = (hD - hU) / (scaleZ * cellSize);
-
-					// 法線: 勾配から導出 (上向き (+Y) が正)
-					math::Vector3 n(-dydx, 1.0f, -dydz);
-					n.Normalize();
-					verts[zi * vN + xi].normal = n;
-
-					// タンジェント: X 方向の接線ベクトル (1, dydx, 0) を正規化
-					const float tlen = std::sqrt(1.0f + dydx * dydx);
-					verts[zi * vN + xi].tangent.Set(1.0f / tlen, dydx / tlen, 0.0f, 1.0f);
-				}
-			}
-
-			// --- インデックス生成 ---
-			// D3D11 デフォルト: 時計回り (CW) = 表面。
-			// i00→i01→i10 の順にすると法線が +Y（上向き）になりフロントフェースとなる。
+			// インデックス生成 (地形変更時は変わらないため1回のみ)
 			std::vector<uint32_t> indices;
 			indices.reserve(static_cast<size_t>(N) * N * 6);
 			for (uint32_t zi = 0; zi < N; ++zi)
@@ -225,9 +230,83 @@ namespace aq
 				}
 			}
 
-			mesh_.Initialize(verts.data(),   static_cast<uint32_t>(verts.size()),
-			                 indices.data(),  static_cast<uint32_t>(indices.size()),
-			                 graphics::StaticMesh::ShaderType::TerrainLit);
+			// 動的VBで初期化: ペイント時に Map/Unmap で頂点を書き換える
+			mesh_.InitializeDynamic(vertCache_.data(),  static_cast<uint32_t>(vertCache_.size()),
+			                        indices.data(),      static_cast<uint32_t>(indices.size()),
+			                        graphics::StaticMesh::ShaderType::TerrainLit);
+		}
+
+
+		void HeightmapChunk::RebuildFromHeights()
+		{
+			if (vertCache_.empty() || hmapWidth_ == 0) return;
+
+			const uint32_t N        = desc_.resolution;
+			const uint32_t vN       = N + 1;
+			const float    cellSize = desc_.terrainSize / static_cast<float>(N);
+
+			// Y 座標を heightData_ から再計算
+			for (uint32_t zi = 0; zi < vN; ++zi)
+			{
+				for (uint32_t xi = 0; xi < vN; ++xi)
+				{
+					const float nx = static_cast<float>(xi) / N;
+					const float nz = static_cast<float>(zi) / N;
+					vertCache_[zi * vN + xi].position.y =
+						BilinearSample(heightData_, hmapWidth_, hmapHeight_, nx, nz) * desc_.heightScale;
+				}
+			}
+
+			// 法線・タンジェント再計算
+			for (uint32_t zi = 0; zi < vN; ++zi)
+			{
+				for (uint32_t xi = 0; xi < vN; ++xi)
+				{
+					const uint32_t xL = (xi > 0) ? xi - 1 : xi;
+					const uint32_t xR = (xi < N) ? xi + 1 : xi;
+					const uint32_t zU = (zi > 0) ? zi - 1 : zi;
+					const uint32_t zD = (zi < N) ? zi + 1 : zi;
+
+					const float hL = vertCache_[zi  * vN + xL].position.y;
+					const float hR = vertCache_[zi  * vN + xR].position.y;
+					const float hU = vertCache_[zU  * vN + xi].position.y;
+					const float hD = vertCache_[zD  * vN + xi].position.y;
+
+					const float scaleX = static_cast<float>(xR - xL);
+					const float scaleZ = static_cast<float>(zD - zU);
+					const float dydx   = (hR - hL) / (scaleX * cellSize);
+					const float dydz   = (hD - hU) / (scaleZ * cellSize);
+
+					math::Vector3 n(-dydx, 1.0f, -dydz);
+					n.Normalize();
+					vertCache_[zi * vN + xi].normal = n;
+
+					const float tlen = std::sqrt(1.0f + dydx * dydx);
+					vertCache_[zi * vN + xi].tangent.Set(1.0f / tlen, dydx / tlen, 0.0f, 1.0f);
+				}
+			}
+
+			// 動的VBへアップロード
+			mesh_.UpdateVertices(vertCache_.data(), static_cast<uint32_t>(vertCache_.size()));
+		}
+
+
+		void HeightmapChunk::SetTerrainSize(float size)
+		{
+			if (size <= 0.0f || heightData_.empty()) return;
+			terrainSize_      = size;
+			desc_.terrainSize = size;
+			ComputeVertices(heightData_, hmapWidth_, hmapHeight_, desc_, vertCache_);
+			mesh_.UpdateVertices(vertCache_.data(), static_cast<uint32_t>(vertCache_.size()));
+		}
+
+
+		void HeightmapChunk::SetHeightScale(float scale)
+		{
+			if (heightData_.empty()) return;
+			heightScale_      = scale;
+			desc_.heightScale = scale;
+			RebuildFromHeights();
 		}
 
 

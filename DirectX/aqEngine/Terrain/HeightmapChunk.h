@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <cstdint>
 #include <vector>
 #include "Graphics/StaticMesh.h"
@@ -55,8 +55,24 @@ namespace aq
 			/** ワールド XZ 座標から地面の高さを返す (バイリニア補間) */
 			float GetHeight(float worldX, float worldZ) const;
 
+			/** heightData_ を書き換えた後に呼ぶ: 法線再計算 + 動的VB更新 */
+			void RebuildFromHeights();
+
 			void SetCastShadow(bool v)    { mesh_.SetCastShadow(v); }
 			void SetReceiveShadow(bool v) { mesh_.SetReceiveShadow(v); }
+
+			// HeightmapPainter 向け公開アクセサ
+			float*   GetHeightDataMutable()  { return heightData_.data(); }
+			uint32_t GetMapWidth()     const { return hmapWidth_; }
+			uint32_t GetMapHeight()    const { return hmapHeight_; }
+			float    GetTerrainSize()  const { return terrainSize_; }
+			float    GetHeightScale()  const { return heightScale_; }
+			uint32_t GetResolution()   const { return desc_.resolution; }
+
+			/** XZ スケール変更 + 頂点再計算 (height データは保持) */
+			void SetTerrainSize(float size);
+			/** Y スケール変更 + 頂点 Y 再計算 */
+			void SetHeightScale(float scale);
 
 		private:
 			void BuildMesh(const std::vector<float>& heights,
@@ -65,12 +81,14 @@ namespace aq
 
 			graphics::StaticMesh mesh_;
 
-			// GetHeight() 用に CPU へ保持する高さデータ
-			std::vector<float> heightData_;
+			// CPU 側高さデータ (GetHeight + RebuildFromHeights で使用)
+			std::vector<float>               heightData_;
+			std::vector<graphics::VertexData> vertCache_;   // RebuildFromHeights 用キャッシュ
 			uint32_t           hmapWidth_   = 0;
 			uint32_t           hmapHeight_  = 0;
 			float              terrainSize_ = 0.0f;
 			float              heightScale_ = 0.0f;
+			Desc               desc_        = {};            // RebuildFromHeights で参照
 		};
 	}
 }

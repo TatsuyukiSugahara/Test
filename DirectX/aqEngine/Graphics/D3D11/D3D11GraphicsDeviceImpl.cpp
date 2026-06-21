@@ -207,10 +207,24 @@ namespace aq
 			)->device_;
 		}
 
+		ID3D11DeviceContext* D3D11GraphicsDeviceImpl::GetStaticDeviceContext()
+		{
+			return static_cast<D3D11GraphicsDeviceImpl*>(
+				GraphicsDevice::Get().GetImplRaw()
+			)->deviceContext_;
+		}
+
 
 		std::unique_ptr<IVertexBuffer> D3D11GraphicsDeviceImpl::CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
 		{
 			auto vb = std::make_unique<VertexBuffer>();
+			if (!vb->Create(vertexNum, stride, data)) return nullptr;
+			return vb;
+		}
+
+		std::unique_ptr<IVertexBuffer> D3D11GraphicsDeviceImpl::CreateDynamicVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
+		{
+			auto vb = std::make_unique<DynamicVertexBuffer>();
 			if (!vb->Create(vertexNum, stride, data)) return nullptr;
 			return vb;
 		}

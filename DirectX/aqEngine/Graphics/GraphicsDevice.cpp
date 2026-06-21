@@ -94,6 +94,11 @@ namespace aq
 			return impl_->CreateVertexBuffer(vertexNum, stride, data);
 		}
 
+		std::unique_ptr<IVertexBuffer> GraphicsDevice::CreateDynamicVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
+		{
+			return impl_->CreateDynamicVertexBuffer(vertexNum, stride, data);
+		}
+
 		std::unique_ptr<IIndexBuffer> GraphicsDevice::CreateIndexBuffer(uint32_t indexNum, const void* data)
 		{
 			return impl_->CreateIndexBuffer(indexNum, data);

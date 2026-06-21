@@ -203,5 +203,50 @@ namespace aq
 				indexBuffer_ = nullptr;
 			}
 		}
+
+
+		/*******************************************/
+
+
+		bool DynamicVertexBuffer::Create(uint32_t vertexNum, uint32_t stride, const void* data)
+		{
+			Release();
+			D3D11_BUFFER_DESC desc = {};
+			desc.Usage          = D3D11_USAGE_DYNAMIC;
+			desc.ByteWidth      = stride * vertexNum;
+			desc.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
+			desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+			HRESULT hr;
+			if (data) {
+				D3D11_SUBRESOURCE_DATA initData = {};
+				initData.pSysMem = data;
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&desc, &initData, &vb_);
+			} else {
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&desc, nullptr, &vb_);
+			}
+			if (FAILED(hr)) return false;
+			stride_   = stride;
+			capacity_ = stride * vertexNum;
+			return true;
+		}
+
+		void DynamicVertexBuffer::Release()
+		{
+			if (vb_) { vb_->Release(); vb_ = nullptr; }
+			stride_   = 0;
+			capacity_ = 0;
+		}
+
+		bool DynamicVertexBuffer::Update(const void* data, uint32_t byteSize)
+		{
+			if (!vb_ || !data || byteSize > capacity_) return false;
+			ID3D11DeviceContext* ctx = D3D11GraphicsDeviceImpl::GetStaticDeviceContext();
+			D3D11_MAPPED_SUBRESOURCE mapped = {};
+			if (FAILED(ctx->Map(vb_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return false;
+			memcpy(mapped.pData, data, byteSize);
+			ctx->Unmap(vb_, 0);
+			return true;
+		}
 	}
 }

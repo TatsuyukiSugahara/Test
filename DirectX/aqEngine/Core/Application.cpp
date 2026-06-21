@@ -246,6 +246,8 @@ namespace aq
 #endif
 			ImGui::NewFrame();
 
+			OnImGuiRender();
+
 #ifdef AQ_DEBUG_IMGUI
 			if (ImGui::GetIO().MouseClicked[2])
 				showDebugUI_ = !showDebugUI_;

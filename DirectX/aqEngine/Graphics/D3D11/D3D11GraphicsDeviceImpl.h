@@ -38,9 +38,11 @@ namespace aq
 			ID3D11DeviceContext* GetDeviceContext() const { return deviceContext_; }
 
 			/** SamplerState / RenderTarget / Texture 等 D3D11 リソースクラス向け静的アクセサ */
-			static ID3D11Device* GetStaticDevice();
+			static ID3D11Device*        GetStaticDevice();
+			static ID3D11DeviceContext* GetStaticDeviceContext();
 
 			std::unique_ptr<IVertexBuffer>       CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
+			std::unique_ptr<IVertexBuffer>       CreateDynamicVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
 			std::unique_ptr<IIndexBuffer>        CreateIndexBuffer(uint32_t indexNum, const void* data) override;
 			std::unique_ptr<IConstantBuffer>     CreateConstantBuffer(const void* data, uint32_t size) override;
 			std::unique_ptr<IShader>             CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type) override;

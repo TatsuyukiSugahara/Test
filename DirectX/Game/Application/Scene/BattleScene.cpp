@@ -4,6 +4,9 @@
 #include "Utility.h"
 #include "Component/TerrainComponent.h"  // Utility.h (EngineAssert) より後に include する
 #include "Component/OceanComponent.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Core/DebugUI.h"
+#endif
 
 #include "Component/TransformComponentSystem.h"
 #include "Component/BodyComponentSystem.h"
@@ -40,7 +43,8 @@ namespace app
 			// 地形エンティティ生成
 			// メッシュは local(0,0,0)~(terrainSize,h,terrainSize) で生成されるため
 			// TransformComponent の localPosition を (-half,0,-half) にしてキャラ原点を中心にする
-			aq::ecs::TerrainComponent* terrainComp = nullptr;
+			aq::ecs::TerrainComponent*   terrainComp = nullptr;
+			aq::ecs::TransformComponent* terrainTC   = nullptr;
 			{
 				aq::terrain::HeightmapChunk::Desc desc;
 				desc.heightmapPath  = "Assets/Terrain/heightmap.png";
@@ -56,6 +60,7 @@ namespace app
 				auto entity = aq::ecs::EntityContext::Get().CreateEntity<aq::ecs::TransformComponent, aq::ecs::TerrainComponent>();
 
 				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+				terrainTC = tc;
 				tc->transform.localPosition.Set(-50.0f, 0.0f, -50.0f);
 				tc->transform.localAngle.Set(0.0f);
 				tc->transform.localScale.Set(1.0f);
@@ -64,6 +69,12 @@ namespace app
 				terrainComp->SetDesc(desc);
 				terrainComp->GetChunk()->SetReceiveShadow(true);
 			}
+
+#ifdef AQ_DEBUG_IMGUI
+			painter_.Attach(terrainComp->GetChunk(), aq::math::Vector3(-50.0f, 0.0f, -50.0f),
+			                terrainTC ? &terrainTC->transform.localPosition : nullptr);
+			aq::DebugUI::Get().Register(&painter_);
+#endif
 
 			// world(0,0) = terrain local(50,50) (XZオフセット -50 適用後)
 			const float spawnY = terrainComp->GetChunk()->GetHeight(50.0f, 50.0f);
@@ -180,7 +191,10 @@ namespace app
 
 		void BattleScene::Finalize()
 		{
-
+#ifdef AQ_DEBUG_IMGUI
+			aq::DebugUI::Get().Unregister(&painter_);
+			painter_.Detach();
+#endif
 		}
 	}
 }

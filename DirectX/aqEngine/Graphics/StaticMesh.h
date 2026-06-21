@@ -58,6 +58,12 @@ namespace aq
 			void Initialize(const void* vertexBuffer, const uint32_t vertexNum,
 			                const void* indexBuffer,  const uint32_t indexNum,
 			                const ShaderType shaderType);
+			/** 動的VBで初期化 (HeightmapChunk ペイント用) */
+			void InitializeDynamic(const void* vertexBuffer, const uint32_t vertexNum,
+			                       const void* indexBuffer,  const uint32_t indexNum,
+			                       const ShaderType shaderType);
+			/** 動的VBの頂点データを更新する (InitializeDynamic 後のみ有効) */
+			void UpdateVertices(const VertexData* verts, uint32_t count);
 			void SetLocalMatrix(const math::Matrix4x4& localMatrix);
 			void Update(const math::Vector3& translation, const math::Quaternion& rotation, const math::Vector3& scale);
 

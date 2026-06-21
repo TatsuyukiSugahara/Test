@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Graphics/IBuffer.h"
 
 namespace aq
@@ -62,6 +62,26 @@ namespace aq
 			uint32_t GetStride() const override { return stride_; }
 
 			inline ID3D11Buffer*& GetBody() { return vertexBuffer_; }
+		};
+
+		/** DYNAMIC 頂点バッファ: Map/Unmap で毎フレーム書き換え可能 (ハイトマップペイント用) */
+		class DynamicVertexBuffer : public IVertexBuffer
+		{
+		private:
+			ID3D11Buffer* vb_       = nullptr;
+			uint32_t      stride_   = 0;
+			uint32_t      capacity_ = 0;   // bytes
+
+		public:
+			DynamicVertexBuffer()  = default;
+			~DynamicVertexBuffer() { Release(); }
+
+			bool     Create(uint32_t vertexNum, uint32_t stride, const void* data) override;
+			void     Release() override;
+			uint32_t GetStride() const override { return stride_; }
+			bool     Update(const void* data, uint32_t byteSize) override;
+
+			inline ID3D11Buffer*& GetBody() { return vb_; }
 		};
 
 		class IndexBuffer : public IIndexBuffer

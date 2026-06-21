@@ -41,6 +41,10 @@ namespace aq
 		virtual void OnRegister() {}
 		/** メインパス Submit 前に呼ばれる（オフスクリーンパス等を Submit する） */
 		virtual void OnPreRender() {}
+#ifdef AQ_IMGUI
+		/** ImGui::NewFrame() 直後に呼ばれる。ゲーム固有の ImGui ウィンドウをここで構築する */
+		virtual void OnImGuiRender() {}
+#endif
 #ifdef AQ_DEBUG_IMGUI
 		/** メインメニューバー内にゲーム固有のメニュー項目を追加する */
 		virtual void OnDebugRenderMenu() {}

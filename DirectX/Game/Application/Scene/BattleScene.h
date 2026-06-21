@@ -1,6 +1,9 @@
 #pragma once
 #include "Scene.h"
 #include "ECS/Entity.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Terrain/HeightmapPainter.h"
+#endif
 
 namespace app
 {
@@ -22,6 +25,9 @@ namespace app
 
 		private:
 			aq::ecs::EntityHandle playerHandle_;
+#ifdef AQ_DEBUG_IMGUI
+			aq::terrain::HeightmapPainter painter_;
+#endif
 		};
 	}
 }

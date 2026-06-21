@@ -11,11 +11,6 @@
 #include "Rendering/FrameCommands.h"
 #include "Rendering/Shadow/HardShadowRenderer.h"
 #include "Rendering/PostProcess/BloomRenderer.h"
-#ifdef AQ_DEBUG_IMGUI
-#include "Core/DebugUI.h"
-#include "Rendering/PostProcess/BloomDebugPanel.h"
-#include "Ocean/OceanDebugPanel.h"
-#endif
 #include "Resource/Resource.h"
 #include "ECS/ECS.h"
 #include "ECS/ActorComponentSystem.h"
@@ -60,11 +55,6 @@ namespace app
 				renderer_.SetShadowRenderer(std::move(shadowRenderer),
 				                            engine::Engine::Get().GetMainRenderTargetHandle(),
 				                            renderW, renderH);
-#ifdef AQ_DEBUG_IMGUI
-				shadowDebugPanel_ = std::make_unique<aq::rendering::ShadowDebugPanel>(
-					renderer_.GetShadowRenderer()->GetSettingsRef());
-				aq::DebugUI::Get().Register(shadowDebugPanel_.get());
-#endif
 			}
 		}
 
@@ -76,20 +66,9 @@ namespace app
 			auto bloom = std::make_unique<aq::rendering::BloomRenderer>();
 			if (bloom->Initialize(renderW, renderH))
 			{
-				bloomRenderer_ = bloom.get(); // 所有権は renderer_ へ移す前に生ポインタを保存
 				renderer_.SetPostProcessRenderer(std::move(bloom));
-#ifdef AQ_DEBUG_IMGUI
-				bloomDebugPanel_ = std::make_unique<aq::rendering::BloomDebugPanel>(*bloomRenderer_);
-				aq::DebugUI::Get().Register(bloomDebugPanel_.get());
-#endif
 			}
 		}
-
-#ifdef AQ_DEBUG_IMGUI
-		// Ocean — ECS から毎フレーム OceanComponent を検索するためシーン生成前でも登録可
-		oceanDebugPanel_ = std::make_unique<aq::ocean::OceanDebugPanel>();
-		aq::DebugUI::Get().Register(oceanDebugPanel_.get());
-#endif
 
 		return true;
 	}
@@ -97,23 +76,6 @@ namespace app
 
 	void Application::OnFinalize()
 	{
-#ifdef AQ_DEBUG_IMGUI
-		if (oceanDebugPanel_)
-		{
-			aq::DebugUI::Get().Unregister(oceanDebugPanel_.get());
-			oceanDebugPanel_.reset();
-		}
-		if (bloomDebugPanel_)
-		{
-			aq::DebugUI::Get().Unregister(bloomDebugPanel_.get());
-			bloomDebugPanel_.reset();
-		}
-		if (shadowDebugPanel_)
-		{
-			aq::DebugUI::Get().Unregister(shadowDebugPanel_.get());
-			shadowDebugPanel_.reset();
-		}
-#endif
 		app::SceneManager::Release();
 		GameInput::Finalize();
 	}

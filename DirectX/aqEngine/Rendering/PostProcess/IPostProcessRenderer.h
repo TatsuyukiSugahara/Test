@@ -1,5 +1,9 @@
 #pragma once
 #include "Rendering/RenderTargetHandle.h"
+#ifdef AQ_DEBUG_IMGUI
+#include <memory>
+#include "Core/IDebugRenderable.h"
+#endif
 
 namespace aq
 {
@@ -20,6 +24,11 @@ namespace aq
 
 			/** ポストプロセス後の最終出力 RT ハンドル。displayRT に渡す。 */
 			virtual RenderTargetHandle GetFinalRT() const = 0;
+
+#ifdef AQ_DEBUG_IMGUI
+			/** デバッグパネルを生成して返す。非対応の実装は nullptr を返す。 */
+			virtual std::unique_ptr<IDebugRenderable> CreateDebugPanel() { return nullptr; }
+#endif
 		};
 	}
 }

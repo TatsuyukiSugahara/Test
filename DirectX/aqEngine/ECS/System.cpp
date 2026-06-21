@@ -2,6 +2,9 @@
 #include "System.h"
 #include "Util/ThreadPool.h"
 #include <queue>
+#ifdef AQ_DEBUG_IMGUI
+#include <imgui/imgui.h>
+#endif
 
 
 namespace aq
@@ -84,6 +87,65 @@ namespace aq
 				"SystemManager::BuildSchedule: circular dependency detected");
 
 			registrationFinalized_ = true;
+
+#ifdef AQ_DEBUG_IMGUI
+			groups_.clear();
+			for (auto& entry : systemEntries_)
+			{
+				const char* group = entry.system->GetDebugGroup();
+				if (group == nullptr) continue;
+
+				auto it = std::find_if(groups_.begin(), groups_.end(),
+					[&](const GroupEntry& g) { return g.name == group; });
+				if (it == groups_.end())
+					groups_.push_back({ group, false, { entry.system.get() } });
+				else
+					it->systems.push_back(entry.system.get());
+			}
+#endif
 		}
+
+
+#ifdef AQ_DEBUG_IMGUI
+		void SystemManager::DebugRenderMenuAll()
+		{
+			for (auto& entry : systemEntries_)
+				if (entry.system->GetDebugGroup() == nullptr)
+					entry.system->DebugRenderMenu();
+
+			for (auto& g : groups_)
+				ImGui::MenuItem(g.name.c_str(), nullptr, &g.show);
+		}
+
+
+		void SystemManager::DebugRenderAll()
+		{
+			for (auto& entry : systemEntries_)
+				if (entry.system->GetDebugGroup() == nullptr)
+					entry.system->DebugRender();
+
+			for (auto& g : groups_)
+			{
+				if (!g.show) continue;
+				if (ImGui::Begin(g.name.c_str()))
+				{
+					const std::string tabBarId = "##group_" + g.name;
+					if (ImGui::BeginTabBar(tabBarId.c_str()))
+					{
+						for (auto* sys : g.systems)
+						{
+							if (ImGui::BeginTabItem(sys->GetDebugTabLabel()))
+							{
+								sys->RenderContent();
+								ImGui::EndTabItem();
+							}
+						}
+						ImGui::EndTabBar();
+					}
+				}
+				ImGui::End();
+			}
+		}
+#endif
 	}
 }

@@ -16,8 +16,10 @@ namespace aq
 		public:
 			explicit ShadowDebugPanel(ShadowSettings& settings);
 
-			void DebugRenderMenu() override;
-			void DebugRender()     override;
+			void        DebugRenderMenu()     override;
+			void        DebugRender()         override;
+			void        RenderContent()       override;
+			const char* GetDebugLabel() const override { return "Shadow"; }
 
 		private:
 			ShadowSettings& settings_;

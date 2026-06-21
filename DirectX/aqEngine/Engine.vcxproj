@@ -186,6 +186,7 @@
     <ClCompile Include="Rendering\Renderer.cpp" />
     <ClCompile Include="Rendering\RenderThread.cpp" />
     <ClCompile Include="Rendering\ImGuiRenderCommand.cpp" />
+    <ClCompile Include="Rendering\RenderingDebugPanel.cpp" />
     <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp" />
     <ClCompile Include="Rendering\Shadow\ShadowDebugPanel.cpp" />
@@ -287,6 +288,7 @@
     <ClInclude Include="Rendering\RenderFrame.h" />
     <ClInclude Include="Rendering\Renderer.h" />
     <ClInclude Include="Rendering\RenderTargetHandle.h" />
+    <ClInclude Include="Rendering\RenderingDebugPanel.h" />
     <ClInclude Include="Rendering\RenderThread.h" />
     <ClInclude Include="Rendering\Shadow\HardShadowRenderer.h" />
     <ClInclude Include="Rendering\Shadow\IShadowRenderer.h" />

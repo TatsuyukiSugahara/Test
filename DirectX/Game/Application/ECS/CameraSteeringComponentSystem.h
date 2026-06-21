@@ -132,14 +132,9 @@ namespace app
 			void Update() override;
 
 #ifdef AQ_DEBUG_IMGUI
-			void DebugRenderMenu() override;
-			void DebugRender() override;
-#endif
-
-
-		private:
-#ifdef AQ_DEBUG_IMGUI
-			bool show_ = false;
+			const char* GetDebugGroup()    const override { return "Camera"; }
+			const char* GetDebugTabLabel() const override { return "Steering"; }
+			void        RenderContent()          override;
 #endif
 		};
 
@@ -181,14 +176,9 @@ namespace app
 			void Update() override;
 
 #ifdef AQ_DEBUG_IMGUI
-			void DebugRenderMenu() override;
-			void DebugRender() override;
-#endif
-
-
-		private:
-#ifdef AQ_DEBUG_IMGUI
-			bool show_ = false;
+			const char* GetDebugGroup()    const override { return "Camera"; }
+			const char* GetDebugTabLabel() const override { return "Effect"; }
+			void        RenderContent()          override;
 #endif
 		};
 	}

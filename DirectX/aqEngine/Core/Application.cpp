@@ -24,6 +24,8 @@
 #endif
 #ifdef AQ_DEBUG_IMGUI
 #include "DebugUI.h"
+#include "Ocean/OceanDebugPanel.h"
+#include "Rendering/RenderingDebugPanel.h"
 #endif
 
 
@@ -109,7 +111,44 @@ namespace engine
 #endif
 #endif
 
-		return OnInitialize();
+		if (!OnInitialize()) return false;
+
+#ifdef AQ_DEBUG_IMGUI
+		// OnInitialize() でゲーム側が Shadow/Bloom 等のレンダラを設定した後にパネルを生成する
+		{
+			renderingDebugPanel_ = std::make_unique<aq::rendering::RenderingDebugPanel>();
+
+			// Ocean
+			oceanDebugPanel_ = std::make_unique<aq::ocean::OceanDebugPanel>();
+			renderingDebugPanel_->AddTab("Ocean", oceanDebugPanel_.get());
+
+			// Shadow — ゲームが SetShadowRenderer していれば自動でパネルを生成
+			if (auto* sr = renderer_.GetShadowRenderer())
+			{
+				auto panel = sr->CreateDebugPanel();
+				if (panel)
+				{
+					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
+					renderingDebugPanel_->TakeOwnership(std::move(panel));
+				}
+			}
+
+			// PostProcess (Bloom など) — 同上
+			if (auto* pp = renderer_.GetPostProcessRenderer())
+			{
+				auto panel = pp->CreateDebugPanel();
+				if (panel)
+				{
+					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
+					renderingDebugPanel_->TakeOwnership(std::move(panel));
+				}
+			}
+
+			aq::DebugUI::Get().Register(renderingDebugPanel_.get());
+		}
+#endif
+
+		return true;
 	}
 
 
@@ -208,17 +247,23 @@ namespace engine
 			ImGui::NewFrame();
 
 #ifdef AQ_DEBUG_IMGUI
-			if (ImGui::BeginMainMenuBar())
+			if (ImGui::GetIO().MouseClicked[2])
+				showDebugUI_ = !showDebugUI_;
+
+			if (showDebugUI_)
 			{
-				aq::ecs::EntityContext::Get().DebugRenderMenu();
-				aq::ecs::EntityContext::Get().DebugRenderSystemMenus();
-				aq::DebugUI::Get().DebugRenderMenuAll();
-				OnDebugRenderMenu();
-				ImGui::EndMainMenuBar();
+				if (ImGui::BeginMainMenuBar())
+				{
+					aq::ecs::EntityContext::Get().DebugRenderMenu();
+					aq::ecs::EntityContext::Get().DebugRenderSystemMenus();
+					aq::DebugUI::Get().DebugRenderMenuAll();
+					OnDebugRenderMenu();
+					ImGui::EndMainMenuBar();
+				}
+				aq::ecs::EntityContext::Get().DebugRender();
+				aq::DebugUI::Get().DebugRenderAll();
+				OnDebugRender();
 			}
-			aq::ecs::EntityContext::Get().DebugRender();
-			aq::DebugUI::Get().DebugRenderAll();
-			OnDebugRender();
 #endif
 
 			ImGui::Render();

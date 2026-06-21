@@ -40,15 +40,13 @@ namespace app
 
 			void Update() override;
 #ifdef AQ_DEBUG_IMGUI
-			void DebugRenderMenu() override;
-			void DebugRender() override;
+			const char* GetDebugGroup()    const override { return "Character"; }
+			const char* GetDebugTabLabel() const override { return "Character"; }
+			void        RenderContent()          override;
 #endif
 
 		private:
 			float speed_ = 0.01f;
-#ifdef AQ_DEBUG_IMGUI
-			bool show_ = false;
-#endif
 		};
 	}
 }

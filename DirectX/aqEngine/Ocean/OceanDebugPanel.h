@@ -18,6 +18,7 @@ namespace aq
 		public:
 			void DebugRenderMenu() override;
 			void DebugRender()     override;
+			void RenderContent();
 
 		private:
 			bool show_ = false;

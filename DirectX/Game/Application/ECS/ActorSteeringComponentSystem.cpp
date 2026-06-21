@@ -55,20 +55,9 @@ namespace app
 		}
 
 #ifdef AQ_DEBUG_IMGUI
-		void CharacterSteeringSystem::DebugRenderMenu()
+		void CharacterSteeringSystem::RenderContent()
 		{
-			ImGui::MenuItem("Character Steering", nullptr, &show_);
-		}
-
-		void CharacterSteeringSystem::DebugRender()
-		{
-			if (!show_) return;
-
-			if (ImGui::Begin("Character Steering"))
-			{
-				ImGui::SliderFloat("Speed", &speed_, 0.0f, 0.1f, "%.4f");
-			}
-			ImGui::End();
+			ImGui::SliderFloat("Speed", &speed_, 0.0f, 0.1f, "%.4f");
 		}
 #endif
 	}

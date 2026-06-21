@@ -14,8 +14,10 @@ namespace aq
 		public:
 			explicit BloomDebugPanel(BloomRenderer& renderer);
 
-			void DebugRenderMenu() override;
-			void DebugRender()     override;
+			void        DebugRenderMenu()          override;
+			void        DebugRender()              override;
+			void        RenderContent()            override;
+			const char* GetDebugLabel() const      override { return "Bloom"; }
 
 		private:
 			BloomRenderer& renderer_;

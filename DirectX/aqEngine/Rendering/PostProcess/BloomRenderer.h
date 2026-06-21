@@ -47,6 +47,10 @@ namespace aq
 			void     SetIntensity(float v)     { intensity_  = v; }
 			void     SetBlurPasses(uint32_t v) { blurPasses_ = (v < 1) ? 1 : (v > kMaxLevels) ? kMaxLevels : v; }
 
+#ifdef AQ_DEBUG_IMGUI
+			std::unique_ptr<IDebugRenderable> CreateDebugPanel() override;
+#endif
+
 		private:
 			std::unique_ptr<graphics::IShader>         extractShader_;
 			std::unique_ptr<graphics::IShader>         dualBlurDownShader_;

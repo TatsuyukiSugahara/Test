@@ -204,79 +204,55 @@ namespace app
 
 
 #ifdef AQ_DEBUG_IMGUI
-		void CameraEffectSystem::DebugRenderMenu()
+		void CameraEffectSystem::RenderContent()
 		{
-			ImGui::MenuItem("Camera Effect", nullptr, &show_);
-		}
-
-
-		void CameraEffectSystem::DebugRender()
-		{
-			if (!show_) return;
-
-			if (ImGui::Begin("Camera Effect"))
-			{
-				aq::ecs::Foreach<CameraEffectComponent>(
-					[](const aq::ecs::Entity& entity, CameraEffectComponent* comp)
-					{
-						ImGui::PushID(static_cast<int>(entity.GetID()));
-						ImGui::Text("Entity %u | Active: %d", entity.GetID(), comp->isActive);
-						ImGui::SliderFloat("shakeMagnitude", &comp->shakeMagnitude, 0.0f, 1.0f);
-						ImGui::SliderFloat("shakeDuration",  &comp->shakeDuration,  0.0f, 5.0f);
-						ImGui::Separator();
-						ImGui::PopID();
-					});
-			}
-			ImGui::End();
+			aq::ecs::Foreach<CameraEffectComponent>(
+				[](const aq::ecs::Entity& entity, CameraEffectComponent* comp)
+				{
+					ImGui::PushID(static_cast<int>(entity.GetID()));
+					ImGui::Text("Entity %u | Active: %d", entity.GetID(), comp->isActive);
+					ImGui::SliderFloat("shakeMagnitude", &comp->shakeMagnitude, 0.0f, 1.0f);
+					ImGui::SliderFloat("shakeDuration",  &comp->shakeDuration,  0.0f, 5.0f);
+					ImGui::Separator();
+					ImGui::PopID();
+				});
 		}
 #endif
 
 
 #ifdef AQ_DEBUG_IMGUI
-		void CameraSteeringSystem::DebugRenderMenu()
+		void CameraSteeringSystem::RenderContent()
 		{
-			ImGui::MenuItem("Camera Steering", nullptr, &show_);
-		}
+			aq::ecs::Foreach<CameraSteeringComponent>(
+				[](const aq::ecs::Entity& entity, CameraSteeringComponent* comp)
+				{
+					ImGui::PushID(static_cast<int>(entity.GetID()));
+					ImGui::Text("Entity %u | Active: %d | Priority: %d",
+						entity.GetID(), comp->isActive, comp->priority);
 
+					const bool isManual = comp->controlMode == CameraControlMode::ManualView;
+					ImGui::Text("ControlMode: %s", isManual ? "ManualView" : "FollowOnly");
 
-		void CameraSteeringSystem::DebugRender()
-		{
-			if (!show_) return;
-
-			if (ImGui::Begin("Camera Steering"))
-			{
-				aq::ecs::Foreach<CameraSteeringComponent>(
-					[](const aq::ecs::Entity& entity, CameraSteeringComponent* comp)
+					if (isManual)
 					{
-						ImGui::PushID(static_cast<int>(entity.GetID()));
-						ImGui::Text("Entity %u | Active: %d | Priority: %d",
-							entity.GetID(), comp->isActive, comp->priority);
+						ImGui::TextDisabled("positionMode: ignored (ManualView active)");
+						ImGui::SliderFloat("viewYaw",   &comp->viewYawDegrees,   -180.0f, 180.0f);
+						ImGui::SliderFloat("viewPitch", &comp->viewPitchDegrees,
+							comp->minViewPitchDegrees, comp->maxViewPitchDegrees);
+						ImGui::SliderFloat("distance",  &comp->distanceFromTarget, 1.0f, 50.0f);
+					}
+					else
+					{
+						ImGui::Text("positionMode: %s",
+							comp->positionMode == CameraPositionMode::OffsetFromTarget
+								? "OffsetFromTarget" : "FixedPosition");
+					}
 
-						const bool isManual = comp->controlMode == CameraControlMode::ManualView;
-						ImGui::Text("ControlMode: %s", isManual ? "ManualView" : "FollowOnly");
-
-						if (isManual)
-						{
-							ImGui::TextDisabled("positionMode: ignored (ManualView active)");
-							ImGui::SliderFloat("viewYaw",   &comp->viewYawDegrees,   -180.0f, 180.0f);
-							ImGui::SliderFloat("viewPitch", &comp->viewPitchDegrees,
-								comp->minViewPitchDegrees, comp->maxViewPitchDegrees);
-							ImGui::SliderFloat("distance",  &comp->distanceFromTarget, 1.0f, 50.0f);
-						}
-						else
-						{
-							ImGui::Text("positionMode: %s",
-								comp->positionMode == CameraPositionMode::OffsetFromTarget
-									? "OffsetFromTarget" : "FixedPosition");
-						}
-
-						ImGui::SliderFloat("lookAtSharpness",   &comp->lookAtSharpness,   0.1f, 20.0f);
-						ImGui::SliderFloat("positionSharpness", &comp->positionSharpness,  0.1f, 20.0f);
-						ImGui::Separator();
-						ImGui::PopID();
-					});
-			}
-			ImGui::End();
+					ImGui::SliderFloat("lookAtSharpness",   &comp->lookAtSharpness,   0.1f, 20.0f);
+					ImGui::SliderFloat("positionSharpness", &comp->positionSharpness,  0.1f, 20.0f);
+					ImGui::Separator();
+					ImGui::PopID();
+				});
 		}
 #endif
 	}

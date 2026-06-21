@@ -6,6 +6,9 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/Lighting.h"
 #include <cmath>
+#ifdef AQ_DEBUG_IMGUI
+#include "ShadowDebugPanel.h"
+#endif
 
 
 namespace aq
@@ -84,5 +87,12 @@ namespace aq
 			outData.depthBias        = settings_.depthBias;
 			outData.softness         = settings_.softness;
 		}
+
+#ifdef AQ_DEBUG_IMGUI
+		std::unique_ptr<IDebugRenderable> HardShadowRenderer::CreateDebugPanel()
+		{
+			return std::make_unique<ShadowDebugPanel>(settings_);
+		}
+#endif
 	}
 }

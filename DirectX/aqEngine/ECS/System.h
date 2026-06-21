@@ -21,8 +21,15 @@ namespace aq
 
 			virtual void Update() = 0;
 #ifdef AQ_DEBUG_IMGUI
-			virtual void DebugRenderMenu() {}
-			virtual void DebugRender() {}
+			virtual void        DebugRenderMenu()               {}
+			virtual void        DebugRender()                   {}
+
+			// グループタブに参加する場合はグループ名を返す（nullptr = 個別ウィンドウ）
+			virtual const char* GetDebugGroup()    const        { return nullptr; }
+			// タブバー上のラベル
+			virtual const char* GetDebugTabLabel() const        { return ""; }
+			// Begin/End なしで中身だけ描画（グループタブから呼ばれる）
+			virtual void        RenderContent()                 {}
 #endif
 		};
 
@@ -40,9 +47,21 @@ namespace aq
 				std::string          displayName;
 			};
 
+#ifdef AQ_DEBUG_IMGUI
+			struct GroupEntry
+			{
+				std::string              name;
+				bool                     show = false;
+				std::vector<SystemBase*> systems;
+			};
+#endif
+
 			std::vector<SystemEntry> systemEntries_;
 			std::vector<size_t>      updateOrder_;
 			bool                     registrationFinalized_ = false;
+#ifdef AQ_DEBUG_IMGUI
+			std::vector<GroupEntry>  groups_;
+#endif
 
 
 		private:
@@ -60,19 +79,10 @@ namespace aq
 			void Update();
 
 #ifdef AQ_DEBUG_IMGUI
-			/** 全 System の DebugRenderMenu をメインメニューバー内で呼ぶ */
-			void DebugRenderMenuAll()
-			{
-				for (auto& entry : systemEntries_)
-					entry.system->DebugRenderMenu();
-			}
-
-			/** 全 System の DebugRender をメインスレッドで直列実行 */
-			void DebugRenderAll()
-			{
-				for (auto& entry : systemEntries_)
-					entry.system->DebugRender();
-			}
+			/** グループなし System のメニュー + グループごとの MenuItem を描画 */
+			void DebugRenderMenuAll();
+			/** グループなし System の個別ウィンドウ + グループタブウィンドウを描画 */
+			void DebugRenderAll();
 #endif
 
 

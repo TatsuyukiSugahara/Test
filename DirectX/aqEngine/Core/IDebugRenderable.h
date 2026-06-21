@@ -17,6 +17,10 @@ namespace aq
 		virtual void DebugRenderMenu() {}
 		/** デバッグウィンドウを描画する。 */
 		virtual void DebugRender() {}
+		/** Begin/End なしで中身だけ描画する（タブに埋め込む場合に使用）。 */
+		virtual void RenderContent() {}
+		/** タブに表示するラベル文字列を返す。 */
+		virtual const char* GetDebugLabel() const { return ""; }
 #endif
 	};
 }

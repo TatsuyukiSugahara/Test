@@ -2,6 +2,11 @@
 #include "IApplication.h"
 #include "Rendering/Renderer.h"
 #include "Rendering/RenderThread.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Rendering/RenderingDebugPanel.h"
+#include "Ocean/OceanDebugPanel.h"
+#include <memory>
+#endif
 
 namespace engine
 {
@@ -48,6 +53,11 @@ namespace engine
 
 #ifdef AQ_IMGUI
 		bool imguiReady_ = false;
+#endif
+#ifdef AQ_DEBUG_IMGUI
+		bool                                                showDebugUI_ = true;
+		std::unique_ptr<aq::ocean::OceanDebugPanel>         oceanDebugPanel_;
+		std::unique_ptr<aq::rendering::RenderingDebugPanel> renderingDebugPanel_;
 #endif
 	};
 }

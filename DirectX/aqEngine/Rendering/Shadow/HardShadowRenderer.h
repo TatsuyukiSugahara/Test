@@ -44,6 +44,10 @@ namespace aq
 
 			graphics::IDepthMap* GetDepthMap() const override { return depthMap_.get(); }
 
+#ifdef AQ_DEBUG_IMGUI
+			std::unique_ptr<IDebugRenderable> CreateDebugPanel() override;
+#endif
+
 		private:
 			std::unique_ptr<graphics::IDepthMap> depthMap_;
 			std::shared_ptr<graphics::IShader>   shadowVS_;

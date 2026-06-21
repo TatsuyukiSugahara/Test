@@ -5,6 +5,9 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/IShader.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "BloomDebugPanel.h"
+#endif
 
 
 namespace aq
@@ -120,5 +123,12 @@ namespace aq
 				width,
 				height);
 		}
+
+#ifdef AQ_DEBUG_IMGUI
+		std::unique_ptr<IDebugRenderable> BloomRenderer::CreateDebugPanel()
+		{
+			return std::make_unique<BloomDebugPanel>(*this);
+		}
+#endif
 	}
 }

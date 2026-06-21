@@ -3,6 +3,10 @@
 #include "Graphics/Lighting.h"
 #include "Graphics/IDepthMap.h"
 #include "Rendering/RenderTargetHandle.h"
+#ifdef AQ_DEBUG_IMGUI
+#include <memory>
+#include "Core/IDebugRenderable.h"
+#endif
 
 
 namespace aq
@@ -49,6 +53,11 @@ namespace aq
 
 			/** メインパスで SRV (t4) にバインドするデプスマップ */
 			virtual graphics::IDepthMap* GetDepthMap() const = 0;
+
+#ifdef AQ_DEBUG_IMGUI
+			/** デバッグパネルを生成して返す。非対応の実装は nullptr を返す。 */
+			virtual std::unique_ptr<IDebugRenderable> CreateDebugPanel() { return nullptr; }
+#endif
 		};
 	}
 }

@@ -5,6 +5,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "aqEngine/Rendering/Shadow/ShadowDebugPanel.h"
 #include "aqEngine/Rendering/PostProcess/BloomDebugPanel.h"
+#include "aqEngine/Ocean/OceanDebugPanel.h"
 #endif
 
 namespace app
@@ -23,6 +24,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 		std::unique_ptr<aq::rendering::ShadowDebugPanel> shadowDebugPanel_;
 		std::unique_ptr<aq::rendering::BloomDebugPanel>  bloomDebugPanel_;
+		std::unique_ptr<aq::ocean::OceanDebugPanel>      oceanDebugPanel_;
 #endif
 
 	protected:

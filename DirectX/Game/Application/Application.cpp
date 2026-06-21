@@ -14,6 +14,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
 #include "Rendering/PostProcess/BloomDebugPanel.h"
+#include "Ocean/OceanDebugPanel.h"
 #endif
 #include "Resource/Resource.h"
 #include "ECS/ECS.h"
@@ -84,6 +85,12 @@ namespace app
 			}
 		}
 
+#ifdef AQ_DEBUG_IMGUI
+		// Ocean — ECS から毎フレーム OceanComponent を検索するためシーン生成前でも登録可
+		oceanDebugPanel_ = std::make_unique<aq::ocean::OceanDebugPanel>();
+		aq::DebugUI::Get().Register(oceanDebugPanel_.get());
+#endif
+
 		return true;
 	}
 
@@ -91,6 +98,11 @@ namespace app
 	void Application::OnFinalize()
 	{
 #ifdef AQ_DEBUG_IMGUI
+		if (oceanDebugPanel_)
+		{
+			aq::DebugUI::Get().Unregister(oceanDebugPanel_.get());
+			oceanDebugPanel_.reset();
+		}
 		if (bloomDebugPanel_)
 		{
 			aq::DebugUI::Get().Unregister(bloomDebugPanel_.get());

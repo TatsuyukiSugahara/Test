@@ -9,6 +9,7 @@
 #include "Graphics/IShaderResourceView.h"
 #include "Graphics/Lighting.h"
 #include "Shadow/ShadowData.h"
+#include "Ocean/OceanData.h"
 
 
 namespace aq
@@ -71,18 +72,27 @@ namespace aq
 		};
 
 
+		// 海描画1件分のデータ (RenderItem + OceanCB)
+		struct OceanRenderItem
+		{
+			RenderItem          base;
+			ocean::OceanCBData  oceanCB;
+		};
+
+
 		/**
 		 * One frame's rendering snapshot.
 		 * Built by the game thread; consumed by Renderer / RenderThread.
 		 */
 		struct RenderFrame
 		{
-			CameraData              camera;
-			graphics::LightingData  lighting;
-			ShadowCBData            shadow;
-			std::vector<RenderItem> items;
+			CameraData                   camera;
+			graphics::LightingData       lighting;
+			ShadowCBData                 shadow;
+			std::vector<RenderItem>      items;
+			std::vector<OceanRenderItem> oceanItems;  // 海描画用
 
-			void Clear() { items.clear(); }
+			void Clear() { items.clear(); oceanItems.clear(); }
 		};
 	}
 }

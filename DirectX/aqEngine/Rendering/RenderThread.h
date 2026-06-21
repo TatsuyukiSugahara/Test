@@ -80,6 +80,7 @@ namespace aq
 				ConstantBufferPool                         perDrawPool;
 				ConstantBufferPool                         materialPool;
 				ConstantBufferPool                         bonesPool;
+				ConstantBufferPool                         oceanPool;   // b5: OceanCBData
 				std::unique_ptr<graphics::IConstantBuffer> lightingCB;
 				std::unique_ptr<graphics::IConstantBuffer> shadowCB;
 				graphics::LightingData                     lightingData;
@@ -88,10 +89,11 @@ namespace aq
 				bool                                       ready = false;
 				bool                                       done  = true;
 
-				FrameSlot(uint32_t perDrawSize, uint32_t materialSize, uint32_t bonesSize)
+				FrameSlot(uint32_t perDrawSize, uint32_t materialSize, uint32_t bonesSize, uint32_t oceanSize)
 					: perDrawPool(perDrawSize)
 					, materialPool(materialSize)
 					, bonesPool(bonesSize)
+					, oceanPool(oceanSize)
 				{}
 			};
 

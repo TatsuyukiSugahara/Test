@@ -4,6 +4,7 @@
 #include "Graphics/Camera.h"
 #include "Component/TerrainComponent.h"
 #include "Resource/Resource.h"
+#include "Engine.h"
 
 namespace aq
 {
@@ -365,6 +366,13 @@ namespace aq
 						terrain->GetChunk()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
 					}
 				});
+
+			aq::ecs::Foreach<TransformComponent, OceanComponent>([](const aq::ecs::Entity&, TransformComponent* tc, OceanComponent* ocean)
+				{
+					if (ocean->IsCompleted()) {
+						ocean->GetMesh()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
+					}
+				});
 		}
 
 
@@ -417,6 +425,17 @@ namespace aq
 					aq::rendering::RenderItem item;
 					if (comp->GetSkeletalMesh()->FillRenderItem(item)) {
 						frame.items.push_back(item);
+					}
+				});
+
+			// 海描画アイテム収集
+			const float totalTime = engine::Engine::GetTotalTime();
+			aq::ecs::Foreach<OceanComponent>([&frame, totalTime](const aq::ecs::Entity&, OceanComponent* comp)
+				{
+					if (!comp->IsCompleted()) return;
+					aq::rendering::OceanRenderItem item;
+					if (comp->GetMesh()->FillRenderItem(item, comp->GetParams(), totalTime)) {
+						frame.oceanItems.push_back(item);
 					}
 				});
 		}

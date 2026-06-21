@@ -94,6 +94,13 @@ namespace aq
 		{
 			return cameraRotation_;
 		}
+
+		/** カメラの前方向をXZ平面に投影して正規化 */
+		math::Vector3 GetForwardXZ() const;
+		/** カメラの右方向をXZ平面に投影して正規化 */
+		math::Vector3 GetRightXZ() const;
+		/** XZ入力（z=前後 / x=左右）をカメラ相対のワールド方向に変換して正規化（ゼロ入力時はゼロ返却） */
+		math::Vector3 TransformMoveInput(const math::Vector3& input) const;
 	};
 
 

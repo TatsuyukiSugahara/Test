@@ -35,6 +35,10 @@ namespace app
 		keyboardMap_.Bind(GameAction::MoveRight,    BindKey(KeyBoardType::D));
 		keyboardMap_.Bind(GameAction::MoveForward,  BindKey(KeyBoardType::W));
 		keyboardMap_.Bind(GameAction::MoveBackward, BindKey(KeyBoardType::S));
+		keyboardMap_.Bind(GameAction::LookLeft,     BindKey(KeyBoardType::Left));
+		keyboardMap_.Bind(GameAction::LookRight,    BindKey(KeyBoardType::Right));
+		keyboardMap_.Bind(GameAction::LookUp,       BindKey(KeyBoardType::Up));
+		keyboardMap_.Bind(GameAction::LookDown,     BindKey(KeyBoardType::Down));
 
 		gamepadMap_.Bind(GameAction::MoveLeft,     BindPad(PadButton::DLeft));
 		gamepadMap_.Bind(GameAction::MoveRight,    BindPad(PadButton::DRight));

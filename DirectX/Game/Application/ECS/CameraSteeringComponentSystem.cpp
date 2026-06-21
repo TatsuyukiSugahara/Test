@@ -68,6 +68,18 @@ namespace app
 						comp->minViewPitchDegrees,
 						comp->maxViewPitchDegrees);
 
+					// キーボード矢印キー（invertViewY はスティックと同じく適用する）
+					if (GameInput::Get().IsPressed(GameAction::LookLeft))  comp->viewYawDegrees -= comp->yawSpeedDegreesPerSecond * dt;
+					if (GameInput::Get().IsPressed(GameAction::LookRight)) comp->viewYawDegrees += comp->yawSpeedDegreesPerSecond * dt;
+
+					float keyPitchDelta = 0.0f;
+					if (GameInput::Get().IsPressed(GameAction::LookUp))   keyPitchDelta += ySign * comp->pitchSpeedDegreesPerSecond * dt;
+					if (GameInput::Get().IsPressed(GameAction::LookDown)) keyPitchDelta -= ySign * comp->pitchSpeedDegreesPerSecond * dt;
+					comp->viewPitchDegrees = std::clamp(
+						comp->viewPitchDegrees + keyPitchDelta,
+						comp->minViewPitchDegrees,
+						comp->maxViewPitchDegrees);
+
 					const float yaw   = DirectX::XMConvertToRadians(comp->viewYawDegrees);
 					const float pitch = DirectX::XMConvertToRadians(comp->viewPitchDegrees);
 

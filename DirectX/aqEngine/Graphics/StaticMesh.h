@@ -24,6 +24,7 @@ namespace aq
 				SimpleBox,    // SimpleBox.fx
 				ModelLit,     // ModelLit.fx (フルライティング)
 				TerrainLit,   // TerrainLit.fx (スプラットマップ地形)
+				OceanLit,     // OceanLit.fx (Gerstner 波・Fresnel 海面)
 			};
 
 		private:

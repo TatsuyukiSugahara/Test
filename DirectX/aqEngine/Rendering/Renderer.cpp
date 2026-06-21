@@ -1,11 +1,13 @@
 #include "aq.h"
 #include "Renderer.h"
 #include "DrawItemCommand.h"
+#include "OceanDrawCommand.h"
 #include "FrameContext.h"
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/Lighting.h"
+#include "Ocean/OceanData.h"
 
 
 namespace aq
@@ -55,6 +57,11 @@ namespace aq
 				RecordDrawItem(item, frame.camera, outList);
 			}
 
+			// Pass 2.5: 海パス (メインパスの後、ポストプロセスの前)
+			for (const OceanRenderItem& item : frame.oceanItems) {
+				outList.Enqueue<OceanDrawCommand>(item, frame.camera);
+			}
+
 			// Pass 3: ポストプロセス（メインパスのみ）
 			if (postProcessRenderer_ && applyPostProcess) {
 				postProcessRenderer_->BuildPostProcessCommandList(
@@ -71,6 +78,7 @@ namespace aq
 			ConstantBufferPool perDrawPool(sizeof(graphics::VSConstantBuffer));
 			ConstantBufferPool materialPool(sizeof(graphics::MaterialCBData));
 			ConstantBufferPool bonesPool(128u * 64u);
+			ConstantBufferPool oceanPool(sizeof(ocean::OceanCBData));
 
 			auto lightingCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
 				&frame.lighting, sizeof(frame.lighting));
@@ -79,7 +87,7 @@ namespace aq
 			auto shadowCB = graphics::GraphicsDevice::Get().CreateConstantBuffer(
 				&frame.shadow, sizeof(frame.shadow));
 
-			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get(), shadowCB.get(), &bonesPool };
+			FrameContext fc { &perDrawPool, &materialPool, lightingCB.get(), shadowCB.get(), &bonesPool, &oceanPool };
 
 			RenderCommandList list;
 			BuildCommandList(frame, list, mainRTHandle_, mainViewportW_, mainViewportH_);

@@ -66,6 +66,39 @@ namespace aq
 
 
 
+	math::Vector3 Camera::GetForwardXZ() const
+	{
+		// 逆ビュー行列の行2 = カメラ前方（ワールド空間）
+		math::Vector3 fwd(viewMatrixInverse_._31, 0.0f, viewMatrixInverse_._33);
+		fwd.TryNormalize();
+		return fwd;
+	}
+
+
+	math::Vector3 Camera::GetRightXZ() const
+	{
+		// 逆ビュー行列の行0 = カメラ右方向（ワールド空間）
+		math::Vector3 right(viewMatrixInverse_._11, 0.0f, viewMatrixInverse_._13);
+		right.TryNormalize();
+		return right;
+	}
+
+
+	math::Vector3 Camera::TransformMoveInput(const math::Vector3& input) const
+	{
+		const math::Vector3 fwd   = GetForwardXZ();
+		const math::Vector3 right = GetRightXZ();
+
+		math::Vector3 result(
+			fwd.x * input.z + right.x * input.x,
+			0.0f,
+			fwd.z * input.z + right.z * input.x);
+
+		result.TryNormalize();
+		return result;
+	}
+
+
 	/*******************************************/
 
 

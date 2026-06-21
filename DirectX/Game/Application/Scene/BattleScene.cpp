@@ -3,6 +3,7 @@
 
 #include "Utility.h"
 #include "Component/TerrainComponent.h"  // Utility.h (EngineAssert) より後に include する
+#include "Component/OceanComponent.h"
 
 #include "Component/TransformComponentSystem.h"
 #include "Component/BodyComponentSystem.h"
@@ -66,6 +67,40 @@ namespace app
 
 			// world(0,0) = terrain local(50,50) (XZオフセット -50 適用後)
 			const float spawnY = terrainComp->GetChunk()->GetHeight(50.0f, 50.0f);
+
+			// 海エンティティ (地形の下に配置して水面を演出)
+			{
+				auto entity = aq::ecs::EntityContext::Get().CreateEntity<
+					aq::ecs::TransformComponent, aq::ecs::OceanComponent>();
+
+				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+				tc->transform.localPosition.Set(-100.0f, -0.5f, -100.0f);
+				tc->transform.localAngle.Set(0.0f);
+				tc->transform.localScale.Set(1.0f);
+
+				aq::ocean::OceanParams params;
+				params.size       = 300.0f;  // 地形 (100m) より広い範囲をカバー
+				params.resolution = 128;
+
+				// 海の色
+				params.deepColor    = { 0.02f, 0.06f, 0.14f };
+				params.shallowColor = { 0.07f, 0.22f, 0.38f };
+
+				// Fresnel
+				params.fresnelBias  = 0.04f;
+				params.fresnelScale = 1.0f;
+				params.fresnelPower = 4.0f;
+
+				// 太陽ハイライト
+				params.sunShininess = 256.0f;
+				params.sunIntensity = 2.5f;
+				params.skyColor     = { 0.55f, 0.75f, 0.95f };
+
+				// Gerstner 波パラメータ (デフォルト値を使用)
+				// params.waves[0..3] はデフォルトで主うねり・斜め・斜め逆・チョップが設定済み
+
+				entity.GetComponent<aq::ecs::OceanComponent>()->Initialize(params);
+			}
 
 			// メインカメラの Near・アスペクト比設定（位置/注視点は CameraSteeringSystem が管理）
 			aq::Camera* const mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);

@@ -22,6 +22,7 @@ namespace aq
 				{ "Assets/Shader/SimpleBox.fx",  "VSMain", "Assets/Shader/SimpleBox.fx",  "PSMain" },
 				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain" },
 				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain" },
+				{ "Assets/Shader/OceanLit.fx",   "VSMain", "Assets/Shader/OceanLit.fx",   "PSMain" },
 			};
 		}
 

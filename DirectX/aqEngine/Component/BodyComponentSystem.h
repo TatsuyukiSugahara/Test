@@ -6,6 +6,7 @@
 #include "Graphics/SkeletalMesh.h"
 #include "Graphics/RenderContext.h"
 #include "Rendering/RenderFrame.h"
+#include "Component/OceanComponent.h"
 
 
 namespace aq

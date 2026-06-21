@@ -194,6 +194,10 @@
     <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Component\TerrainComponent.cpp" />
+    <ClCompile Include="Ocean\OceanMesh.cpp" />
+    <ClCompile Include="Ocean\OceanDebugPanel.cpp" />
+    <ClCompile Include="Component\OceanComponent.cpp" />
+    <ClCompile Include="Rendering\OceanDrawCommand.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Application.h" />
@@ -292,6 +296,11 @@
     <ClInclude Include="Resource\Resource.h" />
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Component\TerrainComponent.h" />
+    <ClInclude Include="Ocean\OceanData.h" />
+    <ClInclude Include="Ocean\OceanMesh.h" />
+    <ClInclude Include="Ocean\OceanDebugPanel.h" />
+    <ClInclude Include="Component\OceanComponent.h" />
+    <ClInclude Include="Rendering\OceanDrawCommand.h" />
     <ClInclude Include="Util\CRC32.h" />
     <ClInclude Include="Util\GameTimer.h" />
     <ClInclude Include="Util\ThreadPool.h" />

@@ -57,6 +57,41 @@ namespace engine
 			if (d3d)
 			{
 				ImGui::CreateContext();
+
+				// 日本語フォントを Windows フォントフォルダから読み込む
+				// GetWindowsDirectoryA でフォントパスを動的に解決する
+				{
+					char winDir[MAX_PATH] = {};
+					if (GetWindowsDirectoryA(winDir, MAX_PATH) == 0)
+						strcpy_s(winDir, "C:\\Windows");
+
+					static const char* kJpFontNames[] = {
+						"meiryo.ttc",    // Meiryo (Vista+、推奨)
+						"YuGothR.ttc",   // Yu Gothic Regular (Win8.1+)
+						"msgothic.ttc",  // MS Gothic (XP+、フォールバック)
+					};
+
+					ImGuiIO& io = ImGui::GetIO();
+					bool fontLoaded = false;
+					for (const char* name : kJpFontNames)
+					{
+						char path[MAX_PATH];
+						sprintf_s(path, "%s\\Fonts\\%s", winDir, name);
+
+						FILE* f = nullptr;
+						if (fopen_s(&f, path, "rb") != 0 || !f) continue;
+						fclose(f);
+
+						ImFontConfig cfg;
+						cfg.FontNo = 0;  // TTC コレクション内の先頭フォントを使用
+						ImFont* font = io.Fonts->AddFontFromFileTTF(
+							path, 15.0f, &cfg, io.Fonts->GetGlyphRangesJapanese());
+						if (font) { fontLoaded = true; break; }
+					}
+					if (!fontLoaded)
+						io.Fonts->AddFontDefault();
+				}
+
 				const bool winOk  = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
 				const bool dx11Ok = winOk && ImGui_ImplDX11_Init(d3d->GetDevice(), d3d->GetDeviceContext());
 				if (dx11Ok)

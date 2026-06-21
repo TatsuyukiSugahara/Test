@@ -29,7 +29,7 @@ namespace app
 				});
 
 			auto& entityCtx = aq::ecs::EntityContext::Get();
-			const float dt  = engine::Engine::GetDeltaTime();
+			const float dt  = aq::Engine::GetDeltaTime();
 
 			for (size_t i = 0; i < kMaxType; ++i)
 			{
@@ -162,8 +162,8 @@ namespace app
 
 		void CameraEffectSystem::Update()
 		{
-			const float dt         = engine::Engine::GetDeltaTime();
-			const float totalTime  = engine::Engine::GetTotalTime();
+			const float dt         = aq::Engine::GetDeltaTime();
+			const float totalTime  = aq::Engine::GetTotalTime();
 
 			aq::ecs::Foreach<CameraEffectComponent>(
 				[dt, totalTime](const aq::ecs::Entity&, CameraEffectComponent* comp)

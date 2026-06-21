@@ -36,8 +36,8 @@ namespace app
 
 		// Shadow renderer
 		{
-			const float renderW = static_cast<float>(engine::Engine::Get().GetRenderWidth());
-			const float renderH = static_cast<float>(engine::Engine::Get().GetRenderHeight());
+			const float renderW = static_cast<float>(aq::Engine::Get().GetRenderWidth());
+			const float renderH = static_cast<float>(aq::Engine::Get().GetRenderHeight());
 
 			aq::rendering::ShadowSettings shadowSettings;
 			shadowSettings.resolution  = 2048;
@@ -53,15 +53,15 @@ namespace app
 			if (shadowRenderer->Create(shadowSettings, "Assets/Shader/ShadowDepth.fx"))
 			{
 				renderer_.SetShadowRenderer(std::move(shadowRenderer),
-				                            engine::Engine::Get().GetMainRenderTargetHandle(),
+				                            aq::Engine::Get().GetMainRenderTargetHandle(),
 				                            renderW, renderH);
 			}
 		}
 
 		// Bloom
 		{
-			const uint32_t renderW = engine::Engine::Get().GetRenderWidth();
-			const uint32_t renderH = engine::Engine::Get().GetRenderHeight();
+			const uint32_t renderW = aq::Engine::Get().GetRenderWidth();
+			const uint32_t renderH = aq::Engine::Get().GetRenderHeight();
 
 			auto bloom = std::make_unique<aq::rendering::BloomRenderer>();
 			if (bloom->Initialize(renderW, renderH))

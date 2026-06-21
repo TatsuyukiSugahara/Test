@@ -106,8 +106,8 @@ namespace app
 			aq::Camera* const mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);
 			mainCamera->SetNear(0.01f);
 			mainCamera->SetViewportSize(
-				static_cast<float>(engine::Engine::Get().GetRenderWidth()),
-				static_cast<float>(engine::Engine::Get().GetRenderHeight()));
+				static_cast<float>(aq::Engine::Get().GetRenderWidth()),
+				static_cast<float>(aq::Engine::Get().GetRenderHeight()));
 
 			// オフスクリーンカメラ
 			aq::Camera* offscreenCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);

@@ -29,7 +29,7 @@
 #endif
 
 
-namespace engine
+namespace aq
 {
 	bool Application::Initialize(aq::graphics::RenderContext& renderContext)
 	{

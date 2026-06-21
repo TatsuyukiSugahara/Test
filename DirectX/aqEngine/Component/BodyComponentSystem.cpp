@@ -429,7 +429,7 @@ namespace aq
 				});
 
 			// 海描画アイテム収集
-			const float totalTime = engine::Engine::GetTotalTime();
+			const float totalTime = aq::Engine::GetTotalTime();
 			aq::ecs::Foreach<OceanComponent>([&frame, totalTime](const aq::ecs::Entity&, OceanComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;

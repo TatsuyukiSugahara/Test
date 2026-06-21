@@ -8,7 +8,7 @@
 #include <memory>
 #endif
 
-namespace engine
+namespace aq
 {
 	/**
 	 * エンジンサブシステムの初期化・更新・終了を担うアプリケーション基底クラス。

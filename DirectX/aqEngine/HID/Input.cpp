@@ -29,7 +29,7 @@ namespace aq
 				return S_FALSE;
 			if (FAILED(device_->SetDataFormat(&c_dfDIKeyboard)))
 				return S_FALSE;
-			if (FAILED(device_->SetCooperativeLevel(engine::Engine::Get().GetHWND(), DISCL_NONEXCLUSIVE | DISCL_FOREGROUND)))
+			if (FAILED(device_->SetCooperativeLevel(aq::Engine::Get().GetHWND(), DISCL_NONEXCLUSIVE | DISCL_FOREGROUND)))
 				return S_FALSE;
 			device_->Acquire();
 			return S_OK;
@@ -106,7 +106,7 @@ namespace aq
 			if (FAILED(device_->SetDataFormat(&c_dfDIMouse2)))
 				return S_FALSE;
 
-			if (FAILED(device_->SetCooperativeLevel(engine::Engine::Get().GetHWND(), DISCL_NONEXCLUSIVE | DISCL_FOREGROUND)))
+			if (FAILED(device_->SetCooperativeLevel(aq::Engine::Get().GetHWND(), DISCL_NONEXCLUSIVE | DISCL_FOREGROUND)))
 				return S_FALSE;
 
 			DIPROPDWORD diprop;
@@ -188,7 +188,7 @@ namespace aq
 		{
 			POINT pos;
 			::GetCursorPos(&pos);
-			ScreenToClient(engine::Engine::Get().GetHWND(), &pos);
+			ScreenToClient(aq::Engine::Get().GetHWND(), &pos);
 			return math::Vector2(static_cast<float>(pos.x), static_cast<float>(pos.y));
 		}
 

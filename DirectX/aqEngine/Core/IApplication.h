@@ -1,7 +1,7 @@
 #pragma once
 #include "Graphics/RenderContext.h"
 
-namespace engine
+namespace aq
 {
 	/**
 	 * アプリケーションを動作させる基本機能

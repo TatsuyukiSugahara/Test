@@ -81,7 +81,7 @@ namespace aq
 
 		void AnimationSystem::Update()
 		{
-			const float deltaTime = engine::Engine::GetDeltaTime();
+			const float deltaTime = aq::Engine::GetDeltaTime();
 			aq::ecs::Foreach<SkeletalMeshComponent, AnimationComponent>([deltaTime](const aq::ecs::Entity&, SkeletalMeshComponent* skeletalMeshComponent, AnimationComponent* animationComponent)
 				{
 					animationComponent->Update(deltaTime, skeletalMeshComponent);

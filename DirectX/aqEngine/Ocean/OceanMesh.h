@@ -29,7 +29,7 @@ namespace aq
 			            const math::Vector3& scale);
 
 			// 描画に必要なデータを OceanRenderItem へ書き込む
-			// time: engine::Engine::GetTotalTime() を渡す
+			// time: aq::Engine::GetTotalTime() を渡す
 			bool FillRenderItem(rendering::OceanRenderItem& item,
 			                    const OceanParams& params,
 			                    float time) const;

@@ -3,7 +3,7 @@
 
 namespace app
 {
-	class Application : public engine::Application
+	class Application : public aq::Application
 	{
 	protected:
 		aq::rendering::RenderTargetHandle offscreenRTHandle_;

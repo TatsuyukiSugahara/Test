@@ -8,7 +8,7 @@
 #include "Util/GameTimer.h"
 
 
-namespace engine
+namespace aq
 {
 	class IApplication;
 

@@ -400,9 +400,14 @@ namespace aq
 		// IDebugRenderable::DebugRender  (メインエントリ)
 		// -----------------------------------------------------------------------
 
+		void HeightmapPainter::DebugRenderMenu()
+		{
+			ImGui::MenuItem("Heightmap Painter", nullptr, &show_);
+		}
+
 		void HeightmapPainter::DebugRender()
 		{
-			if (!chunk_) return;
+			if (!chunk_ || !show_) return;
 
 			const ImGuiIO& io = ImGui::GetIO();
 			const float    sw = io.DisplaySize.x;
@@ -454,7 +459,7 @@ namespace aq
 			if (windowLocked_) windowFlags |= ImGuiWindowFlags_NoMove;
 
 			ImGui::SetNextWindowSize(ImVec2(420.0f, 560.0f), ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("Heightmap Painter", nullptr, windowFlags))
+			if (!ImGui::Begin("Heightmap Painter", &show_, windowFlags))
 			{
 				ImGui::End();
 				return;

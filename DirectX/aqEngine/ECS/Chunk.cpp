@@ -114,6 +114,116 @@ namespace aq
 		}
 
 
+		EntityID Chunk::MoveEntityRemoveArchetype(
+			EntityLocation& loc, Chunk& other, EntityID entityId, const TypeInfo& droppedType)
+		{
+			// ── 1. 移動先スロット確保 ──────────────────────────────────────────────
+			const auto newLoc = other.CreateEntity(entityId);
+
+			// ── 2. 各コンポーネントを処理 ──────────────────────────────────────────
+			// droppedType → その場でデストラクタ呼び出し（ドロップ）
+			// 他の型    → 移動先チャンクへ move-construct
+			for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i)
+			{
+				const TypeInfo& typeInfo = archetype_.GetTypeInfo(i);
+				const size_t    off      = archetype_.GetOffsetByIndex(i) * capacity_;
+				const size_t    csize    = archetype_.GetSize(i);
+				void* src = begin_.get() + off + csize * loc.index;
+
+				if (typeInfo == droppedType)
+				{
+					const auto dtor = typeInfo.GetDestructor();
+					if (dtor) dtor(src);
+				}
+				else
+				{
+					const size_t dstIdx  = other.archetype_.GetIndexByTypeInfo(typeInfo);
+					EngineAssertMsg(dstIdx < other.archetype_.GetArchetypeSize(),
+						"MoveEntityRemoveArchetype: component not found in destination Archetype");
+					const size_t dstOff  = other.archetype_.GetOffsetByIndex(dstIdx) * other.capacity_;
+					const size_t dstSize = other.archetype_.GetSize(dstIdx);
+					void* dst = other.begin_.get() + dstOff + dstSize * newLoc.index;
+					const auto mover = typeInfo.GetMover();
+					if (mover) mover(dst, src);
+					else       memcpy(dst, src, csize);
+				}
+			}
+
+			// ── 3. インライン swap-remove（DestroyEntitySwap は使わない） ───────────
+			// 理由: DestroyEntitySwap は全コンポーネントのデストラクタを呼ぶが、
+			//       droppedType はステップ2で既に破棄済みのためダブル破棄になる。
+			//       非 droppedType は moved-from 状態なので、
+			//       デストラクタを呼んでから末尾エンティティを書き込む。
+			const uint32_t lastIndex = size_ - 1;
+			EntityID       swappedId = INVALID_ENTITY_ID;
+
+			if (loc.index != lastIndex)
+			{
+				for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i)
+				{
+					const TypeInfo& typeInfo = archetype_.GetTypeInfo(i);
+					const size_t    off      = archetype_.GetOffsetByIndex(i) * capacity_;
+					const size_t    csize    = archetype_.GetSize(i);
+					void* slot = begin_.get() + off + csize * loc.index;   // 空きスロット
+					void* last = begin_.get() + off + csize * lastIndex;   // 末尾エンティティ
+
+					const auto dtor  = typeInfo.GetDestructor();
+					const auto mover = typeInfo.GetMover();
+
+					if (typeInfo == droppedType)
+					{
+						// slot: ステップ2で破棄済み（dead memory）→ move-construct で上書き可
+						if (mover)
+						{
+							mover(slot, last);
+							if (dtor) dtor(last);
+						}
+						else
+						{
+							memcpy(slot, last, csize);
+						}
+					}
+					else
+					{
+						// slot: moved-from 状態 → デストラクタで寿命終了してから末尾を移動
+						if (dtor) dtor(slot);
+						if (mover)
+						{
+							mover(slot, last);
+							if (dtor) dtor(last);
+						}
+						else
+						{
+							memcpy(slot, last, csize);
+						}
+					}
+				}
+				swappedId = entityIDs_[lastIndex];
+				entityIDs_[loc.index] = swappedId;
+			}
+			else
+			{
+				// loc.index == lastIndex: スワップ不要、非 droppedType の moved-from を破棄
+				for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i)
+				{
+					const TypeInfo& typeInfo = archetype_.GetTypeInfo(i);
+					if (typeInfo == droppedType) continue;   // ステップ2で破棄済み
+
+					const size_t off   = archetype_.GetOffsetByIndex(i) * capacity_;
+					const size_t csize = archetype_.GetSize(i);
+					void* src = begin_.get() + off + csize * loc.index;
+					const auto dtor = typeInfo.GetDestructor();
+					if (dtor) dtor(src);
+				}
+			}
+
+			entityIDs_.pop_back();
+			--size_;
+			loc = newLoc;
+			return swappedId;
+		}
+
+
 		void Chunk::ResetMemory(uint32_t capacity)
 		{
 			auto work = AllocBuffer(archetype_.GetArchetypeMemorySize() * capacity, archetype_.GetMaxAlign());

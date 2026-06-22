@@ -17,6 +17,7 @@
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
 #include "Component/TransformComponentSystem.h"
+#include "Component/HierarchicalTransformComponent.h"
 #include "Graphics/Camera.h"
 #include "Component/BodyComponentSystem.h"
 

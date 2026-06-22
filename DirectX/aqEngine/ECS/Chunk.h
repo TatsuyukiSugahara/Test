@@ -74,6 +74,14 @@ namespace aq
 			 */
 			EntityID MoveEntitySlot(EntityLocation& loc, Chunk& other, EntityID entityId);
 
+			/**
+			 * エンティティを他チャンクに移動しつつ droppedType のコンポーネントを破棄する。
+			 * MoveEntitySlot（AddComponent 方向）の逆操作（RemoveComponent 用）。
+			 * DestroyEntitySwap は呼ばず swap-remove ロジックを内包する。
+			 * src の swap-remove で移動した EntityID を返す（移動なければ INVALID_ENTITY_ID）。
+			 */
+			EntityID MoveEntityRemoveArchetype(EntityLocation& loc, Chunk& other, EntityID entityId, const TypeInfo& droppedType);
+
 
 			/**
 			 * 指定行の EntityID を取得

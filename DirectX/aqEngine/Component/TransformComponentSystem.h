@@ -1,90 +1,38 @@
-﻿#pragma once
+#pragma once
 #include "ECS/ECS.h"
 
 namespace aq
 {
 	namespace ecs
 	{
+		// ワールド座標をまとめて持つ構造体。HierarchicalTransformComponent で使用する。
 		struct Transform
 		{
-		public:
-			aq::math::Vector3 position;
-			aq::math::Vector3 localPosition;
-			aq::math::Vector3 scale;
-			aq::math::Vector3 localScale;
-			aq::math::Vector3 angle;
-			aq::math::Vector3 localAngle;
-			aq::math::Quaternion rotation;
-			aq::math::Quaternion localRotation;
-
-			aq::math::Matrix4x4 rotationMatrix;
-			aq::math::Matrix4x4 worldMatrix;
-
-			Transform* parent;
-			std::vector<Transform*> children;
-
-
-		public:
-			Transform();
-			~Transform();
-
-			void UpdateTransform();
-			void UpdateWorldMatrix();
-
-			void Release();
-			void RemoveChild(Transform* t);
-
-			void SetParent(Transform* p)
-			{
-				parent = p;
-				parent->children.push_back(this);
-			}
+			aq::math::Vector3    position = aq::math::Vector3::Zero;
+			aq::math::Vector3    scale    = aq::math::Vector3::One;
+			aq::math::Quaternion rotation = aq::math::Quaternion::Identity;
 		};
 
 
+		// ローカル座標のみを保持する。階層関係は持たない。
+		// HierarchicalTransformComponent と常にセットで生成すること。
 		struct TransformComponent : public IComponent
 		{
 			ecsComponent(aq::ecs::TransformComponent);
 
+			aq::math::Vector3    position = aq::math::Vector3::Zero;
+			aq::math::Vector3    scale    = aq::math::Vector3::One;
+			aq::math::Quaternion rotation = aq::math::Quaternion::Identity;
 
-		public:
-			Transform transform;
-
-
-		public:
-			TransformComponent();
-			~TransformComponent();
-
-
-		public:
-			void SetParent(TransformComponent* parent)
+#ifdef AQ_DEBUG_IMGUI
+			template <typename V>
+			void Inspect(V& visitor)
 			{
-				transform.SetParent(&parent->transform);
+				visitor.Field("position (local)", position);
+				visitor.Field("scale    (local)", scale);
+				visitor.Field("rotation (local)", rotation);
 			}
-
-		public:
-			//aq::math::Vector3 GetFront() const;
-		};
-
-
-		
-
-		class HierarcicalTransformSystem : public ecs::SystemBase
-		{
-		public:
-			HierarcicalTransformSystem();
-			~HierarcicalTransformSystem();
-
-			void Update();
-
-
-		private:
-			static HierarcicalTransformSystem* instance_;
-
-
-		public:
-			static HierarcicalTransformSystem& Get() { return *instance_; }
-			static bool IsAvailable() { return instance_ != nullptr; }
+#endif
 		};
 	}
 }

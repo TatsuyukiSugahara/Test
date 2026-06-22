@@ -97,13 +97,9 @@ namespace aq
 				return *this;
 			}
 			/** 加算 */
-			Vector3 operator+(const Vector3& v)
+			Vector3 operator+(const Vector3& v) const
 			{
-				Vector3 out;
-				out.x = x + v.x;
-				out.y = y + v.y;
-				out.z = z + v.z;
-				return out;
+				return Vector3(x + v.x, y + v.y, z + v.z);
 			}
 			/** 減算 */
 			Vector3 operator-(const Vector3& v) const
@@ -111,22 +107,14 @@ namespace aq
 				return Vector3(x - v.x, y - v.y, z - v.z);
 			}
 			/** 乗算 */
-			Vector3 operator*(const Vector3& v)
+			Vector3 operator*(const Vector3& v) const
 			{
-				Vector3 out;
-				x = x * v.x;
-				y = y * v.y;
-				z = z * v.z;
-				return out;
+				return Vector3(x * v.x, y * v.y, z * v.z);
 			}
 			/** 除算 */
-			Vector3 operator/(const Vector3& v)
+			Vector3 operator/(const Vector3& v) const
 			{
-				Vector3 out;
-				x = x / v.x;
-				y = y / v.y;
-				z = z / v.z;
-				return out;
+				return Vector3(x / v.x, y / v.y, z / v.z);
 			}
 			/** ゼロ判定 */
 			inline bool IsZero() const
@@ -402,6 +390,20 @@ namespace aq
 			}
 
 			void SetEuler(const aq::math::Vector3& rot);
+
+			// world = local * parent の規約に合わせた合成。
+			// 正規化済みクォータニオン同士を合成して返す。
+			Quaternion operator*(const Quaternion& parent) const
+			{
+				Quaternion result;
+				DirectX::XMStoreFloat4(
+					&result.vector,
+					DirectX::XMQuaternionNormalize(
+						DirectX::XMQuaternionMultiply(
+							DirectX::XMLoadFloat4(&vector),
+							DirectX::XMLoadFloat4(&parent.vector))));
+				return result;
+			}
 		};
 
 

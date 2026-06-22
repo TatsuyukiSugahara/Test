@@ -1,12 +1,17 @@
 ﻿#pragma once
 #include "EntityManager.h"
 #include "System.h"
+#include "EntityDebugTag.h"
+#include <type_traits>
 
 
 namespace aq
 {
 	namespace ecs
 	{
+		// TC+HTC 同時生成の static_assert 用前方宣言
+		struct TransformComponent;
+		struct HierarchicalTransformComponent;
 		/**
 		 * ECS の統括窓口。EntityManager と SystemManager を所有し、
 		 * 外部からのアクセス・初期化・更新を一本化する唯一のシングルトン。
@@ -35,15 +40,38 @@ namespace aq
 
 			// --- Entity 操作 ---
 
-			Entity CreateEntity(const Archetype& archetype)
-			{
-				return entityManager_.CreateEntity(archetype);
-			}
-
 			template <typename... Args>
 			Entity CreateEntity()
 			{
+				static_assert(
+					!(std::is_same_v<TransformComponent, Args> || ...) ||
+					 (std::is_same_v<HierarchicalTransformComponent, Args> || ...),
+					"TransformComponent を含む Entity は HierarchicalTransformComponent も必須です");
+#ifdef AQ_DEBUG_IMGUI
+				if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
+					return entityManager_.CreateEntity<Args...>();
+				else
+					return entityManager_.CreateEntity<Args..., EntityDebugTag>();
+#else
 				return entityManager_.CreateEntity<Args...>();
+#endif
+			}
+
+			template <typename... Args>
+			void RequestCreateEntity(std::function<void(Entity)> onCreated = nullptr)
+			{
+				static_assert(
+					!(std::is_same_v<TransformComponent, Args> || ...) ||
+					 (std::is_same_v<HierarchicalTransformComponent, Args> || ...),
+					"TransformComponent を含む Entity は HierarchicalTransformComponent も必須です");
+#ifdef AQ_DEBUG_IMGUI
+				if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
+					entityManager_.RequestCreateEntity<Args...>(std::move(onCreated));
+				else
+					entityManager_.RequestCreateEntity<Args..., EntityDebugTag>(std::move(onCreated));
+#else
+				entityManager_.RequestCreateEntity<Args...>(std::move(onCreated));
+#endif
 			}
 
 			bool IsValid(const EntityHandle& handle) const
@@ -63,6 +91,12 @@ namespace aq
 			}
 
 			template <typename T>
+			void RemoveComponent(const EntityHandle& handle)
+			{
+				entityManager_.RemoveComponent<T>(handle);
+			}
+
+			template <typename T>
 			T* GetComponent(const EntityHandle& handle)
 			{
 				return entityManager_.GetComponent<T>(handle);
@@ -79,6 +113,30 @@ namespace aq
 			{
 				return entityManager_.GetView<Cs...>();
 			}
+
+			// EntityHandle から Entity を取得する。
+			Entity GetEntity(EntityHandle handle);
+
+			// EntityID から Entity を取得する。
+			// EntityID は generation を持たないため、
+			// 破棄済み ID を渡すと旧世代の Entity が返ってしまう危険がある。
+			// 外部に ID を保持する場合は EntityHandle への移行を推奨する。
+			Entity GetEntity(EntityID id);
+
+
+			// --- 親子階層操作（HierarchicalTransformComponent が必要） ---
+
+			// 親の EntityHandle を返す。HierarchicalTransformComponent がないか親未設定なら無効なハンドルを返す。
+			EntityHandle GetParent(EntityHandle handle);
+
+			// 子の EntityHandle リストを返す。無効なハンドルはスキップする。
+			std::vector<EntityHandle> GetChildren(EntityHandle handle);
+
+			// child の親を parent に設定する。HierarchicalTransformComponent の SetParent に委譲。
+			bool SetParent(EntityHandle child, EntityHandle parent);
+
+			// entity の親子関係を解除する。HierarchicalTransformComponent の DetachParent に委譲。
+			void DetachParent(EntityHandle entity);
 
 
 			// --- System 操作 ---

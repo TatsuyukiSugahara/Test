@@ -43,6 +43,7 @@ namespace aq
 			void Detach();
 
 			// IDebugRenderable
+			void DebugRenderMenu() override;
 			void DebugRender() override;
 			const char* GetDebugLabel() const override { return "Heightmap Painter"; }
 
@@ -51,8 +52,9 @@ namespace aq
 			float     brushRadius_   = 10.0f;    // world units
 			float     brushStrength_ = 0.5f;
 			float     flattenTarget_ = 0.0f;     // [0,1] 正規化高さ
-			bool      enabled_        = true;    // ツール全体の有効フラグ
+			bool      enabled_        = false;    // ツール全体の有効フラグ
 			bool      paint3DEnabled_ = true;    // 3D ビュー直接ペイント有効フラグ
+			bool      show_           = true;    // ウィンドウ表示フラグ
 
 		private:
 			HeightmapChunk* chunk_       = nullptr;

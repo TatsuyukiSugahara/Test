@@ -468,9 +468,14 @@ namespace aq
 			                       DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
 		}
 
+		void SplatmapPainter::DebugRenderMenu()
+		{
+			ImGui::MenuItem("Splatmap Painter", nullptr, &show_);
+		}
+
 		void SplatmapPainter::DebugRender()
 		{
-			if (!chunk_) return;
+			if (!chunk_ || !show_) return;
 
 			const ImGuiIO& io = ImGui::GetIO();
 			const float sw = io.DisplaySize.x;
@@ -514,7 +519,7 @@ namespace aq
 			ImGuiWindowFlags windowFlags = ImGuiWindowFlags_None;
 			if (windowLocked_) windowFlags |= ImGuiWindowFlags_NoMove;
 			ImGui::SetNextWindowSize(ImVec2(430.0f, 620.0f), ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("Splatmap Painter", nullptr, windowFlags))
+			if (!ImGui::Begin("Splatmap Painter", &show_, windowFlags))
 			{
 				ImGui::End();
 				return;

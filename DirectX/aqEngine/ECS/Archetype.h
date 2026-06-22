@@ -82,13 +82,22 @@ namespace aq
 
 
 			/**
-			 * Archetypeを追加
+			 * Archetypeを追加（コンパイル時型版）
 			 */
 			template <typename T>
 			constexpr Archetype& AddType()
 			{
+				return AddType(TypeInfo::Create<T>());
+			}
+
+			/**
+			 * Archetypeを追加（実行時 TypeInfo 版）
+			 * 既存の型を TypeInfo として渡して Archetype を動的に構築するときに使う。
+			 */
+			constexpr Archetype& AddType(const TypeInfo& newType)
+			{
+				if (archetypeSize_ >= MAX_COMPONENT_SIZE) return *this;
 				size_t insertIndex = archetypeSize_;
-				constexpr auto newType = TypeInfo::Create<T>();
 				for (size_t i = 0; i < archetypeSize_; ++i) {
 					if (typeList_[i].GetHash() > newType.GetHash()) {
 						for (size_t j = archetypeSize_; j > i; --j) {
@@ -108,6 +117,19 @@ namespace aq
 					archetypeMemorySize_ += AlignUp(typeList_[i].GetSize(), maxAlign_);
 				}
 				return *this;
+			}
+
+			/**
+			 * 指定した型を除いた新しい Archetype を返す（RemoveComponent 用）
+			 */
+			constexpr Archetype RemoveType(const TypeInfo& typeToRemove) const
+			{
+				Archetype result;
+				for (size_t i = 0; i < archetypeSize_; ++i) {
+					if (typeList_[i] != typeToRemove)
+						result.AddType(typeList_[i]);
+				}
+				return result;
 			}
 
 
@@ -224,6 +246,8 @@ namespace aq
 			template <typename ...Args>
 			static constexpr Archetype Create()
 			{
+				static_assert(sizeof...(Args) <= MAX_COMPONENT_SIZE,
+					"Archetype: コンポーネント数が MAX_COMPONENT_SIZE(16) を超えています");
 				Archetype result;
 				result.CreateImpl<Args...>();
 
@@ -257,6 +281,7 @@ namespace aq
 			template <typename Head, typename ...Tails>
 			constexpr void CreateImpl()
 			{
+				if (archetypeSize_ >= MAX_COMPONENT_SIZE) return;
 				typeList_[archetypeSize_] = TypeInfo::Create<Head>();
 				++archetypeSize_;
 				if constexpr (sizeof...(Tails) != 0) {

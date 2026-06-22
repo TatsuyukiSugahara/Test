@@ -25,6 +25,7 @@ namespace aq
 			void Attach(HeightmapChunk* chunk, math::Vector3 worldOffset);
 			void Detach();
 
+			void DebugRenderMenu() override;
 			void DebugRender() override;
 			const char* GetDebugLabel() const override { return "Splatmap Painter"; }
 
@@ -33,8 +34,9 @@ namespace aq
 			uint32_t  activeLayer_ = 0;
 			float     brushRadius_ = 10.0f;
 			float     brushStrength_ = 0.3f;
-			bool      enabled_        = true;
+			bool      enabled_        = false;
 			bool      paint3DEnabled_ = true;
+			bool      show_           = true;    // ウィンドウ表示フラグ
 
 		private:
 			HeightmapChunk* chunk_ = nullptr;

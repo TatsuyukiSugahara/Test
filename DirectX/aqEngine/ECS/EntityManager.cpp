@@ -77,6 +77,9 @@ Entity EntityManager::CreateEntityImpl(const Archetype& archetype)
 
 		void EntityManager::RequestDestroyEntity(const EntityHandle& handle)
 		{
+			EngineAssertMsg(!isInUserCallback_,
+				"EntityManager::RequestDestroyEntity: structural changes are forbidden inside onCreated/onAdded callback.");
+			if (isInUserCallback_) return;
 			std::lock_guard<std::mutex> lock(commandMutex_);
 			pendingCommands_.push_back({ [this, handle]() { DestroyEntityNow(handle); } });
 		}
@@ -84,6 +87,10 @@ Entity EntityManager::CreateEntityImpl(const Archetype& archetype)
 
 		void EntityManager::FlushCommands()
 		{
+			EngineAssertMsg(!flushingCommands_,
+				"EntityManager::FlushCommands: nested flush is not allowed.");
+			ScopedFlag flushGuard(flushingCommands_);
+
 			std::unique_lock<std::shared_mutex> lock(iterationMutex_);
 
 			std::vector<EntityCommand> commands;
@@ -120,16 +127,5 @@ Entity EntityManager::CreateEntityImpl(const Archetype& archetype)
 		}
 
 
-		std::vector<Chunk*> EntityManager::GetChunkList(const Archetype& archetype)
-		{
-			std::vector<Chunk*> result;
-			result.reserve(4);
-			for (auto& chunk : chunkList_) {
-				if (archetype.IsIn(chunk.GetArchetype())) {
-					result.push_back(&chunk);
-				}
-			}
-			return result;
-		}
 	}
 }

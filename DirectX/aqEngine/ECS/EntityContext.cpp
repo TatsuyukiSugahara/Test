@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "EntityContext.h"
+#include "Component/HierarchicalTransformComponent.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #endif
@@ -10,6 +11,60 @@ namespace aq
 	namespace ecs
 	{
 		EntityContext* EntityContext::instance_ = nullptr;
+
+
+		Entity EntityContext::GetEntity(const EntityHandle handle)
+		{
+			if (!entityManager_.IsValid(handle)) return Entity();
+			return entityManager_.MakeEntity(handle);
+		}
+
+
+		Entity EntityContext::GetEntity(const EntityID id)
+		{
+			return entityManager_.MakeEntity(id);
+		}
+
+
+		EntityHandle EntityContext::GetParent(const EntityHandle handle)
+		{
+			const auto* hierarchicalTransformComponent = entityManager_.GetComponent<HierarchicalTransformComponent>(handle);
+			if (!hierarchicalTransformComponent) return EntityHandle();
+			if (!entityManager_.IsValid(hierarchicalTransformComponent->parentHandle)) return EntityHandle();
+			return hierarchicalTransformComponent->parentHandle;
+		}
+
+
+		std::vector<EntityHandle> EntityContext::GetChildren(const EntityHandle handle)
+		{
+			const auto* hierarchicalTransformComponent = entityManager_.GetComponent<HierarchicalTransformComponent>(handle);
+			if (!hierarchicalTransformComponent) return {};
+
+			std::vector<EntityHandle> result;
+			for (const EntityHandle& childHandle : hierarchicalTransformComponent->childHandles) {
+				if (entityManager_.IsValid(childHandle)) {
+					result.push_back(childHandle);
+				}
+			}
+			return result;
+		}
+
+
+		bool EntityContext::SetParent(const EntityHandle child, const EntityHandle parent)
+		{
+			auto* hierarchicalTransformComponent = entityManager_.GetComponent<HierarchicalTransformComponent>(child);
+			if (!hierarchicalTransformComponent) return false;
+			return hierarchicalTransformComponent->SetParent(child, parent);
+		}
+
+
+		void EntityContext::DetachParent(const EntityHandle entity)
+		{
+			auto* hierarchicalTransformComponent = entityManager_.GetComponent<HierarchicalTransformComponent>(entity);
+			if (hierarchicalTransformComponent) {
+				hierarchicalTransformComponent->DetachParent(entity);
+			}
+		}
 
 
 #ifdef AQ_DEBUG_IMGUI

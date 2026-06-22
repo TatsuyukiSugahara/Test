@@ -45,6 +45,7 @@ namespace aq
 				std::unique_ptr<SystemBase> system;
 				std::vector<size_t> dependencyIndices;
 				std::string          displayName;
+				size_t               level = 0; // wave schedule 用 実行レベル
 			};
 
 #ifdef AQ_DEBUG_IMGUI
@@ -122,6 +123,8 @@ namespace aq
 			void AddDependency()
 			{
 				EngineAssertMsg(!registrationFinalized_, "AddDependency: called after FinalizeRegistration");
+				EngineAssertMsg((!std::is_same_v<TSystem, TDependency>), "AddDependency: TSystem and TDependency are the same type (self-dependency)");
+				if constexpr (std::is_same_v<TSystem, TDependency>) return;
 
 				const size_t sysIdx = FindIndex<TSystem>();
 				const size_t depIdx = FindIndex<TDependency>();

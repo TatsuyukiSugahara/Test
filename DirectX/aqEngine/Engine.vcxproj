@@ -141,7 +141,11 @@
     <ClCompile Include="Component\AnimationComponentSystem.cpp" />
     <ClCompile Include="Component\BodyComponentSystem.cpp" />
     <ClCompile Include="Component\TransformComponentSystem.cpp" />
+    <ClCompile Include="Component\HierarchicalTransformComponent.cpp" />
+    <ClCompile Include="Component\Prefab.cpp" />
     <ClCompile Include="ECS\Chunk.cpp" />
+    <ClCompile Include="ECS\ComponentRegistry.cpp" />
+    <ClCompile Include="ECS\SceneHierarchySystem.cpp" />
     <ClCompile Include="ECS\EntityContext.cpp" />
     <ClCompile Include="ECS\EntityManager.cpp" />
     <ClCompile Include="ECS\System.cpp" />
@@ -210,7 +214,13 @@
     <ClInclude Include="Component\AnimationComponentSystem.h" />
     <ClInclude Include="Component\BodyComponentSystem.h" />
     <ClInclude Include="Component\TransformComponentSystem.h" />
+    <ClInclude Include="Component\HierarchicalTransformComponent.h" />
+    <ClInclude Include="Component\Prefab.h" />
     <ClInclude Include="ECS\Archetype.h" />
+    <ClInclude Include="ECS\ComponentRegistry.h" />
+    <ClInclude Include="ECS\SceneHierarchySystem.h" />
+    <ClInclude Include="ECS\EntityDebugTag.h" />
+    <ClInclude Include="ECS\ImGuiFieldVisitor.h" />
     <ClInclude Include="ECS\Chunk.h" />
     <ClInclude Include="ECS\ComponentArray.h" />
     <ClInclude Include="ECS\ECS.h" />

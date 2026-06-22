@@ -11,6 +11,7 @@
 #include "Rendering/RenderCommandList.h"
 #include "Rendering/FrameCommands.h"
 #include "Component/TransformComponentSystem.h"
+#include "Component/HierarchicalTransformComponent.h"
 #include "Component/BodyComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
 #ifdef AQ_IMGUI
@@ -26,6 +27,8 @@
 #include "DebugUI.h"
 #include "Ocean/OceanDebugPanel.h"
 #include "Rendering/RenderingDebugPanel.h"
+#include "ECS/ComponentRegistry.h"
+#include "ECS/SceneHierarchySystem.h"
 #endif
 
 
@@ -48,6 +51,7 @@ namespace aq
 		aq::graphics::LightManager::Initialize();
 #ifdef AQ_DEBUG_IMGUI
 		aq::DebugUI::Initialize();
+		aq::ecs::ComponentRegistry::RegisterCoreComponents();
 #endif
 
 #ifdef AQ_IMGUI
@@ -219,6 +223,10 @@ namespace aq
 
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::AnimationSystem>();
+
+#ifdef AQ_DEBUG_IMGUI
+		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::SceneHierarchySystem>();
+#endif
 
 		OnRegister();
 

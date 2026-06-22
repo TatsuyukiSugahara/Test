@@ -9,7 +9,9 @@
 #endif
 
 #include "Component/TransformComponentSystem.h"
+#include "Component/HierarchicalTransformComponent.h"
 #include "Component/BodyComponentSystem.h"
+#include "Component/Prefab.h"
 #include "Component/AnimationComponentSystem.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
@@ -32,9 +34,9 @@ namespace app
 		aq::math::Vector3 BattleScene::GetFocusPosition() const
 		{
 			if (!playerHandle_.IsValid()) return aq::math::Vector3(0.f, 0.f, 0.f);
-			auto* tc = aq::ecs::EntityContext::Get().GetComponent<aq::ecs::TransformComponent>(playerHandle_);
-			if (!tc) return aq::math::Vector3(0.f, 0.f, 0.f);
-			return tc->transform.position;
+			auto* hierarchicalTransformComponent = aq::ecs::EntityContext::Get().GetComponent<aq::ecs::HierarchicalTransformComponent>(playerHandle_);
+			if (!hierarchicalTransformComponent) return aq::math::Vector3(0.f, 0.f, 0.f);
+			return hierarchicalTransformComponent->transform.position;
 		}
 
 
@@ -57,13 +59,12 @@ namespace app
 				desc.terrainSize    = 100.0f;
 				desc.layerTiling    = 20.0f;
 
-				auto entity = aq::ecs::EntityContext::Get().CreateEntity<aq::ecs::TransformComponent, aq::ecs::TerrainComponent>();
+				auto entity = aq::ecs::EntityContext::Get().CreateEntity<aq::ecs::TransformComponent, aq::ecs::HierarchicalTransformComponent, aq::ecs::TerrainComponent>();
 
 				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
 				terrainTC = tc;
-				tc->transform.localPosition.Set(-50.0f, 0.0f, -50.0f);
-				tc->transform.localAngle.Set(0.0f);
-				tc->transform.localScale.Set(1.0f);
+				tc->position.Set(-50.0f, 0.0f, -50.0f);
+				tc->scale.Set(1.0f);
 
 				terrainComp = entity.GetComponent<aq::ecs::TerrainComponent>();
 				terrainComp->SetDesc(desc);
@@ -72,7 +73,7 @@ namespace app
 
 #ifdef AQ_DEBUG_IMGUI
 			painter_.Attach(terrainComp->GetChunk(), aq::math::Vector3(-50.0f, 0.0f, -50.0f),
-			                terrainTC ? &terrainTC->transform.localPosition : nullptr);
+			                terrainTC ? &terrainTC->position : nullptr);
 			splatmapPainter_.Attach(terrainComp->GetChunk(), aq::math::Vector3(-50.0f, 0.0f, -50.0f));
 			aq::DebugUI::Get().Register(&painter_);
 			aq::DebugUI::Get().Register(&splatmapPainter_);
@@ -84,12 +85,11 @@ namespace app
 			// 海エンティティ (地形の下に配置して水面を演出)
 			{
 				auto entity = aq::ecs::EntityContext::Get().CreateEntity<
-					aq::ecs::TransformComponent, aq::ecs::OceanComponent>();
+					aq::ecs::TransformComponent, aq::ecs::HierarchicalTransformComponent, aq::ecs::OceanComponent>();
 
 				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
-				tc->transform.localPosition.Set(-100.0f, -0.5f, -100.0f);
-				tc->transform.localAngle.Set(0.0f);
-				tc->transform.localScale.Set(1.0f);
+				tc->position.Set(-100.0f, -0.5f, -100.0f);
+				tc->scale.Set(1.0f);
 
 				aq::ocean::OceanParams params;
 				params.size       = 300.0f;  // 地形 (100m) より広い範囲をカバー
@@ -137,6 +137,7 @@ namespace app
 			{
 				auto entity = aq::ecs::EntityContext::Get().CreateEntity<
 					aq::ecs::TransformComponent,
+					aq::ecs::HierarchicalTransformComponent,
 					aq::ecs::SkeletalMeshComponent,
 					aq::ecs::AnimationComponent,
 					app::ecs::StateMachineComponent>();
@@ -145,9 +146,8 @@ namespace app
 				playerHandle_ = targetHandle;
 
 				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
-				tc->transform.localPosition.Set(0.0f, spawnY, 0.0f);
-				tc->transform.localAngle.Set(0.0f);
-				tc->transform.localScale.Set(1.0f);
+				tc->position.Set(0.0f, spawnY, 0.0f);
+				tc->scale.Set(1.0f);
 
 				auto* skelComp = entity.GetComponent<aq::ecs::SkeletalMeshComponent>();
 				skelComp->SetModelPath("Assets/unityChan.tkm");
@@ -187,6 +187,48 @@ namespace app
 				auto entity = aq::ecs::EntityContext::Get().CreateEntity<app::ecs::CameraEffectComponent>();
 				auto* const effect = entity.GetComponent<app::ecs::CameraEffectComponent>();
 				effect->cameraType = aq::CameraType::Main;
+			}
+
+			// ----- Prefab 階層テスト -----
+			// ローカル座標と期待ワールド座標:
+			//   root        local (0, spawnY, 5)   → world (0, spawnY, 5)
+			//   └ child     local (+3, 0, 0)        → world (3, spawnY, 5)
+			//     └ grandchild local (0, +2, 0)     → world (3, spawnY+2, 5)
+			// HierarcicalTransformSystem が 1 フレーム後に HTC.transform を更新する。
+			{
+				auto grandchildPrefab = aq::ecs::Prefab::Create<
+					aq::ecs::TransformComponent,
+					aq::ecs::HierarchicalTransformComponent,
+					aq::ecs::BoxStaticMeshComponent>(
+					"PrefabTest_Grandchild",
+					[](aq::ecs::Entity entity)
+					{
+						entity.GetComponent<aq::ecs::TransformComponent>()->position.Set(0.0f, 2.0f, 0.0f);
+					});
+
+				auto childPrefab = aq::ecs::Prefab::Create<
+					aq::ecs::TransformComponent,
+					aq::ecs::HierarchicalTransformComponent,
+					aq::ecs::BoxStaticMeshComponent>(
+					"PrefabTest_Child",
+					[](aq::ecs::Entity entity)
+					{
+						entity.GetComponent<aq::ecs::TransformComponent>()->position.Set(3.0f, 0.0f, 0.0f);
+					});
+				childPrefab.AddChild(grandchildPrefab);
+
+				auto rootPrefab = aq::ecs::Prefab::Create<
+					aq::ecs::TransformComponent,
+					aq::ecs::HierarchicalTransformComponent,
+					aq::ecs::BoxStaticMeshComponent>(
+					"PrefabTest_Root",
+					[spawnY](aq::ecs::Entity entity)
+					{
+						entity.GetComponent<aq::ecs::TransformComponent>()->position.Set(0.0f, spawnY, 5.0f);
+					});
+				rootPrefab.AddChild(childPrefab);
+
+				rootPrefab.Instantiate();
 			}
 		}
 

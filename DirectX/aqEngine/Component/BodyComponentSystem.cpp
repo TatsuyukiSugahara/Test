@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "BodyComponentSystem.h"
 #include "TransformComponentSystem.h"
+#include "HierarchicalTransformComponent.h"
 #include "Graphics/Camera.h"
 #include "Component/TerrainComponent.h"
 #include "Resource/Resource.h"
@@ -336,41 +337,59 @@ namespace aq
 
 		void RenderSystem::Update()
 		{
-			aq::ecs::Foreach<TransformComponent, BoxStaticMeshComponent>([](const aq::ecs::Entity& entity, TransformComponent* transformComponent, BoxStaticMeshComponent* boxStaticMeshComponent)
+			aq::ecs::Foreach<TransformComponent, HierarchicalTransformComponent, BoxStaticMeshComponent>(
+				[](const aq::ecs::Entity&, TransformComponent*, HierarchicalTransformComponent* hierarchicalTransformComponent, BoxStaticMeshComponent* boxStaticMeshComponent)
 				{
 					boxStaticMeshComponent->Update();
-					boxStaticMeshComponent->GetStaticMesh()->Update(transformComponent->transform.position, transformComponent->transform.rotation, transformComponent->transform.scale);
+					boxStaticMeshComponent->GetStaticMesh()->Update(
+						hierarchicalTransformComponent->transform.position,
+						hierarchicalTransformComponent->transform.rotation,
+						hierarchicalTransformComponent->transform.scale);
 				});
 
-			aq::ecs::Foreach<TransformComponent, StaticMeshComponent>([](const aq::ecs::Entity& entity, TransformComponent* trasnformComponent, StaticMeshComponent* staticMeshComponent)
+			aq::ecs::Foreach<TransformComponent, HierarchicalTransformComponent, StaticMeshComponent>(
+				[](const aq::ecs::Entity&, TransformComponent*, HierarchicalTransformComponent* hierarchicalTransformComponent, StaticMeshComponent* staticMeshComponent)
 				{
-					// リソース読み込み
 					staticMeshComponent->Update();
 					if (staticMeshComponent->IsCompleted()) {
-						staticMeshComponent->GetStaticMesh()->Update(trasnformComponent->transform.position, trasnformComponent->transform.rotation, trasnformComponent->transform.scale);
+						staticMeshComponent->GetStaticMesh()->Update(
+							hierarchicalTransformComponent->transform.position,
+							hierarchicalTransformComponent->transform.rotation,
+							hierarchicalTransformComponent->transform.scale);
 					}
 				});
 
-			// SkeletalMesh のリソース読み込みとワールド行列更新
-			aq::ecs::Foreach<TransformComponent, SkeletalMeshComponent>([](const aq::ecs::Entity&, TransformComponent* tc, SkeletalMeshComponent* skelComp)
+			aq::ecs::Foreach<TransformComponent, HierarchicalTransformComponent, SkeletalMeshComponent>(
+				[](const aq::ecs::Entity&, TransformComponent*, HierarchicalTransformComponent* hierarchicalTransformComponent, SkeletalMeshComponent* skeletalMeshComponent)
 				{
-					skelComp->Update();
-					if (skelComp->IsCompleted()) {
-						skelComp->GetSkeletalMesh()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
+					skeletalMeshComponent->Update();
+					if (skeletalMeshComponent->IsCompleted()) {
+						skeletalMeshComponent->GetSkeletalMesh()->Update(
+							hierarchicalTransformComponent->transform.position,
+							hierarchicalTransformComponent->transform.rotation,
+							hierarchicalTransformComponent->transform.scale);
 					}
 				});
 
-			aq::ecs::Foreach<TransformComponent, TerrainComponent>([](const aq::ecs::Entity&, TransformComponent* tc, TerrainComponent* terrain)
+			aq::ecs::Foreach<TransformComponent, HierarchicalTransformComponent, TerrainComponent>(
+				[](const aq::ecs::Entity&, TransformComponent*, HierarchicalTransformComponent* hierarchicalTransformComponent, TerrainComponent* terrainComponent)
 				{
-					if (terrain->IsCompleted()) {
-						terrain->GetChunk()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
+					if (terrainComponent->IsCompleted()) {
+						terrainComponent->GetChunk()->Update(
+							hierarchicalTransformComponent->transform.position,
+							hierarchicalTransformComponent->transform.rotation,
+							hierarchicalTransformComponent->transform.scale);
 					}
 				});
 
-			aq::ecs::Foreach<TransformComponent, OceanComponent>([](const aq::ecs::Entity&, TransformComponent* tc, OceanComponent* ocean)
+			aq::ecs::Foreach<TransformComponent, HierarchicalTransformComponent, OceanComponent>(
+				[](const aq::ecs::Entity&, TransformComponent*, HierarchicalTransformComponent* hierarchicalTransformComponent, OceanComponent* oceanComponent)
 				{
-					if (ocean->IsCompleted()) {
-						ocean->GetMesh()->Update(tc->transform.position, tc->transform.rotation, tc->transform.scale);
+					if (oceanComponent->IsCompleted()) {
+						oceanComponent->GetMesh()->Update(
+							hierarchicalTransformComponent->transform.position,
+							hierarchicalTransformComponent->transform.rotation,
+							hierarchicalTransformComponent->transform.scale);
 					}
 				});
 		}

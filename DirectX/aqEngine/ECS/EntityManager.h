@@ -37,9 +37,13 @@ namespace aq
 			// ForEach 中の構造変更（chunkList_ 再確保）を実際にブロックする。
 			mutable std::shared_mutex iterationMutex_;
 
+			bool flushingCommands_  = false; // FlushCommands() の再入防止
+			bool isInUserCallback_  = false; // onCreated / onAdded callback 中の即時構造変更を禁止
+
 
 		private:
 			friend class EntityContext;
+			template <typename...> friend class EntityView;
 
 			EntityManager() {}
 			~EntityManager()
@@ -50,20 +54,44 @@ namespace aq
 
 
 		public:
-			/**
-			 * エンティティ生成
-			 */
-			Entity CreateEntity(const Archetype& archetype);
-
 			template <typename ...Args>
 			Entity CreateEntity()
 			{
+				EngineAssertMsg(!isInUserCallback_,
+					"EntityManager::CreateEntity: immediate creation is forbidden inside onCreated/onAdded callback. Use RequestCreateEntity instead.");
+				if (isInUserCallback_) return Entity();
 				constexpr auto archetype = Archetype::Create<Args...>();
 				std::unique_lock<std::shared_mutex> lock(iterationMutex_);
 				Entity e = CreateEntityImpl(archetype);
 				EntityLocation* loc = ResolveLocation(e.GetHandle());
 				if (loc) { NewComponent<Args...>(*loc); }
 				return e;
+			}
+
+			/**
+			 * エンティティ生成の遅延予約。FlushCommands() で実行される。
+			 * onCreated: 生成完了後に Entity を渡して呼ばれる省略可能なコールバック。
+			 * callback 内では component の初期値設定のみ許可。即時 CreateEntity は禁止。
+			 */
+			template <typename ...Args>
+			void RequestCreateEntity(std::function<void(Entity)> onCreated = nullptr)
+			{
+				EngineAssertMsg(!isInUserCallback_,
+					"EntityManager::RequestCreateEntity: structural changes are forbidden inside onCreated/onAdded callback.");
+				if (isInUserCallback_) return;
+				std::lock_guard<std::mutex> lock(commandMutex_);
+				pendingCommands_.push_back({
+					[this, onCreated = std::move(onCreated)]() {
+						constexpr auto archetype = Archetype::Create<Args...>();
+						Entity e = CreateEntityImpl(archetype);
+						EntityLocation* loc = ResolveLocation(e.GetHandle());
+						if (loc) { NewComponent<Args...>(*loc); }
+						if (onCreated) {
+							ScopedFlag cbGuard(isInUserCallback_);
+							onCreated(e);
+						}
+					}
+				});
 			}
 
 
@@ -97,29 +125,13 @@ namespace aq
 			}
 
 
-		// ECS.h の Foreach / Query からのみ使用する内部 API
+		// EntityView / EntityContext からのみ使用する内部 API（friend 宣言で許可）
 		// 外部から Chunk* を取得して EntityLocation ベースの低レベル操作を行うルートを
-		// 一般コードに開放しないための分離。将来的には非公開化を検討する。
-		public:
+		// 一般コードに開放しない。
+		private:
 			uint32_t CreateChunk(const Archetype& archetype);
 
-			template <typename ...Args>
-			uint32_t CreateChunk()
-			{
-				constexpr auto archetype = Archetype::Create<Args...>();
-				return CreateChunk(archetype);
-			}
-
 			uint32_t GetChunkIndex(const Archetype& archetype) const;
-
-			std::vector<Chunk*> GetChunkList(const Archetype& archetype);
-
-			template <typename ...Args>
-			std::vector<Chunk*> GetChunkList()
-			{
-				constexpr auto archetype = Archetype::Create<Args...>();
-				return GetChunkList(archetype);
-			}
 
 			// EntityView が保持する安全なインデックス列を返す
 			// Chunk* ではなくインデックスを返すことで chunkList_ 再確保後の dangling を防ぐ
@@ -158,18 +170,43 @@ namespace aq
 
 		public:
 			/**
+			 * RemoveComponent コマンドを積む（FlushCommands で実行）
+			 * T を持たないエンティティに対しては何もしない。
+			 */
+			template <typename T>
+			void RemoveComponent(const EntityHandle& handle)
+			{
+				EngineAssertMsg(!isInUserCallback_,
+					"EntityManager::RemoveComponent: structural changes are forbidden inside onCreated/onAdded callback.");
+				if (isInUserCallback_) return;
+				std::lock_guard<std::mutex> lock(commandMutex_);
+				pendingCommands_.push_back({
+					[this, handle]() {
+						EntityLocation* loc = ResolveLocation(handle);
+						if (!loc) return;
+						RemoveComponentByLocation<T>(*loc);
+					}
+				});
+			}
+
+
+			/**
 			 * AddComponent コマンドを積む（FlushCommands で実行）
 			 * onAdded: 追加完了後に T* を渡して呼ばれる省略可能なコールバック
 			 */
 			template <typename T>
 			void AddComponent(const EntityHandle& handle, std::function<void(T*)> onAdded = nullptr)
 			{
+				EngineAssertMsg(!isInUserCallback_,
+					"EntityManager::AddComponent: structural changes are forbidden inside onCreated/onAdded callback.");
+				if (isInUserCallback_) return;
 				std::lock_guard<std::mutex> lock(commandMutex_);
 				pendingCommands_.push_back({
 					[this, handle, onAdded = std::move(onAdded)]() {
 						EntityLocation* loc = ResolveLocation(handle);
 						if (!loc) return;
 						if (AddComponentByLocation<T>(*loc) && onAdded) {
+							ScopedFlag cbGuard(isInUserCallback_);
 							onAdded(GetComponentByLocation<T>(*loc));
 						}
 					}
@@ -208,8 +245,9 @@ namespace aq
 				return Entity(this, handle);
 			}
 
+		private:
 			/**
-			 * EntityID から public Entity を生成（Foreach 内部で使用）
+			 * EntityID から Entity を生成（EntityView::ForEach 内部でのみ使用）
 			 */
 			Entity MakeEntity(EntityID id)
 			{
@@ -217,8 +255,15 @@ namespace aq
 				return Entity(this, EntityHandle(id, slots_[id].generation));
 			}
 
+			struct ScopedFlag {
+				bool& flag;
+				ScopedFlag(bool& f) : flag(f) { flag = true; }
+				~ScopedFlag() { flag = false; }
+			};
 
-		private:
+			// 外部公開なし。typed 版 CreateEntity<Args...>() からのみ呼ぶ
+			Entity CreateEntity(const Archetype& archetype);
+
 			// ロックなしで Entity を生成する内部実装。
 			// 呼び出し元（CreateEntity / CreateEntity<Args...>）が iterationMutex_ を保持していること。
 			Entity CreateEntityImpl(const Archetype& archetype);
@@ -275,6 +320,35 @@ namespace aq
 			void NewComponent(const EntityLocation& loc)
 			{
 				(new(chunkList_[loc.chunkIndex].GetComponent<Ts>(loc)) Ts(), ...);
+			}
+
+			// true: 実際に除去した / false: T を持っていなかったため何もしなかった
+			template <typename T>
+			bool RemoveComponentByLocation(EntityLocation& loc)
+			{
+				if (!chunkList_[loc.chunkIndex].GetArchetype().HasType<T>()) return false;
+
+				const Archetype dstArchetype =
+					chunkList_[loc.chunkIndex].GetArchetype().RemoveType(TypeInfo::Create<T>());
+
+				auto dstChunkIndex = GetChunkIndex(dstArchetype);
+				if (dstChunkIndex == static_cast<uint32_t>(chunkList_.size()))
+					dstChunkIndex = CreateChunk(dstArchetype);
+
+				const EntityID entityId = chunkList_[loc.chunkIndex].GetEntityID(loc.index);
+				const uint32_t oldIndex = loc.index;
+
+				const EntityID swappedId = chunkList_[loc.chunkIndex].MoveEntityRemoveArchetype(
+					loc, chunkList_[dstChunkIndex], entityId, TypeInfo::Create<T>());
+
+				loc.chunkIndex = dstChunkIndex;
+
+				if (entityId != INVALID_ENTITY_ID)
+					slots_[entityId].location = loc;
+				if (swappedId != INVALID_ENTITY_ID)
+					slots_[swappedId].location.index = oldIndex;
+
+				return true;
 			}
 
 

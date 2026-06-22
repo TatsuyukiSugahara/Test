@@ -16,32 +16,32 @@ namespace aq
 			EngineAssertMsg(registrationFinalized_,
 				"SystemManager::Update: FinalizeRegistration has not been called");
 
-			const size_t count = systemEntries_.size();
-			std::vector<std::shared_future<void>> futures(count);
+			// wave ごとに全 task を submit してから全 future を get() する。
+			// worker 内 future.wait() がなくなりスレッドを無駄に占有しない。
+			// 例外は全 task 完了を待ってから最初の例外を rethrow する。
+			const size_t maxLevel = systemEntries_.empty() ? 0
+				: (*std::max_element(systemEntries_.begin(), systemEntries_.end(),
+					[](const SystemEntry& a, const SystemEntry& b){ return a.level < b.level; })).level;
 
-			for (size_t idx : updateOrder_) {
-				SystemBase* system = systemEntries_[idx].system.get();
+			for (size_t wave = 0; wave <= maxLevel; ++wave) {
+				std::vector<std::future<void>> waveFutures;
 
-				std::vector<std::shared_future<void>> deps;
-				deps.reserve(systemEntries_[idx].dependencyIndices.size());
-				for (size_t depIdx : systemEntries_[idx].dependencyIndices) {
-					deps.push_back(futures[depIdx]);
+				for (size_t idx : updateOrder_) {
+					if (systemEntries_[idx].level != wave) continue;
+					SystemBase* system = systemEntries_[idx].system.get();
+					waveFutures.push_back(
+						util::ThreadPool::Get().Submit([system]() { system->Update(); })
+					);
 				}
 
-				futures[idx] = util::ThreadPool::Get().Submit(
-					[system, deps = std::move(deps)]() {
-						for (const auto& dep : deps) {
-							dep.wait();
-						}
-						system->Update();
+				std::exception_ptr firstException = nullptr;
+				for (auto& fut : waveFutures) {
+					try { fut.get(); }
+					catch (...) {
+						if (!firstException) firstException = std::current_exception();
 					}
-				).share();
-			}
-
-			for (auto& fut : futures) {
-				if (fut.valid()) {
-					fut.wait();
 				}
+				if (firstException) std::rethrow_exception(firstException);
 			}
 		}
 
@@ -85,6 +85,15 @@ namespace aq
 
 			EngineAssertMsg(updateOrder_.size() == n,
 				"SystemManager::BuildSchedule: circular dependency detected");
+
+			// 各 System の実行レベルを計算（level[i] = max(level[dep]) + 1）
+			std::vector<size_t> levels(n, 0);
+			for (size_t cur : updateOrder_) {
+				for (size_t depIdx : systemEntries_[cur].dependencyIndices) {
+					levels[cur] = std::max(levels[cur], levels[depIdx] + 1);
+				}
+				systemEntries_[cur].level = levels[cur];
+			}
 
 			registrationFinalized_ = true;
 

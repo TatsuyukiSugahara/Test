@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "CameraSteeringComponentSystem.h"
 #include "Component/TransformComponentSystem.h"
+#include "Component/HierarchicalTransformComponent.h"
 #include "Graphics/Camera.h"
 #include "Engine.h"
 #include "GameInput.h"
@@ -42,12 +43,12 @@ namespace app
 				if (comp->lookAtMode == CameraLookAtMode::TrackEntity
 					&& entityCtx.IsValid(comp->lookAtEntity))
 				{
-					const auto* const tc = entityCtx.GetComponent<aq::ecs::TransformComponent>(comp->lookAtEntity);
-					if (tc)
+					const auto* const hierarchicalTransformComponent = entityCtx.GetComponent<aq::ecs::HierarchicalTransformComponent>(comp->lookAtEntity);
+					if (hierarchicalTransformComponent)
 					{
-						targetPos.x = tc->transform.position.x + comp->lookAtPosition.x;
-						targetPos.y = tc->transform.position.y + comp->lookAtPosition.y;
-						targetPos.z = tc->transform.position.z + comp->lookAtPosition.z;
+						targetPos.x = hierarchicalTransformComponent->transform.position.x + comp->lookAtPosition.x;
+						targetPos.y = hierarchicalTransformComponent->transform.position.y + comp->lookAtPosition.y;
+						targetPos.z = hierarchicalTransformComponent->transform.position.z + comp->lookAtPosition.z;
 					}
 				}
 
@@ -103,11 +104,12 @@ namespace app
 							&& comp->lookAtMode == CameraLookAtMode::TrackEntity
 							&& entityCtx.IsValid(comp->lookAtEntity))
 						{
-							const auto* const tc = entityCtx.GetComponent<aq::ecs::TransformComponent>(comp->lookAtEntity);
-							if (tc)
+							const auto* const hierarchicalTransformComponent = entityCtx.GetComponent<aq::ecs::HierarchicalTransformComponent>(comp->lookAtEntity);
+							if (hierarchicalTransformComponent)
 							{
-								const DirectX::XMMATRIX rot = DirectX::XMLoadFloat4x4(
-									&tc->transform.rotationMatrix.matrix);
+								aq::math::Matrix4x4 rotationMatrix;
+								rotationMatrix.MakeRotationFromQuaternion(hierarchicalTransformComponent->transform.rotation);
+								const DirectX::XMMATRIX rot = DirectX::XMLoadFloat4x4(&rotationMatrix.matrix);
 								DirectX::XMStoreFloat3(&worldOffset.vector,
 									DirectX::XMVector3TransformNormal(
 										DirectX::XMLoadFloat3(&comp->cameraOffset.vector), rot));

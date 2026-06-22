@@ -39,9 +39,16 @@ namespace aq
 		public:
 			inline bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
 
-
 		public:
 			inline aq::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
+
+#ifdef AQ_DEBUG_IMGUI
+			template <typename V>
+			void Inspect(V& visitor)
+			{
+				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
+			}
+#endif
 		};
 
 		class StaticMeshComponent : public aq::ecs::IComponent
@@ -82,11 +89,27 @@ namespace aq
 
 
 		public:
-			inline bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
-
+			inline bool IsCompleted()     const { return componentState_ == ComponentState::Completed; }
+			inline const std::string& GetModelPath() const { return modelPath_; }
 
 		public:
 			inline aq::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
+
+#ifdef AQ_DEBUG_IMGUI
+			template <typename V>
+			void Inspect(V& visitor)
+			{
+				// コピー経由で編集して Enter で SetModelPath を呼ぶ（自己代入回避）
+				std::string newModel   = modelPath_;
+				std::string newTexture = texturePath_;
+				const bool cm = visitor.FieldPath("Model Path",   newModel);
+				const bool ct = visitor.FieldPath("Texture Path", newTexture);
+				if (cm || ct)
+					SetModelPath(newModel.c_str(),
+					             newTexture.empty() ? nullptr : newTexture.c_str());
+				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
+			}
+#endif
 		};
 
 
@@ -133,9 +156,25 @@ namespace aq
 
 			void Update();
 
-			bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
+			bool IsCompleted()            const { return componentState_ == ComponentState::Completed; }
+			const std::string& GetModelPath() const { return modelPath_; }
 
 			aq::graphics::SkeletalMesh* GetSkeletalMesh() { return &skeletalMesh_; }
+
+#ifdef AQ_DEBUG_IMGUI
+			template <typename V>
+			void Inspect(V& visitor)
+			{
+				std::string newModel   = modelPath_;
+				std::string newTexture = texturePath_;
+				const bool cm = visitor.FieldPath("Model Path",   newModel);
+				const bool ct = visitor.FieldPath("Texture Path", newTexture);
+				if (cm || ct)
+					SetModelPath(newModel.c_str(),
+					             newTexture.empty() ? nullptr : newTexture.c_str());
+				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
+			}
+#endif
 		};
 
 

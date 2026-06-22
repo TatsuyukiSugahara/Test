@@ -82,7 +82,7 @@ namespace app
 				const aq::ecs::EntityHandle& targetHandle = stateMachine_->GetTargetHandle();
 				if (aq::ecs::EntityContext::Get().IsValid(targetHandle)) {
 					auto* transformComponent = aq::ecs::EntityContext::Get().GetComponent<aq::ecs::TransformComponent>(targetHandle);
-					transformComponent->transform.localPosition.Add(move);
+					transformComponent->position.Add(move);
 				}
 			} else {
 				stateMachine_->RequestStateID(aqHash32("Idle"));

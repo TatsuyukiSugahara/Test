@@ -3,6 +3,7 @@
 #ifdef AQ_DEBUG_IMGUI
 
 #include "HeightmapChunk.h"
+#include "TerrainPaintTool.h"
 #include "Graphics/Camera.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
@@ -410,7 +411,8 @@ namespace aq
 
 			// ---- 3D ビュー直接ペイント ----
 			hitLastFrame_ = false;
-			if (paint3DEnabled_ && !io.WantCaptureMouse && sw > 0.0f && sh > 0.0f)
+			if (enabled_ && paint3DEnabled_ && ActiveTerrainPaintTool() == TerrainPaintTool::Heightmap &&
+			    !io.WantCaptureMouse && sw > 0.0f && sh > 0.0f)
 			{
 				Camera* cam = CameraManager::Get().GetCamera(CameraType::Main);
 				if (cam)
@@ -458,9 +460,15 @@ namespace aq
 				return;
 			}
 
+			ImGui::Checkbox("Enabled", &enabled_);
+			ImGui::SameLine();
 			ImGui::Checkbox("Lock Window", &windowLocked_);
 			ImGui::SameLine();
+			if (ImGui::RadioButton("Active 3D Tool", ActiveTerrainPaintTool() == TerrainPaintTool::Heightmap))
+				ActiveTerrainPaintTool() = TerrainPaintTool::Heightmap;
 			ImGui::Separator();
+
+			ImGui::BeginDisabled(!enabled_);
 
 			// ---- World Settings ----
 			if (ImGui::CollapsingHeader("World Settings"))
@@ -507,7 +515,7 @@ namespace aq
 
 			ImGui::Checkbox("3D Paint", &paint3DEnabled_);
 			ImGui::SameLine();
-			if (ImGui::Button("Undo") || (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)))
+			if (ImGui::Button("Undo") || (enabled_ && ActiveTerrainPaintTool() == TerrainPaintTool::Heightmap && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)))
 				PopUndo();
 
 			ImGui::Separator();
@@ -531,15 +539,18 @@ namespace aq
 					ImGui::GetWindowDrawList()->AddCircle(
 						mp, brushUVPx, IM_COL32(255, 220, 0, 220), 32, 1.5f);
 
-					if (ImGui::IsMouseClicked(0))
+					if (enabled_)
 					{
-						PushUndo();
-						wasMouseDownOnCanvas_ = true;
-					}
-					if (io.MouseDown[0] && wasMouseDownOnCanvas_)
-					{
-						ApplyBrushAtUV(u, v, dt);
-						dirty_ = true;
+						if (ImGui::IsMouseClicked(0))
+						{
+							PushUndo();
+							wasMouseDownOnCanvas_ = true;
+						}
+						if (io.MouseDown[0] && wasMouseDownOnCanvas_)
+						{
+							ApplyBrushAtUV(u, v, dt);
+							dirty_ = true;
+						}
 					}
 				}
 
@@ -568,6 +579,7 @@ namespace aq
 				dirty_ = true;
 			}
 
+			ImGui::EndDisabled();
 			ImGui::End();
 		}
 

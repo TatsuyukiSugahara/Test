@@ -49,9 +49,9 @@ namespace app
 				aq::terrain::HeightmapChunk::Desc desc;
 				desc.heightmapPath  = "Assets/Terrain/heightmap.png";
 				desc.splatmapPath   = "Assets/Terrain/splatmap.png";
-				desc.layerPaths[0]  = "Assets/Terrain/grass.dds";
-				desc.layerPaths[1]  = "Assets/Terrain/rock.dds";
-				desc.layerPaths[2]  = "Assets/Terrain/dirt.dds";
+				desc.layerPaths[0]  = "Assets/Terrain/grass.DDS";
+				desc.layerPaths[1]  = "Assets/Terrain/snow.DDS";
+				desc.layerPaths[2]  = "Assets/Terrain/rock.DDS";
 				desc.resolution     = 128;
 				desc.heightScale    = 10.0f;
 				desc.terrainSize    = 100.0f;
@@ -73,7 +73,9 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 			painter_.Attach(terrainComp->GetChunk(), aq::math::Vector3(-50.0f, 0.0f, -50.0f),
 			                terrainTC ? &terrainTC->transform.localPosition : nullptr);
+			splatmapPainter_.Attach(terrainComp->GetChunk(), aq::math::Vector3(-50.0f, 0.0f, -50.0f));
 			aq::DebugUI::Get().Register(&painter_);
+			aq::DebugUI::Get().Register(&splatmapPainter_);
 #endif
 
 			// world(0,0) = terrain local(50,50) (XZオフセット -50 適用後)
@@ -192,7 +194,9 @@ namespace app
 		void BattleScene::Finalize()
 		{
 #ifdef AQ_DEBUG_IMGUI
+			aq::DebugUI::Get().Unregister(&splatmapPainter_);
 			aq::DebugUI::Get().Unregister(&painter_);
+			splatmapPainter_.Detach();
 			painter_.Detach();
 #endif
 		}

@@ -203,6 +203,9 @@
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
     </ClCompile>
+    <ClCompile Include="Terrain\SplatmapPainter.cpp">
+      <Filter>Terrain</Filter>
+    </ClCompile>
     <ClCompile Include="Component\TerrainComponent.cpp">
       <Filter>Component</Filter>
     </ClCompile>
@@ -491,6 +494,12 @@
       <Filter>Resource</Filter>
     </ClInclude>
     <ClInclude Include="Terrain\HeightmapChunk.h">
+      <Filter>Terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="Terrain\SplatmapPainter.h">
+      <Filter>Terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="Terrain\TerrainPaintTool.h">
       <Filter>Terrain</Filter>
     </ClInclude>
     <ClInclude Include="Component\TerrainComponent.h">

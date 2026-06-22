@@ -42,6 +42,7 @@ namespace aq
 
 			// テクスチャリソース t0-t3
 			aq::res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
+			std::shared_ptr<IShaderResourceView> textureOverrides_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 
 			MaterialCBData materialCB_;
 			ShaderType     shaderType_    = ShaderType::NormalModel;
@@ -69,6 +70,8 @@ namespace aq
 
 			/** テクスチャを個別スロットに設定する (Initialize 後に呼ぶ) */
 			void SetTexture(rendering::TextureSlot slot, aq::res::RefGPUResource resource);
+			void SetTextureOverride(rendering::TextureSlot slot, std::shared_ptr<IShaderResourceView> srv);
+			void ClearTextureOverride(rendering::TextureSlot slot);
 
 			const math::Vector4& GetParameter(uint32_t index) const { return materialCB_.params[index]; }
 			void                 SetParameter(uint32_t index, const math::Vector4& v) { materialCB_.params[index] = v; }

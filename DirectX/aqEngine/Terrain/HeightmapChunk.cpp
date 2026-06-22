@@ -4,6 +4,9 @@
 #include "Resource/Resource.h"
 
 #include <cmath>
+#include <algorithm>
+#include <cctype>
+#include <string>
 
 
 namespace aq
@@ -12,6 +15,24 @@ namespace aq
 	{
 		namespace
 		{
+			void NormalizeSplatWeight(math::Vector4& w)
+			{
+				w.x = std::clamp(w.x, 0.0f, 1.0f);
+				w.y = std::clamp(w.y, 0.0f, 1.0f);
+				w.z = std::clamp(w.z, 0.0f, 1.0f);
+				const float total = w.x + w.y + w.z;
+				if (total <= 0.0001f)
+				{
+					w.Set(1.0f, 0.0f, 0.0f, 1.0f);
+					return;
+				}
+				const float inv = 1.0f / total;
+				w.x *= inv;
+				w.y *= inv;
+				w.z *= inv;
+				w.w = 1.0f;
+			}
+
 			/**
 			 * 画像ファイルを読み込み、Rチャンネルを [0,1] の float 配列として返す。
 			 * 内部で DirectXTex を使い R8G8B8A8_UNORM に変換してから取り出す。
@@ -62,6 +83,57 @@ namespace aq
 						// 1ピクセル = RGBA 4バイト。R チャンネルのみ使用
 						const uint8_t r = img->pixels[y * img->rowPitch + x * 4];
 						outHeights[y * outW + x] = r / 255.0f;
+					}
+				}
+				return true;
+			}
+
+			bool LoadSplatValues(const char* path,
+			                     std::vector<math::Vector4>& outSplat,
+			                     uint32_t& outW, uint32_t& outH)
+			{
+				if (!path || !path[0]) return false;
+
+				wchar_t wpath[512] = {};
+				size_t converted = 0;
+				if (mbstowcs_s(&converted, wpath, path, 511) != 0) return false;
+
+				DirectX::TexMetadata meta;
+				DirectX::ScratchImage raw;
+
+				std::string spath(path);
+				const auto dot = spath.rfind('.');
+				std::string ext = (dot != std::string::npos) ? spath.substr(dot) : "";
+				for (char& c : ext) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+
+				HRESULT hr = (ext == ".dds")
+					? DirectX::LoadFromDDSFile(wpath, DirectX::DDS_FLAGS_NONE, &meta, raw)
+					: DirectX::LoadFromWICFile(wpath, DirectX::WIC_FLAGS_NONE, &meta, raw);
+				if (FAILED(hr)) return false;
+
+				DirectX::ScratchImage rgba;
+				hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
+				                      DXGI_FORMAT_R8G8B8A8_UNORM,
+				                      DirectX::TEX_FILTER_DEFAULT,
+				                      DirectX::TEX_THRESHOLD_DEFAULT,
+				                      rgba);
+				if (FAILED(hr)) return false;
+
+				const DirectX::Image* img = rgba.GetImage(0, 0, 0);
+				if (!img || !img->pixels) return false;
+
+				outW = static_cast<uint32_t>(img->width);
+				outH = static_cast<uint32_t>(img->height);
+				outSplat.resize(static_cast<size_t>(outW) * outH);
+
+				for (uint32_t y = 0; y < outH; ++y)
+				{
+					for (uint32_t x = 0; x < outW; ++x)
+					{
+						const uint8_t* p = img->pixels + y * img->rowPitch + x * 4;
+						math::Vector4 w(p[0] / 255.0f, p[1] / 255.0f, p[2] / 255.0f, 1.0f);
+						NormalizeSplatWeight(w);
+						outSplat[static_cast<size_t>(y) * outW + x] = w;
 					}
 				}
 				return true;
@@ -161,17 +233,20 @@ namespace aq
 				heightData_.assign(static_cast<size_t>(hmapWidth_) * hmapHeight_, 0.0f);
 			}
 
+			if (!LoadSplatValues(desc.splatmapPath, splatData_, splatMapWidth_, splatMapHeight_))
+			{
+				splatMapWidth_  = hmapWidth_;
+				splatMapHeight_ = hmapHeight_;
+				splatData_.assign(static_cast<size_t>(splatMapWidth_) * splatMapHeight_,
+				                  math::Vector4(1.0f, 0.0f, 0.0f, 1.0f));
+			}
+
 			BuildMesh(heightData_, hmapWidth_, hmapHeight_, desc);
 
 			auto& rm = res::ResourceManager::Get();
 
-			// t0: スプラットマップ (Albedo スロット)
-			if (desc.splatmapPath && desc.splatmapPath[0])
-			{
-				mesh_.SetTexture(rendering::TextureSlot::Albedo,
-				                 rm.Load<res::GPUResource>(desc.splatmapPath));
-				mesh_.SetMaterialFlag(graphics::MatFlag_HasSplatMap, true);
-			}
+			// t0: runtime splat map generated from CPU weights.
+			RebuildSplatTexture();
 
 			// t1-t3: レイヤーテクスチャ (Normal/Specular/Emissive スロットを流用)
 			static constexpr rendering::TextureSlot kLayerSlots[3] = {
@@ -236,6 +311,62 @@ namespace aq
 			                        graphics::StaticMesh::ShaderType::TerrainLit);
 		}
 
+		void HeightmapChunk::RebuildSplatTexture()
+		{
+			if (splatData_.empty() || splatMapWidth_ == 0 || splatMapHeight_ == 0)
+			{
+				runtimeSplatSrv_.reset();
+				mesh_.ClearTextureOverride(rendering::TextureSlot::Albedo);
+				mesh_.SetMaterialFlag(graphics::MatFlag_HasSplatMap, false);
+				return;
+			}
+
+			std::vector<uint8_t> pixels(static_cast<size_t>(splatMapWidth_) * splatMapHeight_ * 4);
+			for (uint32_t y = 0; y < splatMapHeight_; ++y)
+			{
+				for (uint32_t x = 0; x < splatMapWidth_; ++x)
+				{
+					math::Vector4 w = splatData_[static_cast<size_t>(y) * splatMapWidth_ + x];
+					NormalizeSplatWeight(w);
+					const size_t idx = (static_cast<size_t>(y) * splatMapWidth_ + x) * 4;
+					pixels[idx + 0] = static_cast<uint8_t>(std::clamp(w.x, 0.0f, 1.0f) * 255.0f + 0.5f);
+					pixels[idx + 1] = static_cast<uint8_t>(std::clamp(w.y, 0.0f, 1.0f) * 255.0f + 0.5f);
+					pixels[idx + 2] = static_cast<uint8_t>(std::clamp(w.z, 0.0f, 1.0f) * 255.0f + 0.5f);
+					pixels[idx + 3] = 255u;
+				}
+			}
+
+			graphics::Texture2DDesc texDesc;
+			texDesc.width     = splatMapWidth_;
+			texDesc.height    = splatMapHeight_;
+			texDesc.mipLevels = 1;
+			texDesc.format    = graphics::PixelFormat::R8G8B8A8_Unorm;
+
+			graphics::ImageData imgData;
+			imgData.pixels     = pixels.data();
+			imgData.rowPitch   = splatMapWidth_ * 4;
+			imgData.slicePitch = static_cast<uint32_t>(pixels.size());
+
+			auto srv = graphics::GraphicsDevice::Get().CreateTexture2D(texDesc, imgData);
+			runtimeSplatSrv_.reset(srv ? srv.release() : nullptr);
+			mesh_.SetTextureOverride(rendering::TextureSlot::Albedo, runtimeSplatSrv_);
+			mesh_.SetMaterialFlag(graphics::MatFlag_HasSplatMap, runtimeSplatSrv_ != nullptr);
+		}
+
+
+		void HeightmapChunk::FillSplatLayer(uint32_t layerIndex)
+		{
+			if (splatData_.empty()) return;
+			layerIndex = std::min(layerIndex, 2u);
+			for (auto& w : splatData_)
+			{
+				w.Set(layerIndex == 0 ? 1.0f : 0.0f,
+				      layerIndex == 1 ? 1.0f : 0.0f,
+				      layerIndex == 2 ? 1.0f : 0.0f,
+				      1.0f);
+			}
+			RebuildSplatTexture();
+		}
 
 		void HeightmapChunk::RebuildFromHeights()
 		{

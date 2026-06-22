@@ -1,7 +1,9 @@
 #pragma once
 #include <cstdint>
 #include <vector>
+#include <memory>
 #include "Graphics/StaticMesh.h"
+#include "Graphics/IShaderResourceView.h"
 #include "Rendering/RenderFrame.h"
 
 
@@ -57,17 +59,26 @@ namespace aq
 
 			/** heightData_ を書き換えた後に呼ぶ: 法線再計算 + 動的VB更新 */
 			void RebuildFromHeights();
+			void RebuildSplatTexture();
+			void FillSplatLayer(uint32_t layerIndex);
 
 			void SetCastShadow(bool v)    { mesh_.SetCastShadow(v); }
 			void SetReceiveShadow(bool v) { mesh_.SetReceiveShadow(v); }
 
 			// HeightmapPainter 向け公開アクセサ
 			float*   GetHeightDataMutable()  { return heightData_.data(); }
+			const float* GetHeightData() const { return heightData_.data(); }
 			uint32_t GetMapWidth()     const { return hmapWidth_; }
 			uint32_t GetMapHeight()    const { return hmapHeight_; }
 			float    GetTerrainSize()  const { return terrainSize_; }
 			float    GetHeightScale()  const { return heightScale_; }
 			uint32_t GetResolution()   const { return desc_.resolution; }
+
+			math::Vector4*       GetSplatDataMutable()       { return splatData_.data(); }
+			const math::Vector4* GetSplatData() const         { return splatData_.data(); }
+			uint32_t GetSplatMapWidth()  const { return splatMapWidth_; }
+			uint32_t GetSplatMapHeight() const { return splatMapHeight_; }
+			graphics::IShaderResourceView* GetSplatTexture() const { return runtimeSplatSrv_.get(); }
 
 			/** XZ スケール変更 + 頂点再計算 (height データは保持) */
 			void SetTerrainSize(float size);
@@ -83,9 +94,13 @@ namespace aq
 
 			// CPU 側高さデータ (GetHeight + RebuildFromHeights で使用)
 			std::vector<float>               heightData_;
-			std::vector<graphics::VertexData> vertCache_;   // RebuildFromHeights 用キャッシュ
+			std::vector<graphics::VertexData> vertCache_;
+			std::vector<math::Vector4>       splatData_;
+			std::shared_ptr<graphics::IShaderResourceView> runtimeSplatSrv_;   // RebuildFromHeights 用キャッシュ
 			uint32_t           hmapWidth_   = 0;
 			uint32_t           hmapHeight_  = 0;
+			uint32_t           splatMapWidth_  = 0;
+			uint32_t           splatMapHeight_ = 0;
 			float              terrainSize_ = 0.0f;
 			float              heightScale_ = 0.0f;
 			Desc               desc_        = {};            // RebuildFromHeights で参照

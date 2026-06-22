@@ -195,6 +195,7 @@
     <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Terrain\HeightmapPainter.cpp" />
+    <ClCompile Include="Terrain\SplatmapPainter.cpp" />
     <ClCompile Include="Component\TerrainComponent.cpp" />
     <ClCompile Include="Ocean\OceanMesh.cpp" />
     <ClCompile Include="Ocean\OceanDebugPanel.cpp" />
@@ -299,6 +300,8 @@
     <ClInclude Include="Resource\Resource.h" />
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Terrain\HeightmapPainter.h" />
+    <ClInclude Include="Terrain\SplatmapPainter.h" />
+    <ClInclude Include="Terrain\TerrainPaintTool.h" />
     <ClInclude Include="Component\TerrainComponent.h" />
     <ClInclude Include="Ocean\OceanData.h" />
     <ClInclude Include="Ocean\OceanMesh.h" />

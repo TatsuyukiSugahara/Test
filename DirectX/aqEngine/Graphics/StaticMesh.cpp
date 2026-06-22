@@ -147,6 +147,7 @@ namespace aq
 		{
 			const uint32_t idx = static_cast<uint32_t>(slot);
 			gpuResources_[idx] = resource;
+			textureOverrides_[idx].reset();
 
 			// Normal/Specular/Emissive フラグを自動更新
 			MaterialFlags flag = MatFlag_HasNormal;
@@ -160,6 +161,16 @@ namespace aq
 			SetMaterialFlag(flag, resource != nullptr);
 		}
 
+		void StaticMesh::SetTextureOverride(rendering::TextureSlot slot, std::shared_ptr<IShaderResourceView> srv)
+		{
+			textureOverrides_[static_cast<uint32_t>(slot)] = std::move(srv);
+		}
+
+
+		void StaticMesh::ClearTextureOverride(rendering::TextureSlot slot)
+		{
+			textureOverrides_[static_cast<uint32_t>(slot)].reset();
+		}
 
 		bool StaticMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
@@ -168,6 +179,12 @@ namespace aq
 			        vertexBuffer_, indexBuffer_, samplerState_,
 			        gpuResources_, indicesSize_, worldMatrix_, materialCB_))
 				return false;
+
+			for (uint32_t slot = 0; slot < static_cast<uint32_t>(rendering::TextureSlot::Count); ++slot)
+			{
+				if (textureOverrides_[slot])
+					item.textures[slot] = textureOverrides_[slot];
+			}
 
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;

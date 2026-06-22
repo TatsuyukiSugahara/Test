@@ -3,6 +3,7 @@
 #include "ECS/Entity.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Terrain/HeightmapPainter.h"
+#include "Terrain/SplatmapPainter.h"
 #endif
 
 namespace app
@@ -27,6 +28,7 @@ namespace app
 			aq::ecs::EntityHandle playerHandle_;
 #ifdef AQ_DEBUG_IMGUI
 			aq::terrain::HeightmapPainter painter_;
+			aq::terrain::SplatmapPainter splatmapPainter_;
 #endif
 		};
 	}

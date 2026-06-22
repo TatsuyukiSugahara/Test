@@ -51,6 +51,7 @@ namespace aq
 			float     brushRadius_   = 10.0f;    // world units
 			float     brushStrength_ = 0.5f;
 			float     flattenTarget_ = 0.0f;     // [0,1] 正規化高さ
+			bool      enabled_        = true;    // ツール全体の有効フラグ
 			bool      paint3DEnabled_ = true;    // 3D ビュー直接ペイント有効フラグ
 
 		private:

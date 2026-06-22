@@ -6,6 +6,8 @@
 #include "Component/TransformComponentSystem.h"
 #include "Component/HierarchicalTransformComponent.h"
 #include "Component/BodyComponentSystem.h"
+#include "Component/TerrainComponent.h"
+#include "Component/OceanComponent.h"
 
 namespace aq
 {
@@ -163,6 +165,56 @@ namespace aq
 				};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<SkeletalMeshComponent>(h); };
 				registry.Register(TypeInfo::Create<SkeletalMeshComponent>(), std::move(meta));
+			}
+
+			// --- TerrainComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Terrain";
+				meta.requiredWith = {};
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<TerrainComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<TerrainComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<TerrainComponent>(h))               ctx.AddComponent<TerrainComponent>(h);
+				};
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<TerrainComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Inspect(visitor);
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<TerrainComponent>(h); };
+				registry.Register(TypeInfo::Create<TerrainComponent>(), std::move(meta));
+			}
+
+			// --- OceanComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Ocean";
+				meta.requiredWith = {};
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<OceanComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<OceanComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<OceanComponent>(h))                 ctx.AddComponent<OceanComponent>(h);
+				};
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<OceanComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Inspect(visitor);
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<OceanComponent>(h); };
+				registry.Register(TypeInfo::Create<OceanComponent>(), std::move(meta));
 			}
 		}
 	}

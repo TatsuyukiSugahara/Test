@@ -6,6 +6,7 @@
 #include "Component/OceanComponent.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
+#include "ECS/EntityDebugTag.h"
 #endif
 
 #include "Component/TransformComponentSystem.h"
@@ -69,6 +70,9 @@ namespace app
 				terrainComp = entity.GetComponent<aq::ecs::TerrainComponent>();
 				terrainComp->SetDesc(desc);
 				terrainComp->GetChunk()->SetReceiveShadow(true);
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Terrain");
+#endif
 			}
 
 #ifdef AQ_DEBUG_IMGUI
@@ -113,6 +117,9 @@ namespace app
 				// params.waves[0..3] はデフォルトで主うねり・斜め・斜め逆・チョップが設定済み
 
 				entity.GetComponent<aq::ecs::OceanComponent>()->Initialize(params);
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Ocean");
+#endif
 			}
 
 			// メインカメラの Near・アスペクト比設定（位置/注視点は CameraSteeringSystem が管理）
@@ -163,12 +170,18 @@ namespace app
 				stateMachineComponent->GetStateMachine()->AddState<app::actor::MoveState>(aqHash32("Move"));
 				stateMachineComponent->GetStateMachine()->RequestStateID(aqHash32("Idle"));
 				stateMachineComponent->GetStateMachine()->SetTargetHandle(targetHandle);
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Player");
+#endif
 			}
 
 			{
 				auto entity = aq::ecs::EntityContext::Get().CreateEntity<app::ecs::CharacterSteeringComponent>();
 				auto* const component = entity.GetComponent<app::ecs::CharacterSteeringComponent>();
 				component->SetTarget(targetHandle);
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CharacterSteering");
+#endif
 			}
 
 			// カメラエンティティ（プレイヤー追従 ManualView TPS）
@@ -180,6 +193,9 @@ namespace app
 				cam->TrackEntity(targetHandle, aq::math::Vector3(0.0f, 1.5f, 0.0f));
 				cam->SetManualView(0.0f, 20.0f, 10.0f);
 				cam->cameraType = aq::CameraType::Main;
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CameraTracking");
+#endif
 			}
 
 			// カメラエフェクトエンティティ（シェイク等の演出加算。TriggerShake() で起動）
@@ -187,6 +203,9 @@ namespace app
 				auto entity = aq::ecs::EntityContext::Get().CreateEntity<app::ecs::CameraEffectComponent>();
 				auto* const effect = entity.GetComponent<app::ecs::CameraEffectComponent>();
 				effect->cameraType = aq::CameraType::Main;
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CameraEffect");
+#endif
 			}
 
 			// ----- Prefab 階層テスト -----

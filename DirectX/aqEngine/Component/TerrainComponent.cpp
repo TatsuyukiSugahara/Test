@@ -9,6 +9,13 @@ namespace aq
 		{
 			chunk_.Initialize(desc);
 			state_ = State::Completed;
+#ifdef AQ_DEBUG_IMGUI
+			heightmapPath_ = desc.heightmapPath ? desc.heightmapPath : "";
+			splatmapPath_  = desc.splatmapPath  ? desc.splatmapPath  : "";
+			for (int i = 0; i < 3; ++i)
+				layerPaths_[i] = desc.layerPaths[i] ? desc.layerPaths[i] : "";
+			layerTiling_ = desc.layerTiling;
+#endif
 		}
 	}
 }

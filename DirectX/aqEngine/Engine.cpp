@@ -114,9 +114,11 @@ namespace aq
 			TEXT("Application"), nullptr
 		};
 		RegisterClassEx(&wc);
+		RECT rc = { 0, 0, static_cast<LONG>(screenWidth_), static_cast<LONG>(screenHeight_) };
+		AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 		hWnd_ = CreateWindow(
 			TEXT("Application"), TEXT("Application"),
-			WS_OVERLAPPEDWINDOW, 0, 0, screenWidth_, screenHeight_,
+			WS_OVERLAPPEDWINDOW, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
 			nullptr, nullptr, initializeParameter.hInstance, nullptr
 		);
 

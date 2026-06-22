@@ -25,6 +25,8 @@ namespace aq
 			void DrawHierarchyWindow();
 			void DrawInspectorWindow();
 			void DrawEntityNode(EntityHandle handle, int depth = 0);
+			void DrawInsertGap(EntityHandle parent, int insertIndex);
+			void MoveChildToIndex(EntityHandle parent, EntityHandle dragged, int insertIndex);
 			void DestroySubtree(EntityHandle handle);
 
 			EntityHandle selectedHandle_;

@@ -8,6 +8,7 @@
 #include "Component/TransformComponentSystem.h"
 #include "Component/HierarchicalTransformComponent.h"
 #include <imgui/imgui.h>
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -179,15 +180,35 @@ namespace aq
 				ImGui::EndDragDropTarget();
 			}
 
+			// 右クリックコンテキストメニュー
+			if (ImGui::BeginPopupContextItem())
+			{
+				if (ImGui::MenuItem("Select"))
+					selectedHandle_ = handle;
+
+				if (htc && ctx.IsValid(htc->parentHandle))
+				{
+					ImGui::Separator();
+					if (ImGui::MenuItem("Detach from Parent"))
+						ctx.DetachParent(handle);
+				}
+				ImGui::EndPopup();
+			}
+
 			if (opened)
 			{
 				if (htc)
 				{
-					for (EntityHandle child : htc->childHandles)
+					// コピーして安全なイテレーション（DrawInsertGap 内で childHandles が変更されても無効化しない）
+					const std::vector<EntityHandle> children = htc->childHandles;
+					const int childCount = static_cast<int>(children.size());
+					for (int i = 0; i < childCount; ++i)
 					{
-						if (ctx.IsValid(child))
-							DrawEntityNode(child, depth + 1);
+						DrawInsertGap(handle, i);
+						if (ctx.IsValid(children[i]))
+							DrawEntityNode(children[i], depth + 1);
 					}
+					DrawInsertGap(handle, childCount);
 				}
 				ImGui::TreePop();
 			}
@@ -323,6 +344,78 @@ namespace aq
 			}
 
 			ImGui::End();
+		}
+
+
+		// ── ギャップドロップゾーン（兄弟間順序変更用） ──────────────────────────────
+
+		void SceneHierarchySystem::DrawInsertGap(EntityHandle parent, int insertIndex)
+		{
+			// ドラッグ中でなければ何もしない（レイアウトに高さを加えない）
+			const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+			if (!payload || !payload->IsDataType("ENTITY_HANDLE")) return;
+
+			ImGui::PushID(insertIndex + 10000);
+
+			const ImVec2 pos = ImGui::GetCursorScreenPos();
+			ImGui::InvisibleButton("##gap", ImVec2(ImGui::GetContentRegionAvail().x, 6.0f));
+
+			EntityHandle dragged;
+			bool         dropped = false;
+
+			if (ImGui::BeginDragDropTarget())
+			{
+				// ホバー中にインジケーターラインを描画
+				ImDrawList* dl = ImGui::GetWindowDrawList();
+				const float y  = pos.y + 2.0f;
+				dl->AddLine(ImVec2(ImGui::GetItemRectMin().x, y),
+				            ImVec2(ImGui::GetItemRectMax().x, y),
+				            IM_COL32(255, 200, 0, 255), 2.0f);
+
+				if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("ENTITY_HANDLE"))
+				{
+					memcpy(&dragged, p->Data, sizeof(EntityHandle));
+					dropped = true;
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			ImGui::PopID();
+
+			if (dropped && dragged != parent)
+				MoveChildToIndex(parent, dragged, insertIndex);
+		}
+
+
+		// ── 子の順序変更 ───────────────────────────────────────────────────────────
+
+		void SceneHierarchySystem::MoveChildToIndex(EntityHandle parent, EntityHandle dragged, int insertIndex)
+		{
+			auto& ctx = EntityContext::Get();
+			if (!ctx.IsValid(parent) || !ctx.IsValid(dragged) || parent == dragged) return;
+
+			auto* parentHtc  = ctx.GetComponent<HierarchicalTransformComponent>(parent);
+			auto* draggedHtc = ctx.GetComponent<HierarchicalTransformComponent>(dragged);
+			if (!parentHtc) return;
+
+			const bool isAlreadyChild = draggedHtc && (draggedHtc->parentHandle == parent);
+			if (!isAlreadyChild)
+			{
+				if (!ctx.SetParent(dragged, parent)) return;
+				parentHtc = ctx.GetComponent<HierarchicalTransformComponent>(parent);
+				if (!parentHtc) return;
+			}
+
+			auto& children   = parentHtc->childHandles;
+			auto  it         = std::find(children.begin(), children.end(), dragged);
+			if (it == children.end()) return;
+
+			const int currentIdx = static_cast<int>(it - children.begin());
+			children.erase(it);
+
+			if (insertIndex > currentIdx) --insertIndex;
+			insertIndex = std::max(0, std::min(insertIndex, static_cast<int>(children.size())));
+			children.insert(children.begin() + insertIndex, dragged);
 		}
 
 

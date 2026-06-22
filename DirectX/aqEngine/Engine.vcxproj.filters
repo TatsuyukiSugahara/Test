@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Component">
@@ -28,6 +28,9 @@
     <Filter Include="Memory">
       <UniqueIdentifier>{e1f2a3b4-c5d6-7890-ef12-345678901234}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Ocean">
+      <UniqueIdentifier>{e9f0a1b2-c3d4-e5f6-a7b8-c9d0e1f2a3b4}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Physics">
       <UniqueIdentifier>{c739d076-df44-472d-873f-202f105a6f6a}</UniqueIdentifier>
     </Filter>
@@ -52,14 +55,29 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="aq.cpp" />
+    <ClCompile Include="Engine.cpp" />
     <ClCompile Include="Core\Application.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="Engine.cpp" />
-    <ClCompile Include="Util\JobSystem.cpp">
-      <Filter>Util</Filter>
+    <ClCompile Include="Core\DebugUI.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\AnimationComponentSystem.cpp">
+      <Filter>Component</Filter>
     </ClCompile>
     <ClCompile Include="Component\BodyComponentSystem.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\HierarchicalTransformComponent.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\OceanComponent.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Prefab.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\TerrainComponent.cpp">
       <Filter>Component</Filter>
     </ClCompile>
     <ClCompile Include="Component\TransformComponentSystem.cpp">
@@ -68,14 +86,23 @@
     <ClCompile Include="ECS\Chunk.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
+    <ClCompile Include="ECS\ComponentRegistry.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
     <ClCompile Include="ECS\EntityContext.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
     <ClCompile Include="ECS\EntityManager.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
+    <ClCompile Include="ECS\SceneHierarchySystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
     <ClCompile Include="ECS\System.cpp">
       <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\AnimationClip.cpp">
+      <Filter>Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\Camera.cpp">
       <Filter>Graphics</Filter>
@@ -90,9 +117,6 @@
       <Filter>Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\Shader.cpp">
-      <Filter>Graphics</Filter>
-    </ClCompile>
-    <ClCompile Include="Graphics\AnimationClip.cpp">
       <Filter>Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\SkeletalMesh.cpp">
@@ -140,6 +164,12 @@
     <ClCompile Include="Memory\MemoryTracker.cpp">
       <Filter>Memory</Filter>
     </ClCompile>
+    <ClCompile Include="Ocean\OceanDebugPanel.cpp">
+      <Filter>Ocean</Filter>
+    </ClCompile>
+    <ClCompile Include="Ocean\OceanMesh.cpp">
+      <Filter>Ocean</Filter>
+    </ClCompile>
     <ClCompile Include="Physics\BulletGhostNarrowphase.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
@@ -173,20 +203,26 @@
     <ClCompile Include="Rendering\FrameContext.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\ImGuiRenderCommand.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\OceanDrawCommand.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\RenderCommandList.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\Renderer.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\RenderingDebugPanel.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\RenderThread.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp">
-      <Filter>Rendering\Shadow</Filter>
-    </ClCompile>
-    <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp">
-      <Filter>Rendering\Shadow</Filter>
+    <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp">
+      <Filter>Rendering\PostProcess</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\PostProcess\BloomPassCommand.cpp">
       <Filter>Rendering\PostProcess</Filter>
@@ -194,8 +230,14 @@
     <ClCompile Include="Rendering\PostProcess\BloomRenderer.cpp">
       <Filter>Rendering\PostProcess</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp">
-      <Filter>Rendering\PostProcess</Filter>
+    <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp">
+      <Filter>Rendering\Shadow</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Shadow\ShadowDebugPanel.cpp">
+      <Filter>Rendering\Shadow</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp">
+      <Filter>Rendering\Shadow</Filter>
     </ClCompile>
     <ClCompile Include="Resource\Resource.cpp">
       <Filter>Resource</Filter>
@@ -203,34 +245,58 @@
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
     </ClCompile>
+    <ClCompile Include="Terrain\HeightmapPainter.cpp">
+      <Filter>Terrain</Filter>
+    </ClCompile>
     <ClCompile Include="Terrain\SplatmapPainter.cpp">
       <Filter>Terrain</Filter>
     </ClCompile>
-    <ClCompile Include="Component\TerrainComponent.cpp">
-      <Filter>Component</Filter>
+    <ClCompile Include="Util\GameTimer.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\JobSystem.cpp">
+      <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="Util\ThreadPool.cpp">
       <Filter>Util</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Core\Application.h">
-      <Filter>Core</Filter>
-    </ClInclude>
     <ClInclude Include="Engine.h" />
     <ClInclude Include="aq.h" />
-    <ClInclude Include="Core\IApplication.h">
-      <Filter>Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Util\JobSystem.h">
-      <Filter>Util</Filter>
-    </ClInclude>
     <ClInclude Include="Utility.h" />
+    <ClInclude Include="Component\AnimationComponentSystem.h">
+      <Filter>Component</Filter>
+    </ClInclude>
     <ClInclude Include="Component\BodyComponentSystem.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\HierarchicalTransformComponent.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\OceanComponent.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Prefab.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\TerrainComponent.h">
       <Filter>Component</Filter>
     </ClInclude>
     <ClInclude Include="Component\TransformComponentSystem.h">
       <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Application.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\DebugUI.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\IApplication.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\IDebugRenderable.h">
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="ECS\Archetype.h">
       <Filter>ECS</Filter>
@@ -239,6 +305,9 @@
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="ECS\ComponentArray.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\ComponentRegistry.h">
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="ECS\ECS.h">
@@ -250,6 +319,9 @@
     <ClInclude Include="ECS\EntityContext.h">
       <Filter>ECS</Filter>
     </ClInclude>
+    <ClInclude Include="ECS\EntityDebugTag.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
     <ClInclude Include="ECS\EntityManager.h">
       <Filter>ECS</Filter>
     </ClInclude>
@@ -259,16 +331,22 @@
     <ClInclude Include="ECS\IComponent.h">
       <Filter>ECS</Filter>
     </ClInclude>
+    <ClInclude Include="ECS\ImGuiFieldVisitor.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\SceneHierarchySystem.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
     <ClInclude Include="ECS\System.h">
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="ECS\TypeInfo.h">
       <Filter>ECS</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\Camera.h">
+    <ClInclude Include="Graphics\AnimationClip.h">
       <Filter>Graphics</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\AnimationClip.h">
+    <ClInclude Include="Graphics\Camera.h">
       <Filter>Graphics</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\GPUBuffer.h">
@@ -391,6 +469,15 @@
     <ClInclude Include="Memory\StdAllocatorAdapter.h">
       <Filter>Memory</Filter>
     </ClInclude>
+    <ClInclude Include="Ocean\OceanData.h">
+      <Filter>Ocean</Filter>
+    </ClInclude>
+    <ClInclude Include="Ocean\OceanDebugPanel.h">
+      <Filter>Ocean</Filter>
+    </ClInclude>
+    <ClInclude Include="Ocean\OceanMesh.h">
+      <Filter>Ocean</Filter>
+    </ClInclude>
     <ClInclude Include="Physics\BoxCollider.h">
       <Filter>Physics</Filter>
     </ClInclude>
@@ -451,6 +538,9 @@
     <ClInclude Include="Rendering\IRenderCommand.h">
       <Filter>Rendering</Filter>
     </ClInclude>
+    <ClInclude Include="Rendering\OceanDrawCommand.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
     <ClInclude Include="Rendering\RenderCommandList.h">
       <Filter>Rendering</Filter>
     </ClInclude>
@@ -460,11 +550,26 @@
     <ClInclude Include="Rendering\Renderer.h">
       <Filter>Rendering</Filter>
     </ClInclude>
+    <ClInclude Include="Rendering\RenderingDebugPanel.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
     <ClInclude Include="Rendering\RenderTargetHandle.h">
       <Filter>Rendering</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\RenderThread.h">
       <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\BloomDebugPanel.h">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\BloomPassCommand.h">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\BloomRenderer.h">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h">
+      <Filter>Rendering\PostProcess</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Shadow\HardShadowRenderer.h">
       <Filter>Rendering\Shadow</Filter>
@@ -475,25 +580,19 @@
     <ClInclude Include="Rendering\Shadow\ShadowData.h">
       <Filter>Rendering\Shadow</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\Shadow\ShadowPassCommand.h">
+    <ClInclude Include="Rendering\Shadow\ShadowDebugPanel.h">
       <Filter>Rendering\Shadow</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h">
-      <Filter>Rendering\PostProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\BloomPassCommand.h">
-      <Filter>Rendering\PostProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\BloomRenderer.h">
-      <Filter>Rendering\PostProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\BloomDebugPanel.h">
-      <Filter>Rendering\PostProcess</Filter>
+    <ClInclude Include="Rendering\Shadow\ShadowPassCommand.h">
+      <Filter>Rendering\Shadow</Filter>
     </ClInclude>
     <ClInclude Include="Resource\Resource.h">
       <Filter>Resource</Filter>
     </ClInclude>
     <ClInclude Include="Terrain\HeightmapChunk.h">
+      <Filter>Terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="Terrain\HeightmapPainter.h">
       <Filter>Terrain</Filter>
     </ClInclude>
     <ClInclude Include="Terrain\SplatmapPainter.h">
@@ -502,10 +601,13 @@
     <ClInclude Include="Terrain\TerrainPaintTool.h">
       <Filter>Terrain</Filter>
     </ClInclude>
-    <ClInclude Include="Component\TerrainComponent.h">
-      <Filter>Component</Filter>
-    </ClInclude>
     <ClInclude Include="Util\CRC32.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\GameTimer.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\JobSystem.h">
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\ThreadPool.h">

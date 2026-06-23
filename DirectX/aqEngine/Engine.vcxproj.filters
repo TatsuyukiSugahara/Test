@@ -55,6 +55,27 @@
     <Filter Include="Util">
       <UniqueIdentifier>{ec0fba07-4c22-4637-9849-565ebf6dd4aa}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{11223344-5566-7788-99aa-bbccddeeff00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Animation">
+      <UniqueIdentifier>{22334455-6677-8899-aabb-ccddeeff0011}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Component">
+      <UniqueIdentifier>{33445566-7788-99aa-bbcc-ddeeff001122}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Input">
+      <UniqueIdentifier>{44556677-8899-aabb-ccdd-eeff00112233}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Rendering">
+      <UniqueIdentifier>{55667788-99aa-bbcc-ddee-ff0011223344}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Resource">
+      <UniqueIdentifier>{66778899-aabb-ccdd-eeff-001122334455}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Screen">
+      <UniqueIdentifier>{7788aabb-ccdd-eeff-0011-223344556677}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="aq.cpp" />
@@ -274,6 +295,45 @@
     </ClCompile>
     <ClCompile Include="Util\ThreadPool.cpp">
       <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\SimpleJson.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\UIContext.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\UIObject.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Screen\UIScreen.cpp">
+      <Filter>UI\Screen</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Screen\UIScreenManager.cpp">
+      <Filter>UI\Screen</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Input\UIInputSystem.cpp">
+      <Filter>UI\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Animation\UIAnimationSystem.cpp">
+      <Filter>UI\Animation</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Animation\UIAnimationTrack.cpp">
+      <Filter>UI\Animation</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Component\UIAnimationComponent.cpp">
+      <Filter>UI\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Rendering\UIBatchRenderCommand.cpp">
+      <Filter>UI\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Rendering\UIBatchRenderer.cpp">
+      <Filter>UI\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Rendering\UIRenderPipeline.cpp">
+      <Filter>UI\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Resource\UIDocumentLoader.cpp">
+      <Filter>UI\Resource</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -642,6 +702,84 @@
     </ClInclude>
     <ClInclude Include="Util\ThreadPool.h">
       <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\SimpleJson.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\UITypes.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\UIContext.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\UIObject.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\IUIComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\UITransformComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\UICanvasComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\UIButtonComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\UIImageComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\UINineSliceComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\UICircleGaugeComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Component\UIAnimationComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Screen\UIScreen.h">
+      <Filter>UI\Screen</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Screen\UIScreenManager.h">
+      <Filter>UI\Screen</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Input\UIAction.h">
+      <Filter>UI\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Input\UIInputSystem.h">
+      <Filter>UI\Input</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Rendering\UIRenderItem.h">
+      <Filter>UI\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Rendering\UIBatchRenderCommand.h">
+      <Filter>UI\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Rendering\UIRenderPipeline.h">
+      <Filter>UI\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Rendering\UIBatchRenderer.h">
+      <Filter>UI\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Animation\UIAnimatedProperty.h">
+      <Filter>UI\Animation</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Animation\UIAnimationTrack.h">
+      <Filter>UI\Animation</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Animation\UIClipTrack.h">
+      <Filter>UI\Animation</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Animation\UIAnimationClip.h">
+      <Filter>UI\Animation</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Animation\UIAnimationSystem.h">
+      <Filter>UI\Animation</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Resource\UIDocumentLoader.h">
+      <Filter>UI\Resource</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -209,6 +209,19 @@
     <ClCompile Include="Ocean\OceanDebugPanel.cpp" />
     <ClCompile Include="Component\OceanComponent.cpp" />
     <ClCompile Include="Rendering\OceanDrawCommand.cpp" />
+    <ClCompile Include="Util\SimpleJson.cpp" />
+    <ClCompile Include="UI\UIContext.cpp" />
+    <ClCompile Include="UI\UIObject.cpp" />
+    <ClCompile Include="UI\Screen\UIScreen.cpp" />
+    <ClCompile Include="UI\Screen\UIScreenManager.cpp" />
+    <ClCompile Include="UI\Input\UIInputSystem.cpp" />
+    <ClCompile Include="UI\Animation\UIAnimationSystem.cpp" />
+    <ClCompile Include="UI\Animation\UIAnimationTrack.cpp" />
+    <ClCompile Include="UI\Component\UIAnimationComponent.cpp" />
+    <ClCompile Include="UI\Rendering\UIBatchRenderCommand.cpp" />
+    <ClCompile Include="UI\Rendering\UIBatchRenderer.cpp" />
+    <ClCompile Include="UI\Rendering\UIRenderPipeline.cpp" />
+    <ClCompile Include="UI\Resource\UIDocumentLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Application.h" />
@@ -311,6 +324,10 @@
     <ClInclude Include="Rendering\Shadow\ShadowDebugPanel.h" />
     <ClInclude Include="Rendering\Shadow\ShadowData.h" />
     <ClInclude Include="Rendering\Shadow\ShadowPassCommand.h" />
+    <ClInclude Include="Rendering\PostProcess\BloomDebugPanel.h" />
+    <ClInclude Include="Rendering\PostProcess\BloomPassCommand.h" />
+    <ClInclude Include="Rendering\PostProcess\BloomRenderer.h" />
+    <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h" />
     <ClInclude Include="Resource\Resource.h" />
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Terrain\HeightmapPainter.h" />
@@ -327,9 +344,35 @@
     <ClInclude Include="Rendering\Deferred\GBufferItemCommand.h" />
     <ClInclude Include="Rendering\Deferred\DeferredLightingCommand.h" />
     <ClInclude Include="Rendering\Deferred\DeferredDebugPanel.h" />
+    <ClInclude Include="UI\UITypes.h" />
+    <ClInclude Include="UI\UIContext.h" />
+    <ClInclude Include="UI\UIObject.h" />
+    <ClInclude Include="UI\Component\IUIComponent.h" />
+    <ClInclude Include="UI\Component\UITransformComponent.h" />
+    <ClInclude Include="UI\Component\UICanvasComponent.h" />
+    <ClInclude Include="UI\Component\UIButtonComponent.h" />
+    <ClInclude Include="UI\Component\UIImageComponent.h" />
+    <ClInclude Include="UI\Component\UINineSliceComponent.h" />
+    <ClInclude Include="UI\Component\UICircleGaugeComponent.h" />
+    <ClInclude Include="UI\Component\UIAnimationComponent.h" />
+    <ClInclude Include="UI\Screen\UIScreen.h" />
+    <ClInclude Include="UI\Screen\UIScreenManager.h" />
+    <ClInclude Include="UI\Input\UIAction.h" />
+    <ClInclude Include="UI\Input\UIInputSystem.h" />
+    <ClInclude Include="UI\Rendering\UIRenderItem.h" />
+    <ClInclude Include="UI\Rendering\UIBatchRenderCommand.h" />
+    <ClInclude Include="UI\Rendering\UIRenderPipeline.h" />
+    <ClInclude Include="UI\Rendering\UIBatchRenderer.h" />
+    <ClInclude Include="UI\Animation\UIAnimatedProperty.h" />
+    <ClInclude Include="UI\Animation\UIAnimationTrack.h" />
+    <ClInclude Include="UI\Animation\UIClipTrack.h" />
+    <ClInclude Include="UI\Animation\UIAnimationClip.h" />
+    <ClInclude Include="UI\Animation\UIAnimationSystem.h" />
+    <ClInclude Include="UI\Resource\UIDocumentLoader.h" />
     <ClInclude Include="Util\CRC32.h" />
     <ClInclude Include="Util\GameTimer.h" />
     <ClInclude Include="Util\ThreadPool.h" />
+    <ClInclude Include="Util\SimpleJson.h" />
     <ClInclude Include="Utility.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

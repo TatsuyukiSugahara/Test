@@ -1,0 +1,27 @@
+{
+    "name": "TestRoot",
+    "components": {
+        "transform": {
+            "active": true,
+            "sizeDelta": [1920, 1080]
+        },
+        "canvas": {
+            "resolution": [1920, 1080]
+        }
+    },
+    "children": [
+        {
+            "name": "TestImage",
+            "components": {
+                "transform": {
+                    "position": [960, 540, 0],
+                    "sizeDelta": [400, 400]
+                },
+                "image": {
+                    "texture": "Assets/Character/Character.png",
+                    "color": [1, 1, 1, 1]
+                }
+            }
+        }
+    ]
+}

@@ -26,7 +26,9 @@ namespace aq
 			S     = DIK_S,
 			D     = DIK_D,
 
-			Space = DIK_SPACE,
+			Space  = DIK_SPACE,
+			Enter  = DIK_RETURN,
+			Escape = DIK_ESCAPE,
 		};
 
 

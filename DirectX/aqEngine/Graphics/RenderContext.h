@@ -54,9 +54,21 @@ namespace aq
 			{
 				impl_->OMSetDepthMode(mode);
 			}
+			void OMSetBlendMode(BlendMode mode)
+			{
+				impl_->OMSetBlendMode(mode);
+			}
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height)
 			{
 				impl_->RSSetViewport(topLeftX, topLeftY, width, height);
+			}
+			void RSSetScissorEnabled(bool enabled)
+			{
+				impl_->RSSetScissorEnabled(enabled);
+			}
+			void RSSetScissorRect(int x, int y, int w, int h)
+			{
+				impl_->RSSetScissorRect(x, y, w, h);
 			}
 			void ClearRenderTargetView(uint32_t index, float* clearColor)
 			{

@@ -27,6 +27,14 @@ namespace aq
 			Disabled,   // DepthEnable=FALSE           (fullscreen pass 用)
 		};
 
+		enum class BlendMode : uint8_t
+		{
+			Opaque,        // ブレンドなし (既定)
+			AlphaBlend,    // 通常アルファ合成 (src.a × src + (1-src.a) × dst)
+			Additive,      // 加算合成 (src + dst)
+			Premultiplied, // 事前乗算済みアルファ (src + (1-src.a) × dst)
+		};
+
 		class IRenderContextImpl
 		{
 		public:
@@ -36,7 +44,10 @@ namespace aq
 			virtual void OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets) = 0;
 			virtual void OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT) = 0;
 			virtual void OMSetDepthMode(DepthMode mode) = 0;
+			virtual void OMSetBlendMode(BlendMode mode) = 0;
 			virtual void RSSetViewport(float topLeftX, float topLeftY, float width, float height) = 0;
+			virtual void RSSetScissorEnabled(bool enabled) = 0;
+			virtual void RSSetScissorRect(int x, int y, int w, int h) = 0;
 			virtual void ClearRenderTargetView(uint32_t index, float* clearColor) = 0;
 			virtual void ClearDepthBuffer() = 0;
 

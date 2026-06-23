@@ -4,6 +4,10 @@
 #include "Resource/Resource.h"
 #include "ECS/EntityContext.h"
 #include "HID/Input.h"
+#include "UI/UIContext.h"
+#include "UI/Input/UIInputSystem.h"
+#include "UI/Screen/UIScreenManager.h"
+#include "UI/Rendering/UIBatchRenderer.h"
 #include "Graphics/Camera.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/LightManager.h"
@@ -48,6 +52,7 @@ namespace aq
 			EngineAssertMsg(false, "InputManager::Setup failed: DirectInput or device initialization failed");
 			return false;
 		}
+		aq::ui::UIContext::Initialize();
 		aq::CameraManager::Initialize();
 		aq::graphics::LightManager::Initialize();
 #ifdef AQ_DEBUG_IMGUI
@@ -115,6 +120,10 @@ namespace aq
 		}
 #endif
 #endif
+
+		renderer_.SetUIRenderCallback([](aq::rendering::RenderCommandList& list) {
+			aq::ui::UIContext::Get().GetBatchRenderer().BuildCommandList(list);
+		});
 
 		if (!OnInitialize()) return false;
 
@@ -195,6 +204,7 @@ namespace aq
 #ifdef AQ_DEBUG_IMGUI
 		aq::DebugUI::Finalize();
 #endif
+		aq::ui::UIContext::Finalize();
 		aq::graphics::LightManager::Finalize();
 		aq::ecs::EntityContext::Finalize();
 		aq::res::ResourceManager::Finalize();
@@ -216,6 +226,12 @@ namespace aq
 		aq::ecs::EntityContext::Get().Update();
 		aq::res::ResourceManager::Get().Update();
 		OnUpdate();
+		{
+			auto& ui = aq::ui::UIContext::Get();
+			ui.GetInputSystem().Update(ui.Screens(), aq::hid::InputManager::Get());
+			ui.Screens().Update(aq::Engine::GetDeltaTime());
+			ui.GetBatchRenderer().CollectRenderItems(ui.Screens());
+		}
 		aq::CameraManager::Get().UpdateAll();
 		Render();
 	}

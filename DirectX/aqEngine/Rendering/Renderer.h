@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <memory>
+#include <functional>
 #include "RenderFrame.h"
 #include "RenderCommandList.h"
 #include "RenderTargetHandle.h"
@@ -46,6 +47,17 @@ namespace aq
 			IDeferredRenderer* GetDeferredRenderer() const { return deferredRenderer_.get(); }
 
 			/**
+			 * UI 描画コールバックを設定する。
+			 * BuildCommandList() のポストプロセス後・ImGui 前に呼ばれる。
+			 * Renderer が UI に直接依存しないよう、std::function で疎結合にする。
+			 * Application::OnInitialize() 等で UIContext::GetBatchRenderer() と接続する。
+			 */
+			void SetUIRenderCallback(std::function<void(RenderCommandList&)> cb)
+			{
+				uiRenderCallback_ = std::move(cb);
+			}
+
+			/**
 			 * ポストプロセスが設定されている場合はその最終出力 RT を、そうでなければ sceneRT を返す。
 			 * RenderThread::Submit の displayRT に渡す値を決めるために使う。
 			 */
@@ -75,12 +87,13 @@ namespace aq
 			                    const CameraData&  camera,
 			                    RenderCommandList& outList) const;
 
-			std::unique_ptr<IShadowRenderer>      shadowRenderer_;
-			std::unique_ptr<IPostProcessRenderer> postProcessRenderer_;
-			std::unique_ptr<IDeferredRenderer>    deferredRenderer_;
-			RenderTargetHandle                    mainRTHandle_;
-			float                                 mainViewportW_ = 0.f;
-			float                                 mainViewportH_ = 0.f;
+			std::unique_ptr<IShadowRenderer>        shadowRenderer_;
+			std::unique_ptr<IPostProcessRenderer>   postProcessRenderer_;
+			std::unique_ptr<IDeferredRenderer>      deferredRenderer_;
+			std::function<void(RenderCommandList&)> uiRenderCallback_;
+			RenderTargetHandle                      mainRTHandle_;
+			float                                   mainViewportW_ = 0.f;
+			float                                   mainViewportH_ = 0.f;
 		};
 	}
 }

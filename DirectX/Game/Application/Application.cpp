@@ -4,6 +4,8 @@
 #include "Scene/Scene.h"
 #include "GameInput.h"
 #include "Engine.h"
+#include "UI/UIContext.h"
+#include "UI/Screen/UIScreenManager.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/LightManager.h"
 #include "Rendering/RenderFrame.h"
@@ -35,6 +37,13 @@ namespace app
 
 		GameInput::Initialize();
 		app::SceneManager::Create();
+
+		// --- UI テスト: 画面中央にキャラクター画像を表示 ---
+		{
+			auto& screens = aq::ui::UIContext::Get().Screens();
+			screens.Register("TestUI", "Assets/UI/TestScreen.json");
+			screens.Push("TestUI");
+		}
 
 		// Shadow renderer
 		{

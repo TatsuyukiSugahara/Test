@@ -22,7 +22,10 @@ namespace aq
 			void OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets) override;
 			void OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT) override;
 			void OMSetDepthMode(DepthMode mode) override;
+			void OMSetBlendMode(BlendMode mode) override;
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height) override;
+			void RSSetScissorEnabled(bool enabled) override;
+			void RSSetScissorRect(int x, int y, int w, int h) override;
 			void ClearRenderTargetView(uint32_t index, float* clearColor) override;
 			void ClearDepthBuffer() override;
 
@@ -79,6 +82,16 @@ namespace aq
 			ID3D11DepthStencilState* dssReadWrite_ = nullptr;
 			ID3D11DepthStencilState* dssReadOnly_  = nullptr;
 			ID3D11DepthStencilState* dssDisabled_  = nullptr;
+
+			// BlendMode ごとの BS。
+			ID3D11BlendState* bsOpaque_        = nullptr;
+			ID3D11BlendState* bsAlphaBlend_    = nullptr;
+			ID3D11BlendState* bsAdditive_      = nullptr;
+			ID3D11BlendState* bsPremultiplied_ = nullptr;
+
+			// Scissor あり / なし の RS。
+			ID3D11RasterizerState* rsDefault_  = nullptr;
+			ID3D11RasterizerState* rsScissor_  = nullptr;
 		};
 	}
 }

@@ -20,28 +20,78 @@ namespace aq
 		{
 			ID3D11Device* dev = D3D11GraphicsDeviceImpl::GetStaticDevice();
 
-			D3D11_DEPTH_STENCIL_DESC desc = {};
-			desc.DepthFunc = D3D11_COMPARISON_LESS;
+			// DepthStencilState
+			D3D11_DEPTH_STENCIL_DESC dssDesc = {};
+			dssDesc.DepthFunc = D3D11_COMPARISON_LESS;
 
-			desc.DepthEnable    = TRUE;
-			desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-			dev->CreateDepthStencilState(&desc, &dssReadWrite_);
+			dssDesc.DepthEnable    = TRUE;
+			dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+			dev->CreateDepthStencilState(&dssDesc, &dssReadWrite_);
 
-			desc.DepthEnable    = TRUE;
-			desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-			dev->CreateDepthStencilState(&desc, &dssReadOnly_);
+			dssDesc.DepthEnable    = TRUE;
+			dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+			dev->CreateDepthStencilState(&dssDesc, &dssReadOnly_);
 
-			desc.DepthEnable    = FALSE;
-			desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-			dev->CreateDepthStencilState(&desc, &dssDisabled_);
+			dssDesc.DepthEnable    = FALSE;
+			dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+			dev->CreateDepthStencilState(&dssDesc, &dssDisabled_);
+
+			// BlendState
+			D3D11_BLEND_DESC blendDesc = {};
+			blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+			// Opaque
+			blendDesc.RenderTarget[0].BlendEnable = FALSE;
+			dev->CreateBlendState(&blendDesc, &bsOpaque_);
+
+			// AlphaBlend: src.a * src + (1 - src.a) * dst
+			blendDesc.RenderTarget[0].BlendEnable    = TRUE;
+			blendDesc.RenderTarget[0].SrcBlend       = D3D11_BLEND_SRC_ALPHA;
+			blendDesc.RenderTarget[0].DestBlend      = D3D11_BLEND_INV_SRC_ALPHA;
+			blendDesc.RenderTarget[0].BlendOp        = D3D11_BLEND_OP_ADD;
+			blendDesc.RenderTarget[0].SrcBlendAlpha  = D3D11_BLEND_ONE;
+			blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+			blendDesc.RenderTarget[0].BlendOpAlpha   = D3D11_BLEND_OP_ADD;
+			dev->CreateBlendState(&blendDesc, &bsAlphaBlend_);
+
+			// Additive: src.a * src + dst
+			blendDesc.RenderTarget[0].SrcBlend       = D3D11_BLEND_SRC_ALPHA;
+			blendDesc.RenderTarget[0].DestBlend      = D3D11_BLEND_ONE;
+			blendDesc.RenderTarget[0].SrcBlendAlpha  = D3D11_BLEND_ONE;
+			blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+			dev->CreateBlendState(&blendDesc, &bsAdditive_);
+
+			// Premultiplied: src (already premultiplied) + (1 - src.a) * dst
+			blendDesc.RenderTarget[0].SrcBlend       = D3D11_BLEND_ONE;
+			blendDesc.RenderTarget[0].DestBlend      = D3D11_BLEND_INV_SRC_ALPHA;
+			blendDesc.RenderTarget[0].SrcBlendAlpha  = D3D11_BLEND_ONE;
+			blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+			dev->CreateBlendState(&blendDesc, &bsPremultiplied_);
+
+			// RasterizerState (ScissorEnable あり / なし)
+			D3D11_RASTERIZER_DESC rsDesc = {};
+			rsDesc.FillMode              = D3D11_FILL_SOLID;
+			rsDesc.CullMode              = D3D11_CULL_NONE;
+			rsDesc.DepthClipEnable       = TRUE;
+			rsDesc.ScissorEnable         = FALSE;
+			dev->CreateRasterizerState(&rsDesc, &rsDefault_);
+
+			rsDesc.ScissorEnable = TRUE;
+			dev->CreateRasterizerState(&rsDesc, &rsScissor_);
 		}
 
 
 		D3D11RenderContextImpl::~D3D11RenderContextImpl()
 		{
-			if (dssReadWrite_) { dssReadWrite_->Release(); dssReadWrite_ = nullptr; }
-			if (dssReadOnly_)  { dssReadOnly_->Release();  dssReadOnly_  = nullptr; }
-			if (dssDisabled_)  { dssDisabled_->Release();  dssDisabled_  = nullptr; }
+			if (dssReadWrite_)    { dssReadWrite_->Release();    dssReadWrite_    = nullptr; }
+			if (dssReadOnly_)     { dssReadOnly_->Release();     dssReadOnly_     = nullptr; }
+			if (dssDisabled_)     { dssDisabled_->Release();     dssDisabled_     = nullptr; }
+			if (bsOpaque_)        { bsOpaque_->Release();        bsOpaque_        = nullptr; }
+			if (bsAlphaBlend_)    { bsAlphaBlend_->Release();    bsAlphaBlend_    = nullptr; }
+			if (bsAdditive_)      { bsAdditive_->Release();      bsAdditive_      = nullptr; }
+			if (bsPremultiplied_) { bsPremultiplied_->Release(); bsPremultiplied_ = nullptr; }
+			if (rsDefault_)       { rsDefault_->Release();       rsDefault_        = nullptr; }
+			if (rsScissor_)       { rsScissor_->Release();       rsScissor_        = nullptr; }
 		}
 
 
@@ -97,6 +147,33 @@ namespace aq
 				case DepthMode::Disabled:  dss = dssDisabled_;  break;
 			}
 			context_->OMSetDepthStencilState(dss, 0);
+		}
+
+
+		void D3D11RenderContextImpl::OMSetBlendMode(BlendMode mode)
+		{
+			ID3D11BlendState* bs = nullptr;
+			switch (mode) {
+				case BlendMode::Opaque:        bs = bsOpaque_;        break;
+				case BlendMode::AlphaBlend:    bs = bsAlphaBlend_;    break;
+				case BlendMode::Additive:      bs = bsAdditive_;      break;
+				case BlendMode::Premultiplied: bs = bsPremultiplied_; break;
+			}
+			const float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
+			context_->OMSetBlendState(bs, blendFactor, 0xFFFFFFFF);
+		}
+
+
+		void D3D11RenderContextImpl::RSSetScissorEnabled(bool enabled)
+		{
+			context_->RSSetState(enabled ? rsScissor_ : rsDefault_);
+		}
+
+
+		void D3D11RenderContextImpl::RSSetScissorRect(int x, int y, int w, int h)
+		{
+			D3D11_RECT rect = { x, y, x + w, y + h };
+			context_->RSSetScissorRects(1, &rect);
 		}
 
 
@@ -187,7 +264,7 @@ namespace aq
 
 		void D3D11RenderContextImpl::PSSetShaderResource(uint32_t startSlot, IShaderResourceView& srv)
 		{
-			auto* d3dSRV = static_cast<ShaderResourceView&>(srv).GetBody();
+			auto* d3dSRV = static_cast<ID3D11ShaderResourceView*>(srv.GetNativeHandle());
 			context_->PSSetShaderResources(startSlot, 1, &d3dSRV);
 		}
 

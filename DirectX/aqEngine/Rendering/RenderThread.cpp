@@ -148,7 +148,8 @@ namespace aq
 						slots_[slot]->lightingCB.get(),
 						slots_[slot]->shadowCB.get(),
 						&slots_[slot]->bonesPool,
-						&slots_[slot]->oceanPool
+						&slots_[slot]->oceanPool,
+						slots_[slot]->displayRT
 					};
 					list->Execute(*context_, fc);
 					list->Reset();  // shared_ptr を解放し、アリーナカーソルをリセット

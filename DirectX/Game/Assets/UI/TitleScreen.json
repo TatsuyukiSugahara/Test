@@ -1,0 +1,89 @@
+{
+  "name": "TitleScreen",
+  "components": {
+    "transform": {
+      "sizeDelta": [1920, 1080],
+      "anchor": { "min": [0.0, 0.0], "max": [1.0, 1.0] },
+      "pivot": [0.5, 0.5]
+    },
+    "canvas": {
+      "resolution": [1920, 1080],
+      "sortOrder": 0
+    }
+  },
+  "children": [
+    {
+      "name": "Background",
+      "components": {
+        "transform": {
+          "position": [0, 0, 0],
+          "sizeDelta": [1920, 1080],
+          "anchor": { "min": [0.0, 0.0], "max": [1.0, 1.0] }
+        },
+        "image": {
+          "texture": "Assets/UI/Textures/title_bg.dds",
+          "color": [1.0, 1.0, 1.0, 1.0]
+        }
+      }
+    },
+    {
+      "name": "HpGauge",
+      "components": {
+        "transform": {
+          "position": [60, 60, 0],
+          "sizeDelta": [400, 32],
+          "anchor": { "min": [0.0, 0.0], "max": [0.0, 0.0] }
+        },
+        "nineSlice": {
+          "texture": "Assets/UI/Textures/gauge_fill.dds",
+          "border": { "left": 8, "right": 8, "top": 4, "bottom": 4 },
+          "color": [0.2, 1.0, 0.3, 1.0],
+          "fillAmount": 0.75,
+          "fillDir": "Right"
+        }
+      }
+    },
+    {
+      "name": "BossGauge",
+      "components": {
+        "transform": {
+          "position": [960, 900, 0],
+          "sizeDelta": [128, 128],
+          "anchor": { "min": [0.5, 1.0], "max": [0.5, 1.0] }
+        },
+        "circleGauge": {
+          "texture": "Assets/UI/Textures/circle_gauge.dds",
+          "color": [1.0, 0.3, 0.2, 1.0],
+          "fillAmount": 0.6,
+          "startAngle": 0.0,
+          "clockwise": true
+        }
+      }
+    },
+    {
+      "ref": "Assets/UI/Prefabs/Button.json",
+      "overrides": {
+        "name": "StartButton",
+        "components": {
+          "transform": {
+            "position": [960, 700, 0]
+          }
+        }
+      }
+    },
+    {
+      "ref": "Assets/UI/Prefabs/Button.json",
+      "overrides": {
+        "name": "QuitButton",
+        "components": {
+          "transform": {
+            "position": [960, 800, 0]
+          },
+          "nineSlice": {
+            "color": [0.8, 0.8, 0.8, 1.0]
+          }
+        }
+      }
+    }
+  ]
+}

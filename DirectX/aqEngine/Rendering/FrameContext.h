@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include "Graphics/IBuffer.h"
+#include "Rendering/RenderTargetHandle.h"
 
 namespace aq
 {
@@ -62,6 +63,7 @@ namespace aq
 			graphics::IConstantBuffer* shadowCB       = nullptr; // b3: per-frame shadow data
 			IConstantBufferPool*       bonesCBPool    = nullptr; // b4: bone matrices (skeletal mesh)
 			IConstantBufferPool*       oceanCBPool    = nullptr; // b5: OceanCBData (海描画用)
+			RenderTargetHandle         displayRT;               // ポストプロセス後の確定 RT (UI 描画先)
 		};
 	}
 }

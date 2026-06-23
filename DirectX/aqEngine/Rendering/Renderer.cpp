@@ -97,6 +97,11 @@ namespace aq
 					static_cast<uint32_t>(viewportW),
 					static_cast<uint32_t>(viewportH));
 			}
+
+			// Pass 6: UI (ポストプロセス後・ImGui 前に描画)
+			if (uiRenderCallback_) {
+				uiRenderCallback_(outList);
+			}
 		}
 
 

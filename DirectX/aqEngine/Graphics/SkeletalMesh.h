@@ -45,6 +45,7 @@ namespace aq
 			res::RefSkeletalMeshResource skeletalMeshResource_;
 			res::RefShaderResource       vsShaderResource_;
 			res::RefShaderResource       psShaderResource_;
+			res::RefShaderResource       gbufferPSShaderResource_;
 
 			res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 

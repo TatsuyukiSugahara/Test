@@ -24,12 +24,7 @@ namespace aq
 			explicit SetRenderTargetCommand(RenderTargetHandle handle)
 				: numViews_(1) { handles_[0] = handle; }
 
-			/**
-			 * MRT用コンストラクタ。numViews は [1, MAX_MRT] の範囲であること。
-			 * DX11 は現在 handles_[0] のみ使用。フル MRT 対応は
-			 * IRenderContextImpl::OMSetRenderTargets が IRenderTarget* 配列を
-			 * 受け取れるようになってから行う。
-			 */
+			/** MRT用コンストラクタ。numViews は [1, MAX_MRT] の範囲であること。 */
 			SetRenderTargetCommand(uint32_t numViews, const RenderTargetHandle* handles);
 
 			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;
@@ -37,6 +32,23 @@ namespace aq
 		private:
 			uint32_t           numViews_ = 0;
 			RenderTargetHandle handles_[MAX_MRT];
+		};
+
+
+		/** colorRT のカラーに depthSourceRT の深度を組み合わせてバインドする。
+		 *  Forward pass で GBuffer0 の深度を scene RT に差し込む際に使用する。 */
+		class SetRenderTargetWithDepthCommand final : public IRenderCommand
+		{
+		public:
+			SetRenderTargetWithDepthCommand(RenderTargetHandle colorHandle,
+			                                RenderTargetHandle depthHandle)
+				: colorHandle_(colorHandle), depthHandle_(depthHandle) {}
+
+			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;
+
+		private:
+			RenderTargetHandle colorHandle_;
+			RenderTargetHandle depthHandle_;
 		};
 
 
@@ -53,6 +65,15 @@ namespace aq
 		private:
 			uint32_t index_;
 			float    color_[4];
+		};
+
+
+		/** バインド中の深度バッファを 1.0 でクリアする。
+		 *  ClearRenderTargetCommand (カラーのみ) と対で使う。 */
+		class ClearDepthCommand final : public IRenderCommand
+		{
+		public:
+			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;
 		};
 
 

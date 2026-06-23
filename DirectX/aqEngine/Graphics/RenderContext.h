@@ -42,6 +42,18 @@ namespace aq
 			{
 				impl_->OMSetRenderTargets(numViews, renderTarget);
 			}
+			void OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets)
+			{
+				impl_->OMSetMRTRenderTargets(numViews, renderTargets);
+			}
+			void OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT)
+			{
+				impl_->OMSetRenderTargetWithDepth(colorRT, depthSourceRT);
+			}
+			void OMSetDepthMode(DepthMode mode)
+			{
+				impl_->OMSetDepthMode(mode);
+			}
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height)
 			{
 				impl_->RSSetViewport(topLeftX, topLeftY, width, height);
@@ -49,6 +61,10 @@ namespace aq
 			void ClearRenderTargetView(uint32_t index, float* clearColor)
 			{
 				impl_->ClearRenderTargetView(index, clearColor);
+			}
+			void ClearDepthBuffer()
+			{
+				impl_->ClearDepthBuffer();
 			}
 
 			void IASetVertexBuffer(IVertexBuffer& vertexBuffer)

@@ -197,6 +197,10 @@
     <ClCompile Include="Rendering\PostProcess\BloomPassCommand.cpp" />
     <ClCompile Include="Rendering\PostProcess\BloomRenderer.cpp" />
     <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp" />
+    <ClCompile Include="Rendering\Deferred\DeferredRenderer.cpp" />
+    <ClCompile Include="Rendering\Deferred\GBufferItemCommand.cpp" />
+    <ClCompile Include="Rendering\Deferred\DeferredLightingCommand.cpp" />
+    <ClCompile Include="Rendering\Deferred\DeferredDebugPanel.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Terrain\HeightmapPainter.cpp" />
     <ClCompile Include="Terrain\SplatmapPainter.cpp" />
@@ -318,6 +322,11 @@
     <ClInclude Include="Ocean\OceanDebugPanel.h" />
     <ClInclude Include="Component\OceanComponent.h" />
     <ClInclude Include="Rendering\OceanDrawCommand.h" />
+    <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h" />
+    <ClInclude Include="Rendering\Deferred\DeferredRenderer.h" />
+    <ClInclude Include="Rendering\Deferred\GBufferItemCommand.h" />
+    <ClInclude Include="Rendering\Deferred\DeferredLightingCommand.h" />
+    <ClInclude Include="Rendering\Deferred\DeferredDebugPanel.h" />
     <ClInclude Include="Util\CRC32.h" />
     <ClInclude Include="Util\GameTimer.h" />
     <ClInclude Include="Util\ThreadPool.h" />

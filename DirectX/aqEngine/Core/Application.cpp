@@ -27,6 +27,7 @@
 #include "DebugUI.h"
 #include "Ocean/OceanDebugPanel.h"
 #include "Rendering/RenderingDebugPanel.h"
+#include "Rendering/Deferred/DeferredRenderer.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/SceneHierarchySystem.h"
 #endif
@@ -130,6 +131,18 @@ namespace aq
 			if (auto* sr = renderer_.GetShadowRenderer())
 			{
 				auto panel = sr->CreateDebugPanel();
+				if (panel)
+				{
+					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
+					renderingDebugPanel_->TakeOwnership(std::move(panel));
+				}
+			}
+
+			// GBuffer / Shadow テクスチャビューア — ディファードが有効な場合のみ
+			if (auto* dr = dynamic_cast<rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer()))
+			{
+				auto* sr = renderer_.GetShadowRenderer();
+				auto panel = dr->CreateDebugPanel(sr);
 				if (panel)
 				{
 					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
@@ -286,6 +299,7 @@ namespace aq
 		auto mainCmdList = std::make_unique<aq::rendering::RenderCommandList>();
 		mainCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(Engine::Get().GetMainRenderTargetHandle());
 		mainCmdList->Enqueue<aq::rendering::ClearRenderTargetCommand>(0u, clearColor);
+		mainCmdList->Enqueue<aq::rendering::ClearDepthCommand>();
 		mainCmdList->Enqueue<aq::rendering::SetViewportCommand>(0.0f, 0.0f, renderW, renderH);
 		aq::rendering::RenderFrame mainFrame;
 		mainFrame.lighting = aq::graphics::LightManager::Get().GetLightingData();

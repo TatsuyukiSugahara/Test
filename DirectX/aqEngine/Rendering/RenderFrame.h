@@ -55,6 +55,8 @@ namespace aq
 			std::shared_ptr<graphics::ISamplerState>  samplerState;
 			std::shared_ptr<graphics::IShader>        vs;
 			std::shared_ptr<graphics::IShader>        ps;
+			/** G-Buffer パス専用 PS。nullptr = forward-only アイテム。 */
+			std::shared_ptr<graphics::IShader>        gbufferPS;
 
 			std::shared_ptr<graphics::IShaderResourceView>
 				textures[static_cast<uint32_t>(TextureSlot::Count)];
@@ -89,10 +91,11 @@ namespace aq
 			CameraData                   camera;
 			graphics::LightingData       lighting;
 			ShadowCBData                 shadow;
-			std::vector<RenderItem>      items;
-			std::vector<OceanRenderItem> oceanItems;  // 海描画用
+			std::vector<RenderItem>      items;        // deferred (opaque, gbufferPS あり)
+			std::vector<RenderItem>      forwardItems;  // forward  (透明・特殊マテリアル)
+			std::vector<OceanRenderItem> oceanItems;   // 海描画用
 
-			void Clear() { items.clear(); oceanItems.clear(); }
+			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); }
 		};
 	}
 }

@@ -40,6 +40,9 @@
     <Filter Include="Rendering\Shadow">
       <UniqueIdentifier>{f0e1d2c3-b4a5-9678-01ef-234567890abc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\Deferred">
+      <UniqueIdentifier>{b2c3d4e5-f6a7-8901-bcde-f01234567890}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Rendering\PostProcess">
       <UniqueIdentifier>{a1e2f3b4-c5d6-7890-ef12-34567890abcd}</UniqueIdentifier>
     </Filter>
@@ -220,6 +223,18 @@
     </ClCompile>
     <ClCompile Include="Rendering\RenderThread.cpp">
       <Filter>Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Deferred\DeferredRenderer.cpp">
+      <Filter>Rendering\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Deferred\GBufferItemCommand.cpp">
+      <Filter>Rendering\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Deferred\DeferredLightingCommand.cpp">
+      <Filter>Rendering\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Deferred\DeferredDebugPanel.cpp">
+      <Filter>Rendering\Deferred</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp">
       <Filter>Rendering\PostProcess</Filter>
@@ -558,6 +573,21 @@
     </ClInclude>
     <ClInclude Include="Rendering\RenderThread.h">
       <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h">
+      <Filter>Rendering\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Deferred\DeferredRenderer.h">
+      <Filter>Rendering\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Deferred\GBufferItemCommand.h">
+      <Filter>Rendering\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Deferred\DeferredLightingCommand.h">
+      <Filter>Rendering\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Deferred\DeferredDebugPanel.h">
+      <Filter>Rendering\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\BloomDebugPanel.h">
       <Filter>Rendering\PostProcess</Filter>

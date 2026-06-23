@@ -2,6 +2,7 @@
 #include "Renderer.h"
 #include "DrawItemCommand.h"
 #include "OceanDrawCommand.h"
+#include "FrameCommands.h"
 #include "FrameContext.h"
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsTypes.h"
@@ -31,6 +32,12 @@ namespace aq
 		}
 
 
+		void Renderer::SetDeferredRenderer(std::unique_ptr<IDeferredRenderer> dr)
+		{
+			deferredRenderer_ = std::move(dr);
+		}
+
+
 		RenderTargetHandle Renderer::GetDisplayRTHandle(RenderTargetHandle sceneRT) const
 		{
 			if (postProcessRenderer_) {
@@ -48,21 +55,42 @@ namespace aq
 			// Pass 1: シャドウパス
 			if (shadowRenderer_) {
 				shadowRenderer_->FillShadowCBData(frame.lighting.directional, frame.shadow);
-
 				shadowRenderer_->BuildShadowCommandList(frame, outList, rtHandle, viewportW, viewportH);
 			}
 
-			// Pass 2: メインパス
-			for (const RenderItem& item : frame.items) {
-				RecordDrawItem(item, frame.camera, outList);
+			if (deferredRenderer_)
+			{
+				// Pass 2a: G-Buffer パス（deferred items を MRT に書き込む）
+				deferredRenderer_->BuildGBufferCommandList(frame, outList);
+
+				// Pass 2b: ディファードライティングパス（シーン RT に書き込む）
+				deferredRenderer_->BuildLightingCommandList(frame, outList, rtHandle);
+
+				// Pass 3: フォワードパス（透明・特殊マテリアル）
+				// GBuffer0 の depth を使って深度テストしながら描画する
+				const RenderTargetHandle gbuffer0 = deferredRenderer_->GetGBuffer0Handle();
+				outList.Enqueue<SetRenderTargetWithDepthCommand>(rtHandle, gbuffer0);
+				for (const RenderItem& item : frame.forwardItems) {
+					RecordDrawItem(item, frame.camera, outList);
+				}
+			}
+			else
+			{
+				// ディファードなし: 全アイテムをフォワードで描画
+				for (const RenderItem& item : frame.items) {
+					RecordDrawItem(item, frame.camera, outList);
+				}
+				for (const RenderItem& item : frame.forwardItems) {
+					RecordDrawItem(item, frame.camera, outList);
+				}
 			}
 
-			// Pass 2.5: 海パス (メインパスの後、ポストプロセスの前)
+			// Pass 4: 海パス（フォワードパスの後、ポストプロセスの前）
 			for (const OceanRenderItem& item : frame.oceanItems) {
 				outList.Enqueue<OceanDrawCommand>(item, frame.camera);
 			}
 
-			// Pass 3: ポストプロセス（メインパスのみ）
+			// Pass 5: ポストプロセス
 			if (postProcessRenderer_ && applyPostProcess) {
 				postProcessRenderer_->BuildPostProcessCommandList(
 					outList, rtHandle,

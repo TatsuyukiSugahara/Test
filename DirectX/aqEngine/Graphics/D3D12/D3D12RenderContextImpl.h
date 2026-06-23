@@ -52,6 +52,10 @@ namespace aq
 			~D3D12RenderContextImpl() override = default;
 
 			void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget) override;
+			void OMSetMRTRenderTargets(uint32_t, IRenderTarget* const*) override {}
+			void OMSetRenderTargetWithDepth(IRenderTarget&, IRenderTarget&) override {}
+			void OMSetDepthMode(DepthMode) override {}
+			void ClearDepthBuffer() override {}
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height) override;
 			void ClearRenderTargetView(uint32_t index, float* clearColor) override;
 
@@ -77,6 +81,11 @@ namespace aq
 			void CSUnsetShaderResource(uint32_t slot) override;
 			void CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& uav) override;
 			void CSUnsetUnorderedAccessView(uint32_t slot) override;
+
+			void OMSetDepthOnlyTarget(IDepthMap&) override {}
+			void ClearDepthMap(IDepthMap&) override {}
+			void PSUnsetShader() override {}
+			void PSSetSampler(uint32_t, ISamplerState&) override {}
 
 			void Draw(uint32_t vertexCount, uint32_t startVertexLocation) override;
 			void DrawIndexed(uint32_t indexCount) override;

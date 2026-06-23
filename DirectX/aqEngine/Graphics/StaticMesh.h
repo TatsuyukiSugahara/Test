@@ -49,6 +49,8 @@ namespace aq
 			bool           castShadow_    = false;
 			bool           receiveShadow_ = false;
 
+			aq::res::RefShaderResource gbufferPSShaderResource_;
+
 		public:
 			StaticMesh();
 			~StaticMesh();
@@ -93,6 +95,8 @@ namespace aq
 				if (enable) materialCB_.flags |=  static_cast<uint32_t>(flag);
 				else        materialCB_.flags &= ~static_cast<uint32_t>(flag);
 			}
+
+			ShaderType GetShaderType() const { return shaderType_; }
 
 			/**
 			 * 描画に必要な情報を RenderItem へコピーする。

@@ -35,19 +35,22 @@ float CalcAttenuation(float dist, float range)
     return x * x;
 }
 
-// ライティング計算本体
-// albedo    : アルベドカラー (linear)
-// specMask  : スペキュラ強度マスク [0, 1]
-// emissive  : エミッシブカラー (linear)
-float3 ComputeLighting(
+// ライティング計算コア。材質値をすべて引数で受け取る。
+// フォワード (MaterialCB から渡す) とディファード (GBuffer から渡す) の両方で使える。
+// preScaledEmissive : emissive * emissiveScale 済みの値
+// gloss             : [0,1] の gloss 値 (同名の MaterialCB グローバルを隠す)
+// specularIntensity : スペキュラ強度    (同名の MaterialCB グローバルを隠す)
+float3 ComputeLightingEx(
     float3 worldPos,
     float3 N,
     float3 albedo,
     float  specMask,
-    float3 emissive)
+    float3 preScaledEmissive,
+    float  gloss,
+    float  specularIntensity)
 {
     float3 V        = normalize(cameraPosition - worldPos);
-    float  shininess = exp2(gloss * 10.0 + 1.0);  // gloss [0,1] → shininess
+    float  shininess = exp2(gloss * 10.0 + 1.0);
 
     // Ambient
     float3 color = ambient.color * ambient.intensity * albedo;
@@ -73,6 +76,23 @@ float3 ComputeLighting(
         color += CalcSpecular(N, H, pointLights[i].color, intens * specularIntensity, shininess, specMask);
     }
 
-    color += emissive * emissiveScale;
+    color += preScaledEmissive;
     return color;
+}
+
+// フォワードシェーダー用ラッパー。MaterialCB のグローバル値を使う。
+// 既存の ModelLit / TerrainLit / SkeletalModelLit 等は変更なしで呼び続けられる。
+// albedo    : アルベドカラー (linear)
+// specMask  : スペキュラ強度マスク [0, 1]
+// emissive  : エミッシブカラー (linear、emissiveScale は内部で適用)
+float3 ComputeLighting(
+    float3 worldPos,
+    float3 N,
+    float3 albedo,
+    float  specMask,
+    float3 emissive)
+{
+    return ComputeLightingEx(worldPos, N, albedo, specMask,
+                             emissive * emissiveScale,
+                             gloss, specularIntensity);
 }

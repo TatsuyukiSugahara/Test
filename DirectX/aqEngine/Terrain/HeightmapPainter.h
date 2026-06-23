@@ -54,7 +54,7 @@ namespace aq
 			float     flattenTarget_ = 0.0f;     // [0,1] 正規化高さ
 			bool      enabled_        = false;    // ツール全体の有効フラグ
 			bool      paint3DEnabled_ = true;    // 3D ビュー直接ペイント有効フラグ
-			bool      show_           = true;    // ウィンドウ表示フラグ
+			bool      show_           = false;   // ウィンドウ表示フラグ（初期非表示）
 
 		private:
 			HeightmapChunk* chunk_       = nullptr;

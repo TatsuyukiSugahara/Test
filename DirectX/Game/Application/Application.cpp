@@ -11,6 +11,7 @@
 #include "Rendering/FrameCommands.h"
 #include "Rendering/Shadow/HardShadowRenderer.h"
 #include "Rendering/PostProcess/BloomRenderer.h"
+#include "Rendering/Deferred/DeferredRenderer.h"
 #include "Resource/Resource.h"
 #include "ECS/ECS.h"
 #include "ECS/ActorComponentSystem.h"
@@ -56,6 +57,18 @@ namespace app
 				renderer_.SetShadowRenderer(std::move(shadowRenderer),
 				                            aq::Engine::Get().GetMainRenderTargetHandle(),
 				                            renderW, renderH);
+			}
+		}
+
+		// Deferred Renderer
+		{
+			const uint32_t renderW = aq::Engine::Get().GetRenderWidth();
+			const uint32_t renderH = aq::Engine::Get().GetRenderHeight();
+
+			auto deferred = std::make_unique<aq::rendering::DeferredRenderer>();
+			if (deferred->Create(renderW, renderH))
+			{
+				renderer_.SetDeferredRenderer(std::move(deferred));
 			}
 		}
 
@@ -137,6 +150,7 @@ namespace app
 		auto offscreenCmdList = std::make_unique<aq::rendering::RenderCommandList>();
 		offscreenCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(offscreenRTHandle_);
 		offscreenCmdList->Enqueue<aq::rendering::ClearRenderTargetCommand>(0u, clearColor);
+		offscreenCmdList->Enqueue<aq::rendering::ClearDepthCommand>();
 		offscreenCmdList->Enqueue<aq::rendering::SetViewportCommand>(
 			0.0f, 0.0f, kOffscreenRTWidth, kOffscreenRTHeight);
 

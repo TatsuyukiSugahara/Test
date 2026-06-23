@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "D3D11RenderContextImpl.h"
+#include "D3D11GraphicsDeviceImpl.h"
 #include "D3D11RenderResources.h"
 #include "D3D11Buffers.h"
 #include "D3D11Shader.h"
@@ -17,6 +18,30 @@ namespace aq
 			, depthStencilView_(nullptr)
 			, renderTargetViewNum_(0)
 		{
+			ID3D11Device* dev = D3D11GraphicsDeviceImpl::GetStaticDevice();
+
+			D3D11_DEPTH_STENCIL_DESC desc = {};
+			desc.DepthFunc = D3D11_COMPARISON_LESS;
+
+			desc.DepthEnable    = TRUE;
+			desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+			dev->CreateDepthStencilState(&desc, &dssReadWrite_);
+
+			desc.DepthEnable    = TRUE;
+			desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+			dev->CreateDepthStencilState(&desc, &dssReadOnly_);
+
+			desc.DepthEnable    = FALSE;
+			desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+			dev->CreateDepthStencilState(&desc, &dssDisabled_);
+		}
+
+
+		D3D11RenderContextImpl::~D3D11RenderContextImpl()
+		{
+			if (dssReadWrite_) { dssReadWrite_->Release(); dssReadWrite_ = nullptr; }
+			if (dssReadOnly_)  { dssReadOnly_->Release();  dssReadOnly_  = nullptr; }
+			if (dssDisabled_)  { dssDisabled_->Release();  dssDisabled_  = nullptr; }
 		}
 
 
@@ -37,6 +62,44 @@ namespace aq
 		}
 
 
+		void D3D11RenderContextImpl::OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets)
+		{
+			memory::Clear(renderTargetViews_, sizeof(renderTargetViews_));
+			depthStencilView_ = nullptr;
+			for (uint32_t i = 0; i < numViews; ++i) {
+				auto* rt = static_cast<RenderTarget*>(renderTargets[i]);
+				renderTargetViews_[i] = rt ? rt->GetrenderTargetView() : nullptr;
+			}
+			if (renderTargets[0]) {
+				depthStencilView_ = static_cast<RenderTarget*>(renderTargets[0])->GetDepthStencilView();
+			}
+			context_->OMSetRenderTargets(numViews, renderTargetViews_, depthStencilView_);
+			renderTargetViewNum_ = numViews;
+		}
+
+
+		void D3D11RenderContextImpl::OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT)
+		{
+			memory::Clear(renderTargetViews_, sizeof(renderTargetViews_));
+			renderTargetViews_[0] = static_cast<RenderTarget&>(colorRT).GetrenderTargetView();
+			depthStencilView_     = static_cast<RenderTarget&>(depthSourceRT).GetDepthStencilView();
+			context_->OMSetRenderTargets(1, renderTargetViews_, depthStencilView_);
+			renderTargetViewNum_ = 1;
+		}
+
+
+		void D3D11RenderContextImpl::OMSetDepthMode(DepthMode mode)
+		{
+			ID3D11DepthStencilState* dss = nullptr;
+			switch (mode) {
+				case DepthMode::ReadWrite: dss = dssReadWrite_; break;
+				case DepthMode::ReadOnly:  dss = dssReadOnly_;  break;
+				case DepthMode::Disabled:  dss = dssDisabled_;  break;
+			}
+			context_->OMSetDepthStencilState(dss, 0);
+		}
+
+
 		void D3D11RenderContextImpl::RSSetViewport(float topLeftX, float topLeftY, float width, float height)
 		{
 			viewport_.Width    = width;
@@ -53,6 +116,13 @@ namespace aq
 		{
 			if (renderTargetViews_ && index < renderTargetViewNum_) {
 				context_->ClearRenderTargetView(renderTargetViews_[index], clearColor);
+			}
+		}
+
+
+		void D3D11RenderContextImpl::ClearDepthBuffer()
+		{
+			if (depthStencilView_) {
 				context_->ClearDepthStencilView(depthStencilView_, D3D11_CLEAR_DEPTH, 1.0f, 0);
 			}
 		}

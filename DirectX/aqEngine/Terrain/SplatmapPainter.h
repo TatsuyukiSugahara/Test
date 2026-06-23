@@ -36,7 +36,7 @@ namespace aq
 			float     brushStrength_ = 0.3f;
 			bool      enabled_        = false;
 			bool      paint3DEnabled_ = true;
-			bool      show_           = true;    // ウィンドウ表示フラグ
+			bool      show_           = false;   // ウィンドウ表示フラグ（初期非表示）
 
 		private:
 			HeightmapChunk* chunk_ = nullptr;

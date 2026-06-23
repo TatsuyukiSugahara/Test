@@ -16,13 +16,16 @@ namespace aq
 				const char* vsFuncName;
 				const char* psFilePath;
 				const char* psFuncName;
+				// G-Buffer パス専用 PS。nullptr = forward-only（ディファード不要）
+				const char* gbufferPSFilePath;
+				const char* gbufferPSFuncName;
 			};
 			ShaderInformation shaderInformations[] = {
-				{ "Assets/Shader/Model.fx",      "VSMain", "Assets/Shader/Model.fx",      "PSMain" },
-				{ "Assets/Shader/SimpleBox.fx",  "VSMain", "Assets/Shader/SimpleBox.fx",  "PSMain" },
-				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain" },
-				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain" },
-				{ "Assets/Shader/OceanLit.fx",   "VSMain", "Assets/Shader/OceanLit.fx",   "PSMain" },
+				{ "Assets/Shader/Model.fx",      "VSMain", "Assets/Shader/Model.fx",      "PSMain", nullptr,                                nullptr   },  // NormalModel
+				{ "Assets/Shader/SimpleBox.fx",  "VSMain", "Assets/Shader/SimpleBox.fx",  "PSMain", nullptr,                                nullptr   },  // SimpleBox
+				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain", "Assets/Shader/GBufferLit.fx",          "PSMain"  },  // ModelLit
+				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain", "Assets/Shader/TerrainGBufferLit.fx",   "PSMain"  },  // TerrainLit
+				{ "Assets/Shader/OceanLit.fx",   "VSMain", "Assets/Shader/OceanLit.fx",   "PSMain", nullptr,                                nullptr   },  // OceanLit
 			};
 		}
 
@@ -110,6 +113,17 @@ namespace aq
 			vsShaderResource_ = aq::res::ResourceManager::Get().LoadShader(info.vsFilePath, info.vsFuncName, IShader::ShaderType::VS);
 			psShaderResource_ = aq::res::ResourceManager::Get().LoadShader(info.psFilePath, info.psFuncName, IShader::ShaderType::PS);
 
+			// G-Buffer PS はディファード対象シェーダーのみロード（パスが nullptr なら forward-only）
+			if (info.gbufferPSFilePath != nullptr)
+			{
+				gbufferPSShaderResource_ = aq::res::ResourceManager::Get().LoadShader(
+					info.gbufferPSFilePath, info.gbufferPSFuncName, IShader::ShaderType::PS);
+			}
+			else
+			{
+				gbufferPSShaderResource_.reset();
+			}
+
 			const bool hasAlbedo = gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Albedo)] != nullptr;
 			if (hasAlbedo)
 			{
@@ -188,6 +202,19 @@ namespace aq
 
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
+
+			// ディファード対象なら G-Buffer PS をセット（エイリアシングで寿命を繋げる）
+			if (gbufferPSShaderResource_ && gbufferPSShaderResource_->IsCompleted())
+			{
+				IShader* rawPS = gbufferPSShaderResource_->GetShader();
+				item.gbufferPS = rawPS
+					? std::shared_ptr<IShader>(gbufferPSShaderResource_, rawPS)
+					: nullptr;
+			}
+			else
+			{
+				item.gbufferPS.reset();
+			}
 
 			// TerrainLit は splat あり/なし問わず t1 (layer0/grass) を必ず sample するため、
 			// t1 が未ロードなら描画をスキップする。HasSplatMap の有無に依存しない。

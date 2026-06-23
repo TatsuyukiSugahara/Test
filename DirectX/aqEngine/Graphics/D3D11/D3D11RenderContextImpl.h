@@ -16,11 +16,15 @@ namespace aq
 		{
 		public:
 			explicit D3D11RenderContextImpl(ID3D11DeviceContext* context);
-			~D3D11RenderContextImpl() override = default;
+			~D3D11RenderContextImpl() override;
 
 			void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget) override;
+			void OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets) override;
+			void OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT) override;
+			void OMSetDepthMode(DepthMode mode) override;
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height) override;
 			void ClearRenderTargetView(uint32_t index, float* clearColor) override;
+			void ClearDepthBuffer() override;
 
 			void IASetVertexBuffer(IVertexBuffer& vertexBuffer) override;
 			void IASetIndexBuffer(IIndexBuffer& indexBuffer) override;
@@ -70,6 +74,11 @@ namespace aq
 			ID3D11RenderTargetView* renderTargetViews_[MAX_MRT_NUM];
 			ID3D11DepthStencilView* depthStencilView_;
 			uint32_t                renderTargetViewNum_;
+
+			// DepthMode ごとの DSS。コンストラクタで生成、デストラクタで解放。
+			ID3D11DepthStencilState* dssReadWrite_ = nullptr;
+			ID3D11DepthStencilState* dssReadOnly_  = nullptr;
+			ID3D11DepthStencilState* dssDisabled_  = nullptr;
 		};
 	}
 }

@@ -41,7 +41,14 @@ namespace aq
 		{
 			outList.Enqueue<ShadowBeginCommand>(*depthMap_, settings_.resolution);
 
+			// ディファードアイテム（opaque）
 			for (const RenderItem& item : frame.items) {
+				if (item.castShadow) {
+					outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
+				}
+			}
+			// フォワードアイテム（透明・特殊）も影を落とす場合はキャスト
+			for (const RenderItem& item : frame.forwardItems) {
 				if (item.castShadow) {
 					outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
 				}

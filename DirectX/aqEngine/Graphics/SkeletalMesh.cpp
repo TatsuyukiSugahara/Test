@@ -17,11 +17,15 @@ namespace aq
 				const char* vsFuncName;
 				const char* psFilePath;
 				const char* psFuncName;
+				// G-Buffer パス専用 PS。nullptr = forward-only（ディファード不要）
+				const char* gbufferPSFilePath;
+				const char* gbufferPSFuncName;
 			};
 			// SkeletalMesh 用シェーダー一覧
 			// TKM v101 (ボーンあり) 専用シェーダー。頂点レイアウトに BLENDWEIGHTS / BLENDINDICES が必要。
 			ShaderInformation skeletalShaderInformations[] = {
-				{ "Assets/Shader/SkeletalModelLit.fx", "VSMain", "Assets/Shader/SkeletalModelLit.fx", "PSMain" },
+				{ "Assets/Shader/SkeletalModelLit.fx", "VSMain", "Assets/Shader/SkeletalModelLit.fx", "PSMain",
+				  "Assets/Shader/SkeletalGBufferLit.fx", "PSMain" },  // SkeletalModelLit
 			};
 		}
 
@@ -84,6 +88,17 @@ namespace aq
 			psShaderResource_ = res::ResourceManager::Get().LoadShader(
 				info.psFilePath, info.psFuncName, IShader::ShaderType::PS);
 
+			// G-Buffer PS はディファード対象シェーダーのみロード（パスが nullptr なら forward-only）
+			if (info.gbufferPSFilePath != nullptr)
+			{
+				gbufferPSShaderResource_ = res::ResourceManager::Get().LoadShader(
+					info.gbufferPSFilePath, info.gbufferPSFuncName, IShader::ShaderType::PS);
+			}
+			else
+			{
+				gbufferPSShaderResource_.reset();
+			}
+
 			const bool hasAlbedo =
 				gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Albedo)] != nullptr;
 			if (hasAlbedo) {
@@ -144,9 +159,22 @@ namespace aq
 			        gpuResources_, indicesSize_, worldMatrix_, materialCB_))
 				return false;
 
-			item.castShadow   = castShadow_;
+			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
 			item.boneMatrices  = boneMatrices_;
+
+			// ディファード対象なら G-Buffer PS をセット（エイリアシングで寿命を繋げる）
+			if (gbufferPSShaderResource_ && gbufferPSShaderResource_->IsCompleted())
+			{
+				IShader* rawPS = gbufferPSShaderResource_->GetShader();
+				item.gbufferPS = rawPS
+					? std::shared_ptr<IShader>(gbufferPSShaderResource_, rawPS)
+					: nullptr;
+			}
+			else
+			{
+				item.gbufferPS.reset();
+			}
 
 			return true;
 		}

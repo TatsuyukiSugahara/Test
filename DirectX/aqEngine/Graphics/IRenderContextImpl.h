@@ -20,14 +20,25 @@ namespace aq
 		 * すべてのパラメータは API 非依存の抽象インターフェース型。
 		 * D3D11 実装クラスがこれを継承し、内部で GetNativeHandle() を使って D3D11 型にキャストする。
 		 */
+		enum class DepthMode : uint8_t
+		{
+			ReadWrite,  // depth test=LESS, write=ON  (既定)
+			ReadOnly,   // depth test=LESS, write=OFF
+			Disabled,   // DepthEnable=FALSE           (fullscreen pass 用)
+		};
+
 		class IRenderContextImpl
 		{
 		public:
 			virtual ~IRenderContextImpl() = default;
 
 			virtual void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget) = 0;
+			virtual void OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets) = 0;
+			virtual void OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT) = 0;
+			virtual void OMSetDepthMode(DepthMode mode) = 0;
 			virtual void RSSetViewport(float topLeftX, float topLeftY, float width, float height) = 0;
 			virtual void ClearRenderTargetView(uint32_t index, float* clearColor) = 0;
+			virtual void ClearDepthBuffer() = 0;
 
 			virtual void IASetVertexBuffer(IVertexBuffer& vertexBuffer) = 0;
 			virtual void IASetIndexBuffer(IIndexBuffer& indexBuffer) = 0;

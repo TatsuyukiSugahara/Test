@@ -2,6 +2,8 @@
 #include "BloomDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "BloomRenderer.h"
+#include "Graphics/GraphicsDevice.h"
+#include "Graphics/IRenderTarget.h"
 #include <imgui/imgui.h>
 
 namespace aq
@@ -31,6 +33,17 @@ namespace aq
 				renderer_.SetIntensity(intensity);
 			if (ImGui::SliderInt("Blur Passes", &passes, 1, 4))
 				renderer_.SetBlurPasses(static_cast<uint32_t>(passes));
+
+			// 輝度抽出テクスチャのプレビュー
+			ImGui::Separator();
+			auto* brightRT = graphics::GraphicsDevice::Get().GetRenderTarget(renderer_.GetBrightRTHandle());
+			if (brightRT)
+			{
+				const float w = ImGui::GetContentRegionAvail().x;
+				ImGui::Image((ImTextureID)brightRT->GetRenderTargetSRV().GetNativeHandle(),
+				             ImVec2(w, w * 0.5625f));  // 16:9 比率
+				ImGui::Text("Bright Extract (threshold: %.2f)", threshold);
+			}
 		}
 
 

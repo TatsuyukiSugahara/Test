@@ -411,39 +411,67 @@ namespace aq
 			// 現在の方針: 同じ描画対象を cameraType で指定した別カメラから映す。
 			// カメラごとに描画対象を絞りたい場合は RenderItem / Component 側に
 			// RenderLayer 等を追加して検討する。
+
+			// SimpleBox は forward-only（G-Buffer パスなし）
 			aq::ecs::Foreach<BoxStaticMeshComponent>([&frame](const aq::ecs::Entity&, BoxStaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
 					if (comp->GetStaticMesh()->FillRenderItem(item)) {
-						frame.items.push_back(item);
+						frame.forwardItems.push_back(item);
 					}
 				});
 
+			// ShaderType で deferred / forward を振り分け
 			aq::ecs::Foreach<StaticMeshComponent>([&frame](const aq::ecs::Entity&, StaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
-					if (comp->GetStaticMesh()->FillRenderItem(item)) {
-						frame.items.push_back(item);
+					if (!comp->GetStaticMesh()->FillRenderItem(item)) return;
+
+					using ShaderType = aq::graphics::StaticMesh::ShaderType;
+					switch (comp->GetStaticMesh()->GetShaderType())
+					{
+					case ShaderType::ModelLit:
+					case ShaderType::TerrainLit:
+						// gbufferPS 未ロード・失敗時はフォワードにフォールバック
+						if (item.gbufferPS)
+							frame.items.push_back(item);
+						else
+							frame.forwardItems.push_back(item);
+						break;
+					case ShaderType::NormalModel:
+					case ShaderType::SimpleBox:
+					case ShaderType::OceanLit:
+					default:
+						frame.forwardItems.push_back(item); // forward
+						break;
 					}
 				});
 
+			// Terrain は deferred（ステージオブジェクトのため G-Buffer に書き込む）
 			aq::ecs::Foreach<TerrainComponent>([&frame](const aq::ecs::Entity&, TerrainComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
 					if (comp->GetChunk()->FillRenderItem(item)) {
-						frame.items.push_back(item);
+						if (item.gbufferPS)
+							frame.items.push_back(item);
+						else
+							frame.forwardItems.push_back(item);
 					}
 				});
 
+			// SkeletalModelLit は deferred
 			aq::ecs::Foreach<SkeletalMeshComponent>([&frame](const aq::ecs::Entity&, SkeletalMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
 					if (comp->GetSkeletalMesh()->FillRenderItem(item)) {
-						frame.items.push_back(item);
+						if (item.gbufferPS)
+							frame.items.push_back(item);
+						else
+							frame.forwardItems.push_back(item);
 					}
 				});
 

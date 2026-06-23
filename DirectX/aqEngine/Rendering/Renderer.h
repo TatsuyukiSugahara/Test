@@ -5,6 +5,7 @@
 #include "RenderTargetHandle.h"
 #include "Shadow/IShadowRenderer.h"
 #include "PostProcess/IPostProcessRenderer.h"
+#include "Deferred/IDeferredRenderer.h"
 
 
 namespace aq
@@ -40,6 +41,10 @@ namespace aq
 			void SetPostProcessRenderer(std::unique_ptr<IPostProcessRenderer> pp);
 			IPostProcessRenderer* GetPostProcessRenderer() const { return postProcessRenderer_.get(); }
 
+			/** ディファードレンダラーを設定する。nullptr を渡すとフォワードのみになる。 */
+			void SetDeferredRenderer(std::unique_ptr<IDeferredRenderer> dr);
+			IDeferredRenderer* GetDeferredRenderer() const { return deferredRenderer_.get(); }
+
 			/**
 			 * ポストプロセスが設定されている場合はその最終出力 RT を、そうでなければ sceneRT を返す。
 			 * RenderThread::Submit の displayRT に渡す値を決めるために使う。
@@ -72,6 +77,7 @@ namespace aq
 
 			std::unique_ptr<IShadowRenderer>      shadowRenderer_;
 			std::unique_ptr<IPostProcessRenderer> postProcessRenderer_;
+			std::unique_ptr<IDeferredRenderer>    deferredRenderer_;
 			RenderTargetHandle                    mainRTHandle_;
 			float                                 mainViewportW_ = 0.f;
 			float                                 mainViewportH_ = 0.f;

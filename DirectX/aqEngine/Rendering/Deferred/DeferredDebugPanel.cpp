@@ -27,11 +27,11 @@ namespace aq
 			auto& gd = graphics::GraphicsDevice::Get();
 			const ImVec2 sz(previewSize_, previewSize_);
 
-			// GBuffer0: albedo.rgb + specMask
+			// GBuffer0: baseColor.rgb + metallic  (PBR)
 			auto* gb0 = gd.GetRenderTarget(deferred_.GetGBuffer0Handle());
-			// GBuffer1: N.xyz + gloss
+			// GBuffer1: N.xyz + roughness  (PBR)
 			auto* gb1 = gd.GetRenderTarget(deferred_.GetGBuffer1Handle());
-			// GBuffer2: worldPos.xyz + specularIntensity
+			// GBuffer2: worldPos.xyz + specular(F0)  (PBR)
 			auto* gb2 = gd.GetRenderTarget(deferred_.GetGBuffer2Handle());
 			// GBuffer3: emissive*scale + pixelTag
 			auto* gb3 = gd.GetRenderTarget(deferred_.GetGBuffer3Handle());
@@ -50,10 +50,10 @@ namespace aq
 			// 上段ラベル
 			if (gb0)
 			{
-				ImGui::Text("GBuffer0: Albedo (RGB) + SpecMask (A)");
+				ImGui::Text("GBuffer0: BaseColor (RGB) + Metallic (A)");
 				ImGui::SameLine(previewSize_ + 8.0f);
 			}
-			ImGui::Text("GBuffer1: Normal (RGB) + Gloss (A)");
+			ImGui::Text("GBuffer1: Normal (RGB) + Roughness (A)");
 
 			ImGui::Spacing();
 
@@ -71,7 +71,7 @@ namespace aq
 			// 下段ラベル
 			if (gb2)
 			{
-				ImGui::Text("GBuffer2: WorldPos (RGB) + SpecInt (A)");
+				ImGui::Text("GBuffer2: WorldPos (RGB) + Specular/F0 (A)");
 				ImGui::SameLine(previewSize_ + 8.0f);
 			}
 			ImGui::Text("GBuffer3: Emissive (RGB) + PixelTag (A)");

@@ -20,11 +20,13 @@ namespace aq
 		public:
 			enum class ShaderType
 			{
-				NormalModel,  // Model.fx    (ライトなし、後方互換)
-				SimpleBox,    // SimpleBox.fx
-				ModelLit,     // ModelLit.fx (フルライティング)
-				TerrainLit,   // TerrainLit.fx (スプラットマップ地形)
-				OceanLit,     // OceanLit.fx (Gerstner 波・Fresnel 海面)
+				NormalModel,   // Model.fx    (ライトなし、後方互換)
+				SimpleBox,     // SimpleBox.fx
+				ModelLit,      // ModelLit.fx (フォワード、Blinn-Phong)
+				TerrainLit,    // TerrainLit.fx (フォワード、スプラットマップ地形)
+				OceanLit,      // OceanLit.fx (Gerstner 波・Fresnel 海面)
+				PBRLit,        // PBRGBuffer.fx (ディファード PBR、static mesh)
+				TerrainPBRLit, // TerrainPBRGBuffer.fx (ディファード PBR、terrain)
 			};
 
 		private:
@@ -44,10 +46,11 @@ namespace aq
 			aq::res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 			std::shared_ptr<IShaderResourceView> textureOverrides_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 
-			MaterialCBData materialCB_;
-			ShaderType     shaderType_    = ShaderType::NormalModel;
-			bool           castShadow_    = false;
-			bool           receiveShadow_ = false;
+			MaterialCBData    materialCB_;
+			PBRMaterialCBData pbrMaterialCB_;
+			ShaderType        shaderType_    = ShaderType::NormalModel;
+			bool              castShadow_    = false;
+			bool              receiveShadow_ = false;
 
 			aq::res::RefShaderResource gbufferPSShaderResource_;
 
@@ -76,12 +79,23 @@ namespace aq
 			void ClearTextureOverride(rendering::TextureSlot slot);
 
 			const math::Vector4& GetParameter(uint32_t index) const { return materialCB_.params[index]; }
-			void                 SetParameter(uint32_t index, const math::Vector4& v) { materialCB_.params[index] = v; }
+			void                 SetParameter(uint32_t index, const math::Vector4& v)
+			{
+				materialCB_.params[index] = v;
+				// PBR CB の _extra も同期（TerrainPBRGBuffer.fx が _extra[0].x をタイリングに使う）
+				if (index < 7) pbrMaterialCB_._extra[index] = v;
+			}
 			void ForEachParameter(const std::function<void(uint32_t, math::Vector4&)>& fn)
 			{
 				for (uint32_t i = 0; i < MATERIAL_PARAMETER_NUM; ++i)
 					fn(i, materialCB_.params[i]);
 			}
+
+			// PBR インスペクター用（#ifdef AQ_DEBUG_IMGUI 内で visitor.Field に渡す）
+			float& MetallicRef()      { return pbrMaterialCB_.metallic; }
+			float& RoughnessRef()     { return pbrMaterialCB_.roughness; }
+			float& SpecularRef()      { return pbrMaterialCB_.specular; }
+			float& EmissiveScaleRef() { return pbrMaterialCB_.emissiveScale; }
 
 			void SetCastShadow(bool v)    { castShadow_ = v; }
 			void SetReceiveShadow(bool v) { receiveShadow_ = v; SetMaterialFlag(MatFlag_ReceiveShadow, v); }
@@ -89,11 +103,23 @@ namespace aq
 
 			void SetSpecularIntensity(float v) { materialCB_.specularIntensity = v; }
 			void SetGloss(float v)             { materialCB_.gloss = v; }
-			void SetEmissiveScale(float v)     { materialCB_.emissiveScale = v; }
+			void SetEmissiveScale(float v)     { materialCB_.emissiveScale = v; pbrMaterialCB_.emissiveScale = v; }
+
+			// PBR 専用 setter（SetShaderType(PBRLit) 後に呼ぶこと）
+			void SetMetallic(float v)      { pbrMaterialCB_.metallic  = v; }
+			void SetRoughness(float v)     { pbrMaterialCB_.roughness = v; }
+			void SetSpecular(float v)      { pbrMaterialCB_.specular  = v; }
+			void SetMetallicRoughnessTex(aq::res::RefGPUResource r)
+			{
+				SetTexture(rendering::TextureSlot::MetallicRoughness, r);
+			}
+
+			// 両 CB に同時反映（タイミング問題を回避）
 			void SetMaterialFlag(MaterialFlags flag, bool enable)
 			{
-				if (enable) materialCB_.flags |=  static_cast<uint32_t>(flag);
-				else        materialCB_.flags &= ~static_cast<uint32_t>(flag);
+				uint32_t bit = static_cast<uint32_t>(flag);
+				if (enable) { materialCB_.flags    |= bit; pbrMaterialCB_.flags |= bit; }
+				else        { materialCB_.flags    &= ~bit; pbrMaterialCB_.flags &= ~bit; }
 			}
 
 			ShaderType GetShaderType() const { return shaderType_; }

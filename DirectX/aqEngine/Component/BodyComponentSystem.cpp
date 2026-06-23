@@ -155,8 +155,18 @@ namespace aq
 						if (!mat.normal.empty())
 							gpuResources_[static_cast<uint32_t>(Slot::Normal)] = rm.Load<aq::res::GPUResource>(mat.normal.c_str());
 
-						if (!mat.specular.empty())
-							gpuResources_[static_cast<uint32_t>(Slot::Specular)] = rm.Load<aq::res::GPUResource>(mat.specular.c_str());
+						// slot 2: PBR は metallicRoughness、forward は specular
+						const bool isPBR = shaderType_ == aq::graphics::StaticMesh::ShaderType::PBRLit ||
+						                   shaderType_ == aq::graphics::StaticMesh::ShaderType::TerrainPBRLit;
+						if (isPBR) {
+							if (!metallicRoughnessPath_.empty())
+								gpuResources_[static_cast<uint32_t>(Slot::MetallicRoughness)] =
+									rm.Load<aq::res::GPUResource>(metallicRoughnessPath_.c_str());
+						} else {
+							if (!mat.specular.empty())
+								gpuResources_[static_cast<uint32_t>(Slot::Specular)] =
+									rm.Load<aq::res::GPUResource>(mat.specular.c_str());
+						}
 
 						textureLoadRequested_ = true;
 					}
@@ -281,8 +291,17 @@ namespace aq
 							gpuResources_[static_cast<uint32_t>(Slot::Albedo)] = rm.Load<aq::res::GPUResource>(albedoPath.c_str());
 						if (!mat.normal.empty())
 							gpuResources_[static_cast<uint32_t>(Slot::Normal)] = rm.Load<aq::res::GPUResource>(mat.normal.c_str());
-						if (!mat.specular.empty())
-							gpuResources_[static_cast<uint32_t>(Slot::Specular)] = rm.Load<aq::res::GPUResource>(mat.specular.c_str());
+
+						// slot 2: PBR は metallicRoughness、forward は specular
+						if (shaderType_ == aq::graphics::SkeletalMesh::ShaderType::SkeletalPBRLit) {
+							if (!metallicRoughnessPath_.empty())
+								gpuResources_[static_cast<uint32_t>(Slot::MetallicRoughness)] =
+									rm.Load<aq::res::GPUResource>(metallicRoughnessPath_.c_str());
+						} else {
+							if (!mat.specular.empty())
+								gpuResources_[static_cast<uint32_t>(Slot::Specular)] =
+									rm.Load<aq::res::GPUResource>(mat.specular.c_str());
+						}
 
 						textureLoadRequested_ = true;
 					}
@@ -299,7 +318,8 @@ namespace aq
 					skeletalMesh_.SetLocalMatrix(modelLocalMatrix_);
 					skeletalMesh_.Initialize(
 						skeletalMeshResource_,
-						gpuResources_[static_cast<uint32_t>(Slot::Albedo)]);
+						gpuResources_[static_cast<uint32_t>(Slot::Albedo)],
+						shaderType_);
 
 					for (uint32_t i = static_cast<uint32_t>(Slot::Normal);
 					     i < static_cast<uint32_t>(Slot::Count); ++i)
@@ -434,17 +454,20 @@ namespace aq
 					{
 					case ShaderType::ModelLit:
 					case ShaderType::TerrainLit:
-						// gbufferPS 未ロード・失敗時はフォワードにフォールバック
+						// gbufferPS が nullptr になったため常に forward
+						frame.forwardItems.push_back(item);
+						break;
+					case ShaderType::PBRLit:
+					case ShaderType::TerrainPBRLit:
+						// gbufferPS がない間はスキップ（forward fallback は MaterialCB 誤解釈を招くため禁止）
 						if (item.gbufferPS)
 							frame.items.push_back(item);
-						else
-							frame.forwardItems.push_back(item);
 						break;
 					case ShaderType::NormalModel:
 					case ShaderType::SimpleBox:
 					case ShaderType::OceanLit:
 					default:
-						frame.forwardItems.push_back(item); // forward
+						frame.forwardItems.push_back(item);
 						break;
 					}
 				});
@@ -462,17 +485,21 @@ namespace aq
 					}
 				});
 
-			// SkeletalModelLit は deferred
+			// SkeletalMesh: PBR は gbufferPS がない間スキップ、それ以外は gbufferPS 有無で振り分け
 			aq::ecs::Foreach<SkeletalMeshComponent>([&frame](const aq::ecs::Entity&, SkeletalMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
-					if (comp->GetSkeletalMesh()->FillRenderItem(item)) {
-						if (item.gbufferPS)
-							frame.items.push_back(item);
-						else
-							frame.forwardItems.push_back(item);
-					}
+					if (!comp->GetSkeletalMesh()->FillRenderItem(item)) return;
+
+					using ShaderType = aq::graphics::SkeletalMesh::ShaderType;
+					const bool isPBR = comp->GetSkeletalMesh()->GetShaderType() == ShaderType::SkeletalPBRLit;
+
+					if (item.gbufferPS)
+						frame.items.push_back(item);
+					else if (!isPBR)
+						frame.forwardItems.push_back(item);
+					// isPBR && !gbufferPS: gbufferPS ロード中はスキップ（MaterialCB 誤解釈を防ぐ）
 				});
 
 			// 海描画アイテム収集

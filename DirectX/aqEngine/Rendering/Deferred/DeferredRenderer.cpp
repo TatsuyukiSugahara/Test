@@ -43,10 +43,10 @@ namespace aq
 				return false;
 			}
 
-			// DeferredLighting シェーダーをロード（同期）
-			auto vs = gd.CreateShader("Assets/Shader/DeferredLighting.fx", "VSMain",
+			// PBR ディファードライティングシェーダーをロード（同期）
+			auto vs = gd.CreateShader("Assets/Shader/PBRLighting.fx", "VSMain",
 			                          graphics::IShader::ShaderType::VS);
-			auto ps = gd.CreateShader("Assets/Shader/DeferredLighting.fx", "PSMain",
+			auto ps = gd.CreateShader("Assets/Shader/PBRLighting.fx", "PSMain",
 			                          graphics::IShader::ShaderType::PS);
 			if (!vs || !ps) return false;
 

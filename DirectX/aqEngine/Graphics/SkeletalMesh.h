@@ -30,7 +30,8 @@ namespace aq
 		public:
 			enum class ShaderType
 			{
-				SkeletalModelLit, // SkeletalModelLit.fx (スキニング + ライティング)
+				SkeletalModelLit, // SkeletalModelLit.fx (フォワード、スキニング + Blinn-Phong)
+				SkeletalPBRLit,   // SkeletalPBRGBuffer.fx (ディファード PBR、スキニング)
 			};
 
 		private:
@@ -49,10 +50,11 @@ namespace aq
 
 			res::RefGPUResource gpuResources_[static_cast<uint32_t>(rendering::TextureSlot::Count)];
 
-			MaterialCBData materialCB_;
-			ShaderType     shaderType_     = ShaderType::SkeletalModelLit;
-			bool           castShadow_    = false;
-			bool           receiveShadow_ = false;
+			MaterialCBData    materialCB_;
+			PBRMaterialCBData pbrMaterialCB_;
+			ShaderType        shaderType_    = ShaderType::SkeletalModelLit;
+			bool              castShadow_    = false;
+			bool              receiveShadow_ = false;
 
 			// AnimationComponent から毎フレーム更新される。nullptr = バインドポーズ (単位行列)
 			std::shared_ptr<std::vector<math::Matrix4x4>> boneMatrices_;
@@ -75,20 +77,44 @@ namespace aq
 
 			void SetSpecularIntensity(float v) { materialCB_.specularIntensity = v; }
 			void SetGloss(float v)             { materialCB_.gloss = v; }
-			void SetEmissiveScale(float v)     { materialCB_.emissiveScale = v; }
-			void SetMaterialFlag(MaterialFlags flag, bool enable)
+			void SetEmissiveScale(float v)     { materialCB_.emissiveScale = v; pbrMaterialCB_.emissiveScale = v; }
+
+			// PBR 専用 setter
+			void SetMetallic(float v)  { pbrMaterialCB_.metallic  = v; }
+			void SetRoughness(float v) { pbrMaterialCB_.roughness = v; }
+			void SetSpecular(float v)  { pbrMaterialCB_.specular  = v; }
+			void SetMetallicRoughnessTex(res::RefGPUResource r)
 			{
-				if (enable) materialCB_.flags |=  static_cast<uint32_t>(flag);
-				else        materialCB_.flags &= ~static_cast<uint32_t>(flag);
+				SetTexture(rendering::TextureSlot::MetallicRoughness, r);
 			}
 
+			// 両 CB に同時反映（SetReceiveShadow 等がロード前に呼ばれても正しく動く）
+			void SetMaterialFlag(MaterialFlags flag, bool enable)
+			{
+				uint32_t bit = static_cast<uint32_t>(flag);
+				if (enable) { materialCB_.flags |= bit;  pbrMaterialCB_.flags |= bit;  }
+				else        { materialCB_.flags &= ~bit; pbrMaterialCB_.flags &= ~bit; }
+			}
+
+			ShaderType GetShaderType() const { return shaderType_; }
+
 			const math::Vector4& GetParameter(uint32_t index) const { return materialCB_.params[index]; }
-			void                 SetParameter(uint32_t index, const math::Vector4& v) { materialCB_.params[index] = v; }
+			void                 SetParameter(uint32_t index, const math::Vector4& v)
+			{
+				materialCB_.params[index] = v;
+				if (index < 7) pbrMaterialCB_._extra[index] = v;
+			}
 			void ForEachParameter(const std::function<void(uint32_t, math::Vector4&)>& fn)
 			{
 				for (uint32_t i = 0; i < MATERIAL_PARAMETER_NUM; ++i)
 					fn(i, materialCB_.params[i]);
 			}
+
+			// PBR インスペクター用
+			float& MetallicRef()      { return pbrMaterialCB_.metallic; }
+			float& RoughnessRef()     { return pbrMaterialCB_.roughness; }
+			float& SpecularRef()      { return pbrMaterialCB_.specular; }
+			float& EmissiveScaleRef() { return pbrMaterialCB_.emissiveScale; }
 
 			/** AnimationComponent からボーン行列を注入する */
 			void SetBoneMatrices(std::shared_ptr<std::vector<math::Matrix4x4>> matrices)

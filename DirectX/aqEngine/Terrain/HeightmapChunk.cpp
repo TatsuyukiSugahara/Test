@@ -308,7 +308,9 @@ namespace aq
 			// 動的VBで初期化: ペイント時に Map/Unmap で頂点を書き換える
 			mesh_.InitializeDynamic(vertCache_.data(),  static_cast<uint32_t>(vertCache_.size()),
 			                        indices.data(),      static_cast<uint32_t>(indices.size()),
-			                        graphics::StaticMesh::ShaderType::TerrainLit);
+			                        graphics::StaticMesh::ShaderType::TerrainPBRLit);
+			// 地形デフォルト PBR 値（metallic=0 は TerrainPBRGBuffer.fx でハードコード）
+			mesh_.SetRoughness(0.8f);
 		}
 
 		void HeightmapChunk::RebuildSplatTexture()

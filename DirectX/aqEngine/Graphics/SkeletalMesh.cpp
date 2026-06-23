@@ -25,7 +25,9 @@ namespace aq
 			// TKM v101 (ボーンあり) 専用シェーダー。頂点レイアウトに BLENDWEIGHTS / BLENDINDICES が必要。
 			ShaderInformation skeletalShaderInformations[] = {
 				{ "Assets/Shader/SkeletalModelLit.fx", "VSMain", "Assets/Shader/SkeletalModelLit.fx", "PSMain",
-				  "Assets/Shader/SkeletalGBufferLit.fx", "PSMain" },  // SkeletalModelLit
+				  nullptr, nullptr },                                                                               // SkeletalModelLit (forward-only)
+				{ "Assets/Shader/SkeletalModelLit.fx", "VSMain", "Assets/Shader/SkeletalModelLit.fx", "PSMain",
+				  "Assets/Shader/SkeletalPBRGBuffer.fx", "PSMain" },                                              // SkeletalPBRLit
 			};
 		}
 
@@ -153,10 +155,17 @@ namespace aq
 
 		bool SkeletalMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
-			if (!FillRenderItemBase(item, isInitialized_,
-			        vsShaderResource_, psShaderResource_,
-			        vertexBuffer_, indexBuffer_, samplerState_,
-			        gpuResources_, indicesSize_, worldMatrix_, materialCB_))
+			const bool isPBR = shaderType_ == ShaderType::SkeletalPBRLit;
+			const bool ok = isPBR
+				? FillRenderItemBase(item, isInitialized_,
+				      vsShaderResource_, psShaderResource_,
+				      vertexBuffer_, indexBuffer_, samplerState_,
+				      gpuResources_, indicesSize_, worldMatrix_, pbrMaterialCB_)
+				: FillRenderItemBase(item, isInitialized_,
+				      vsShaderResource_, psShaderResource_,
+				      vertexBuffer_, indexBuffer_, samplerState_,
+				      gpuResources_, indicesSize_, worldMatrix_, materialCB_);
+			if (!ok)
 				return false;
 
 			item.castShadow    = castShadow_;

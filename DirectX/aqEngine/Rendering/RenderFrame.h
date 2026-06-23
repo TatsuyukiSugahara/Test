@@ -28,10 +28,11 @@ namespace aq
 		/** テクスチャスロット番号 (t0-t3) */
 		enum class TextureSlot : uint32_t
 		{
-			Albedo   = 0,
-			Normal   = 1,
-			Specular = 2,
-			Emissive = 3,
+			Albedo            = 0,
+			Normal            = 1,
+			Specular          = 2,  // forward (Blinn-Phong) 用
+			MetallicRoughness = 2,  // PBR 用 alias: R=metallic, G=roughness
+			Emissive          = 3,
 			Count,
 		};
 

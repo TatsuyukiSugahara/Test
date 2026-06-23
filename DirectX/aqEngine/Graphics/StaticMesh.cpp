@@ -21,11 +21,13 @@ namespace aq
 				const char* gbufferPSFuncName;
 			};
 			ShaderInformation shaderInformations[] = {
-				{ "Assets/Shader/Model.fx",      "VSMain", "Assets/Shader/Model.fx",      "PSMain", nullptr,                                nullptr   },  // NormalModel
-				{ "Assets/Shader/SimpleBox.fx",  "VSMain", "Assets/Shader/SimpleBox.fx",  "PSMain", nullptr,                                nullptr   },  // SimpleBox
-				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain", "Assets/Shader/GBufferLit.fx",          "PSMain"  },  // ModelLit
-				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain", "Assets/Shader/TerrainGBufferLit.fx",   "PSMain"  },  // TerrainLit
-				{ "Assets/Shader/OceanLit.fx",   "VSMain", "Assets/Shader/OceanLit.fx",   "PSMain", nullptr,                                nullptr   },  // OceanLit
+				{ "Assets/Shader/Model.fx",      "VSMain", "Assets/Shader/Model.fx",      "PSMain", nullptr,                                 nullptr  },  // NormalModel
+				{ "Assets/Shader/SimpleBox.fx",  "VSMain", "Assets/Shader/SimpleBox.fx",  "PSMain", nullptr,                                 nullptr  },  // SimpleBox
+				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain", nullptr,                                 nullptr  },  // ModelLit (forward-only; GBuffer は PBRLit へ移行)
+				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain", nullptr,                                 nullptr  },  // TerrainLit (forward-only)
+				{ "Assets/Shader/OceanLit.fx",   "VSMain", "Assets/Shader/OceanLit.fx",   "PSMain", nullptr,                                 nullptr  },  // OceanLit
+				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain", "Assets/Shader/PBRGBuffer.fx",           "PSMain" },  // PBRLit
+				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain", "Assets/Shader/TerrainPBRGBuffer.fx",    "PSMain" },  // TerrainPBRLit
 			};
 		}
 
@@ -188,10 +190,19 @@ namespace aq
 
 		bool StaticMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
-			if (!FillRenderItemBase(item, isInitialized_,
-			        vsShaderResource_, psShaderResource_,
-			        vertexBuffer_, indexBuffer_, samplerState_,
-			        gpuResources_, indicesSize_, worldMatrix_, materialCB_))
+			// PBR 系は pbrMaterialCB_ を GPU に送る（memcpy で型安全に転送）
+			const bool isPBR = shaderType_ == ShaderType::PBRLit ||
+			                   shaderType_ == ShaderType::TerrainPBRLit;
+			const bool ok = isPBR
+				? FillRenderItemBase(item, isInitialized_,
+				      vsShaderResource_, psShaderResource_,
+				      vertexBuffer_, indexBuffer_, samplerState_,
+				      gpuResources_, indicesSize_, worldMatrix_, pbrMaterialCB_)
+				: FillRenderItemBase(item, isInitialized_,
+				      vsShaderResource_, psShaderResource_,
+				      vertexBuffer_, indexBuffer_, samplerState_,
+				      gpuResources_, indicesSize_, worldMatrix_, materialCB_);
+			if (!ok)
 				return false;
 
 			for (uint32_t slot = 0; slot < static_cast<uint32_t>(rendering::TextureSlot::Count); ++slot)
@@ -216,9 +227,9 @@ namespace aq
 				item.gbufferPS.reset();
 			}
 
-			// TerrainLit は splat あり/なし問わず t1 (layer0/grass) を必ず sample するため、
+			// TerrainLit / TerrainPBRLit は t1 (layer0/grass) を必ず sample するため、
 			// t1 が未ロードなら描画をスキップする。HasSplatMap の有無に依存しない。
-			if (shaderType_ == ShaderType::TerrainLit)
+			if (shaderType_ == ShaderType::TerrainLit || shaderType_ == ShaderType::TerrainPBRLit)
 			{
 				if (!item.textures[static_cast<uint32_t>(rendering::TextureSlot::Normal)])
 					return false;

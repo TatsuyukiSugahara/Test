@@ -74,6 +74,7 @@ namespace aq
 			aq::graphics::StaticMesh staticMesh_;
 			std::string modelPath_;
 			std::string texturePath_;
+			std::string metallicRoughnessPath_;
 			aq::math::Matrix4x4 modelLocalMatrix_;
 			bool textureLoadRequested_;
 			aq::graphics::StaticMesh::ShaderType shaderType_;
@@ -85,7 +86,10 @@ namespace aq
 			void Update();
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
 			void SetModelLocalMatrix(const aq::math::Matrix4x4& localMatrix);
+			/** ロード前（SetModelPath より前）に呼ぶこと。ロード後の変更は再初期化されない。 */
 			void SetShaderType(aq::graphics::StaticMesh::ShaderType type) { shaderType_ = type; }
+			/** PBR 専用。SetShaderType(PBRLit) の後、SetModelPath() の前に呼ぶこと。 */
+			void SetMetallicRoughnessPath(const char* path) { metallicRoughnessPath_ = path ? path : ""; }
 
 
 		public:
@@ -108,6 +112,18 @@ namespace aq
 					SetModelPath(newModel.c_str(),
 					             newTexture.empty() ? nullptr : newTexture.c_str());
 				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
+
+				// PBR マテリアルパラメータ（PBR シェーダー時のみ表示）
+				const bool isPBR =
+					shaderType_ == aq::graphics::StaticMesh::ShaderType::PBRLit ||
+					shaderType_ == aq::graphics::StaticMesh::ShaderType::TerrainPBRLit;
+				if (isPBR)
+				{
+					visitor.Field("Metallic",      staticMesh_.MetallicRef());
+					visitor.Field("Roughness",     staticMesh_.RoughnessRef());
+					visitor.Field("Specular F0",   staticMesh_.SpecularRef());
+					visitor.Field("EmissiveScale", staticMesh_.EmissiveScaleRef());
+				}
 			}
 #endif
 		};
@@ -143,8 +159,11 @@ namespace aq
 			aq::graphics::SkeletalMesh       skeletalMesh_;
 			std::string                      modelPath_;
 			std::string                      texturePath_;
+			std::string                      metallicRoughnessPath_;
 			aq::math::Matrix4x4              modelLocalMatrix_;
 			bool                             textureLoadRequested_;
+			aq::graphics::SkeletalMesh::ShaderType shaderType_
+				= aq::graphics::SkeletalMesh::ShaderType::SkeletalModelLit;
 
 		public:
 			SkeletalMeshComponent();
@@ -153,6 +172,10 @@ namespace aq
 			/** モデルパス (TKM v101) とオプションのテクスチャパスを設定する */
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
 			void SetModelLocalMatrix(const aq::math::Matrix4x4& localMatrix);
+			/** ロード前（SetModelPath より前）に呼ぶこと。ロード後の変更は再初期化されない。 */
+			void SetShaderType(aq::graphics::SkeletalMesh::ShaderType type) { shaderType_ = type; }
+			/** PBR 専用。SetShaderType(SkeletalPBRLit) の後、SetModelPath() の前に呼ぶこと。 */
+			void SetMetallicRoughnessPath(const char* path) { metallicRoughnessPath_ = path ? path : ""; }
 
 			void Update();
 
@@ -173,6 +196,15 @@ namespace aq
 					SetModelPath(newModel.c_str(),
 					             newTexture.empty() ? nullptr : newTexture.c_str());
 				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
+
+				// PBR マテリアルパラメータ（PBR シェーダー時のみ表示）
+				if (shaderType_ == aq::graphics::SkeletalMesh::ShaderType::SkeletalPBRLit)
+				{
+					visitor.Field("Metallic",      skeletalMesh_.MetallicRef());
+					visitor.Field("Roughness",     skeletalMesh_.RoughnessRef());
+					visitor.Field("Specular F0",   skeletalMesh_.SpecularRef());
+					visitor.Field("EmissiveScale", skeletalMesh_.EmissiveScaleRef());
+				}
 			}
 #endif
 		};

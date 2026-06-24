@@ -480,8 +480,7 @@ namespace aq
 					if (comp->GetChunk()->FillRenderItem(item)) {
 						if (item.gbufferPS)
 							frame.items.push_back(item);
-						else
-							frame.forwardItems.push_back(item);
+						// gbufferPS 未ロード中はスキップ（MaterialCB 誤解釈を防ぐ）
 					}
 				});
 

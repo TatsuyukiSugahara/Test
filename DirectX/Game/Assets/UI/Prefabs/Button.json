@@ -8,6 +8,7 @@
     },
     "nineSlice": {
       "texture": "Assets/UI/Textures/button_normal.dds",
+      "textureSize": [64, 64],
       "border": { "left": 12, "right": 12, "top": 8, "bottom": 8 },
       "color": [1.0, 1.0, 1.0, 1.0]
     },

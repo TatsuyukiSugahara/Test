@@ -311,6 +311,7 @@ namespace aq
 			                        graphics::StaticMesh::ShaderType::TerrainPBRLit);
 			// 地形デフォルト PBR 値（metallic=0 は TerrainPBRGBuffer.fx でハードコード）
 			mesh_.SetRoughness(0.8f);
+			mesh_.SpecularRef() = 0.5f;  // 誘電体標準 F0 = 0.08 * 0.5 = 0.04
 		}
 
 		void HeightmapChunk::RebuildSplatTexture()

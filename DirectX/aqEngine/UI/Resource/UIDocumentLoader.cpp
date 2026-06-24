@@ -8,6 +8,9 @@
 #include "UI/Component/UINineSliceComponent.h"
 #include "UI/Component/UICircleGaugeComponent.h"
 #include "UI/Component/UIButtonComponent.h"
+#include "UI/Component/UITextComponent.h"
+#include "UI/Component/UIAnimationComponent.h"
+#include "UI/Animation/UIAnimationSerializer.h"
 #include "Util/SimpleJson.h"
 #include "Graphics/IShaderResourceView.h"
 #include "Resource/Resource.h"
@@ -183,6 +186,12 @@ namespace aq
 					if (!b["top"].IsNull())    ns->border.top    = b["top"].AsFloat();
 					if (!b["bottom"].IsNull()) ns->border.bottom = b["bottom"].AsFloat();
 				}
+				if (!j["textureSize"].IsNull())
+				{
+					const auto& ts = j["textureSize"];
+					if (ts.Size() >= 2)
+						ns->textureSize = { ts[0].AsFloat(64.f), ts[1].AsFloat(64.f) };
+				}
 				if (!j["fillAmount"].IsNull())
 					ns->fillAmount = j["fillAmount"].AsFloat(1.f);
 				if (!j["fillDir"].IsNull())
@@ -224,14 +233,52 @@ namespace aq
 					btn->interactable = j["interactable"].AsBool(true);
 			}
 
+			void ApplyText(UIObject& obj, const util::JsonValue& j)
+			{
+				auto* txt = obj.HasComponent<UITextComponent>()
+				            ? obj.GetComponent<UITextComponent>()
+				            : obj.AddComponent<UITextComponent>();
+
+				if (!j["content"].IsNull())
+					txt->content       = j["content"].AsString();
+				if (!j["textStylePath"].IsNull())
+					txt->textStylePath = j["textStylePath"].AsString();
+				if (!j["fontSize"].IsNull())
+					txt->fontSize      = j["fontSize"].AsFloat(0.f);
+				if (!j["scale"].IsNull())
+					txt->scale         = j["scale"].AsFloat(1.f);
+				if (!j["color"].IsNull())
+					txt->color         = ToVec4(j["color"], { 0.f, 0.f, 0.f, 0.f });
+				if (!j["offset"].IsNull())
+					txt->offset        = ToVec2(j["offset"], { 0.f, 0.f });
+				if (!j["wordWrap"].IsNull())
+					txt->wordWrap = j["wordWrap"].AsBool();
+
+				if (!j["alignH"].IsNull())
+				{
+					const auto& s = j["alignH"].AsString();
+					if (s == "Left")       txt->alignH = TextAlignH::Left;
+					else if (s == "Right") txt->alignH = TextAlignH::Right;
+					else                   txt->alignH = TextAlignH::Center;
+				}
+				if (!j["alignV"].IsNull())
+				{
+					const auto& s = j["alignV"].AsString();
+					if (s == "Top")          txt->alignV = TextAlignV::Top;
+					else if (s == "Bottom")  txt->alignV = TextAlignV::Bottom;
+					else                     txt->alignV = TextAlignV::Middle;
+				}
+			}
+
 			void ApplyComponents(UIObject& obj, const util::JsonValue& comps)
 			{
-				if (!comps["transform"].IsNull())  ApplyTransform  (obj, comps["transform"]);
-				if (!comps["canvas"].IsNull())     ApplyCanvas     (obj, comps["canvas"]);
-				if (!comps["image"].IsNull())      ApplyImage      (obj, comps["image"]);
-				if (!comps["nineSlice"].IsNull())  ApplyNineSlice  (obj, comps["nineSlice"]);
-				if (!comps["circleGauge"].IsNull())ApplyCircleGauge(obj, comps["circleGauge"]);
-				if (!comps["button"].IsNull())     ApplyButton     (obj, comps["button"]);
+				if (!comps["transform"].IsNull())   ApplyTransform  (obj, comps["transform"]);
+				if (!comps["canvas"].IsNull())      ApplyCanvas     (obj, comps["canvas"]);
+				if (!comps["image"].IsNull())       ApplyImage      (obj, comps["image"]);
+				if (!comps["nineSlice"].IsNull())   ApplyNineSlice  (obj, comps["nineSlice"]);
+				if (!comps["circleGauge"].IsNull()) ApplyCircleGauge(obj, comps["circleGauge"]);
+				if (!comps["button"].IsNull())      ApplyButton     (obj, comps["button"]);
+				if (!comps["text"].IsNull())        ApplyText       (obj, comps["text"]);
 			}
 
 		} // anonymous namespace
@@ -290,6 +337,16 @@ namespace aq
 			const auto& comps = resolved["components"];
 			if (!comps.IsNull())
 				ApplyComponents(*obj, comps);
+
+			// アニメーションクリップ読み込み
+			const auto& animJson = resolved["animation"];
+			if (!animJson.IsNull())
+			{
+				auto* anim = obj->HasComponent<UIAnimationComponent>()
+				             ? obj->GetComponent<UIAnimationComponent>()
+				             : obj->AddComponent<UIAnimationComponent>();
+				UIAnimationSerializer::LoadAll(animJson, *anim);
+			}
 
 			// 子を再帰生成
 			const auto& children = resolved["children"];

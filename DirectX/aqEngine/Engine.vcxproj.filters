@@ -76,6 +76,9 @@
     <Filter Include="UI\Screen">
       <UniqueIdentifier>{7788aabb-ccdd-eeff-0011-223344556677}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI\Debug">
+      <UniqueIdentifier>{8899bbcc-ddee-ff00-1122-334455667788}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="aq.cpp" />
@@ -320,6 +323,12 @@
     <ClCompile Include="UI\Animation\UIAnimationTrack.cpp">
       <Filter>UI\Animation</Filter>
     </ClCompile>
+    <ClCompile Include="UI\Animation\UIAnimationSerializer.cpp">
+      <Filter>UI\Animation</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Debug\UIAnimationEditor.cpp">
+      <Filter>UI\Debug</Filter>
+    </ClCompile>
     <ClCompile Include="UI\Component\UIAnimationComponent.cpp">
       <Filter>UI\Component</Filter>
     </ClCompile>
@@ -333,6 +342,9 @@
       <Filter>UI\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="UI\Resource\UIDocumentLoader.cpp">
+      <Filter>UI\Resource</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Resource\UIDocumentSerializer.cpp">
       <Filter>UI\Resource</Filter>
     </ClCompile>
   </ItemGroup>
@@ -739,6 +751,9 @@
     <ClInclude Include="UI\Component\UIAnimationComponent.h">
       <Filter>UI\Component</Filter>
     </ClInclude>
+    <ClInclude Include="UI\Component\UITextComponent.h">
+      <Filter>UI\Component</Filter>
+    </ClInclude>
     <ClInclude Include="UI\Screen\UIScreen.h">
       <Filter>UI\Screen</Filter>
     </ClInclude>
@@ -778,7 +793,16 @@
     <ClInclude Include="UI\Animation\UIAnimationSystem.h">
       <Filter>UI\Animation</Filter>
     </ClInclude>
+    <ClInclude Include="UI\Animation\UIAnimationSerializer.h">
+      <Filter>UI\Animation</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Debug\UIAnimationEditor.h">
+      <Filter>UI\Debug</Filter>
+    </ClInclude>
     <ClInclude Include="UI\Resource\UIDocumentLoader.h">
+      <Filter>UI\Resource</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Resource\UIDocumentSerializer.h">
       <Filter>UI\Resource</Filter>
     </ClInclude>
   </ItemGroup>

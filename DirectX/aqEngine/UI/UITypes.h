@@ -65,12 +65,32 @@ namespace aq
 		};
 
 
+		// ---- テキスト整列 ----
+
+		enum class TextAlignH : uint8_t { Left, Center, Right };
+		enum class TextAlignV : uint8_t { Top, Middle, Bottom };
+
+
 		// ---- UI シェーダー種別 (バッチグループの区切り) ----
 
 		enum class UIShaderType : uint8_t
 		{
 			Standard,     // 通常スプライト / NineSlice
 			CircleGauge,  // 円形ゲージ専用 PS
+			SdfText,      // MSDF フォントレンダリング
+		};
+
+
+		// ---- SdfText シェーダー用 CB パラメータ ----
+
+		struct SdfTextParams
+		{
+			math::Vector4 outlineColor    = { 0.f, 0.f, 0.f, 0.f };
+			math::Vector4 shadowColor     = { 0.f, 0.f, 0.f, 0.f };
+			math::Vector2 shadowOffsetUV  = { 0.f, 0.f };
+			float         shadowSoftness  = 0.05f;
+			float         outlineWidth    = 0.f;
+			float         smoothing       = 0.08f;
 		};
 
 

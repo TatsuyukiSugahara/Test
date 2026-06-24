@@ -201,5 +201,146 @@ namespace aq
 			return ParseString(buf);
 		}
 
+
+		// ---- JsonSerializer -----------------------------------------------------
+
+		namespace
+		{
+			// 特殊文字をエスケープして "..." 形式の JSON 文字列を返す
+			std::string EscapeString(const std::string& s)
+			{
+				std::string out;
+				out.reserve(s.size() + 2);
+				out += '"';
+				for (char c : s)
+				{
+					switch (c)
+					{
+						case '"':  out += "\\\""; break;
+						case '\\': out += "\\\\"; break;
+						case '\n': out += "\\n";  break;
+						case '\r': out += "\\r";  break;
+						case '\t': out += "\\t";  break;
+						default:   out += c;      break;
+					}
+				}
+				out += '"';
+				return out;
+			}
+
+			std::string MakeIndent(int depth)
+			{
+				return std::string(static_cast<size_t>(depth) * 2, ' ');
+			}
+
+			void StringifyImpl(const JsonValue& v, std::string& out, int depth)
+			{
+				if (v.IsNull())
+				{
+					out += "null";
+				}
+				else if (v.IsBool())
+				{
+					out += v.AsBool() ? "true" : "false";
+				}
+				else if (v.IsNumber())
+				{
+					// 整数相当なら小数点なしで出力
+					const double d = static_cast<double>(v.AsFloat());
+					const long long i = static_cast<long long>(d);
+					if (static_cast<double>(i) == d)
+					{
+						out += std::to_string(i);
+					}
+					else
+					{
+						char buf[32];
+						std::snprintf(buf, sizeof(buf), "%g", d);
+						out += buf;
+					}
+				}
+				else if (v.IsString())
+				{
+					out += EscapeString(v.AsString());
+				}
+				else if (v.IsArray())
+				{
+					const auto& arr = v.GetArray();
+					if (arr.empty()) { out += "[]"; return; }
+
+					// 全要素がスカラーなら1行で出力
+					bool allScalar = true;
+					for (const auto& e : arr)
+						if (e.IsArray() || e.IsObject()) { allScalar = false; break; }
+
+					if (allScalar)
+					{
+						out += '[';
+						for (size_t i = 0; i < arr.size(); ++i)
+						{
+							if (i > 0) out += ", ";
+							StringifyImpl(arr[i], out, depth + 1);
+						}
+						out += ']';
+					}
+					else
+					{
+						out += "[\n";
+						for (size_t i = 0; i < arr.size(); ++i)
+						{
+							out += MakeIndent(depth + 1);
+							StringifyImpl(arr[i], out, depth + 1);
+							if (i + 1 < arr.size()) out += ',';
+							out += '\n';
+						}
+						out += MakeIndent(depth);
+						out += ']';
+					}
+				}
+				else if (v.IsObject())
+				{
+					const auto& obj = v.GetObject();
+					if (obj.empty()) { out += "{}"; return; }
+
+					// キーを名前順にソートして出力を安定させる
+					std::vector<std::string> keys;
+					keys.reserve(obj.size());
+					for (const auto& [k, _] : obj) keys.push_back(k);
+					std::sort(keys.begin(), keys.end());
+
+					out += "{\n";
+					for (size_t i = 0; i < keys.size(); ++i)
+					{
+						out += MakeIndent(depth + 1);
+						out += EscapeString(keys[i]);
+						out += ": ";
+						StringifyImpl(obj.at(keys[i]), out, depth + 1);
+						if (i + 1 < keys.size()) out += ',';
+						out += '\n';
+					}
+					out += MakeIndent(depth);
+					out += '}';
+				}
+			}
+
+		} // anonymous namespace
+
+
+		std::string JsonSerializer::Stringify(const JsonValue& v, int indent)
+		{
+			std::string out;
+			out.reserve(1024);
+			StringifyImpl(v, out, indent);
+			return out;
+		}
+
+		bool JsonSerializer::WriteFile(const char* path, const JsonValue& v)
+		{
+			std::ofstream ofs(path, std::ios::out | std::ios::trunc);
+			if (!ofs.is_open()) return false;
+			ofs << Stringify(v);
+			return ofs.good();
+		}
+
 	} // namespace util
 } // namespace aq

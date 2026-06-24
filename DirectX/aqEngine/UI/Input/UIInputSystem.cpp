@@ -31,6 +31,7 @@ namespace aq
 			ResetButtonState(m_focusedButton);
 			m_hoveredButton = UIObjectHandle::Invalid();
 			m_focusedButton = UIObjectHandle::Invalid();
+			m_hoveredScreen = nullptr;
 		}
 
 
@@ -45,29 +46,22 @@ namespace aq
 
 			math::Vector2 clientPos = hid::GetMouseCursorPos();
 
-			// キャンバス解像度を取得 (スタック頂上の Canvas コンポーネントから)
-			math::Vector2 canvasPos = clientPos;
-			UIScreen* top = screens.Top();
-			if (top && top->GetRoot())
-			{
-				auto* canvas = top->GetRoot()->GetComponent<UICanvasComponent>();
-				if (canvas)
-					canvasPos = ScaleClientToCanvas(clientPos, canvas->clientSize, canvas->resolution);
-			}
-
-			UIObject* hit = HitTest(screens, canvasPos);
+			// HitTest 内で各スクリーンの canvas 解像度に合わせて座標変換する
+			UIScreen* hitScreen = nullptr;
+			UIObject* hit = HitTest(screens, clientPos, hitScreen);
 			UIObjectHandle hitHandle = hit ? hit->GetHandle() : UIObjectHandle::Invalid();
 
 			// ホバー変化を検知
 			if (hitHandle != m_hoveredButton)
 			{
 				if (UIObject* prev = UIContext::Get().Resolve(m_hoveredButton))
-					FireHoverExit(prev, screens);
+					FireHoverExit(prev, m_hoveredScreen, screens);
 
 				m_hoveredButton = hitHandle;
+				m_hoveredScreen = hitScreen;
 
 				if (UIObject* next = UIContext::Get().Resolve(m_hoveredButton))
-					FireHoverEnter(next, screens);
+					FireHoverEnter(next, m_hoveredScreen, screens);
 			}
 
 			// isPressed 更新
@@ -81,7 +75,7 @@ namespace aq
 			if (m_hoveredButton.IsValid() && hid::IsMouseTriggered(hid::MouseButton::Left))
 			{
 				if (UIObject* btn = UIContext::Get().Resolve(m_hoveredButton))
-					FireClick(btn, screens);
+					FireClick(btn, m_hoveredScreen, screens);
 			}
 		}
 
@@ -101,7 +95,7 @@ namespace aq
 			if (IsSubmit() && m_focusedButton.IsValid())
 			{
 				if (UIObject* btn = UIContext::Get().Resolve(m_focusedButton))
-					FireClick(btn, screens);
+					FireClick(btn, target, screens);
 			}
 
 			// Cancel → Back
@@ -117,16 +111,26 @@ namespace aq
 		// HitTest
 		// =========================================================================
 
-		UIObject* UIInputSystem::HitTest(UIScreenManager& screens, math::Vector2 canvasPos) const
+		UIObject* UIInputSystem::HitTest(UIScreenManager& screens, math::Vector2 clientPos,
+		                                  UIScreen*& outScreen) const
 		{
-			// スタック上 → 下 の順に走査。blocksRaycast で貫通制御。
+			outScreen = nullptr;
+			// スタック上 → 下 の順に走査。各スクリーンの canvas 解像度で座標変換。
 			for (int i = screens.StackSize() - 1; i >= 0; --i)
 			{
 				UIScreen* screen = screens.GetScreen(i);
 				if (!screen || !screen->GetRoot()) continue;
 
+				math::Vector2 canvasPos = clientPos;
+				if (auto* canvas = screen->GetRoot()->GetComponent<UICanvasComponent>())
+					canvasPos = ScaleClientToCanvas(clientPos, canvas->clientSize, canvas->resolution);
+
 				UIObject* hit = HitTestObject(screen->GetRoot(), canvasPos);
-				if (hit) return hit;
+				if (hit)
+				{
+					outScreen = screen;
+					return hit;
+				}
 
 				if (screen->blocksRaycast) break; // 背面に通さない
 			}
@@ -220,64 +224,57 @@ namespace aq
 		// Callback 発火
 		// =========================================================================
 
-		void UIInputSystem::FireClick(UIObject* btn, UIScreenManager& screens)
+		void UIInputSystem::FireClick(UIObject* btn, UIScreen* screen, UIScreenManager& screens)
 		{
 			auto* comp = btn->GetComponent<UIButtonComponent>();
-			if (!comp || !comp->interactable) return;
+			if (!comp || !comp->interactable || !screen) return;
 
-			UIScreen* top = screens.Top();
-			if (!top) return;
-
-			UIClickEvent e{ *btn, *top, screens };
+			UIClickEvent e{ *btn, *screen, screens };
 			if (comp->onClick) comp->onClick(e);
 		}
 
-		void UIInputSystem::FireHoverEnter(UIObject* btn, UIScreenManager& screens)
+		void UIInputSystem::FireHoverEnter(UIObject* btn, UIScreen* screen, UIScreenManager& screens)
 		{
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp) return;
 			comp->isHovered = true;
 
-			UIScreen* top = screens.Top();
-			if (!top) return;
-			UIClickEvent e{ *btn, *top, screens };
+			if (!screen) return;
+			UIClickEvent e{ *btn, *screen, screens };
 			if (comp->onHoverEnter) comp->onHoverEnter(e);
 		}
 
-		void UIInputSystem::FireHoverExit(UIObject* btn, UIScreenManager& screens)
+		void UIInputSystem::FireHoverExit(UIObject* btn, UIScreen* screen, UIScreenManager& screens)
 		{
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp) return;
 			comp->isHovered = false;
 			comp->isPressed = false;
 
-			UIScreen* top = screens.Top();
-			if (!top) return;
-			UIClickEvent e{ *btn, *top, screens };
+			if (!screen) return;
+			UIClickEvent e{ *btn, *screen, screens };
 			if (comp->onHoverExit) comp->onHoverExit(e);
 		}
 
-		void UIInputSystem::FireFocusEnter(UIObject* btn, UIScreenManager& screens)
+		void UIInputSystem::FireFocusEnter(UIObject* btn, UIScreen* screen, UIScreenManager& screens)
 		{
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp) return;
 			comp->isFocused = true;
 
-			UIScreen* top = screens.Top();
-			if (!top) return;
-			UIClickEvent e{ *btn, *top, screens };
+			if (!screen) return;
+			UIClickEvent e{ *btn, *screen, screens };
 			if (comp->onFocusEnter) comp->onFocusEnter(e);
 		}
 
-		void UIInputSystem::FireFocusExit(UIObject* btn, UIScreenManager& screens)
+		void UIInputSystem::FireFocusExit(UIObject* btn, UIScreen* screen, UIScreenManager& screens)
 		{
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp) return;
 			comp->isFocused = false;
 
-			UIScreen* top = screens.Top();
-			if (!top) return;
-			UIClickEvent e{ *btn, *top, screens };
+			if (!screen) return;
+			UIClickEvent e{ *btn, *screen, screens };
 			if (comp->onFocusExit) comp->onFocusExit(e);
 		}
 

@@ -90,5 +90,17 @@ namespace aq
 			static JsonValue ParseFile(const char* path);
 		};
 
+
+		// JsonValue を JSON 文字列に変換するシリアライザー
+		class JsonSerializer
+		{
+		public:
+			// JsonValue を整形済み JSON 文字列へ変換する。
+			static std::string Stringify(const JsonValue& v, int indent = 0);
+
+			// JSON 文字列をファイルへ書き込む。成功時 true。
+			static bool WriteFile(const char* path, const JsonValue& v);
+		};
+
 	} // namespace util
 } // namespace aq

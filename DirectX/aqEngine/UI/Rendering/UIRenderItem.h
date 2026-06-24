@@ -31,6 +31,9 @@ namespace aq
 			float startAngle = 0.f;
 			float clockwise  = 1.f;
 
+			// SdfText 専用 (shaderType == SdfText の時のみ使用)
+			SdfTextParams sdfText;
+
 			std::vector<UIVertex>   vertices; // 通常: 4頂点, NineSlice: 16頂点
 			std::vector<uint16_t>   indices;  // 通常: 6,  NineSlice: 54
 		};

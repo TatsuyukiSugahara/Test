@@ -39,12 +39,16 @@ namespace aq
 			// VS / IA / VB / IB / サンプラーをバインド
 			void BindCommon(graphics::RenderContext& ctx);
 
-			// PS をバインド (Standard / CircleGauge)
+			// PS をバインド (Standard / CircleGauge / SdfText)
 			void BindPS(graphics::RenderContext& ctx, UIShaderType type);
 
 			// CircleGauge 用 CB を更新して PS スロット 0 にバインド
 			void UpdateCircleGaugeCB(graphics::RenderContext& ctx,
 			                         float fillAmount, float startAngle, float clockwise);
+
+			// SdfText 用 CB を更新して PS スロット 1 にバインド
+			void UpdateSdfTextCB(graphics::RenderContext& ctx,
+			                     const struct SdfTextParams& params);
 
 			// DrawIndexed (startIndex オフセットあり, D3D11 直呼び)
 			void DrawIndexed(uint32_t indexCount, uint32_t startIndex);
@@ -53,9 +57,11 @@ namespace aq
 			std::unique_ptr<graphics::IShader>         vs_;
 			std::unique_ptr<graphics::IShader>         standardPS_;
 			std::unique_ptr<graphics::IShader>         circleGaugePS_;
+			std::unique_ptr<graphics::IShader>         sdfTextPS_;
 			std::unique_ptr<graphics::IVertexBuffer>   vb_;          // DYNAMIC
 			std::unique_ptr<graphics::ISamplerState>   sampler_;
 			std::unique_ptr<graphics::IConstantBuffer> gaugeCB_;
+			std::unique_ptr<graphics::IConstantBuffer> sdfTextCB_;
 			void*    ib_              = nullptr;  // ID3D11Buffer* R16_UINT DYNAMIC
 			uint32_t ibCapacityBytes_ = 0;
 			bool     ready_           = false;

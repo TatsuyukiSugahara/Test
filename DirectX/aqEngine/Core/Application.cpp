@@ -34,6 +34,9 @@
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/SceneHierarchySystem.h"
+#include "UI/Debug/UIEditorDebugPanel.h"
+#include "UI/Debug/TextStyleEditorPanel.h"
+#include "UI/Debug/UIAnimationEditor.h"
 #endif
 
 
@@ -94,10 +97,21 @@ namespace aq
 						if (fopen_s(&f, path, "rb") != 0 || !f) continue;
 						fclose(f);
 
+						// 日本語 + Arrows (U+2190-21FF) + Geometric Shapes (U+25A0-25FF) を追加
+						static const ImWchar kCustomRanges[] = {
+							0x0020, 0x00FF, // Basic Latin + Latin-1
+							0x2190, 0x21FF, // Arrows (→←↑↓↖↗↘↙↕ 等)
+							0x25A0, 0x25FF, // Geometric Shapes (●▶◀▲▼ 等)
+							0x3000, 0x30FF, // CJK Symbols, Hiragana, Katakana
+							0x31F0, 0x31FF, // Katakana Phonetic Extensions
+							0xFF00, 0xFFEF, // Half-width
+							0x4e00, 0x9FAF, // CJK Unified Ideographs
+							0,
+						};
 						ImFontConfig cfg;
 						cfg.FontNo = 0;  // TTC コレクション内の先頭フォントを使用
 						ImFont* font = io.Fonts->AddFontFromFileTTF(
-							path, 15.0f, &cfg, io.Fonts->GetGlyphRangesJapanese());
+							path, 15.0f, &cfg, kCustomRanges);
 						if (font) { fontLoaded = true; break; }
 					}
 					if (!fontLoaded)
@@ -171,6 +185,18 @@ namespace aq
 			}
 
 			aq::DebugUI::Get().Register(renderingDebugPanel_.get());
+
+			// UI エディタパネル
+			uiEditorDebugPanel_ = std::make_unique<aq::ui::UIEditorDebugPanel>();
+			aq::DebugUI::Get().Register(uiEditorDebugPanel_.get());
+
+			// TextStyle エディタパネル
+			textStyleEditorPanel_ = std::make_unique<aq::ui::TextStyleEditorPanel>();
+			aq::DebugUI::Get().Register(textStyleEditorPanel_.get());
+
+			// UI Animation Editor
+			uiAnimationEditor_ = std::make_unique<aq::ui::UIAnimationEditor>();
+			aq::DebugUI::Get().Register(uiAnimationEditor_.get());
 		}
 #endif
 

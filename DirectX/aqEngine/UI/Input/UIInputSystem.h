@@ -37,8 +37,9 @@ namespace aq
 			void UpdateFocus(UIScreenManager& screens, hid::InputManager& input);
 
 			// ---- HitTest ----
-			// スタックを上から走査。blocksRaycast でカット。
-			UIObject* HitTest(UIScreenManager& screens, math::Vector2 canvasPos) const;
+			// スタックを上から走査。各スクリーンの canvas 解像度で座標変換。blocksRaycast でカット。
+			// outScreen: ヒットしたスクリーンを返す (ヒットなし = nullptr)
+			UIObject* HitTest(UIScreenManager& screens, math::Vector2 clientPos, UIScreen*& outScreen) const;
 			static UIObject* HitTestObject(UIObject* obj, math::Vector2 canvasPos);
 
 			// ---- フォーカスターゲット画面 ----
@@ -59,17 +60,18 @@ namespace aq
 			static bool IsDirectionDown();
 
 			// ---- callback 発火 ----
-			void FireClick     (UIObject* btn, UIScreenManager& screens);
-			void FireHoverEnter(UIObject* btn, UIScreenManager& screens);
-			void FireHoverExit (UIObject* btn, UIScreenManager& screens);
-			void FireFocusEnter(UIObject* btn, UIScreenManager& screens);
-			void FireFocusExit (UIObject* btn, UIScreenManager& screens);
+			void FireClick     (UIObject* btn, UIScreen* screen, UIScreenManager& screens);
+			void FireHoverEnter(UIObject* btn, UIScreen* screen, UIScreenManager& screens);
+			void FireHoverExit (UIObject* btn, UIScreen* screen, UIScreenManager& screens);
+			void FireFocusEnter(UIObject* btn, UIScreen* screen, UIScreenManager& screens);
+			void FireFocusExit (UIObject* btn, UIScreen* screen, UIScreenManager& screens);
 
 			// ハンドルが指すボタンのコンポーネントフラグを false にリセット
 			void ResetButtonState(UIObjectHandle handle);
 
 			UIObjectHandle m_hoveredButton;
 			UIObjectHandle m_focusedButton;
+			UIScreen*      m_hoveredScreen = nullptr;
 		};
 
 	} // namespace ui

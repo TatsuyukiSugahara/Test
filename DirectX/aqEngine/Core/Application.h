@@ -5,6 +5,9 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/RenderingDebugPanel.h"
 #include "Ocean/OceanDebugPanel.h"
+#include "UI/Debug/UIEditorDebugPanel.h"
+#include "UI/Debug/TextStyleEditorPanel.h"
+#include "UI/Debug/UIAnimationEditor.h"
 #include <memory>
 #endif
 
@@ -62,6 +65,9 @@ namespace aq
 		bool                                                showDebugUI_ = true;
 		std::unique_ptr<aq::ocean::OceanDebugPanel>         oceanDebugPanel_;
 		std::unique_ptr<aq::rendering::RenderingDebugPanel> renderingDebugPanel_;
+		std::unique_ptr<aq::ui::UIEditorDebugPanel>         uiEditorDebugPanel_;
+		std::unique_ptr<aq::ui::TextStyleEditorPanel>       textStyleEditorPanel_;
+		std::unique_ptr<aq::ui::UIAnimationEditor>          uiAnimationEditor_;
 #endif
 	};
 }

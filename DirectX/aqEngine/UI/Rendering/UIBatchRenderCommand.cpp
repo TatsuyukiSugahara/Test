@@ -20,6 +20,9 @@ namespace aq
 				|| !payload_->pipeline
 				|| !payload_->pipeline->IsReady())
 			{
+				// 描画なし：次フレーム GBuffer パスのためステートを既定値に戻す
+				ctx.OMSetDepthMode(graphics::DepthMode::ReadWrite);
+				ctx.OMSetBlendMode(graphics::BlendMode::Opaque);
 				return;
 			}
 
@@ -71,12 +74,22 @@ namespace aq
 						range.fillAmount, range.startAngle, range.clockwise);
 				}
 
+				// SdfText 専用 CB を更新
+				if (range.shaderType == UIShaderType::SdfText)
+				{
+					pipeline.UpdateSdfTextCB(ctx, range.sdfText);
+				}
+
 				// DrawIndexed (startIndex オフセットあり、D3D11 直呼び)
 				pipeline.DrawIndexed(range.indexCount, range.indexOffset);
 			}
 
 			// テクスチャ SRV をアンバインド (次パスへのハザード防止)
 			ctx.PSUnsetShaderResource(0);
+
+			// 次フレーム GBuffer パスのためステートを既定値に戻す
+			ctx.OMSetDepthMode(graphics::DepthMode::ReadWrite);
+			ctx.OMSetBlendMode(graphics::BlendMode::Opaque);
 		}
 
 	} // namespace ui

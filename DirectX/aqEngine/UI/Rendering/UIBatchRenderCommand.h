@@ -21,6 +21,8 @@ namespace aq
 			float fillAmount = 1.f;
 			float startAngle = 0.f;
 			float clockwise  = 1.f;
+			// SdfText 専用 (shaderType == SdfText の時のみ有効)
+			SdfTextParams sdfText;
 		};
 
 		// フレームの全 UI バッチデータ (ヒープ確保; shared_ptr で Command に渡す)

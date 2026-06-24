@@ -207,6 +207,13 @@
     <ClCompile Include="Component\TerrainComponent.cpp" />
     <ClCompile Include="Ocean\OceanMesh.cpp" />
     <ClCompile Include="Ocean\OceanDebugPanel.cpp" />
+    <ClCompile Include="UI\Debug\UIEditorDebugPanel.cpp" />
+    <ClCompile Include="UI\Debug\TextStyleEditorPanel.cpp" />
+    <ClCompile Include="UI\Debug\UIAnimationEditor.cpp" />
+    <ClCompile Include="UI\Animation\UIAnimationSerializer.cpp" />
+    <ClCompile Include="UI\Font\TextStyle.cpp" />
+    <ClCompile Include="UI\Font\FontAsset.cpp" />
+    <ClCompile Include="UI\Font\TextLayout.cpp" />
     <ClCompile Include="Component\OceanComponent.cpp" />
     <ClCompile Include="Rendering\OceanDrawCommand.cpp" />
     <ClCompile Include="Util\SimpleJson.cpp" />
@@ -222,6 +229,7 @@
     <ClCompile Include="UI\Rendering\UIBatchRenderer.cpp" />
     <ClCompile Include="UI\Rendering\UIRenderPipeline.cpp" />
     <ClCompile Include="UI\Resource\UIDocumentLoader.cpp" />
+    <ClCompile Include="UI\Resource\UIDocumentSerializer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Application.h" />
@@ -337,6 +345,15 @@
     <ClInclude Include="Ocean\OceanData.h" />
     <ClInclude Include="Ocean\OceanMesh.h" />
     <ClInclude Include="Ocean\OceanDebugPanel.h" />
+    <ClInclude Include="UI\Debug\UIEditorDebugPanel.h" />
+    <ClInclude Include="UI\Debug\TextStyleEditorPanel.h" />
+    <ClInclude Include="UI\Debug\UIAnimationEditor.h" />
+    <ClInclude Include="UI\Animation\UIAnimationSerializer.h" />
+    <ClInclude Include="UI\Font\TextStyle.h" />
+    <ClInclude Include="UI\Font\TextStyleCache.h" />
+    <ClInclude Include="UI\Font\FontAsset.h" />
+    <ClInclude Include="UI\Font\FontAssetCache.h" />
+    <ClInclude Include="UI\Font\TextLayout.h" />
     <ClInclude Include="Component\OceanComponent.h" />
     <ClInclude Include="Rendering\OceanDrawCommand.h" />
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h" />
@@ -369,6 +386,8 @@
     <ClInclude Include="UI\Animation\UIAnimationClip.h" />
     <ClInclude Include="UI\Animation\UIAnimationSystem.h" />
     <ClInclude Include="UI\Resource\UIDocumentLoader.h" />
+    <ClInclude Include="UI\Resource\UIDocumentSerializer.h" />
+    <ClInclude Include="UI\Component\UITextComponent.h" />
     <ClInclude Include="Util\CRC32.h" />
     <ClInclude Include="Util\GameTimer.h" />
     <ClInclude Include="Util\ThreadPool.h" />

@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "UIRenderPipeline.h"
 #include "UIRenderItem.h"
+#include "UIBatchRenderCommand.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/RenderContext.h"
@@ -19,6 +20,18 @@ namespace aq
 				float clockwise;
 				float pad;
 			};
+
+			// UISDFText.fx の SdfTextCB と一致させること (b1, 64 bytes)
+			struct SdfTextCBData
+			{
+				math::Vector4 outlineColor;     // 16
+				math::Vector4 shadowColor;      // 16
+				math::Vector2 shadowOffsetUV;   // 8
+				float         shadowSoftness;   // 4
+				float         outlineWidth;     // 4
+				float         smoothing;        // 4
+				float         pad0, pad1, pad2; // 12
+			};
 		}
 
 
@@ -30,8 +43,9 @@ namespace aq
 			vs_            = gfx.CreateShader("Assets/Shader/UISprite.fx",      "VSMain", graphics::IShader::ShaderType::VS);
 			standardPS_    = gfx.CreateShader("Assets/Shader/UISprite.fx",      "PSMain", graphics::IShader::ShaderType::PS);
 			circleGaugePS_ = gfx.CreateShader("Assets/Shader/UICircleGauge.fx", "PSMain", graphics::IShader::ShaderType::PS);
+			sdfTextPS_     = gfx.CreateShader("Assets/Shader/UISDFText.fx",     "PSMain", graphics::IShader::ShaderType::PS);
 
-			if (!vs_ || !standardPS_ || !circleGaugePS_)
+			if (!vs_ || !standardPS_ || !circleGaugePS_ || !sdfTextPS_)
 			{
 				EngineAssertMsg(false, "UI シェーダーコンパイル失敗");
 				return;
@@ -86,6 +100,18 @@ namespace aq
 				}
 			}
 
+			// --- SdfText 定数バッファ (b1) ---
+			{
+				SdfTextCBData init = {};
+				init.smoothing = 0.08f;
+				sdfTextCB_ = gfx.CreateConstantBuffer(&init, sizeof(init));
+				if (!sdfTextCB_)
+				{
+					EngineAssertMsg(false, "UI sdfText CB 作成失敗");
+					return;
+				}
+			}
+
 			ready_ = true;
 		}
 
@@ -104,6 +130,7 @@ namespace aq
 		                               const std::vector<uint16_t>& idx)
 		{
 			if (!ready_ || vtx.empty() || idx.empty()) return;
+			if (vtx.size() > kMaxVertices || idx.size() > kMaxIndices) return;
 
 			// VB: IVertexBuffer::Update() (DynamicVertexBuffer が Map/Unmap する)
 			const uint32_t vbBytes = static_cast<uint32_t>(vtx.size() * sizeof(UIVertex));
@@ -149,6 +176,7 @@ namespace aq
 			{
 				case UIShaderType::Standard:    ctx.PSSetShader(*standardPS_);    break;
 				case UIShaderType::CircleGauge: ctx.PSSetShader(*circleGaugePS_); break;
+				case UIShaderType::SdfText:     ctx.PSSetShader(*sdfTextPS_);     break;
 			}
 		}
 
@@ -162,6 +190,22 @@ namespace aq
 			CircleGaugeCBData data = { fillAmount, startAngle, clockwise, 0.f };
 			ctx.UpdateSubresource(*gaugeCB_, data);
 			ctx.PSSetConstantBuffer(0, *gaugeCB_);
+		}
+
+
+		void UIRenderPipeline::UpdateSdfTextCB(graphics::RenderContext& ctx,
+		                                         const SdfTextParams& params)
+		{
+			if (!ready_ || !sdfTextCB_) return;
+			SdfTextCBData data = {};
+			data.outlineColor   = params.outlineColor;
+			data.shadowColor    = params.shadowColor;
+			data.shadowOffsetUV = params.shadowOffsetUV;
+			data.shadowSoftness = params.shadowSoftness;
+			data.outlineWidth   = params.outlineWidth;
+			data.smoothing      = params.smoothing;
+			ctx.UpdateSubresource(*sdfTextCB_, data);
+			ctx.PSSetConstantBuffer(1, *sdfTextCB_);
 		}
 
 

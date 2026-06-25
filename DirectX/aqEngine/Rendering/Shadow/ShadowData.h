@@ -35,5 +35,12 @@ namespace aq
 
 		static_assert(sizeof(ShadowCBData) == 256 + 16 + 16,
 		              "ShadowCBData size mismatch with HLSL ShadowCB");
+
+		// HLSL ShadowDepth.fx の ShadowLightCB (b2) と一致させる
+		struct ShadowSliceCBData
+		{
+			uint32_t lightSlice = 0;
+			uint32_t _pad[3]    = {};
+		};
 	}
 }

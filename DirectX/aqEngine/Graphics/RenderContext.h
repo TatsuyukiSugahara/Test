@@ -186,6 +186,14 @@ namespace aq
 			{
 				impl_->ClearDepthMap(depthMap);
 			}
+			void OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t slice)
+			{
+				impl_->OMSetDepthOnlyTargetSlice(depthMap, slice);
+			}
+			void ClearDepthMapSlice(IDepthMap& depthMap, uint32_t slice)
+			{
+				impl_->ClearDepthMapSlice(depthMap, slice);
+			}
 			void PSUnsetShader()
 			{
 				impl_->PSUnsetShader();

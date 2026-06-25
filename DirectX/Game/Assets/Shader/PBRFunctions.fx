@@ -31,8 +31,6 @@ float D_GGX(float NdotH, float alpha)
 }
 
 // Correlated Smith GGX Visibility term（Heitz 2014）
-// = G(NdotV, NdotL, alpha) / (4 * NdotV * NdotL) を一体化。
-// スペキュラ項: D * V_SmithGGX * F（追加の除算は不要）
 float V_SmithGGX(float NdotV, float NdotL, float alpha)
 {
     float a2   = alpha * alpha;
@@ -80,22 +78,26 @@ float PBR_Attenuation(float dist, float range)
     return x * x;
 }
 
-// Deferred Lighting パス用: 全ライト合算（シャドウ適用前）
+// Deferred Lighting パス用: 全ライト合算。
+// dirShadow: 各ディレクショナルライトのシャドウ係数 (float4, x=light0 ... w=light3)
 float3 ComputePBRLighting(float3 worldPos, float3 N,
                           float3 baseColor, float metallic, float roughness, float specular,
-                          float3 preScaledEmissive)
+                          float3 preScaledEmissive,
+                          float4 dirShadow)
 {
     float3 V = normalize(cameraPosition - worldPos);
 
     // 簡易 ambient（Phase 3 で IBL に置換予定）
     float3 color = ambient.color * ambient.intensity * baseColor * (1.0 - metallic);
 
+    float dirShadowArr[4] = { dirShadow.x, dirShadow.y, dirShadow.z, dirShadow.w };
     for (uint di = 0; di < directionalLightCount; ++di)
     {
+        float  shadow_i = dirShadowArr[di];
         float3 L = normalize(-directionals[di].direction);
         if (dot(N, L) > 0.0)
             color += EvalDisneyBRDF(baseColor, metallic, roughness, specular * globalSpecularScale, N, V, L)
-                     * directionals[di].color * directionals[di].intensity;
+                     * directionals[di].color * directionals[di].intensity * shadow_i;
     }
 
     for (uint i = 0; i < pointLightCount; ++i)
@@ -106,7 +108,7 @@ float3 ComputePBRLighting(float3 worldPos, float3 N,
         {
             float3 L   = delta / max(dist, 1e-5);
             float  att = PBR_Attenuation(dist, pointLights[i].range);
-            color += EvalDisneyBRDF(baseColor, metallic, roughness, specular, N, V, L)
+            color += EvalDisneyBRDF(baseColor, metallic, roughness, specular * globalSpecularScale, N, V, L)
                      * pointLights[i].color * pointLights[i].intensity * att;
         }
     }

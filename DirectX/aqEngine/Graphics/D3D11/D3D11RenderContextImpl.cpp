@@ -382,6 +382,23 @@ namespace aq
 		}
 
 
+		void D3D11RenderContextImpl::OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t slice)
+		{
+			auto& d3dDM = static_cast<D3D11DepthMap&>(depthMap);
+			ID3D11RenderTargetView* nullRTV = nullptr;
+			depthStencilView_ = d3dDM.GetDSV(slice);
+			context_->OMSetRenderTargets(0, &nullRTV, depthStencilView_);
+			renderTargetViewNum_ = 0;
+		}
+
+
+		void D3D11RenderContextImpl::ClearDepthMapSlice(IDepthMap& depthMap, uint32_t slice)
+		{
+			auto& d3dDM = static_cast<D3D11DepthMap&>(depthMap);
+			context_->ClearDepthStencilView(d3dDM.GetDSV(slice), D3D11_CLEAR_DEPTH, 1.0f, 0);
+		}
+
+
 		void D3D11RenderContextImpl::PSUnsetShader()
 		{
 			context_->PSSetShader(nullptr, nullptr, 0);

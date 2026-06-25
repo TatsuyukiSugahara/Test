@@ -35,11 +35,9 @@ float CalcAttenuation(float dist, float range)
     return x * x;
 }
 
-// ライティング計算コア。材質値をすべて引数で受け取る。
-// フォワード (MaterialCB から渡す) とディファード (GBuffer から渡す) の両方で使える。
-// preScaledEmissive : emissive * emissiveScale 済みの値
-// gloss             : [0,1] の gloss 値 (同名の MaterialCB グローバルを隠す)
-// specularIntensity : スペキュラ強度    (同名の MaterialCB グローバルを隠す)
+// ライティング計算コア。
+// dirShadow: 各ディレクショナルライトのシャドウ係数 (x=light0, y=light1, z=light2, w=light3)
+//            フォワードシェーダーからは float4(1,1,1,1) を渡す（シャドウなし）。
 float3 ComputeLightingEx(
     float3 worldPos,
     float3 N,
@@ -47,7 +45,8 @@ float3 ComputeLightingEx(
     float  specMask,
     float3 preScaledEmissive,
     float  gloss,
-    float  specularIntensity)
+    float  specularIntensity,
+    float4 dirShadow)
 {
     float3 V        = normalize(cameraPosition - worldPos);
     float  shininess = exp2(gloss * 10.0 + 1.0);
@@ -55,14 +54,16 @@ float3 ComputeLightingEx(
     // Ambient
     float3 color = ambient.color * ambient.intensity * albedo;
 
-    // Directional lights
+    // Directional lights (ライトごとにシャドウを適用)
     float scaledSpec = specularIntensity * globalSpecularScale;
+    float dirShadowArr[4] = { dirShadow.x, dirShadow.y, dirShadow.z, dirShadow.w };
     for (uint di = 0; di < directionalLightCount; ++di)
     {
+        float  shadow_i = dirShadowArr[di];
         float3 L = normalize(-directionals[di].direction);
         float3 H = normalize(L + V);
-        color += albedo * CalcDiffuse(N, L, directionals[di].color, directionals[di].intensity);
-        color += CalcSpecular(N, H, directionals[di].color, directionals[di].intensity * scaledSpec, shininess, specMask);
+        color += albedo * CalcDiffuse(N, L, directionals[di].color, directionals[di].intensity) * shadow_i;
+        color += CalcSpecular(N, H, directionals[di].color, directionals[di].intensity * scaledSpec, shininess, specMask) * shadow_i;
     }
 
     // Point lights
@@ -75,18 +76,14 @@ float3 ComputeLightingEx(
         float  atten  = CalcAttenuation(dist, pointLights[i].range);
         float  intens = pointLights[i].intensity * atten;
         color += albedo * CalcDiffuse(N, L, pointLights[i].color, intens);
-        color += CalcSpecular(N, H, pointLights[i].color, intens * specularIntensity, shininess, specMask);
+        color += CalcSpecular(N, H, pointLights[i].color, intens * scaledSpec, shininess, specMask);
     }
 
     color += preScaledEmissive;
     return color;
 }
 
-// フォワードシェーダー用ラッパー。MaterialCB のグローバル値を使う。
-// 既存の ModelLit / TerrainLit / SkeletalModelLit 等は変更なしで呼び続けられる。
-// albedo    : アルベドカラー (linear)
-// specMask  : スペキュラ強度マスク [0, 1]
-// emissive  : エミッシブカラー (linear、emissiveScale は内部で適用)
+// フォワードシェーダー用ラッパー（シャドウなし: dirShadow = all 1.0）。
 float3 ComputeLighting(
     float3 worldPos,
     float3 N,
@@ -96,5 +93,6 @@ float3 ComputeLighting(
 {
     return ComputeLightingEx(worldPos, N, albedo, specMask,
                              emissive * emissiveScale,
-                             gloss, specularIntensity);
+                             gloss, specularIntensity,
+                             float4(1.0, 1.0, 1.0, 1.0));
 }

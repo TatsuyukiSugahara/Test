@@ -38,12 +38,12 @@ namespace aq
 				float              prevViewportH) = 0;
 
 			/**
-			 * フレームの DirectionalLight 設定から ShadowCBData を計算する。
+			 * フレームの LightingData から全ディレクショナルライトの ShadowCBData を計算する。
 			 * Renderer::BuildCommandList の先頭で呼ばれ RenderFrame::shadow を埋める。
 			 */
 			virtual void FillShadowCBData(
-				const graphics::DirectionalLight& light,
-				ShadowCBData&                     outData) const = 0;
+				const graphics::LightingData& lighting,
+				ShadowCBData&                 outData) const = 0;
 
 			/** 影の投影中心（シーン中心）を毎フレーム更新する。キャラクター追従に使用。 */
 			virtual void SetSceneCenter(const math::Vector3& center) = 0;

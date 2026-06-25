@@ -18,11 +18,14 @@ namespace aq
 		public:
 			virtual ~IDepthMap() = default;
 
-			/** PSt4 にバインドするための SRV */
-			virtual IShaderResourceView* GetSRV()       const = 0;
+			/** PSt4 にバインドするための SRV (全スライス) */
+			virtual IShaderResourceView* GetSRV()        const = 0;
+
+			/** 指定スライスの SRV (デバッグ表示用)。デフォルト実装は全体 SRV を返す */
+			virtual IShaderResourceView* GetSliceSRV(uint32_t /*slice*/) const { return GetSRV(); }
 
 			/** PSs1 にバインドする比較サンプラー (LESS_EQUAL) */
-			virtual ISamplerState*       GetSampler()   const = 0;
+			virtual ISamplerState*       GetSampler()    const = 0;
 
 			/** テクスチャの解像度 (正方形) */
 			virtual uint32_t             GetResolution() const = 0;

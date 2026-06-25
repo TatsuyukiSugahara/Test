@@ -214,9 +214,12 @@ namespace aq
 			if (FAILED(hr)) {
 				if (errorBlob) {
 					static char text[5 * 1024];
-					snprintf(text, ArraySize(text), "%s", (char*)errorBlob->GetBufferPointer());
-					EngineAssertMsg(false, "シェーダーコンパイルエラー");
+					snprintf(text, ArraySize(text), "[Shader Error] %s\n%s",
+					         filePath, (char*)errorBlob->GetBufferPointer());
+					OutputDebugStringA(text);
+					errorBlob->Release();
 				}
+				EngineAssertMsg(false, "シェーダーコンパイルエラー");
 				return false;
 			}
 

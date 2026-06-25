@@ -4,21 +4,30 @@
 #include "Rendering/RenderFrame.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Graphics/IDepthMap.h"
+#include "Graphics/IBuffer.h"
 
 
 namespace aq
 {
 	namespace rendering
 	{
-		/** シャドウパス開始: DSV バインド + ビューポート設定 + デプスクリア */
+		/**
+		 * シャドウパス開始: 指定スライスの DSV バインド + ビューポート設定 + デプスクリア。
+		 * lightSliceCB は b2 に lightSlice インデックスを渡すための定数バッファ。
+		 */
 		class ShadowBeginCommand final : public IRenderCommand
 		{
 		public:
-			ShadowBeginCommand(graphics::IDepthMap& depthMap, uint32_t resolution);
+			ShadowBeginCommand(graphics::IDepthMap&     depthMap,
+			                   uint32_t                 resolution,
+			                   uint32_t                 slice,
+			                   graphics::IConstantBuffer& lightSliceCB);
 			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;
 		private:
-			graphics::IDepthMap* depthMap_;
-			uint32_t             resolution_;
+			graphics::IDepthMap*       depthMap_;
+			uint32_t                   resolution_;
+			uint32_t                   slice_;
+			graphics::IConstantBuffer* lightSliceCB_;
 		};
 
 

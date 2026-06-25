@@ -6,6 +6,7 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/Lighting.h"
 #include <cmath>
+#include <algorithm>
 #ifdef AQ_DEBUG_IMGUI
 #include "ShadowDebugPanel.h"
 #endif
@@ -28,6 +29,12 @@ namespace aq
 			if (!vs) return false;
 			shadowVS_ = std::move(vs);
 
+			// b2 用: ライトスライスインデックスを shadow VS に渡す定数バッファ
+			ShadowSliceCBData sliceData{};
+			lightSliceCB_ = graphics::GraphicsDevice::Get().CreateConstantBuffer(
+				&sliceData, sizeof(sliceData));
+			if (!lightSliceCB_) return false;
+
 			return true;
 		}
 
@@ -39,66 +46,74 @@ namespace aq
 			float              prevViewportW,
 			float              prevViewportH)
 		{
-			outList.Enqueue<ShadowBeginCommand>(*depthMap_, settings_.resolution);
+			const uint32_t lightCount = frame.lighting.directionalLightCount;
 
-			// ディファードアイテム（opaque）
-			for (const RenderItem& item : frame.items) {
-				if (item.castShadow) {
-					outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
-				}
-			}
-			// フォワードアイテム（透明・特殊）も影を落とす場合はキャスト
-			for (const RenderItem& item : frame.forwardItems) {
-				if (item.castShadow) {
-					outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
-				}
-			}
+			for (uint32_t li = 0; li < lightCount; ++li)
+			{
+				outList.Enqueue<ShadowBeginCommand>(
+					*depthMap_, settings_.resolution, li, *lightSliceCB_);
 
-			outList.Enqueue<ShadowEndCommand>(*depthMap_, prevHandle, prevViewportW, prevViewportH);
+				for (const RenderItem& item : frame.items) {
+					if (item.castShadow)
+						outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
+				}
+				for (const RenderItem& item : frame.forwardItems) {
+					if (item.castShadow)
+						outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
+				}
+
+				outList.Enqueue<ShadowEndCommand>(
+					*depthMap_, prevHandle, prevViewportW, prevViewportH);
+			}
 		}
 
 
 		void HardShadowRenderer::FillShadowCBData(
-			const graphics::DirectionalLight& light,
-			ShadowCBData&                     outData) const
+			const graphics::LightingData& lighting,
+			ShadowCBData&                 outData) const
 		{
-			// ライト方向を正規化。ゼロベクトルの場合は真下方向にフォールバック
-			math::Vector3 normDir = light.direction;
-			if (!normDir.TryNormalize()) {
-				normDir = math::Vector3(0.f, -1.f, 0.f);
+			outData = ShadowCBData{};
+			outData.depthBias    = settings_.depthBias;
+			outData.softness     = settings_.softness;
+
+			const uint32_t count = std::min(lighting.directionalLightCount,
+			                                static_cast<uint32_t>(MaxShadowCascades));
+			outData.cascadeCount = count;
+
+			for (uint32_t i = 0; i < count; ++i)
+			{
+				const graphics::DirectionalLight& light = lighting.directionals[i];
+
+				math::Vector3 normDir = light.direction;
+				if (!normDir.TryNormalize())
+					normDir = math::Vector3(0.f, -1.f, 0.f);
+
+				float dotY = std::abs(normDir.y);
+				math::Vector3 up = (dotY > 0.99f)
+					? math::Vector3(1.f, 0.f, 0.f)
+					: math::Vector3(0.f, 1.f, 0.f);
+
+				math::Vector3 scaledDir = normDir;
+				scaledDir.Scale(settings_.farPlane * 0.5f);
+				math::Vector3 eye = settings_.sceneCenter - scaledDir;
+
+				math::Matrix4x4 lightView, lightProj, lightVP;
+				lightView.MakeLookAt(eye, settings_.sceneCenter, up);
+				lightProj.MakeOrthographic(
+					settings_.orthoWidth, settings_.orthoHeight,
+					settings_.nearPlane,  settings_.farPlane);
+				lightVP.Mull(lightView, lightProj);
+
+				outData.lightViewProj[i] = lightVP;
 			}
 
-			float dotY = std::abs(normDir.y);
-
-			// up ベクトル: ライト方向が Y 軸と平行な場合は X 軸にフォールバック
-			math::Vector3 up = (dotY > 0.99f)
-				? math::Vector3(1.f, 0.f, 0.f)
-				: math::Vector3(0.f, 1.f, 0.f);
-
-			// ライト位置 = シーン中心からライト方向の逆に farPlane/2 だけ離す
-			math::Vector3 scaledDir = normDir;
-			scaledDir.Scale(settings_.farPlane * 0.5f);
-			math::Vector3 eye = settings_.sceneCenter - scaledDir;
-
-			math::Matrix4x4 lightView, lightProj, lightVP;
-			lightView.MakeLookAt(eye, settings_.sceneCenter, up);
-			lightProj.MakeOrthographic(
-				settings_.orthoWidth, settings_.orthoHeight,
-				settings_.nearPlane,  settings_.farPlane);
-			lightVP.Mull(lightView, lightProj);
-
-			outData                  = ShadowCBData{};
-			outData.lightViewProj[0] = lightVP;
-			outData.cascadeSplits    = { settings_.farPlane, 0.f, 0.f, 0.f };
-			outData.cascadeCount     = 1;
-			outData.depthBias        = settings_.depthBias;
-			outData.softness         = settings_.softness;
+			outData.cascadeSplits = { settings_.farPlane, 0.f, 0.f, 0.f };
 		}
 
 #ifdef AQ_DEBUG_IMGUI
 		std::unique_ptr<IDebugRenderable> HardShadowRenderer::CreateDebugPanel()
 		{
-			return std::make_unique<ShadowDebugPanel>(settings_);
+			return std::make_unique<ShadowDebugPanel>(settings_, this);
 		}
 #endif
 	}

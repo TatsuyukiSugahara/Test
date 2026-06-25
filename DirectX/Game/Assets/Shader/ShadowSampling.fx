@@ -14,24 +14,11 @@ static const float2 kPcfOffsets[9] =
 // shadowMapArray の 1 テクセルあたりの UV サイズ（解像度 2048 固定）
 static const float kShadowTexelSize = 1.0 / 2048.0;
 
-// ビュー空間の Z 深度からカスケードインデックスを選択する。
-// cascadeSplits の各成分はカスケード 0,1,2,3 それぞれの far 深度を表す。
-uint SelectCascade(float viewDepth)
+// 指定ライトインデックス（配列スライス）のシャドウを PCF サンプリングする。
+// 戻り値: 0.0=完全に影、1.0=完全に照らされている
+float SampleShadowForLight(float3 worldPos, uint lightIndex)
 {
-    if (cascadeCount > 3 && viewDepth > cascadeSplits.z) return 3;
-    if (cascadeCount > 2 && viewDepth > cascadeSplits.y) return 2;
-    if (cascadeCount > 1 && viewDepth > cascadeSplits.x) return 1;
-    return 0;
-}
-
-// デプスシャドウサンプリング（PCF 3x3、カスケード対応）
-// worldPos  : ワールド空間座標
-// viewDepth : ビュー空間の Z 深度（カスケード選択に使用）
-// 戻り値    : 0.0 = 完全に影、1.0 = 完全に照らされている
-float SampleShadow(float3 worldPos, float viewDepth)
-{
-    uint   cascade  = SelectCascade(viewDepth);
-    float4 lightClip = mul(lightViewProj[cascade], float4(worldPos, 1.0));
+    float4 lightClip = mul(lightViewProj[lightIndex], float4(worldPos, 1.0));
     float3 ndc = lightClip.xyz / lightClip.w;
     float2 uv  = ndc.xy * float2(0.5, -0.5) + 0.5;
 
@@ -47,7 +34,13 @@ float SampleShadow(float3 worldPos, float viewDepth)
     for (int i = 0; i < 9; ++i)
     {
         shadow += shadowMapArray.SampleCmpLevelZero(
-            shadowSampler, float3(uv + kPcfOffsets[i] * uvStep, (float)cascade), d);
+            shadowSampler, float3(uv + kPcfOffsets[i] * uvStep, (float)lightIndex), d);
     }
     return shadow / 9.0;
+}
+
+// 後方互換: ライト 0 のシャドウを返す
+float SampleShadow(float3 worldPos, float viewDepth)
+{
+    return SampleShadowForLight(worldPos, 0);
 }

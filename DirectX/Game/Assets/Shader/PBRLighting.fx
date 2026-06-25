@@ -57,20 +57,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
     float  specular         = g2.w;
     float3 preScaledEmissive = g3.rgb;
 
+    // pixelTag >= 1.5 なら影を受ける。
+    // ライト0のみシャドウを適用し、ライト1以降はフィルライトとしてシャドウなしで寄与させる。
+    float4 dirShadow = float4(1.0, 1.0, 1.0, 1.0);
+    if (pixelTag >= 1.5 && directionalLightCount > 0)
+        dirShadow.x = SampleShadowForLight(worldPos, 0);
+
     float3 lit = ComputePBRLighting(worldPos, N, baseColor, metallic,
-                                    roughness, specular, preScaledEmissive);
-
-    // pixelTag >= 1.5 なら影を受ける（DeferredLighting.fx と同じ pixelTag 規則）
-    if (pixelTag >= 1.5)
-    {
-        float viewDepth = mul(view, float4(worldPos, 1.0)).z;
-        float shadow    = SampleShadow(worldPos, viewDepth);
-
-        // ambient + emissive は影の対象外
-        float3 ambientEmissive = ambient.color * ambient.intensity
-                                 * baseColor * (1.0 - metallic) + preScaledEmissive;
-        lit = ambientEmissive + (lit - ambientEmissive) * shadow;
-    }
+                                    roughness, specular, preScaledEmissive,
+                                    dirShadow);
 
     return float4(lit, 1.0);
 }

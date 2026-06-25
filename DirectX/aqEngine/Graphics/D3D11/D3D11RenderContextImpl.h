@@ -61,6 +61,8 @@ namespace aq
 			void OMSetDepthOnlyTarget(IDepthMap& depthMap) override;
 			void ClearDepthMap(IDepthMap& depthMap) override;
 			void PSUnsetShader() override;
+			void OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t slice) override;
+			void ClearDepthMapSlice(IDepthMap& depthMap, uint32_t slice) override;
 
 			/** D3D11 専用: ラスタライザーステート */
 			void RSSetState(ID3D11RasterizerState* state);

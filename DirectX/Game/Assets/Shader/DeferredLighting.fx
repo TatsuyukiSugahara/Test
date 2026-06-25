@@ -24,10 +24,6 @@ cbuffer PerDrawCB : register(b0)
 };
 
 // フルスクリーントライアングル: Draw(3, 0) で呼ぶ
-// vertexID  TexCoord(uv)  ClipSpace(xy)
-//   0        (0, 0)        (-1,  1)
-//   1        (2, 0)        ( 3,  1)
-//   2        (0, 2)        (-1, -3)
 VSOutput VSMain(uint vertexID : SV_VertexID)
 {
     VSOutput o;
@@ -57,17 +53,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
     float  gbufferSpecIntens = g2.w;
     float3 preScaledEmissive = g3.rgb;
 
-    float3 lit = ComputeLightingEx(worldPos, N, albedo, specMask,
-                                   preScaledEmissive, gbufferGloss, gbufferSpecIntens);
+    // pixelTag >= 1.5 なら影を受ける。
+    // ライト0のみシャドウを適用し、ライト1以降はフィルライトとしてシャドウなしで寄与させる。
+    float4 dirShadow = float4(1.0, 1.0, 1.0, 1.0);
+    if (pixelTag >= 1.5 && directionalLightCount > 0)
+        dirShadow.x = SampleShadowForLight(worldPos, 0);
 
-    // pixelTag >= 1.5 なら影を受ける
-    if (pixelTag >= 1.5)
-    {
-        float viewDepth    = mul(view, float4(worldPos, 1.0)).z;
-        float shadow       = SampleShadow(worldPos, viewDepth);
-        float3 ambientOnly = ambient.color * ambient.intensity * albedo + preScaledEmissive;
-        lit = ambientOnly + (lit - ambientOnly) * shadow;
-    }
+    float3 lit = ComputeLightingEx(worldPos, N, albedo, specMask,
+                                   preScaledEmissive, gbufferGloss, gbufferSpecIntens,
+                                   dirShadow);
 
     return float4(lit, 1.0);
 }

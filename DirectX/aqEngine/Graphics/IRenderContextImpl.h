@@ -84,6 +84,10 @@ namespace aq
 			virtual void OMSetDepthOnlyTarget(IDepthMap& depthMap) = 0;
 			virtual void ClearDepthMap(IDepthMap& depthMap) = 0;
 			virtual void PSUnsetShader() = 0;
+
+			// スライス指定シャドウパス用 (デフォルト実装はスライス 0 にフォールバック)
+			virtual void OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t /*slice*/) { OMSetDepthOnlyTarget(depthMap); }
+			virtual void ClearDepthMapSlice(IDepthMap& depthMap, uint32_t /*slice*/) { ClearDepthMap(depthMap); }
 		};
 	}
 }

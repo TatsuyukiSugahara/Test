@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "ShadowPassCommand.h"
+#include "ShadowData.h"
 #include "Rendering/FrameContext.h"
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsDevice.h"
@@ -14,9 +15,14 @@ namespace aq
 		// ShadowBeginCommand
 		// ----------------------------------------------------------------
 
-		ShadowBeginCommand::ShadowBeginCommand(graphics::IDepthMap& depthMap, uint32_t resolution)
+		ShadowBeginCommand::ShadowBeginCommand(graphics::IDepthMap&     depthMap,
+		                                           uint32_t                 resolution,
+		                                           uint32_t                 slice,
+		                                           graphics::IConstantBuffer& lightSliceCB)
 			: depthMap_(&depthMap)
 			, resolution_(resolution)
+			, slice_(slice)
+			, lightSliceCB_(&lightSliceCB)
 		{}
 
 
@@ -24,9 +30,14 @@ namespace aq
 		{
 			// 前フレームで t4 に bind したシャドウ SRV を先に解放してから DSV として使う
 			ctx.PSUnsetShaderResource(4);
-			ctx.OMSetDepthOnlyTarget(*depthMap_);
+			ctx.OMSetDepthOnlyTargetSlice(*depthMap_, slice_);
 			ctx.RSSetViewport(0.f, 0.f, static_cast<float>(resolution_), static_cast<float>(resolution_));
-			ctx.ClearDepthMap(*depthMap_);
+			ctx.ClearDepthMapSlice(*depthMap_, slice_);
+
+			// b2: lightSlice インデックスをシャドウ VS に渡す
+			ShadowSliceCBData sliceData{ slice_ };
+			ctx.UpdateSubresource(*lightSliceCB_, sliceData);
+			ctx.VSSetConstantBuffer(2, *lightSliceCB_);
 		}
 
 

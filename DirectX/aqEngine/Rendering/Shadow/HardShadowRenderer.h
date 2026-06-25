@@ -1,8 +1,9 @@
-﻿#pragma once
+#pragma once
 #include <memory>
 #include "IShadowRenderer.h"
 #include "Graphics/IDepthMap.h"
 #include "Graphics/IShader.h"
+#include "Graphics/IBuffer.h"
 
 
 namespace aq
@@ -10,8 +11,8 @@ namespace aq
 	namespace rendering
 	{
 		/**
-		 * ハードシャドウ (単一カスケード、デプスのみ) の実装。
-		 * ソフトシャドウ (PCF) や CSM への移行時は IShadowRenderer の別実装に差し替える。
+		 * ハードシャドウ (PCF、ディレクショナルライト最大 4 本対応) の実装。
+		 * 各ディレクショナルライトが深度マップのスライス 0〜3 に書き込む。
 		 */
 		class HardShadowRenderer final : public IShadowRenderer
 		{
@@ -35,8 +36,8 @@ namespace aq
 				float              prevViewportH) override;
 
 			void FillShadowCBData(
-				const graphics::DirectionalLight& light,
-				ShadowCBData&                     outData) const override;
+				const graphics::LightingData& lighting,
+				ShadowCBData&                 outData) const override;
 
 			void SetSceneCenter(const math::Vector3& center) override { settings_.sceneCenter = center; }
 
@@ -49,9 +50,10 @@ namespace aq
 #endif
 
 		private:
-			std::unique_ptr<graphics::IDepthMap> depthMap_;
-			std::shared_ptr<graphics::IShader>   shadowVS_;
-			ShadowSettings                        settings_;
+			std::unique_ptr<graphics::IDepthMap>       depthMap_;
+			std::shared_ptr<graphics::IShader>         shadowVS_;
+			std::unique_ptr<graphics::IConstantBuffer> lightSliceCB_;
+			ShadowSettings                              settings_;
 		};
 	}
 }

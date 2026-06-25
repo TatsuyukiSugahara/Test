@@ -108,15 +108,17 @@ float4 PSMain(PSInput input) : SV_TARGET
     }
 
     float3 N   = normalize(input.N);
-    float3 lit = ComputeLighting(input.worldPos, N, albedo, 1.0, float3(0.0, 0.0, 0.0));
-
+    float4 dirShadow = float4(1.0, 1.0, 1.0, 1.0);
     if (ReceivesShadow())
     {
-        float  viewDepth   = mul(view, float4(input.worldPos, 1.0)).z;
-        float  shadow      = SampleShadow(input.worldPos, viewDepth);
-        float3 ambientOnly = ambient.color * ambient.intensity * albedo;
-        lit = ambientOnly + (lit - ambientOnly) * shadow;
+        if (directionalLightCount > 0) dirShadow.x = SampleShadowForLight(input.worldPos, 0);
+        if (directionalLightCount > 1) dirShadow.y = SampleShadowForLight(input.worldPos, 1);
+        if (directionalLightCount > 2) dirShadow.z = SampleShadowForLight(input.worldPos, 2);
+        if (directionalLightCount > 3) dirShadow.w = SampleShadowForLight(input.worldPos, 3);
     }
+    float3 lit = ComputeLightingEx(input.worldPos, N, albedo, 1.0,
+                                   float3(0.0, 0.0, 0.0), gloss, specularIntensity,
+                                   dirShadow);
 
     return float4(lit, 1.0);
 }

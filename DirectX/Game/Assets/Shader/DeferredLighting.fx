@@ -53,11 +53,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
     float  gbufferSpecIntens = g2.w;
     float3 preScaledEmissive = g3.rgb;
 
-    // pixelTag >= 1.5 なら影を受ける。
-    // ライト0のみシャドウを適用し、ライト1以降はフィルライトとしてシャドウなしで寄与させる。
     float4 dirShadow = float4(1.0, 1.0, 1.0, 1.0);
-    if (pixelTag >= 1.5 && directionalLightCount > 0)
-        dirShadow.x = SampleShadowForLight(worldPos, 0);
+    if (pixelTag >= 1.5)
+    {
+        if (directionalLightCount > 0) dirShadow.x = SampleShadowForLight(worldPos, 0);
+        if (directionalLightCount > 1) dirShadow.y = SampleShadowForLight(worldPos, 1);
+        if (directionalLightCount > 2) dirShadow.z = SampleShadowForLight(worldPos, 2);
+        if (directionalLightCount > 3) dirShadow.w = SampleShadowForLight(worldPos, 3);
+    }
 
     float3 lit = ComputeLightingEx(worldPos, N, albedo, specMask,
                                    preScaledEmissive, gbufferGloss, gbufferSpecIntens,

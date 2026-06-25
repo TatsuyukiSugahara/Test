@@ -1,10 +1,10 @@
 {
-  "fillColor": [0.973451, 0, 0, 1],
+  "fillColor": [0.327434, 1, 0.946433, 1],
   "fontPath": "Assets/Font/CorporateLogo/atlas.json",
   "fontSize": 24,
   "gradient": {
-    "bottomColor": [0.6, 0.6, 0.6, 1],
-    "enabled": false,
+    "bottomColor": [1, 0, 0, 1],
+    "enabled": true,
     "topColor": [1, 1, 1, 1]
   },
   "name": "Default",
@@ -15,7 +15,7 @@
   },
   "shadow": {
     "color": [0.262745, 0.490196, 1, 1],
-    "enabled": true,
+    "enabled": false,
     "offset": [6, -8.5],
     "softness": 0.103
   }

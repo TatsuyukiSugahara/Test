@@ -4,6 +4,7 @@
 #include "Rendering/RenderThread.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/RenderingDebugPanel.h"
+#include "Rendering/LightingDebugPanel.h"
 #include "Ocean/OceanDebugPanel.h"
 #include "UI/Debug/UIEditorDebugPanel.h"
 #include "UI/Debug/TextStyleEditorPanel.h"

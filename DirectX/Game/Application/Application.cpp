@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "Utility.h"
 #include "Application.h"
+#include "TestScreen.h"
 #include "Scene/Scene.h"
 #include "GameInput.h"
 #include "Engine.h"
@@ -38,10 +39,12 @@ namespace app
 		GameInput::Initialize();
 		app::SceneManager::Create();
 
-		// --- UI テスト: 画面中央にキャラクター画像を表示 ---
+		// --- UI アニメーションテスト ---
+		// TestScreen.json に定義された FadeIn + SlideLoop クリップを自動再生する。
+		// デバッグメニュー UI > Animation Editor で実行中アニメーションを確認・編集できる。
 		{
 			auto& screens = aq::ui::UIContext::Get().Screens();
-			screens.Register("TestUI", "Assets/UI/TestScreen.json");
+			screens.Register<app::TestScreen>("TestUI", "Assets/UI/TestScreen.json");
 			screens.Push("TestUI");
 		}
 

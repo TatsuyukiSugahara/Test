@@ -7,7 +7,8 @@ namespace aq
 {
 	namespace graphics
 	{
-		constexpr uint32_t MaxPointLights = 8;
+		constexpr uint32_t MaxPointLights       = 8;
+		constexpr uint32_t MaxDirectionalLights = 4;
 
 		// forward (Blinn-Phong) シェーダー用フラグ
 		enum MaterialFlags : uint32_t
@@ -57,10 +58,14 @@ namespace aq
 		struct LightingData
 		{
 			AmbientLight     ambient;
-			DirectionalLight directional;
+			DirectionalLight directionals[MaxDirectionalLights];
+			uint32_t         directionalLightCount = 1;
+			float            globalSpecularScale   = 1.0f;
+			uint32_t         _pad0                 = 0;
+			uint32_t         _pad1                 = 0;
 			PointLight       pointLights[MaxPointLights];
-			uint32_t         pointLightCount = 0;
-			math::Vector3    cameraPosition  = {};
+			uint32_t         pointLightCount       = 0;
+			math::Vector3    cameraPosition        = {};
 		};
 
 		// sizeof が HLSL MaterialCB と一致している必要がある

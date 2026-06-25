@@ -1,4 +1,5 @@
-#define MAX_POINT_LIGHTS 8
+#define MAX_POINT_LIGHTS       8
+#define MAX_DIRECTIONAL_LIGHTS 4
 
 struct AmbientLight
 {
@@ -25,7 +26,11 @@ struct PointLight
 cbuffer LightingCB : register(b1)
 {
     AmbientLight     ambient;
-    DirectionalLight directional;
+    DirectionalLight directionals[MAX_DIRECTIONAL_LIGHTS];
+    uint             directionalLightCount;
+    float            globalSpecularScale;
+    uint             _lpad0;
+    uint             _lpad1;
     PointLight       pointLights[MAX_POINT_LIGHTS];
     uint             pointLightCount;
     float3           cameraPosition;

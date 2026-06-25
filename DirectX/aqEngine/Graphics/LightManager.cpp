@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "LightManager.h"
+#include <algorithm>
 
 namespace aq
 {
@@ -11,11 +12,46 @@ namespace aq
 		LightManager::LightManager()
 		{
 			// デフォルトライト: 白色ディレクショナル + 薄いアンビエント
-			data_.directional.direction = { 0.0f, -1.0f, 0.5f };
-			data_.directional.color     = { 1.0f,  1.0f, 1.0f };
-			data_.directional.intensity = 1.0f;
-			data_.ambient.color         = { 0.1f,  0.1f, 0.1f };
-			data_.ambient.intensity     = 1.0f;
+			data_.directionals[0].direction = { 0.0f, -1.0f, 0.5f };
+			data_.directionals[0].color     = { 1.0f,  1.0f, 1.0f };
+			data_.directionals[0].intensity = 1.0f;
+			data_.directionalLightCount     = 1;
+			data_.ambient.color             = { 0.1f,  0.1f, 0.1f };
+			data_.ambient.intensity         = 1.0f;
+			data_.globalSpecularScale       = 1.0f;
+		}
+
+
+		void LightManager::AddDirectionalLight(const math::Vector3& direction,
+		                                        const math::Vector3& color,
+		                                        float                intensity)
+		{
+			if (data_.directionalLightCount >= MaxDirectionalLights) return;
+			auto& dl     = data_.directionals[data_.directionalLightCount++];
+			dl.direction = direction;
+			dl.color     = color;
+			dl.intensity = intensity;
+		}
+
+
+		void LightManager::SetDirectionalLight(uint32_t             index,
+		                                        const math::Vector3& direction,
+		                                        const math::Vector3& color,
+		                                        float                intensity)
+		{
+			if (index >= MaxDirectionalLights) return;
+			auto& dl     = data_.directionals[index];
+			dl.direction = direction;
+			dl.color     = color;
+			dl.intensity = intensity;
+			if (index >= data_.directionalLightCount)
+				data_.directionalLightCount = index + 1;
+		}
+
+
+		void LightManager::SetDirectionalLightCount(uint32_t count)
+		{
+			data_.directionalLightCount = std::min(count, MaxDirectionalLights);
 		}
 
 

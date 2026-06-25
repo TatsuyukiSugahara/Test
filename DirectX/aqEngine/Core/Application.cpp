@@ -146,6 +146,13 @@ namespace aq
 		{
 			renderingDebugPanel_ = std::make_unique<aq::rendering::RenderingDebugPanel>();
 
+			// Lighting
+			{
+				auto panel = std::make_unique<aq::rendering::LightingDebugPanel>();
+				renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
+				renderingDebugPanel_->TakeOwnership(std::move(panel));
+			}
+
 			// Ocean
 			oceanDebugPanel_ = std::make_unique<aq::ocean::OceanDebugPanel>();
 			renderingDebugPanel_->AddTab("Ocean", oceanDebugPanel_.get());

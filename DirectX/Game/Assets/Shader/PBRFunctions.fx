@@ -90,11 +90,12 @@ float3 ComputePBRLighting(float3 worldPos, float3 N,
     // 簡易 ambient（Phase 3 で IBL に置換予定）
     float3 color = ambient.color * ambient.intensity * baseColor * (1.0 - metallic);
 
+    for (uint di = 0; di < directionalLightCount; ++di)
     {
-        float3 L = normalize(-directional.direction);
+        float3 L = normalize(-directionals[di].direction);
         if (dot(N, L) > 0.0)
-            color += EvalDisneyBRDF(baseColor, metallic, roughness, specular, N, V, L)
-                     * directional.color * directional.intensity;
+            color += EvalDisneyBRDF(baseColor, metallic, roughness, specular * globalSpecularScale, N, V, L)
+                     * directionals[di].color * directionals[di].intensity;
     }
 
     for (uint i = 0; i < pointLightCount; ++i)

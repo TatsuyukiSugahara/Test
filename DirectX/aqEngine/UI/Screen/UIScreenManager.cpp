@@ -57,7 +57,9 @@ namespace aq
 
 		void UIScreenManager::Update(float dt)
 		{
-			// 1. 全スタック画面のアニメーション更新
+			// 1. 全スタック画面の OnUpdate + アニメーション更新
+			for (auto& screen : stack_)
+				screen->OnUpdate(dt);
 			UIAnimationSystem::Update(*this, dt);
 
 			// 2. pending ops 処理

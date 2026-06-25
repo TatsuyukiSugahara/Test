@@ -55,12 +55,14 @@ float3 ComputeLightingEx(
     // Ambient
     float3 color = ambient.color * ambient.intensity * albedo;
 
-    // Directional light
+    // Directional lights
+    float scaledSpec = specularIntensity * globalSpecularScale;
+    for (uint di = 0; di < directionalLightCount; ++di)
     {
-        float3 L = normalize(-directional.direction);
+        float3 L = normalize(-directionals[di].direction);
         float3 H = normalize(L + V);
-        color += albedo * CalcDiffuse(N, L, directional.color, directional.intensity);
-        color += CalcSpecular(N, H, directional.color, directional.intensity * specularIntensity, shininess, specMask);
+        color += albedo * CalcDiffuse(N, L, directionals[di].color, directionals[di].intensity);
+        color += CalcSpecular(N, H, directionals[di].color, directionals[di].intensity * scaledSpec, shininess, specMask);
     }
 
     // Point lights

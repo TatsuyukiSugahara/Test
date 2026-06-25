@@ -54,7 +54,7 @@ namespace aq
 		{
 			// Pass 1: シャドウパス
 			if (shadowRenderer_) {
-				shadowRenderer_->FillShadowCBData(frame.lighting.directional, frame.shadow);
+				shadowRenderer_->FillShadowCBData(frame.lighting.directionals[0], frame.shadow);
 				shadowRenderer_->BuildShadowCommandList(frame, outList, rtHandle, viewportW, viewportH);
 			}
 

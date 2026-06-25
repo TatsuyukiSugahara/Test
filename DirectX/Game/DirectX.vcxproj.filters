@@ -24,6 +24,9 @@
     <ClCompile Include="Application\Application.cpp">
       <Filter>Application</Filter>
     </ClCompile>
+    <ClCompile Include="Application\TestScreen.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
     <ClCompile Include="Application\GameInput.cpp">
       <Filter>Application</Filter>
     </ClCompile>
@@ -54,6 +57,9 @@
       <Filter>Application</Filter>
     </ClInclude>
     <ClInclude Include="Application\Application.h">
+      <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\TestScreen.h">
       <Filter>Application</Filter>
     </ClInclude>
     <ClInclude Include="Application\GameAction.h">

@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <string>
 #include <string_view>
 #include "UI/UITypes.h"
 
@@ -26,13 +27,14 @@ namespace aq
 			// OnExit   : Pop/Replace で閉じ始めたとき。
 			// OnDestroy: 完全に破棄されたとき。
 			// OnBack   : 戻る操作。true を返すと処理済みとみなし Pop しない。
-			virtual void OnCreate()  {}
-			virtual void OnEnter()   {}
-			virtual void OnPause()   {}
-			virtual void OnResume()  {}
-			virtual void OnExit()    {}
-			virtual void OnDestroy() {}
-			virtual bool OnBack()    { return false; }
+			virtual void OnCreate()          {}
+			virtual void OnEnter()           {}
+			virtual void OnUpdate(float /*dt*/) {}
+			virtual void OnPause()           {}
+			virtual void OnResume()          {}
+			virtual void OnExit()            {}
+			virtual void OnDestroy()         {}
+			virtual bool OnBack()            { return false; }
 
 			// ---- 入力・描画制御フラグ ----
 			bool blocksRaycast = true;  // false → マウス HitTest を背面画面に通す

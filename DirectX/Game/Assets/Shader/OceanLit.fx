@@ -168,16 +168,16 @@ float4 PSMain(PSInput input) : SV_TARGET
     float3 color = lerp(waterColor, skyCol, fresnel);
 
     // --- 拡散光 (Fresnel の弱い角度で海面が明るくなる) ---
-    float3 L       = normalize(-directional.direction);
+    float3 L       = normalize(-directionals[0].direction);
     float  diffuse = saturate(dot(N, L));
-    color += waterColor * directional.color * directional.intensity
+    color += waterColor * directionals[0].color * directionals[0].intensity
            * diffuse * (1.0 - fresnel) * 0.3;
 
     // --- 太陽のハイライト (Blinn-Phong) ---
     float3 H     = normalize(L + V);
     float  NdotH = saturate(dot(N, H));
     float  spec  = pow(NdotH, fresnelParams.w) * sunSky.x;
-    color += directional.color * spec;
+    color += directionals[0].color * spec;
 
     return float4(color, 1.0);
 }

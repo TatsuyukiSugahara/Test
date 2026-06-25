@@ -2,7 +2,6 @@
 #include "AnimationClip.h"
 #include <DirectXMath.h>
 #include <cmath>
-#include <algorithm>
 
 
 namespace aq

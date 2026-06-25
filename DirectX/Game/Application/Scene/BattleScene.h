@@ -1,6 +1,6 @@
 #pragma once
 #include "Scene.h"
-#include "ECS/Entity.h"
+
 #ifdef AQ_DEBUG_IMGUI
 #include "Terrain/HeightmapPainter.h"
 #include "Terrain/SplatmapPainter.h"

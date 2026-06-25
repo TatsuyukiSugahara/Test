@@ -1,8 +1,6 @@
 #include "stdafx.h"
 #include "ActorSteeringComponentSystem.h"
 #include "ActorComponentSystem.h"
-#include "GameInput.h"
-#include "Graphics/Camera.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #endif

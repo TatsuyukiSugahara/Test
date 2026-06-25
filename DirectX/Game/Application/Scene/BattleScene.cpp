@@ -1,26 +1,18 @@
 #include "stdafx.h"
 #include "BattleScene.h"
 
-#include "Utility.h"
-#include "Component/TerrainComponent.h"  // Utility.h (EngineAssert) より後に include する
+#include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
 #include "ECS/EntityDebugTag.h"
 #endif
 
-#include "Component/TransformComponentSystem.h"
-#include "Component/HierarchicalTransformComponent.h"
-#include "Component/BodyComponentSystem.h"
 #include "Component/Prefab.h"
 #include "Component/AnimationComponentSystem.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
-
-#include "Graphics/Camera.h"
-#include "Graphics/LightManager.h"
-#include "HID/Input.h"
 
 
 namespace app

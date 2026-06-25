@@ -4,9 +4,6 @@
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/Lighting.h"
-#include <array>
-#include <cstring>
-#include <algorithm>
 
 
 namespace aq

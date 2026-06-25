@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "LightManager.h"
-#include <algorithm>
 
 namespace aq
 {

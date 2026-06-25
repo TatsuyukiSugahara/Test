@@ -3,7 +3,6 @@
 #include "GhostBody.h"
 #include "BulletDbvtBroadphase.h"
 #include "BulletGhostNarrowphase.h"
-#include <algorithm>
 #include <cassert>
 
 

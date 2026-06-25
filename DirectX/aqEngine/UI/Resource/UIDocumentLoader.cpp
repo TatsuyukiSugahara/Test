@@ -14,8 +14,6 @@
 #include "Util/SimpleJson.h"
 #include "Graphics/IShaderResourceView.h"
 #include "Resource/Resource.h"
-#include <memory>
-#include <string>
 
 namespace aq
 {

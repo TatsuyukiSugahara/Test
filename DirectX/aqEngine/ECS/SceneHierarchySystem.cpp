@@ -8,9 +8,6 @@
 #include "Component/TransformComponentSystem.h"
 #include "Component/HierarchicalTransformComponent.h"
 #include <imgui/imgui.h>
-#include <algorithm>
-#include <cstring>
-#include <vector>
 
 namespace aq
 {

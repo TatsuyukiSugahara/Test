@@ -4,9 +4,7 @@
 #include "Resource/Resource.h"
 
 #include <cmath>
-#include <algorithm>
 #include <cctype>
-#include <string>
 
 
 namespace aq

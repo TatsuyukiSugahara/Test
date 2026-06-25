@@ -1,10 +1,7 @@
 #include "aq.h"
 #include "D3D11Shader.h"
 #include "D3D11GraphicsDeviceImpl.h"
-#include <algorithm>
 #include <filesystem>
-#include <string>
-#include <vector>
 
 namespace aq
 {

@@ -1,6 +1,4 @@
 #pragma once
-#include "UI/Screen/UIScreen.h"
-#include "UI/UITypes.h"
 
 namespace app
 {

@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "GameTimer.h"
-#include <algorithm>
 
 
 namespace aq

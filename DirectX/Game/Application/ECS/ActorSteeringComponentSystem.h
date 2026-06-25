@@ -1,7 +1,4 @@
 ﻿#pragma once
-#include "Utility.h"
-#include "ECS/ECS.h"
-
 
 namespace app
 {

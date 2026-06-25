@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include <cstdint>
-#include "Assets/Shader/MaterialDef.h"
+#include "Graphics/MaterialDef.h"
 #include "Math/Vector.h"
 
 namespace aq

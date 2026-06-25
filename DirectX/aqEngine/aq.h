@@ -45,6 +45,7 @@
 #include <string>
 #include <algorithm>
 #include <functional>
+#include <utility>
 
 #include <memory>
 #include <unordered_map>
@@ -59,6 +60,7 @@
 #include <tchar.h>
 #include <stdio.h>
 #include <cstdint>
+#include <cstring>
 #include <assert.h>
 
 #include <DirectXMath.h>
@@ -71,3 +73,21 @@
 #include "Util/ThreadPool.h"
 
 #include "Utility.h"
+
+#include "Engine.h"
+#include "ECS/ECS.h"
+#include "Component/TransformComponentSystem.h"
+#include "Component/HierarchicalTransformComponent.h"
+#include "Component/BodyComponentSystem.h"
+#include "Graphics/Camera.h"
+#include "Graphics/LightManager.h"
+#include "Graphics/GraphicsDevice.h"
+#include "Rendering/RenderFrame.h"
+#include "Rendering/RenderCommandList.h"
+#include "Rendering/FrameCommands.h"
+#include "Rendering/Shadow/HardShadowRenderer.h"
+#include "Rendering/PostProcess/BloomRenderer.h"
+#include "Rendering/Deferred/DeferredRenderer.h"
+#include "Resource/Resource.h"
+#include "UI/UIContext.h"
+#include "UI/Screen/UIScreenManager.h"

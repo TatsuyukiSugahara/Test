@@ -475,6 +475,9 @@
     <ClInclude Include="Graphics\Lighting.h">
       <Filter>Graphics</Filter>
     </ClInclude>
+    <ClInclude Include="Graphics\MaterialDef.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
     <ClInclude Include="Graphics\LightManager.h">
       <Filter>Graphics</Filter>
     </ClInclude>

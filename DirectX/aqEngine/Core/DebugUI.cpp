@@ -2,7 +2,6 @@
 #include "DebugUI.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "IDebugRenderable.h"
-#include <algorithm>
 
 namespace aq
 {

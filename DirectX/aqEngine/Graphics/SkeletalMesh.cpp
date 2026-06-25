@@ -2,7 +2,6 @@
 #include "SkeletalMesh.h"
 #include "MeshRenderHelper.h"
 #include "GraphicsDevice.h"
-#include <algorithm>
 
 
 namespace aq

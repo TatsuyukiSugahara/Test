@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "StateMachine.h"
-#include "Component/TransformComponentSystem.h"
 
 
 namespace app

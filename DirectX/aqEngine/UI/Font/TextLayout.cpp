@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "TextLayout.h"
 #include "FontAsset.h"
-#include <algorithm>
 #include <cmath>
 
 namespace aq

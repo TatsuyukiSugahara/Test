@@ -1,7 +1,7 @@
 #include "stdafx.h"
-#include "Utility.h"
 #include "GameInput.h"
-#include "HID/InputBinding.h"
+
+
 
 namespace app
 {

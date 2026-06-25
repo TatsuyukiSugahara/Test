@@ -9,7 +9,6 @@
 
 #include <imgui/imgui.h>
 #include <DirectXTex/DirectXTex.h>
-#include <algorithm>
 #include <cmath>
 
 namespace aq

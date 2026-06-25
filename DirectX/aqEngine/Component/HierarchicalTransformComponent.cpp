@@ -2,7 +2,6 @@
 #include "Engine.h"
 #include "HierarchicalTransformComponent.h"
 #include "ECS/EntityContext.h"
-#include <algorithm>
 
 namespace aq
 {

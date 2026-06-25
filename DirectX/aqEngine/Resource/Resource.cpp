@@ -3,10 +3,8 @@
 #include "Resource.h"
 #include "Engine.h"
 #include <cctype>
-#include <cstring>
 #include <cstdio>
 #include <DirectXMath.h>
-#include <algorithm>
 #include <cmath>
 #include <filesystem>
 

@@ -10,7 +10,6 @@
 
 #include <imgui/imgui.h>
 #include <cmath>
-#include <algorithm>
 
 #include <DirectXTex/DirectXTex.h>
 

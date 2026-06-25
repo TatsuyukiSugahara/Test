@@ -6,6 +6,12 @@ namespace app
 {
 	SceneManager* SceneManager::instance_ = nullptr;
 
+	aq::math::Vector3 IScene::GetFocusPosition() const
+	{
+		return aq::math::Vector3(0.f, 0.f, 0.f);
+	}
+
+
 	SceneManager::SceneManager()
 		: currentScene_(nullptr)
 		, nextSceneId_(INVALID_SCENE_ID)

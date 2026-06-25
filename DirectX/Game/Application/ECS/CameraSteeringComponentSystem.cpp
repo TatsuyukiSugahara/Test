@@ -1,10 +1,6 @@
 #include "stdafx.h"
 #include "CameraSteeringComponentSystem.h"
-#include "Component/TransformComponentSystem.h"
-#include "Component/HierarchicalTransformComponent.h"
-#include "Graphics/Camera.h"
-#include "Engine.h"
-#include "GameInput.h"
+#include <cmath>
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #endif
@@ -13,6 +9,18 @@ namespace app
 {
 	namespace ecs
 	{
+		CameraSteeringComponent::CameraSteeringComponent()
+			: cameraType(aq::CameraType::Main)
+		{
+		}
+
+
+		CameraEffectComponent::CameraEffectComponent()
+			: cameraType(aq::CameraType::Main)
+		{
+		}
+
+
 		void CameraSteeringSystem::Update()
 		{
 			// CameraType ごとに最高 priority のコンポーネントを選択する

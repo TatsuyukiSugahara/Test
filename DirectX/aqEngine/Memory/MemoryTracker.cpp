@@ -2,8 +2,6 @@
 #ifdef _DEBUG
 
 #include "MemoryTracker.h"
-#include <mutex>
-#include <unordered_map>
 #include <cstdio>
 #include <windows.h>
 

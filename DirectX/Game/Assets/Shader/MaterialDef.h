@@ -1,1 +1,1 @@
-#define MATERIAL_PARAMETER_NUM 8
+#include "../../../aqEngine/Graphics/MaterialDef.h"

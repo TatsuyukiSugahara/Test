@@ -2,8 +2,6 @@
 #include "FontAsset.h"
 #include "Util/SimpleJson.h"
 #include "Resource/Resource.h"
-#include <string>
-#include <algorithm>
 
 namespace aq
 {

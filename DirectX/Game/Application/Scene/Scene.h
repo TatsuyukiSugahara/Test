@@ -1,7 +1,4 @@
 #pragma once
-#include <cstdint>
-#include "Math/Vector.h"
-
 
 namespace app
 {
@@ -16,7 +13,7 @@ namespace app
 		virtual void Finalize() = 0;
 
 		/** 影の投影中心として使うワールド座標を返す。デフォルトは原点。 */
-		virtual aq::math::Vector3 GetFocusPosition() const { return aq::math::Vector3(0.f, 0.f, 0.f); }
+		virtual aq::math::Vector3 GetFocusPosition() const;
 
 
 	public:

@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "SimpleJson.h"
 #include <fstream>
-#include <cstring>
 #include <cctype>
 #include <cstdlib>
 

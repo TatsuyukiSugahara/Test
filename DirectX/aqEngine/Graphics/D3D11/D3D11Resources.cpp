@@ -3,7 +3,6 @@
 #include "D3D11Buffers.h"
 #include "D3D11GraphicsDeviceImpl.h"
 
-#include <vector>
 
 
 namespace

@@ -16,7 +16,6 @@
 #include "UI/Font/TextStyleCache.h"
 #include "UI/Font/TextLayout.h"
 #include "Rendering/RenderCommandList.h"
-#include <algorithm>
 #include <cmath>
 
 namespace aq

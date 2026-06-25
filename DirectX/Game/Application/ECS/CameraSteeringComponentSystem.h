@@ -1,7 +1,4 @@
 #pragma once
-#include "Utility.h"
-#include "ECS/ECS.h"
-#include "Graphics/Camera.h"
 
 namespace app
 {
@@ -29,6 +26,8 @@ namespace app
 		struct CameraSteeringComponent : aq::ecs::IComponent
 		{
 			ecsComponent(app::ecs::CameraSteeringComponent);
+
+			CameraSteeringComponent();
 
 
 		public:
@@ -61,7 +60,7 @@ namespace app
 
 		public:
 			// --- 制御 ---
-			aq::CameraType cameraType = aq::CameraType::Main;
+			aq::CameraType cameraType;
 			bool           isActive   = true;
 			int            priority   = 0;  // 同 CameraType で複数 Active のとき高い方が優先
 
@@ -121,7 +120,7 @@ namespace app
 				controlMode        = CameraControlMode::ManualView;
 				viewYawDegrees     = initialYaw;
 				viewPitchDegrees   = initialPitch;
-				distanceFromTarget = std::max(distance, 0.01f);
+				distanceFromTarget = (distance > 0.01f) ? distance : 0.01f;
 			}
 		};
 
@@ -145,9 +144,11 @@ namespace app
 		{
 			ecsComponent(app::ecs::CameraEffectComponent);
 
+			CameraEffectComponent();
+
 
 		public:
-			aq::CameraType cameraType = aq::CameraType::Main;
+			aq::CameraType cameraType;
 			bool           isActive   = true;
 
 
@@ -165,7 +166,7 @@ namespace app
 		public:
 			void TriggerShake(const float duration)
 			{
-				shakeDuration = std::max(duration, 0.0f);
+				shakeDuration = (duration > 0.0f) ? duration : 0.0f;
 			}
 		};
 

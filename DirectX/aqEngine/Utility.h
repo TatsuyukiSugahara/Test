@@ -2,7 +2,17 @@
  * 汎用処理群
  */
 #pragma once
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #include <cassert>
+#include <cstdarg>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <functional>
+#include <tchar.h>
 
 
 // アサート

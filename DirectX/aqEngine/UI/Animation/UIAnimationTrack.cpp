@@ -5,7 +5,6 @@
 #include "UI/Component/UIImageComponent.h"
 #include "UI/Component/UINineSliceComponent.h"
 #include "UI/Component/UICircleGaugeComponent.h"
-#include <algorithm>
 #include <cmath>
 
 namespace aq

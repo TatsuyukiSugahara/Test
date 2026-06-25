@@ -12,6 +12,10 @@ Release/
 *.exe
 *.dll
 
+# Source folders that intentionally use "Debug" in their path
+!DirectX/aqEngine/UI/Debug/
+!DirectX/aqEngine/UI/Debug/**
+
 # ============================================================
 # サードパーティ コンパイル済みライブラリ / ThirdParty Compiled Libs
 # ============================================================

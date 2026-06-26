@@ -10,8 +10,12 @@ namespace aq
 	{
 		bool D3D12PipelineStateCache::Key::operator==(const Key& o) const
 		{
-			return vs == o.vs && ps == o.ps && blend == o.blend && depth == o.depth
-			    && topoType == o.topoType && rtFormat == o.rtFormat && dsFormat == o.dsFormat;
+			if (!(vs == o.vs && ps == o.ps && blend == o.blend && depth == o.depth
+			      && topoType == o.topoType && rtCount == o.rtCount && dsFormat == o.dsFormat))
+				return false;
+			for (uint32_t i = 0; i < rtCount && i < MAX_RT; ++i)
+				if (rtFormats[i] != o.rtFormats[i]) return false;
+			return true;
 		}
 
 
@@ -29,7 +33,8 @@ namespace aq
 			mix(&k.blend, sizeof(k.blend));
 			mix(&k.depth, sizeof(k.depth));
 			mix(&k.topoType, sizeof(k.topoType));
-			mix(&k.rtFormat, sizeof(k.rtFormat));
+			mix(&k.rtCount, sizeof(k.rtCount));
+			for (uint32_t i = 0; i < k.rtCount && i < MAX_RT; ++i) mix(&k.rtFormats[i], sizeof(k.rtFormats[i]));
 			mix(&k.dsFormat, sizeof(k.dsFormat));
 			return h;
 		}
@@ -138,8 +143,9 @@ namespace aq
 			desc.InputLayout.pInputElementDescs = elements;
 			desc.InputLayout.NumElements        = elementCount;
 			desc.PrimitiveTopologyType         = key.topoType;
-			desc.NumRenderTargets              = 1;
-			desc.RTVFormats[0]                 = key.rtFormat;
+			desc.NumRenderTargets              = key.rtCount;
+			for (uint32_t i = 0; i < key.rtCount && i < MAX_RT; ++i)
+				desc.RTVFormats[i] = key.rtFormats[i];
 			desc.DSVFormat                     = key.dsFormat;
 			desc.SampleDesc.Count              = 1;
 
@@ -155,10 +161,33 @@ namespace aq
 		}
 
 
+		ID3D12PipelineState* D3D12PipelineStateCache::GetOrCreateCompute(
+			ID3D12Device* device, ID3D12RootSignature* rootSig, D3D12Shader* cs)
+		{
+			if (!device || !rootSig || !cs) return nullptr;
+			const void* key = cs->GetByteCode();
+			auto it = computeCache_.find(key);
+			if (it != computeCache_.end()) return it->second;
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
+			desc.pRootSignature     = rootSig;
+			desc.CS.pShaderBytecode = cs->GetByteCode();
+			desc.CS.BytecodeLength  = cs->GetByteCodeSize();
+
+			ID3D12PipelineState* pso = nullptr;
+			HRESULT hr = device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pso));
+			if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コンピュート PSO 生成失敗"); return nullptr; }
+			computeCache_[key] = pso;
+			return pso;
+		}
+
+
 		void D3D12PipelineStateCache::Release()
 		{
-			for (auto& kv : cache_) { if (kv.second) kv.second->Release(); }
+			for (auto& kv : cache_)        { if (kv.second) kv.second->Release(); }
+			for (auto& kv : computeCache_) { if (kv.second) kv.second->Release(); }
 			cache_.clear();
+			computeCache_.clear();
 		}
 	}
 }

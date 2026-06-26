@@ -5,7 +5,7 @@
 // Graphics API selection.
 // Define ENGINE_GRAPHICS_D3D11 here, or pass it via project preprocessor settings.
 #define ENGINE_GRAPHICS_D3D11
-// #define ENGINE_GRAPHICS_D3D12
+//#define ENGINE_GRAPHICS_D3D12
 // #define ENGINE_GRAPHICS_VULKAN
 
 #define NOMINMAX

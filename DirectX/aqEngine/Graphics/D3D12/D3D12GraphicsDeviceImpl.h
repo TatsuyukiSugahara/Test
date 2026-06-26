@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <memory>
+#include <vector>
 #include "Graphics/IGraphicsDeviceImpl.h"
 
 // D3D12/DXGI の COM インターフェースを前方宣言する。
@@ -21,8 +22,10 @@ namespace aq
 	namespace graphics
 	{
 		class D3D12RenderTarget;
+		class D3D12DepthMap;
 		class D3D12RootSignature;
 		class D3D12PipelineStateCache;
+		class D3D12RenderContextImpl;
 		/**
 		 * DirectX 12 Concrete Implementor (Bridge Pattern)
 		 *
@@ -45,6 +48,7 @@ namespace aq
 		 */
 		class D3D12GraphicsDeviceImpl : public IGraphicsDeviceImpl
 		{
+			friend class D3D12RenderContextImpl;  // SRVヒープ直接アクセスのため
 		public:
 			D3D12GraphicsDeviceImpl();
 			~D3D12GraphicsDeviceImpl() override;
@@ -58,10 +62,10 @@ namespace aq
 			void CopyToBackBuffer(IRenderTarget& src) override;
 			void SetupDefaultRenderState(RenderContext& context) override;
 
-			// TODO: D3D12 オフスクリーン RT 未実装。D3D12 バックエンド移行時に実装する。
-			IRenderTarget* GetRenderTarget(uint32_t index) override { return nullptr; }
-			uint32_t CreateOffscreenRenderTarget(uint32_t /*width*/, uint32_t /*height*/) override { return ~0u; }
-			uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& /*desc*/) override { return ~0u; }
+			// オフスクリーン RT (Phase 3)
+			IRenderTarget* GetRenderTarget(uint32_t index) override;
+			uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
+			uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& desc) override;
 
 			// ── リソースファクトリ (Phase 0: クリア画面のため未実装。Phase 1〜2 で実装) ──
 			std::unique_ptr<IVertexBuffer>       CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
@@ -75,10 +79,28 @@ namespace aq
 			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) override;
 
 			/** D3D12RenderContextImpl が記録に使うアクセサ */
-			ID3D12GraphicsCommandList* GetCommandList() const  { return commandList_; }
-			ID3D12CommandQueue*        GetCommandQueue() const { return commandQueue_; }
+			ID3D12GraphicsCommandList* GetCommandList() const   { return commandList_; }
+			ID3D12CommandQueue*        GetCommandQueue() const  { return commandQueue_; }
 			ID3D12RootSignature*       GetRootSignature() const;
+			ID3D12RootSignature*       GetComputeRootSignature() const;
 			D3D12PipelineStateCache*   GetPipelineCache() const { return psoCache_.get(); }
+			// ── SRV ディスクリプタヒープ (Phase 2) ──
+			// RenderContext (friend) が描画時にテーブルを確保・コピーするためのアクセサ。
+			// D3D12_*_HANDLE をヘッダで露出しないよう、ハンドルは「ヒープ + インデックス」で受け渡し、
+			// 実ハンドル計算は d3d12.h を含む .cpp 側で行う。
+			ID3D12DescriptorHeap* GetSRVShaderHeap() const  { return srvShaderHeap_; }
+			ID3D12DescriptorHeap* GetSRVStagingHeap() const { return srvStagingHeap_; }
+			uint32_t              GetSRVDescriptorSize() const { return srvDescriptorSize_; }
+			uint32_t              GetNullSRVIndex() const { return nullSRVIndex_; }
+
+			/** shader-visible ring から count 個連続の SRV スロットを確保し、先頭インデックスを返す。
+			 *  フレーム内 bump アロケータ。容量超過時 false (呼び側は描画スキップ)。 */
+			bool AllocateSRVTableRange(uint32_t count, uint32_t& outBaseIndex);
+
+			/** フレーム世代。BeginFrameIfNeeded で新フレームを開くたびに +1。
+			 *  RenderContext が「コマンドリスト Reset により失われた SRV テーブルバインド」を
+			 *  フレーム先頭で張り直すために監視する。 */
+			uint64_t GetFrameGeneration() const { return frameGeneration_; }
 
 			/** RenderContext から呼ばれ、フレーム未オープンならコマンドリストを開いて RT を準備する */
 			void BeginFrameIfNeeded();
@@ -89,7 +111,10 @@ namespace aq
 		private:
 			bool CreateDeviceAndQueues();
 			bool CreateSwapChain(void* hwnd, uint32_t width, uint32_t height);
-			bool CreateRenderTargets();
+			bool CreateBackBuffers();
+			bool CreateMainRenderTargets(uint32_t width, uint32_t height);
+			bool CreateSRVHeaps();
+			bool CreateRtvDsvHeaps();
 			void WaitForGPU();
 
 		private:
@@ -100,20 +125,43 @@ namespace aq
 			ID3D12CommandAllocator*    commandAlloc_  = nullptr;
 			ID3D12GraphicsCommandList* commandList_   = nullptr;
 			IDXGISwapChain3*           swapChain_     = nullptr;
-			ID3D12DescriptorHeap*      rtvHeap_       = nullptr;
 			ID3D12Resource*            backBuffers_[RENDER_TARGET_COUNT] = {};
+
+			// カラー RTV / 深度 DSV のディスクリプタヒープ (CPU 専用・線形アロケータ)
+			ID3D12DescriptorHeap*      rtvHeap_           = nullptr;
+			ID3D12DescriptorHeap*      dsvHeap_           = nullptr;
 			uint32_t                   rtvDescriptorSize_ = 0;
+			uint32_t                   dsvDescriptorSize_ = 0;
+			uint32_t                   rtvNext_           = 0;
+			uint32_t                   dsvNext_           = 0;
+			uint32_t                   rtvCapacity_       = 0;
+			uint32_t                   dsvCapacity_       = 0;
 
 			ID3D12Fence*               fence_         = nullptr;
 			void*                      fenceEvent_    = nullptr;  // HANDLE
 			uint64_t                   fenceValue_    = 0;
 
+			// メイン RT(深度付きオフスクリーン)。シーンはここへ描画し CopyToBackBuffer でバックバッファへ複写。
 			std::unique_ptr<D3D12RenderTarget> mainRenderTargets_[RENDER_TARGET_COUNT];
-			uint32_t                   currentRTIndex_ = 0;
+			std::vector<std::unique_ptr<D3D12RenderTarget>> offscreenRTs_;
+			uint32_t                   currentBackBufferIndex_ = 0;
+			uint32_t                   backBufferStates_[RENDER_TARGET_COUNT] = {};  // D3D12_RESOURCE_STATES
 
 			std::unique_ptr<D3D12RootSignature>     rootSignature_;
 			std::unique_ptr<D3D12PipelineStateCache> psoCache_;
 			bool                       frameOpen_ = false;  // BeginFrameIfNeeded で開かれているか
+
+			// ── SRV ディスクリプタヒープ (Phase 2) ──
+			// d3d12.h をヘッダに持ち込まないため、ハンドルは保持せずヒープ + サイズ + インデックスで管理する。
+			ID3D12DescriptorHeap*      srvStagingHeap_       = nullptr;  // CPU可視/非shader-visible: テクスチャSRV恒久格納
+			ID3D12DescriptorHeap*      srvShaderHeap_        = nullptr;  // shader-visible: 毎フレームringでテーブル確保
+			uint32_t                   srvDescriptorSize_    = 0;
+			uint32_t                   srvStagingCapacity_   = 0;
+			uint32_t                   srvStagingNext_       = 0;        // 次に割り当てる staging スロット
+			uint32_t                   srvShaderRingCapacity_= 0;
+			uint32_t                   srvShaderRingNext_    = 0;        // フレーム内 ring 位置 (BeginFrame で reset)
+			uint32_t                   nullSRVIndex_         = 0;        // staging 内の null SRV 位置
+			uint64_t                   frameGeneration_      = 0;        // BeginFrameIfNeeded で開くたびに +1
 		};
 	}
 }

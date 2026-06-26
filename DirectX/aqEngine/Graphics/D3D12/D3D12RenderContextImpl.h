@@ -52,11 +52,11 @@ namespace aq
 			~D3D12RenderContextImpl() override = default;
 
 			void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget) override;
-			void OMSetMRTRenderTargets(uint32_t, IRenderTarget* const*) override {}
-			void OMSetRenderTargetWithDepth(IRenderTarget&, IRenderTarget&) override {}
-			void OMSetDepthMode(DepthMode) override {}
-			void OMSetBlendMode(BlendMode) override {}
-			void ClearDepthBuffer() override {}
+			void OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets) override;
+			void OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT) override;
+			void OMSetDepthMode(DepthMode mode) override;
+			void OMSetBlendMode(BlendMode mode) override;
+			void ClearDepthBuffer() override;
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height) override;
 			void RSSetScissorEnabled(bool enabled) override;
 			void RSSetScissorRect(int x, int y, int w, int h) override;
@@ -85,9 +85,12 @@ namespace aq
 			void CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& uav) override;
 			void CSUnsetUnorderedAccessView(uint32_t slot) override;
 
-			void OMSetDepthOnlyTarget(IDepthMap&) override {}
-			void ClearDepthMap(IDepthMap&) override {}
-			void PSUnsetShader() override {}
+			void OMSetDepthOnlyTarget(IDepthMap& depthMap) override;
+			void ClearDepthMap(IDepthMap& depthMap) override;
+			void OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t slice) override;
+			void ClearDepthMapSlice(IDepthMap& depthMap, uint32_t slice) override;
+			// 深度のみパス用に PS をクリアする (no-op だと古い PS が残り VS/PS リンケージ不一致になる)
+			void PSUnsetShader() override { pendingPS_ = nullptr; }
 
 			void Draw(uint32_t vertexCount, uint32_t startVertexLocation) override;
 			void DrawIndexed(uint32_t indexCount) override;
@@ -99,9 +102,15 @@ namespace aq
 		private:
 			// 描画時に PSO を解決してパイプラインを確定する
 			void FlushPipeline();
+			// SRV バインドに変更があれば ring からテーブルを確保しコピー・バインドする
+			void FlushDescriptors();
+			// 現在バインド中の RTV/DSV を OMSetRenderTargets でコマンドリストへ設定する
+			void ApplyRenderTargets();
 
 		private:
 			D3D12GraphicsDeviceImpl* device_ = nullptr;
+
+			static constexpr uint32_t MAX_RTV = 8;
 
 			// 保留ステート (DX11 のイミディエイト設定を DX12 の PSO/記録に変換するため溜める)
 			IShader*          pendingVS_ = nullptr;
@@ -109,6 +118,29 @@ namespace aq
 			BlendMode         blend_     = BlendMode::Opaque;
 			DepthMode         depth_     = DepthMode::ReadWrite;
 			PrimitiveTopology topology_  = PrimitiveTopology::TriangleList;
+
+			// 現在バインド中の RT/DSV 追跡 (PSO キーのフォーマット + Clear* の対象)
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles_[MAX_RTV] = {};
+			uint32_t                    rtvCount_  = 0;
+			DXGI_FORMAT                 rtFormats_[MAX_RTV] = {};
+			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle_ = {};
+			bool                        hasDSV_    = false;
+			DXGI_FORMAT                 dsFormat_  = DXGI_FORMAT_UNKNOWN;
+
+			// 保留 SRV テーブル (Phase 2)。各スロットのソース CPU ハンドル (staging ヒープ上)。
+			// ptr==0 は未バインド = null SRV で埋める。Draw 時に dirty なら ring へコピー。
+			static constexpr uint32_t SRV_SLOT_COUNT = 12;  // = D3D12RootSignature::SRV_TABLE_SIZE
+			D3D12_CPU_DESCRIPTOR_HANDLE pendingSRV_[SRV_SLOT_COUNT] = {};
+			bool                        srvDirty_     = false;
+			uint64_t                    lastFrameGen_ = 0;  // SRV テーブルを張り直したフレーム世代
+
+			// 保留コンピュート状態 (Phase 4: ブルーム)。Dispatch 時に確定する。
+			static constexpr uint32_t CS_SRV_COUNT = 2;  // t0..t1
+			static constexpr uint32_t CS_UAV_COUNT = 1;  // u0
+			IShader*                    pendingCS_   = nullptr;
+			D3D12_GPU_VIRTUAL_ADDRESS   csCBAddr_    = 0;
+			D3D12_CPU_DESCRIPTOR_HANDLE csSRV_[CS_SRV_COUNT] = {};
+			D3D12_CPU_DESCRIPTOR_HANDLE csUAV_[CS_UAV_COUNT] = {};
 		};
 	}
 }

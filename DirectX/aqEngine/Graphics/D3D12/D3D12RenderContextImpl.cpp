@@ -4,6 +4,9 @@
 #include "D3D12GraphicsDeviceImpl.h"
 #include "D3D12Buffers.h"
 #include "D3D12Shader.h"
+#include "D3D12Resources.h"
+#include "D3D12RenderTarget.h"
+#include "D3D12DepthMap.h"
 #include "D3D12PipelineStateCache.h"
 #include "D3D12RootSignature.h"
 
@@ -44,6 +47,20 @@ namespace aq
 				}
 				return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 			}
+
+			// RT カラー資源を指定ステートへ遷移する (現在ステートと異なる場合のみ)
+			void TransitionRT(ID3D12GraphicsCommandList* list, D3D12RenderTarget& rt, D3D12_RESOURCE_STATES after)
+			{
+				if (!rt.GetResource() || rt.GetState() == after) return;
+				D3D12_RESOURCE_BARRIER b = {};
+				b.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+				b.Transition.pResource   = rt.GetResource();
+				b.Transition.StateBefore = rt.GetState();
+				b.Transition.StateAfter  = after;
+				b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+				list->ResourceBarrier(1, &b);
+				rt.SetState(after);
+			}
 		}
 
 
@@ -67,8 +84,10 @@ namespace aq
 			key.blend    = blend_;
 			key.depth    = depth_;
 			key.topoType = ToTopoType(topology_);
-			key.rtFormat = DXGI_FORMAT_R8G8B8A8_UNORM;   // P1b: バックバッファ固定
-			key.dsFormat = DXGI_FORMAT_UNKNOWN;          // P3 で深度対応
+			key.rtCount  = rtvCount_;
+			for (uint32_t i = 0; i < MAX_RTV; ++i)
+				key.rtFormats[i] = (i < rtvCount_) ? rtFormats_[i] : DXGI_FORMAT_UNKNOWN;
+			key.dsFormat = hasDSV_ ? dsFormat_ : DXGI_FORMAT_UNKNOWN;
 
 			ID3D12PipelineState* pso = cache->GetOrCreate(
 				D3D12GraphicsDeviceImpl::GetStaticDevice(), device_->GetRootSignature(), vs, ps, key);
@@ -77,11 +96,141 @@ namespace aq
 		}
 
 
-		// ── 出力マージャ / ラスタライザ ──────────────────────────────────────
-		void D3D12RenderContextImpl::OMSetRenderTargets(uint32_t, IRenderTarget*)
+		void D3D12RenderContextImpl::FlushDescriptors()
 		{
-			// P1b: RTV はフレーム先頭でバックバッファに束ねる。オフスクリーン RT は P3。
+			static_assert(SRV_SLOT_COUNT == D3D12RootSignature::SRV_TABLE_SIZE,
+			              "保留 SRV スロット数とルートシグネチャの SRV テーブルサイズが不一致");
+
+			// 新フレームではコマンドリスト Reset でテーブルバインドが失われるため強制的に張り直す。
+			const uint64_t gen = device_->GetFrameGeneration();
+			if (gen != lastFrameGen_) { srvDirty_ = true; lastFrameGen_ = gen; }
+
+			if (!srvDirty_) return;  // 前回 Draw のテーブルバインドがそのまま有効
+
+			ID3D12Device*              dev  = D3D12GraphicsDeviceImpl::GetStaticDevice();
+			ID3D12GraphicsCommandList* list = device_->GetCommandList();
+			ID3D12DescriptorHeap*      heap = device_->GetSRVShaderHeap();
+			if (!dev || !list || !heap) return;
+
+			// ring から SRV_SLOT_COUNT 個の連続スロットを確保
+			uint32_t base = 0;
+			if (!device_->AllocateSRVTableRange(SRV_SLOT_COUNT, base)) return;
+
+			const uint32_t size = device_->GetSRVDescriptorSize();
+			D3D12_CPU_DESCRIPTOR_HANDLE dstCPU = heap->GetCPUDescriptorHandleForHeapStart();
+			dstCPU.ptr += static_cast<SIZE_T>(base) * size;
+			D3D12_GPU_DESCRIPTOR_HANDLE dstGPU = heap->GetGPUDescriptorHandleForHeapStart();
+			dstGPU.ptr += static_cast<UINT64>(base) * size;
+
+			// null SRV のソースハンドル (未バインドスロットを埋める)
+			D3D12_CPU_DESCRIPTOR_HANDLE nullSrc = device_->GetSRVStagingHeap()->GetCPUDescriptorHandleForHeapStart();
+			nullSrc.ptr += static_cast<SIZE_T>(device_->GetNullSRVIndex()) * size;
+
+			for (uint32_t i = 0; i < SRV_SLOT_COUNT; ++i)
+			{
+				D3D12_CPU_DESCRIPTOR_HANDLE slotDst = dstCPU;
+				slotDst.ptr += static_cast<SIZE_T>(i) * size;
+				const D3D12_CPU_DESCRIPTOR_HANDLE src = pendingSRV_[i].ptr ? pendingSRV_[i] : nullSrc;
+				dev->CopyDescriptorsSimple(1, slotDst, src, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			}
+
+			list->SetGraphicsRootDescriptorTable(D3D12RootSignature::PARAM_SRV_TABLE, dstGPU);
+			srvDirty_ = false;
+		}
+
+
+		// ── 出力マージャ / ラスタライザ ──────────────────────────────────────
+		void D3D12RenderContextImpl::ApplyRenderTargets()
+		{
+			ID3D12GraphicsCommandList* list = device_->GetCommandList();
+			list->OMSetRenderTargets(rtvCount_, rtvCount_ ? rtvHandles_ : nullptr, FALSE,
+			                         hasDSV_ ? &dsvHandle_ : nullptr);
+		}
+
+		void D3D12RenderContextImpl::OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget)
+		{
 			device_->BeginFrameIfNeeded();
+			ID3D12GraphicsCommandList* list = device_->GetCommandList();
+
+			rtvCount_ = 0;
+			hasDSV_   = false;
+			if (renderTarget && numViews > 0)
+			{
+				// D3D11 backend 同様、renderTarget は RenderTarget[] の先頭を指す。
+				auto* rts = static_cast<D3D12RenderTarget*>(renderTarget);
+				for (uint32_t i = 0; i < numViews && i < MAX_RTV; ++i)
+				{
+					TransitionRT(list, rts[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+					rtvHandles_[i] = rts[i].GetRtvHandle();
+					rtFormats_[i]  = rts[i].GetColorFormat();
+					++rtvCount_;
+				}
+				if (rts[0].HasDepth())
+				{
+					dsvHandle_ = rts[0].GetDsvHandle();
+					dsFormat_  = DXGI_FORMAT_D24_UNORM_S8_UINT;  // オフスクリーン深度フォーマット
+					hasDSV_    = true;
+				}
+			}
+			ApplyRenderTargets();
+		}
+
+		void D3D12RenderContextImpl::OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets)
+		{
+			device_->BeginFrameIfNeeded();
+			ID3D12GraphicsCommandList* list = device_->GetCommandList();
+
+			rtvCount_ = 0;
+			hasDSV_   = false;
+			for (uint32_t i = 0; i < numViews && i < MAX_RTV; ++i)
+			{
+				auto* rt = static_cast<D3D12RenderTarget*>(renderTargets[i]);
+				if (!rt) continue;
+				TransitionRT(list, *rt, D3D12_RESOURCE_STATE_RENDER_TARGET);
+				rtvHandles_[rtvCount_] = rt->GetRtvHandle();
+				rtFormats_[rtvCount_]  = rt->GetColorFormat();
+				++rtvCount_;
+			}
+			if (numViews > 0 && renderTargets[0])
+			{
+				auto* rt0 = static_cast<D3D12RenderTarget*>(renderTargets[0]);
+				if (rt0->HasDepth())
+				{
+					dsvHandle_ = rt0->GetDsvHandle();
+					dsFormat_  = DXGI_FORMAT_D24_UNORM_S8_UINT;
+					hasDSV_    = true;
+				}
+			}
+			ApplyRenderTargets();
+		}
+
+		void D3D12RenderContextImpl::OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT)
+		{
+			device_->BeginFrameIfNeeded();
+			ID3D12GraphicsCommandList* list = device_->GetCommandList();
+
+			auto& color = static_cast<D3D12RenderTarget&>(colorRT);
+			auto& depth = static_cast<D3D12RenderTarget&>(depthSourceRT);
+			TransitionRT(list, color, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+			rtvHandles_[0] = color.GetRtvHandle();
+			rtFormats_[0]  = color.GetColorFormat();
+			rtvCount_      = 1;
+			dsvHandle_     = depth.GetDsvHandle();
+			dsFormat_      = DXGI_FORMAT_D24_UNORM_S8_UINT;
+			hasDSV_        = depth.HasDepth();
+			ApplyRenderTargets();
+		}
+
+		void D3D12RenderContextImpl::OMSetDepthMode(DepthMode mode) { depth_ = mode; }
+		void D3D12RenderContextImpl::OMSetBlendMode(BlendMode mode) { blend_ = mode; }
+
+		void D3D12RenderContextImpl::ClearDepthBuffer()
+		{
+			device_->BeginFrameIfNeeded();
+			if (hasDSV_)
+				device_->GetCommandList()->ClearDepthStencilView(
+					dsvHandle_, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 		}
 
 		void D3D12RenderContextImpl::RSSetViewport(float topLeftX, float topLeftY, float width, float height)
@@ -108,10 +257,11 @@ namespace aq
 			device_->GetCommandList()->RSSetScissorRects(1, &rect);
 		}
 
-		void D3D12RenderContextImpl::ClearRenderTargetView(uint32_t, float*)
+		void D3D12RenderContextImpl::ClearRenderTargetView(uint32_t index, float* clearColor)
 		{
-			// P1b: クリアはフレーム先頭 (BeginFrameIfNeeded) で実施済み。
 			device_->BeginFrameIfNeeded();
+			if (index < rtvCount_ && clearColor)
+				device_->GetCommandList()->ClearRenderTargetView(rtvHandles_[index], clearColor, 0, nullptr);
 		}
 
 
@@ -161,18 +311,69 @@ namespace aq
 				startSlot, static_cast<D3D12ConstantBuffer&>(cb).GetGPUAddress());
 		}
 
-		// P2: テクスチャ SRV テーブル / サンプラーは未実装
-		void D3D12RenderContextImpl::PSSetShaderResource(uint32_t, IShaderResourceView&) {}
-		void D3D12RenderContextImpl::PSUnsetShaderResource(uint32_t) {}
+		// テクスチャ/RT/Depth の SRV。staging ヒープ上の SRV を保留テーブルへ記録し、
+		// Draw 時に shader-visible ring へコピーしてバインドする。
+		// RT/Depth は読み取り前に PIXEL_SHADER_RESOURCE へ遷移する (D3D12SRV::TransitionToSRV)。
+		void D3D12RenderContextImpl::PSSetShaderResource(uint32_t startSlot, IShaderResourceView& srv)
+		{
+			if (startSlot >= SRV_SLOT_COUNT) return;
+			// UI の DeferredSRV など IShaderResourceView ラッパに対応するため、GetNativeHandle() 経由で
+			// 実体の D3D12SRV* を取得する (D3D11 backend が native SRV ポインタを使うのと同じ多態)。
+			auto* s = static_cast<D3D12SRV*>(srv.GetNativeHandle());
+			if (!s) { PSUnsetShaderResource(startSlot); return; }
+			device_->BeginFrameIfNeeded();
+			s->TransitionToSRV(device_->GetCommandList());
+			pendingSRV_[startSlot] = s->GetStagingCPUHandle();
+			srvDirty_ = true;
+		}
+
+		void D3D12RenderContextImpl::PSUnsetShaderResource(uint32_t slot)
+		{
+			if (slot >= SRV_SLOT_COUNT) return;
+			pendingSRV_[slot] = {};  // null SRV で埋める
+			srvDirty_ = true;
+		}
+
+		// サンプラーはルートシグネチャの静的サンプラー (s0/s1) を使うため no-op。
 		void D3D12RenderContextImpl::PSSetSampler(uint32_t, ISamplerState&) {}
 
-		// P4: コンピュート系は未実装
-		void D3D12RenderContextImpl::CSSetShader(IShader&) {}
-		void D3D12RenderContextImpl::CSSetConstantBuffer(uint32_t, IConstantBuffer&) {}
-		void D3D12RenderContextImpl::CSSetShaderResource(uint32_t, IShaderResourceView&) {}
-		void D3D12RenderContextImpl::CSUnsetShaderResource(uint32_t) {}
-		void D3D12RenderContextImpl::CSSetUnorderedAccessView(uint32_t, IUnorderedAccessView&) {}
-		void D3D12RenderContextImpl::CSUnsetUnorderedAccessView(uint32_t) {}
+		// ── コンピュート (Phase 4: ブルーム) ──
+		// 保留 SRV/UAV/CBV を溜め、Dispatch で確定する。
+		void D3D12RenderContextImpl::CSSetShader(IShader& shader) { pendingCS_ = &shader; }
+
+		void D3D12RenderContextImpl::CSSetConstantBuffer(uint32_t /*startSlot*/, IConstantBuffer& cb)
+		{
+			csCBAddr_ = static_cast<D3D12ConstantBuffer&>(cb).GetGPUAddress();
+		}
+
+		void D3D12RenderContextImpl::CSSetShaderResource(uint32_t startSlot, IShaderResourceView& srv)
+		{
+			if (startSlot >= CS_SRV_COUNT) return;
+			auto* s = static_cast<D3D12SRV*>(srv.GetNativeHandle());
+			if (!s) { csSRV_[startSlot] = {}; return; }
+			device_->BeginFrameIfNeeded();
+			s->TransitionToComputeSRV(device_->GetCommandList());
+			csSRV_[startSlot] = s->GetStagingCPUHandle();
+		}
+
+		void D3D12RenderContextImpl::CSUnsetShaderResource(uint32_t slot)
+		{
+			if (slot < CS_SRV_COUNT) csSRV_[slot] = {};
+		}
+
+		void D3D12RenderContextImpl::CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& uav)
+		{
+			if (startSlot >= CS_UAV_COUNT) return;
+			device_->BeginFrameIfNeeded();
+			auto& u = static_cast<D3D12UAVHandleRef&>(uav);
+			u.TransitionToUAV(device_->GetCommandList());
+			csUAV_[startSlot] = u.GetStagingCPUHandle();
+		}
+
+		void D3D12RenderContextImpl::CSUnsetUnorderedAccessView(uint32_t slot)
+		{
+			if (slot < CS_UAV_COUNT) csUAV_[slot] = {};
+		}
 
 
 		// ── 描画 ─────────────────────────────────────────────────────────────
@@ -180,6 +381,7 @@ namespace aq
 		{
 			device_->BeginFrameIfNeeded();
 			FlushPipeline();
+			FlushDescriptors();
 			device_->GetCommandList()->DrawInstanced(vertexCount, 1, startVertexLocation, 0);
 		}
 
@@ -187,6 +389,7 @@ namespace aq
 		{
 			device_->BeginFrameIfNeeded();
 			FlushPipeline();
+			FlushDescriptors();
 			device_->GetCommandList()->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
 		}
 
@@ -194,10 +397,122 @@ namespace aq
 		{
 			device_->BeginFrameIfNeeded();
 			FlushPipeline();
+			FlushDescriptors();
 			device_->GetCommandList()->DrawIndexedInstanced(indexCount, 1, startIndexLocation, 0, 0);
 		}
 
-		void D3D12RenderContextImpl::Dispatch(uint32_t, uint32_t, uint32_t) {}
+		void D3D12RenderContextImpl::Dispatch(uint32_t x, uint32_t y, uint32_t z)
+		{
+			device_->BeginFrameIfNeeded();
+			auto* cs = static_cast<D3D12Shader*>(pendingCS_);
+			if (!cs) return;
+
+			ID3D12Device*              dev  = D3D12GraphicsDeviceImpl::GetStaticDevice();
+			ID3D12GraphicsCommandList* list = device_->GetCommandList();
+			ID3D12DescriptorHeap*      heap = device_->GetSRVShaderHeap();
+			ID3D12RootSignature*       crs  = device_->GetComputeRootSignature();
+			if (!dev || !list || !heap || !crs) return;
+
+			// コンピュートルートシグネチャ + PSO
+			list->SetComputeRootSignature(crs);
+			ID3D12PipelineState* pso = device_->GetPipelineCache()->GetOrCreateCompute(dev, crs, cs);
+			if (pso) list->SetPipelineState(pso);
+
+			// b0: ルート CBV
+			if (csCBAddr_) list->SetComputeRootConstantBufferView(D3D12RootSignature::CS_PARAM_CBV, csCBAddr_);
+
+			const uint32_t size = device_->GetSRVDescriptorSize();
+			D3D12_CPU_DESCRIPTOR_HANDLE nullSrc = device_->GetSRVStagingHeap()->GetCPUDescriptorHandleForHeapStart();
+			nullSrc.ptr += static_cast<SIZE_T>(device_->GetNullSRVIndex()) * size;
+
+			// t0..t1: SRV テーブル (未バインドは null SRV)
+			{
+				uint32_t base = 0;
+				if (device_->AllocateSRVTableRange(CS_SRV_COUNT, base))
+				{
+					D3D12_CPU_DESCRIPTOR_HANDLE dstCPU = heap->GetCPUDescriptorHandleForHeapStart();
+					dstCPU.ptr += static_cast<SIZE_T>(base) * size;
+					D3D12_GPU_DESCRIPTOR_HANDLE dstGPU = heap->GetGPUDescriptorHandleForHeapStart();
+					dstGPU.ptr += static_cast<UINT64>(base) * size;
+					for (uint32_t i = 0; i < CS_SRV_COUNT; ++i)
+					{
+						D3D12_CPU_DESCRIPTOR_HANDLE slot = dstCPU;
+						slot.ptr += static_cast<SIZE_T>(i) * size;
+						const D3D12_CPU_DESCRIPTOR_HANDLE src = csSRV_[i].ptr ? csSRV_[i] : nullSrc;
+						dev->CopyDescriptorsSimple(1, slot, src, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+					}
+					list->SetComputeRootDescriptorTable(D3D12RootSignature::CS_PARAM_SRV_TABLE, dstGPU);
+				}
+			}
+
+			// u0: UAV テーブル (ブルームは常に u0 をバインドする)
+			if (csUAV_[0].ptr)
+			{
+				uint32_t base = 0;
+				if (device_->AllocateSRVTableRange(CS_UAV_COUNT, base))
+				{
+					D3D12_CPU_DESCRIPTOR_HANDLE dstCPU = heap->GetCPUDescriptorHandleForHeapStart();
+					dstCPU.ptr += static_cast<SIZE_T>(base) * size;
+					D3D12_GPU_DESCRIPTOR_HANDLE dstGPU = heap->GetGPUDescriptorHandleForHeapStart();
+					dstGPU.ptr += static_cast<UINT64>(base) * size;
+					dev->CopyDescriptorsSimple(1, dstCPU, csUAV_[0], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+					list->SetComputeRootDescriptorTable(D3D12RootSignature::CS_PARAM_UAV_TABLE, dstGPU);
+				}
+			}
+
+			list->Dispatch(x, y, z);
+
+			// 次の描画はグラフィクスルートシグネチャを張り直す必要があるため dirty 化する。
+			srvDirty_ = true;
+		}
+
+
+		// ── シャドウパス: 深度専用ターゲット ─────────────────────────────────
+		void D3D12RenderContextImpl::OMSetDepthOnlyTarget(IDepthMap& depthMap)
+		{
+			OMSetDepthOnlyTargetSlice(depthMap, 0);
+		}
+
+		void D3D12RenderContextImpl::OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t slice)
+		{
+			device_->BeginFrameIfNeeded();
+			ID3D12GraphicsCommandList* list = device_->GetCommandList();
+			auto& dm = static_cast<D3D12DepthMap&>(depthMap);
+
+			// SRV から書き込みへ戻す: PIXEL_SHADER_RESOURCE → DEPTH_WRITE
+			if (dm.GetState() != D3D12_RESOURCE_STATE_DEPTH_WRITE)
+			{
+				D3D12_RESOURCE_BARRIER b = {};
+				b.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+				b.Transition.pResource   = dm.GetResource();
+				b.Transition.StateBefore = dm.GetState();
+				b.Transition.StateAfter  = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+				b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+				list->ResourceBarrier(1, &b);
+				dm.SetState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+			}
+
+			// カラー RT 無し・DSV のみバインド
+			rtvCount_      = 0;
+			dsvHandle_     = dm.GetDsv(slice);
+			dsFormat_      = DXGI_FORMAT_D32_FLOAT;
+			hasDSV_        = true;
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = dsvHandle_;
+			list->OMSetRenderTargets(0, nullptr, FALSE, &dsv);
+		}
+
+		void D3D12RenderContextImpl::ClearDepthMap(IDepthMap& depthMap)
+		{
+			ClearDepthMapSlice(depthMap, 0);
+		}
+
+		void D3D12RenderContextImpl::ClearDepthMapSlice(IDepthMap& depthMap, uint32_t slice)
+		{
+			device_->BeginFrameIfNeeded();
+			auto& dm = static_cast<D3D12DepthMap&>(depthMap);
+			device_->GetCommandList()->ClearDepthStencilView(
+				dm.GetDsv(slice), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+		}
 
 
 		// ── 定数バッファ更新 (アップロードヒープへ memcpy) ───────────────────

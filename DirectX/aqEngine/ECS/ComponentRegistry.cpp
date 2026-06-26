@@ -8,6 +8,7 @@
 #include "Component/BodyComponentSystem.h"
 #include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
+#include "Component/DecalComponent.h"
 
 namespace aq
 {
@@ -215,6 +216,31 @@ namespace aq
 				};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<OceanComponent>(h); };
 				registry.Register(TypeInfo::Create<OceanComponent>(), std::move(meta));
+			}
+
+			// --- DecalComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Decal";
+				meta.requiredWith = {};
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<DecalComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<DecalComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<DecalComponent>(h))                 ctx.AddComponent<DecalComponent>(h);
+				};
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<DecalComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Inspect(visitor);
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<DecalComponent>(h); };
+				registry.Register(TypeInfo::Create<DecalComponent>(), std::move(meta));
 			}
 		}
 	}

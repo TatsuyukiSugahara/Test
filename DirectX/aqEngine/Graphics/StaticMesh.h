@@ -100,6 +100,8 @@ namespace aq
 
 			void SetCastShadow(bool v)    { castShadow_ = v; }
 			void SetReceiveShadow(bool v) { receiveShadow_ = v; SetMaterialFlag(MatFlag_ReceiveShadow, v); }
+			// 投影デカールを受けるか（既定 true）。false で GBuffer に非対象マーカーを書く。
+			void SetReceivesDecal(bool v) { SetMaterialFlag(MatFlag_NoDecal, !v); }
 			void SetSamplerState(std::unique_ptr<ISamplerState> sampler) { samplerState_ = std::move(sampler); }
 
 			void SetSpecularIntensity(float v) { materialCB_.specularIntensity = v; }

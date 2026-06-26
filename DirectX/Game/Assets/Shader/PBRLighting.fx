@@ -49,6 +49,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
     float pixelTag = g3.a;
     clip(pixelTag - 0.5);
 
+    // +4 はデカール非対象マーカー。シャドウ判定では下位値 (1/2) に戻す。
+    float shadowTag = (pixelTag >= 4.5) ? (pixelTag - 4.0) : pixelTag;
+
     float3 baseColor        = g0.rgb;
     float  metallic         = g0.a;
     float3 N                = normalize(g1.xyz);
@@ -58,7 +61,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
     float3 preScaledEmissive = g3.rgb;
 
     float4 dirShadow = float4(1.0, 1.0, 1.0, 1.0);
-    if (pixelTag >= 1.5)
+    if (shadowTag >= 1.5)
     {
         if (directionalLightCount > 0) dirShadow.x = SampleShadowForLight(worldPos, 0);
         if (directionalLightCount > 1) dirShadow.y = SampleShadowForLight(worldPos, 1);

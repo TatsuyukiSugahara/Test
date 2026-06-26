@@ -76,6 +76,16 @@ namespace aq
 						rt.SrcBlend    = D3D12_BLEND_ONE;
 						rt.DestBlend   = D3D12_BLEND_INV_SRC_ALPHA;
 						break;
+					case BlendMode::DecalColor:
+						// RGB は AlphaBlend、アルファ ch は書き込まない (GBuffer0.a=metallic を保護)
+						rt.BlendEnable       = TRUE;
+						rt.SrcBlend          = D3D12_BLEND_SRC_ALPHA;
+						rt.DestBlend         = D3D12_BLEND_INV_SRC_ALPHA;
+						rt.SrcBlendAlpha     = D3D12_BLEND_ZERO;
+						rt.DestBlendAlpha    = D3D12_BLEND_ONE;
+						rt.RenderTargetWriteMask =
+							D3D12_COLOR_WRITE_ENABLE_RED | D3D12_COLOR_WRITE_ENABLE_GREEN | D3D12_COLOR_WRITE_ENABLE_BLUE;
+						break;
 				}
 				return desc;
 			}

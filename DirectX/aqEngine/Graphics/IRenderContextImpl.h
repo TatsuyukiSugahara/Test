@@ -33,6 +33,7 @@ namespace aq
 			AlphaBlend,    // 通常アルファ合成 (src.a × src + (1-src.a) × dst)
 			Additive,      // 加算合成 (src + dst)
 			Premultiplied, // 事前乗算済みアルファ (src + (1-src.a) × dst)
+			DecalColor,    // RGB のみアルファ合成・アルファ ch 書き込みマスク (GBuffer0.a=metallic を保護)
 		};
 
 		class IRenderContextImpl

@@ -24,6 +24,11 @@ namespace aq
 			virtual void BuildGBufferCommandList(const RenderFrame& frame,
 			                                     RenderCommandList& outList) const = 0;
 
+			/** 投影デカールパスのコマンドを outList に記録する (G-Buffer パスとライティングパスの間)。
+			 *  GBuffer0 (albedo) へデカールを書き戻す。decalItems が空なら何もしない。 */
+			virtual void BuildDecalCommandList(const RenderFrame& /*frame*/,
+			                                   RenderCommandList& /*outList*/) const {}
+
 			/** ディファードライティングパスのコマンドを outList に記録する。
 			 *  sceneRT は lightingPass の書き込み先 RT ハンドル。深度は GBuffer0 を使用する。 */
 			virtual void BuildLightingCommandList(const RenderFrame& frame,

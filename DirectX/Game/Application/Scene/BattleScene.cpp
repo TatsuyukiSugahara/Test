@@ -3,6 +3,7 @@
 
 #include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
+#include "Component/DecalComponent.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
 #include "ECS/EntityDebugTag.h"
@@ -155,6 +156,7 @@ namespace app
 				skelComp->SetModelPath("Assets/unityChan.tkm");
 				skelComp->GetSkeletalMesh()->SetCastShadow(true);
 				skelComp->GetSkeletalMesh()->SetReceiveShadow(true);
+				skelComp->GetSkeletalMesh()->SetReceivesDecal(false);  // プレイヤーはデカール非対象
 
 				auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
 				animComp->AddAnimation(aqHash32("idle"), "Assets/animData/idle.tka");
@@ -167,6 +169,26 @@ namespace app
 				stateMachineComponent->GetStateMachine()->SetTargetHandle(targetHandle);
 #ifdef AQ_DEBUG_IMGUI
 				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Player");
+#endif
+			}
+
+			// 確認用デカール: プレイヤー足元の地面に真下投影で 1 枚配置。
+			// 縦に長い箱 (y=深度) にして地形と確実に交差させる。
+			{
+				auto entity = aq::ecs::EntityContext::Get().CreateEntity<
+					aq::ecs::TransformComponent,
+					aq::ecs::HierarchicalTransformComponent,
+					aq::ecs::DecalComponent>();
+
+				auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+				tc->position.Set(0.0f, spawnY, 0.0f);   // プレイヤーと同じ足元
+				tc->scale.Set(1.0f);
+
+				auto* decal = entity.GetComponent<aq::ecs::DecalComponent>();
+				decal->SetTexturePath("Assets/Terrain/rock.DDS");  // α無しなので四角く塗られる(可視確認用)
+				decal->SetSize(aq::math::Vector3(4.0f, 20.0f, 4.0f)); // xz=範囲4, y=深度20(地面を貫く)
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Decal");
 #endif
 			}
 

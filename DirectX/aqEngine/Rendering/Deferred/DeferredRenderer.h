@@ -2,6 +2,7 @@
 #include <memory>
 #include "IDeferredRenderer.h"
 #include "Graphics/IShader.h"
+#include "Graphics/ISamplerState.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/IDebugRenderable.h"
 namespace aq { namespace rendering { class IShadowRenderer; } }
@@ -29,6 +30,9 @@ namespace aq
 			void BuildGBufferCommandList(const RenderFrame& frame,
 			                             RenderCommandList& outList) const override;
 
+			void BuildDecalCommandList(const RenderFrame& frame,
+			                           RenderCommandList& outList) const override;
+
 			void BuildLightingCommandList(const RenderFrame& frame,
 			                              RenderCommandList& outList,
 			                              RenderTargetHandle sceneRT) const override;
@@ -50,6 +54,11 @@ namespace aq
 
 			std::shared_ptr<graphics::IShader> lightingVS_;
 			std::shared_ptr<graphics::IShader> lightingPS_;
+
+			// 投影デカールパス用 (任意: ロード失敗時はデカールパスをスキップ)
+			std::shared_ptr<graphics::IShader>       decalVS_;
+			std::shared_ptr<graphics::IShader>       decalPS_;
+			std::unique_ptr<graphics::ISamplerState> decalSampler_;
 		};
 	}
 }

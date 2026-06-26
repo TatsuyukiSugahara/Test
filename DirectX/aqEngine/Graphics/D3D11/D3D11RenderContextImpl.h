@@ -91,6 +91,7 @@ namespace aq
 			ID3D11BlendState* bsAlphaBlend_    = nullptr;
 			ID3D11BlendState* bsAdditive_      = nullptr;
 			ID3D11BlendState* bsPremultiplied_ = nullptr;
+			ID3D11BlendState* bsDecalColor_    = nullptr;
 
 			// Scissor あり / なし の RS。
 			ID3D11RasterizerState* rsDefault_  = nullptr;

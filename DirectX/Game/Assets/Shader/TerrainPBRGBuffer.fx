@@ -101,7 +101,7 @@ PSOutput PSMain(PSInput input)
     }
 
     float3 N        = normalize(input.N);
-    float  pixelTag = PBR_ReceivesShadow() ? 2.0 : 1.0;
+    float  pixelTag = PBR_EncodePixelTag();
 
     PSOutput o;
     o.gbuffer0 = float4(baseColor, 0.0);        // metallic = 0（地形は常に誘電体）

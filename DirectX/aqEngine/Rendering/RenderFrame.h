@@ -84,6 +84,30 @@ namespace aq
 
 
 		/**
+		 * 投影デカール用 定数バッファ (b0)。
+		 * perDrawCBPool (= sizeof(VSConstantBuffer) = 192B) から Allocate するため
+		 * サイズを 192B に固定する。Decal.fx の cbuffer DecalCB と一致させること。
+		 */
+		struct DecalCBData
+		{
+			math::Matrix4x4 worldToDecal;   // ワールド座標 → デカールローカル ([-0.5,0.5]^3)
+			math::Vector4   color;          // rgb=色ティント, a=不透明度
+			math::Vector4   forward;        // xyz=投影軸(ワールド), w=角度フェード下限 (cosθ)
+			math::Vector4   pad[6];         // 192B へのパディング
+		};
+		static_assert(sizeof(DecalCBData) == 192,
+		              "DecalCBData must match perDrawCBPool slot size (192B)");
+
+
+		// デカール描画1件分のデータ。
+		struct DecalRenderItem
+		{
+			std::shared_ptr<graphics::IShaderResourceView> texture;  // デカールテクスチャ (t0)
+			DecalCBData                                    cb;
+		};
+
+
+		/**
 		 * One frame's rendering snapshot.
 		 * Built by the game thread; consumed by Renderer / RenderThread.
 		 */
@@ -95,8 +119,9 @@ namespace aq
 			std::vector<RenderItem>      items;        // deferred (opaque, gbufferPS あり)
 			std::vector<RenderItem>      forwardItems;  // forward  (透明・特殊マテリアル)
 			std::vector<OceanRenderItem> oceanItems;   // 海描画用
+			std::vector<DecalRenderItem> decalItems;   // 投影デカール (GBuffer へ書き戻し)
 
-			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); }
+			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); decalItems.clear(); }
 		};
 	}
 }

@@ -95,6 +95,9 @@
     <ClCompile Include="Component\BodyComponentSystem.cpp">
       <Filter>Component</Filter>
     </ClCompile>
+    <ClCompile Include="Component\DecalComponent.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
     <ClCompile Include="Component\HierarchicalTransformComponent.cpp">
       <Filter>Component</Filter>
     </ClCompile>
@@ -287,6 +290,9 @@
     <ClCompile Include="Rendering\Deferred\DeferredLightingCommand.cpp">
       <Filter>Rendering\Deferred</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Deferred\DeferredDecalCommand.cpp">
+      <Filter>Rendering\Deferred</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Deferred\DeferredDebugPanel.cpp">
       <Filter>Rendering\Deferred</Filter>
     </ClCompile>
@@ -386,6 +392,9 @@
       <Filter>Component</Filter>
     </ClInclude>
     <ClInclude Include="Component\BodyComponentSystem.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\DecalComponent.h">
       <Filter>Component</Filter>
     </ClInclude>
     <ClInclude Include="Component\HierarchicalTransformComponent.h">
@@ -716,6 +725,9 @@
       <Filter>Rendering\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Deferred\DeferredLightingCommand.h">
+      <Filter>Rendering\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Deferred\DeferredDecalCommand.h">
       <Filter>Rendering\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Deferred\DeferredDebugPanel.h">

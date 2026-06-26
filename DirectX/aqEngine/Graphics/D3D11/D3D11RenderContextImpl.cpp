@@ -69,6 +69,17 @@ namespace aq
 			blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 			dev->CreateBlendState(&blendDesc, &bsPremultiplied_);
 
+			// DecalColor: RGB は AlphaBlend、アルファ ch は書き込まない
+			// (GBuffer0.a = metallic を保護する。デカール投影パス専用)
+			blendDesc.RenderTarget[0].SrcBlend       = D3D11_BLEND_SRC_ALPHA;
+			blendDesc.RenderTarget[0].DestBlend      = D3D11_BLEND_INV_SRC_ALPHA;
+			blendDesc.RenderTarget[0].SrcBlendAlpha  = D3D11_BLEND_ZERO;
+			blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+			blendDesc.RenderTarget[0].RenderTargetWriteMask =
+				D3D11_COLOR_WRITE_ENABLE_RED | D3D11_COLOR_WRITE_ENABLE_GREEN | D3D11_COLOR_WRITE_ENABLE_BLUE;
+			dev->CreateBlendState(&blendDesc, &bsDecalColor_);
+			blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
 			// RasterizerState (ScissorEnable あり / なし)
 			D3D11_RASTERIZER_DESC rsDesc = {};
 			rsDesc.FillMode              = D3D11_FILL_SOLID;
@@ -91,6 +102,7 @@ namespace aq
 			if (bsAlphaBlend_)    { bsAlphaBlend_->Release();    bsAlphaBlend_    = nullptr; }
 			if (bsAdditive_)      { bsAdditive_->Release();      bsAdditive_      = nullptr; }
 			if (bsPremultiplied_) { bsPremultiplied_->Release(); bsPremultiplied_ = nullptr; }
+			if (bsDecalColor_)    { bsDecalColor_->Release();    bsDecalColor_    = nullptr; }
 			if (rsDefault_)       { rsDefault_->Release();       rsDefault_        = nullptr; }
 			if (rsScissor_)       { rsScissor_->Release();       rsScissor_        = nullptr; }
 		}
@@ -159,6 +171,7 @@ namespace aq
 				case BlendMode::AlphaBlend:    bs = bsAlphaBlend_;    break;
 				case BlendMode::Additive:      bs = bsAdditive_;      break;
 				case BlendMode::Premultiplied: bs = bsPremultiplied_; break;
+				case BlendMode::DecalColor:    bs = bsDecalColor_;    break;
 			}
 			const float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
 			context_->OMSetBlendState(bs, blendFactor, 0xFFFFFFFF);

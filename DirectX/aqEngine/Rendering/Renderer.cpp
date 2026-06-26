@@ -63,6 +63,9 @@ namespace aq
 				// Pass 2a: G-Buffer パス（deferred items を MRT に書き込む）
 				deferredRenderer_->BuildGBufferCommandList(frame, outList);
 
+				// Pass 2.5: 投影デカールパス（GBuffer0 albedo へ書き戻す。ライティング前）
+				deferredRenderer_->BuildDecalCommandList(frame, outList);
+
 				// Pass 2b: ディファードライティングパス（シーン RT に書き込む）
 				deferredRenderer_->BuildLightingCommandList(frame, outList, rtHandle);
 

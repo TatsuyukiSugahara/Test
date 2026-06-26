@@ -103,8 +103,8 @@ PSOutput PSMain(PSInput input)
         ? emissiveTex.Sample(samp, input.uv).rgb
         : float3(0.0, 0.0, 0.0);
 
-    // pixelTag: 1.0=影なし, 2.0=影あり（DeferredLighting.fx と同じ規則）
-    float pixelTag = PBR_ReceivesShadow() ? 2.0 : 1.0;
+    // pixelTag: 1=影なし, 2=影あり / +4=デカール非対象（PBR_EncodePixelTag 参照）
+    float pixelTag = PBR_EncodePixelTag();
 
     PSOutput o;
     o.gbuffer0 = float4(baseColor, mat_metallic);

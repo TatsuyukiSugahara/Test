@@ -2,7 +2,9 @@
 #include "DeferredRenderer.h"
 #include "GBufferItemCommand.h"
 #include "DeferredLightingCommand.h"
+#include "DeferredDecalCommand.h"
 #include "Rendering/FrameCommands.h"
+#include "Rendering/SetBlendModeCommand.h"
 #include "Rendering/RenderCommandList.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
@@ -52,7 +54,42 @@ namespace aq
 
 			lightingVS_ = std::move(vs);
 			lightingPS_ = std::move(ps);
+
+			// 投影デカール用シェーダー・サンプラー (任意機能: 失敗してもライティングは継続)
+			decalVS_ = gd.CreateShader("Assets/Shader/Decal.fx", "VSMain",
+			                           graphics::IShader::ShaderType::VS);
+			decalPS_ = gd.CreateShader("Assets/Shader/Decal.fx", "PSMain",
+			                           graphics::IShader::ShaderType::PS);
+			graphics::SamplerDesc decalSamp;
+			decalSamp.filter   = graphics::FilterMode::MinMagMipLinear;
+			decalSamp.addressU = graphics::AddressMode::Clamp;
+			decalSamp.addressV = graphics::AddressMode::Clamp;
+			decalSamp.addressW = graphics::AddressMode::Clamp;
+			decalSampler_ = gd.CreateSamplerState(decalSamp);
+
 			return true;
+		}
+
+
+		void DeferredRenderer::BuildDecalCommandList(
+			const RenderFrame& frame,
+			RenderCommandList& outList) const
+		{
+			if (frame.decalItems.empty()) return;
+			if (!decalVS_ || !decalPS_ || !decalSampler_) return;
+
+			// GBuffer0 (albedo + 自前 depth) を RT にバインド。深度テストは各コマンドで無効化。
+			outList.Enqueue<SetRenderTargetCommand>(gbuffer0Handle_);
+
+			for (const DecalRenderItem& decal : frame.decalItems)
+			{
+				outList.Enqueue<DeferredDecalCommand>(
+					*decalVS_, *decalPS_, *decalSampler_, decal,
+					gbuffer1Handle_, gbuffer2Handle_, gbuffer3Handle_);
+			}
+
+			// 後続のライティングパスがブレンドしないよう Opaque に戻す。
+			outList.Enqueue<SetBlendModeCommand>(graphics::BlendMode::Opaque);
 		}
 
 

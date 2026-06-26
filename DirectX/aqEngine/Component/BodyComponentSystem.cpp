@@ -4,6 +4,7 @@
 #include "HierarchicalTransformComponent.h"
 #include "Graphics/Camera.h"
 #include "Component/TerrainComponent.h"
+#include "Component/DecalComponent.h"
 #include "Resource/Resource.h"
 #include "Engine.h"
 
@@ -412,6 +413,12 @@ namespace aq
 							hierarchicalTransformComponent->transform.scale);
 					}
 				});
+
+			aq::ecs::Foreach<DecalComponent>(
+				[](const aq::ecs::Entity&, DecalComponent* decalComponent)
+				{
+					decalComponent->Update();
+				});
 		}
 
 
@@ -509,6 +516,17 @@ namespace aq
 					aq::rendering::OceanRenderItem item;
 					if (comp->GetMesh()->FillRenderItem(item, comp->GetParams(), totalTime)) {
 						frame.oceanItems.push_back(item);
+					}
+				});
+
+			// 投影デカール収集 (ワールド変換を使って GBuffer へ投影)
+			aq::ecs::Foreach<HierarchicalTransformComponent, DecalComponent>(
+				[&frame](const aq::ecs::Entity&, HierarchicalTransformComponent* hierarchicalTransformComponent, DecalComponent* decalComponent)
+				{
+					if (!decalComponent->IsReady()) return;
+					aq::rendering::DecalRenderItem item;
+					if (decalComponent->FillDecalItem(item, hierarchicalTransformComponent->transform)) {
+						frame.decalItems.push_back(item);
 					}
 				});
 		}

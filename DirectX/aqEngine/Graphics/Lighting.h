@@ -18,6 +18,7 @@ namespace aq
 			MatFlag_HasEmissive   = 1u << 2,
 			MatFlag_ReceiveShadow = 1u << 3,
 			MatFlag_HasSplatMap   = 1u << 4,  // t0=splatmap, t1-t3=layers
+			MatFlag_NoDecal       = 1u << 5,  // セットでデカール非対象 (既定 0 = 受ける)
 			MatFlag_User0         = 1u << 16,
 		};
 
@@ -29,6 +30,7 @@ namespace aq
 			PBRFlag_HasEmissive          = 1u << 2,
 			PBRFlag_ReceiveShadow        = 1u << 3,
 			PBRFlag_HasSplatMap          = 1u << 4,  // Terrain 専用
+			PBRFlag_NoDecal              = 1u << 5,  // セットでデカール非対象 (既定 0 = 受ける)
 		};
 
 		// GPU レイアウト: HLSL LightingCB の各構造体と完全一致させる

@@ -8,6 +8,7 @@
 #define PBR_HAS_EMISSIVE           (1u << 2)
 #define PBR_RECEIVE_SHADOW         (1u << 3)
 #define PBR_HAS_SPLATMAP           (1u << 4)  // Terrain 専用
+#define PBR_NO_DECAL               (1u << 5)  // セットでデカール非対象 (既定 0 = 受ける)
 
 cbuffer PBRMaterialCB : register(b2)
 {
@@ -27,6 +28,17 @@ bool PBR_HasMetallicRoughness() { return (pbrMaterialFlags & PBR_HAS_METALLIC_RO
 bool PBR_HasEmissiveMap()       { return (pbrMaterialFlags & PBR_HAS_EMISSIVE)            != 0; }
 bool PBR_ReceivesShadow()       { return (pbrMaterialFlags & PBR_RECEIVE_SHADOW)          != 0; }
 bool PBR_HasSplatMap()          { return (pbrMaterialFlags & PBR_HAS_SPLATMAP)            != 0; }
+bool PBR_ReceivesDecal()        { return (pbrMaterialFlags & PBR_NO_DECAL)               == 0; }
+
+// GBuffer3.a に書く pixelTag を生成する。
+//   下位値: 1=シャドウなし, 2=シャドウあり / +4 = デカール非対象
+// デコードは PBRLighting.fx / Decal.fx 側と一致させること。
+float PBR_EncodePixelTag()
+{
+    float tag = PBR_ReceivesShadow() ? 2.0 : 1.0;
+    if (!PBR_ReceivesDecal()) tag += 4.0;
+    return tag;
+}
 
 // ディファードでは半透明を直接書けないため、dither(=不透明度) に応じてピクセルを
 // 確率的に discard し擬似半透明を表現する（4x4 Bayer スクリーンスペース ディザ）。

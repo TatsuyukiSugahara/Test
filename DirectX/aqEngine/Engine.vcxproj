@@ -140,6 +140,7 @@
     <ClCompile Include="Core\DebugUI.cpp" />
     <ClCompile Include="Component\AnimationComponentSystem.cpp" />
     <ClCompile Include="Component\BodyComponentSystem.cpp" />
+    <ClCompile Include="Component\DecalComponent.cpp" />
     <ClCompile Include="Component\TransformComponentSystem.cpp" />
     <ClCompile Include="Component\HierarchicalTransformComponent.cpp" />
     <ClCompile Include="Component\Prefab.cpp" />
@@ -211,6 +212,7 @@
     <ClCompile Include="Rendering\Deferred\DeferredRenderer.cpp" />
     <ClCompile Include="Rendering\Deferred\GBufferItemCommand.cpp" />
     <ClCompile Include="Rendering\Deferred\DeferredLightingCommand.cpp" />
+    <ClCompile Include="Rendering\Deferred\DeferredDecalCommand.cpp" />
     <ClCompile Include="Rendering\Deferred\DeferredDebugPanel.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Terrain\HeightmapPainter.cpp" />
@@ -249,6 +251,7 @@
     <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Component\AnimationComponentSystem.h" />
     <ClInclude Include="Component\BodyComponentSystem.h" />
+    <ClInclude Include="Component\DecalComponent.h" />
     <ClInclude Include="Component\TransformComponentSystem.h" />
     <ClInclude Include="Component\HierarchicalTransformComponent.h" />
     <ClInclude Include="Component\Prefab.h" />
@@ -382,6 +385,7 @@
     <ClInclude Include="Rendering\Deferred\DeferredRenderer.h" />
     <ClInclude Include="Rendering\Deferred\GBufferItemCommand.h" />
     <ClInclude Include="Rendering\Deferred\DeferredLightingCommand.h" />
+    <ClInclude Include="Rendering\Deferred\DeferredDecalCommand.h" />
     <ClInclude Include="Rendering\Deferred\DeferredDebugPanel.h" />
     <ClInclude Include="UI\UITypes.h" />
     <ClInclude Include="UI\UIContext.h" />

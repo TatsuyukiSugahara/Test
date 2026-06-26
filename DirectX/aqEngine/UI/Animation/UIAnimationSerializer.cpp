@@ -32,6 +32,7 @@ namespace aq
 				case UIAnimatedProperty::NineSliceBorderRight: return "NineSliceBorderRight";
 				case UIAnimatedProperty::NineSliceBorderTop:   return "NineSliceBorderTop";
 				case UIAnimatedProperty::NineSliceBorderBottom:return "NineSliceBorderBottom";
+				case UIAnimatedProperty::TextCharCount:        return "TextCharCount";
 				default:                                       return "PositionX";
 			}
 		}
@@ -56,6 +57,7 @@ namespace aq
 			if (s == "NineSliceBorderRight")  return UIAnimatedProperty::NineSliceBorderRight;
 			if (s == "NineSliceBorderTop")    return UIAnimatedProperty::NineSliceBorderTop;
 			if (s == "NineSliceBorderBottom") return UIAnimatedProperty::NineSliceBorderBottom;
+			if (s == "TextCharCount")         return UIAnimatedProperty::TextCharCount;
 			return UIAnimatedProperty::PositionX;
 		}
 

@@ -5,6 +5,7 @@
 #include "UI/Component/UIImageComponent.h"
 #include "UI/Component/UINineSliceComponent.h"
 #include "UI/Component/UICircleGaugeComponent.h"
+#include "UI/Component/UITextComponent.h"
 #include <cmath>
 
 namespace aq
@@ -129,6 +130,12 @@ namespace aq
 				case UIAnimatedProperty::NineSliceBorderBottom:
 					if (auto* c = obj->GetComponent<UINineSliceComponent>()) c->border.bottom = v;
 					break;
+
+				// ---- Text ----
+				case UIAnimatedProperty::TextCharCount:
+					if (auto* c = obj->GetComponent<UITextComponent>())
+						c->visibleCharCount = (v < 0.f) ? -1 : static_cast<int>(v);
+					break;
 			}
 		}
 
@@ -201,6 +208,12 @@ namespace aq
 					break;
 				case UIAnimatedProperty::NineSliceBorderBottom:
 					if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->border.bottom;
+					break;
+
+				// ---- Text ----
+				case UIAnimatedProperty::TextCharCount:
+					if (auto* c = obj->GetComponent<UITextComponent>())
+						return static_cast<float>(c->visibleCharCount);
 					break;
 			}
 			return 0.f;

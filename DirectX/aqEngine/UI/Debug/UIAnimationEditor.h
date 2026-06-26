@@ -58,6 +58,7 @@ namespace aq
 
 			// ---- State ----
 			bool           show_               = false;
+			bool           windowPinned_       = false;
 			UIObjectHandle targetHandle_;
 
 			// 選択
@@ -69,6 +70,13 @@ namespace aq
 			// Timeline 表示
 			float          zoomPxPerSec_       = 150.f;
 			float          timelineScrollX_    = 0.f;
+
+			// Drag / context-menu state
+			bool           isDraggingKf_       = false;
+			int            dragKfCtIdx_        = -1;
+			int            dragKfPtIdx_        = -1;
+			int            dragKfKiIdx_        = -1;
+			float          ctxClickTime_       = 0.f;
 
 			// Preview
 			float          scrubTime_          = 0.f;

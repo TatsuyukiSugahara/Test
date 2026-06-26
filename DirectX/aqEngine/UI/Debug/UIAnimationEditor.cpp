@@ -48,8 +48,12 @@ namespace aq
 		{
 			if (!show_) return;
 
+			const ImGuiWindowFlags winFlags = windowPinned_
+				? (ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)
+				: ImGuiWindowFlags_None;
+
 			ImGui::SetNextWindowSize(ImVec2(1000, 600), ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("UI Animation Editor", &show_))
+			if (!ImGui::Begin("UI Animation Editor", &show_, winFlags))
 			{
 				ImGui::End();
 				return;
@@ -57,6 +61,10 @@ namespace aq
 
 			// dt 取得 (preview 用)
 			const float dt = ImGui::GetIO().DeltaTime;
+
+			if (ImGui::SmallButton(windowPinned_ ? "[固定中] 解除" : "[固定]"))
+				windowPinned_ = !windowPinned_;
+			ImGui::SameLine();
 
 			DrawObjectPicker();
 			ImGui::Separator();
@@ -380,7 +388,8 @@ namespace aq
 						"ColorR","ColorG","ColorB","ColorA",
 						"FillAmount","Active",
 						"NineSliceBorderLeft","NineSliceBorderRight",
-						"NineSliceBorderTop","NineSliceBorderBottom"
+						"NineSliceBorderTop","NineSliceBorderBottom",
+						"TextCharCount",
 					};
 					static const UIAnimatedProperty kPropValues[] = {
 						UIAnimatedProperty::PositionX, UIAnimatedProperty::PositionY,
@@ -394,8 +403,9 @@ namespace aq
 						UIAnimatedProperty::NineSliceBorderRight,
 						UIAnimatedProperty::NineSliceBorderTop,
 						UIAnimatedProperty::NineSliceBorderBottom,
+						UIAnimatedProperty::TextCharCount,
 					};
-					constexpr int kPropCount = 18;
+					constexpr int kPropCount = 19;
 
 					if (ImGui::SmallButton("+ PropTrack"))
 					{
@@ -428,7 +438,7 @@ namespace aq
 						std::snprintf(ptLabel, sizeof(ptLabel), "  %s",
 						              UIAnimationSerializer::PropertyToStr(pt.property));
 
-						if (ImGui::Selectable(ptLabel, ptSel))
+						if (ImGui::Selectable(ptLabel, ptSel, ImGuiSelectableFlags_AllowOverlap))
 						{
 							selClipTrackIdx_ = ci;
 							selPropTrackIdx_ = pi;
@@ -481,6 +491,9 @@ namespace aq
 
 			const float contentW = kLabelW + totalW + 20.f;
 			const float contentH = kRulerH + totalRows * kRowH + 10.f;
+
+			// 操作ヒント
+			ImGui::TextDisabled("右クリック: キー追加/削除  |  Ctrl+Click: キー追加  |  Delete: 削除  |  Drag: 移動  |  Wheel: ズーム");
 
 			// 横スクロール可能な子ウィンドウ
 			ImGui::BeginChild("##tlscroll", ImVec2(0, 0), false,
@@ -593,6 +606,159 @@ namespace aq
 				}
 			}
 
+			// キーフレームドラッグ処理 (クリック開始位置がキーフレーム上のときのみ動く)
+			if (dragKfCtIdx_ >= 0 && dragKfPtIdx_ >= 0 && dragKfKiIdx_ >= 0 &&
+			    dragKfCtIdx_ < (int)clip.clipTracks.size())
+			{
+				auto& dct = clip.clipTracks[dragKfCtIdx_];
+				if (dragKfPtIdx_ < (int)dct.tracks.size())
+				{
+					auto& dpt = dct.tracks[dragKfPtIdx_];
+					if (dragKfKiIdx_ < (int)dpt.keyframes.size())
+					{
+						auto& dkf = dpt.keyframes[dragKfKiIdx_];
+						if (ImGui::IsMouseDragging(0, 2.f))
+						{
+							isDraggingKf_ = true;
+							const float dx = ImGui::GetIO().MouseDelta.x;
+							dkf.time = std::clamp(dkf.time + dx / zoomPxPerSec_, 0.f, totalDur);
+						}
+						if (isDraggingKf_ && ImGui::IsMouseReleased(0))
+						{
+							const float savedTime = dkf.time;
+							std::sort(dpt.keyframes.begin(), dpt.keyframes.end(),
+							          [](const UIKeyframe& a, const UIKeyframe& b)
+							          { return a.time < b.time; });
+							for (int ni = 0; ni < (int)dpt.keyframes.size(); ++ni)
+							{
+								if (std::abs(dpt.keyframes[ni].time - savedTime) < 1e-5f)
+								{ selKeyframeIdx_ = ni; break; }
+							}
+						}
+					}
+				}
+			}
+			if (ImGui::IsMouseReleased(0))
+			{
+				isDraggingKf_ = false;
+				dragKfCtIdx_ = dragKfPtIdx_ = dragKfKiIdx_ = -1;
+			}
+
+			// Deleteキー → 選択キーフレーム削除
+			if (ImGui::IsWindowHovered() && ImGui::IsKeyPressed(ImGuiKey_Delete) &&
+			    selClipTrackIdx_ >= 0 && selPropTrackIdx_ >= 0 && selKeyframeIdx_ >= 0 &&
+			    selClipTrackIdx_ < (int)clip.clipTracks.size())
+			{
+				auto& ct = clip.clipTracks[selClipTrackIdx_];
+				if (selPropTrackIdx_ < (int)ct.tracks.size())
+				{
+					auto& pt = ct.tracks[selPropTrackIdx_];
+					if (selKeyframeIdx_ < (int)pt.keyframes.size())
+					{
+						pt.keyframes.erase(pt.keyframes.begin() + selKeyframeIdx_);
+						selKeyframeIdx_ = -1;
+					}
+				}
+			}
+
+			// キーフレームコンテキストメニュー
+			if (ImGui::BeginPopup("kf_ctx"))
+			{
+				if (selClipTrackIdx_ >= 0 && selPropTrackIdx_ >= 0 && selKeyframeIdx_ >= 0 &&
+				    selClipTrackIdx_ < (int)clip.clipTracks.size())
+				{
+					auto& ct = clip.clipTracks[selClipTrackIdx_];
+					if (selPropTrackIdx_ < (int)ct.tracks.size())
+					{
+						auto& pt = ct.tracks[selPropTrackIdx_];
+						if (selKeyframeIdx_ < (int)pt.keyframes.size())
+						{
+							auto& kf = pt.keyframes[selKeyframeIdx_];
+							ImGui::TextDisabled("t=%.3f  v=%.3f", kf.time, kf.value);
+							ImGui::Separator();
+							static const char* kEaseMenuLabels[] =
+								{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
+							if (ImGui::BeginMenu("Ease"))
+							{
+								for (int ei = 0; ei < 5; ++ei)
+								{
+									bool isCur = (static_cast<int>(kf.ease) == ei);
+									if (ImGui::MenuItem(kEaseMenuLabels[ei], nullptr, isCur))
+										kf.ease = static_cast<EaseType>(ei);
+								}
+								ImGui::EndMenu();
+							}
+							ImGui::Separator();
+							if (ImGui::MenuItem("Duplicate Key"))
+							{
+								UIKeyframe dup = kf;
+								dup.time = std::min(dup.time + 0.1f, clip.duration);
+								pt.keyframes.push_back(dup);
+								std::sort(pt.keyframes.begin(), pt.keyframes.end(),
+								          [](const UIKeyframe& a, const UIKeyframe& b)
+								          { return a.time < b.time; });
+								for (int ni = 0; ni < (int)pt.keyframes.size(); ++ni)
+								{
+									if (std::abs(pt.keyframes[ni].time - dup.time) < 1e-5f)
+									{ selKeyframeIdx_ = ni; break; }
+								}
+							}
+							ImGui::Separator();
+							if (ImGui::MenuItem("Delete Key"))
+							{
+								pt.keyframes.erase(pt.keyframes.begin() + selKeyframeIdx_);
+								selKeyframeIdx_ = -1;
+							}
+						}
+					}
+				}
+				ImGui::EndPopup();
+			}
+
+			// トラック空領域コンテキストメニュー
+			if (ImGui::BeginPopup("track_ctx"))
+			{
+				if (selClipTrackIdx_ >= 0 && selPropTrackIdx_ >= 0 &&
+				    selClipTrackIdx_ < (int)clip.clipTracks.size())
+				{
+					auto& ct = clip.clipTracks[selClipTrackIdx_];
+					if (selPropTrackIdx_ < (int)ct.tracks.size())
+					{
+						auto& pt = ct.tracks[selPropTrackIdx_];
+						ImGui::TextDisabled("%s  t=%.3f",
+						    UIAnimationSerializer::PropertyToStr(pt.property), ctxClickTime_);
+						ImGui::Separator();
+						if (ImGui::MenuItem("Add Key here"))
+						{
+							UIKeyframe kf{ ctxClickTime_, pt.Sample(ctxClickTime_), EaseType::Linear };
+							pt.keyframes.push_back(kf);
+							std::sort(pt.keyframes.begin(), pt.keyframes.end(),
+							          [](const UIKeyframe& a, const UIKeyframe& b)
+							          { return a.time < b.time; });
+							for (int ni = 0; ni < (int)pt.keyframes.size(); ++ni)
+							{
+								if (std::abs(pt.keyframes[ni].time - ctxClickTime_) < 1e-5f)
+								{ selKeyframeIdx_ = ni; break; }
+							}
+						}
+						if (ImGui::MenuItem("Add Key at Scrub"))
+						{
+							UIKeyframe kf{ scrubTime_, pt.Sample(scrubTime_), EaseType::Linear };
+							pt.keyframes.push_back(kf);
+							std::sort(pt.keyframes.begin(), pt.keyframes.end(),
+							          [](const UIKeyframe& a, const UIKeyframe& b)
+							          { return a.time < b.time; });
+							for (int ni = 0; ni < (int)pt.keyframes.size(); ++ni)
+							{
+								if (std::abs(pt.keyframes[ni].time - scrubTime_) < 1e-5f)
+								{ selKeyframeIdx_ = ni; break; }
+							}
+						}
+					}
+				}
+				ImGui::EndPopup();
+			}
+
 			ImGui::EndChild();
 		}
 
@@ -666,6 +832,7 @@ namespace aq
 
 			// キーフレーム描画 & クリック
 			const float cy = rowY + rowH * 0.5f;
+			bool anyKfRightClicked = false;
 			for (int ki = 0; ki < (int)pt.keyframes.size(); ++ki)
 			{
 				auto& kf = pt.keyframes[ki];
@@ -674,43 +841,50 @@ namespace aq
 				                    ptIdx == selPropTrackIdx_  &&
 				                    ki    == selKeyframeIdx_);
 
-				// 菱形
+				// 菱形 (ドラッグ中は半透明)
 				const ImU32 kCol = kSel
-					? IM_COL32(255, 220, 50, 255)
+					? (isDraggingKf_ ? IM_COL32(255, 220, 50, 140) : IM_COL32(255, 220, 50, 255))
 					: IM_COL32(120, 200, 120, 255);
 				dl->AddQuadFilled(
-					ImVec2(kx,            cy - kDiamondR),
+					ImVec2(kx,             cy - kDiamondR),
 					ImVec2(kx + kDiamondR, cy),
-					ImVec2(kx,            cy + kDiamondR),
+					ImVec2(kx,             cy + kDiamondR),
 					ImVec2(kx - kDiamondR, cy),
 					kCol);
 				dl->AddQuad(
-					ImVec2(kx,            cy - kDiamondR),
+					ImVec2(kx,             cy - kDiamondR),
 					ImVec2(kx + kDiamondR, cy),
-					ImVec2(kx,            cy + kDiamondR),
+					ImVec2(kx,             cy + kDiamondR),
 					ImVec2(kx - kDiamondR, cy),
 					IM_COL32(255, 255, 255, 100));
 
-				// クリックで選択
 				const float kHit = kDiamondR + 2.f;
 				const bool inKf = mouse.x >= kx - kHit && mouse.x <= kx + kHit &&
 				                  mouse.y >= cy - kHit && mouse.y <= cy + kHit;
+
+				// 左クリックで選択 & ドラッグ開始ソース記録
 				if (inKf && ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered())
 				{
 					selClipTrackIdx_ = ctIdx;
 					selPropTrackIdx_ = ptIdx;
 					selKeyframeIdx_  = ki;
+					dragKfCtIdx_     = ctIdx;
+					dragKfPtIdx_     = ptIdx;
+					dragKfKiIdx_     = ki;
 				}
 
-				// ドラッグで time 変更
-				if (kSel && ImGui::IsMouseDragging(0))
+				// 右クリック → キーフレームコンテキストメニュー
+				if (inKf && ImGui::IsMouseClicked(1) && ImGui::IsWindowHovered() && !isDraggingKf_)
 				{
-					float dx = ImGui::GetIO().MouseDelta.x;
-					kf.time  = std::clamp(kf.time + dx / zoomPxPerSec_, 0.f, duration);
+					selClipTrackIdx_  = ctIdx;
+					selPropTrackIdx_  = ptIdx;
+					selKeyframeIdx_   = ki;
+					anyKfRightClicked = true;
+					ImGui::OpenPopup("kf_ctx");
 				}
 
-				// Tooltip
-				if (inKf)
+				// Tooltip (ドラッグ中は非表示)
+				if (inKf && !isDraggingKf_)
 				{
 					ImGui::BeginTooltip();
 					ImGui::Text("t=%.3f  v=%.3f  ease=%s",
@@ -718,6 +892,19 @@ namespace aq
 					            UIAnimationSerializer::EaseToStr(kf.ease));
 					ImGui::EndTooltip();
 				}
+			}
+
+			// 空トラック領域の右クリック → キー追加コンテキストメニュー
+			const bool inTrackArea = mouse.x >= ox && mouse.x <= ox + trackW &&
+			                         mouse.y >= rowY && mouse.y < rowY + rowH;
+			if (!anyKfRightClicked && inTrackArea &&
+			    ImGui::IsMouseClicked(1) && ImGui::IsWindowHovered())
+			{
+				selClipTrackIdx_ = ctIdx;
+				selPropTrackIdx_ = ptIdx;
+				selKeyframeIdx_  = -1;
+				ctxClickTime_    = std::clamp((mouse.x - ox) / zoomPxPerSec_, 0.f, duration);
+				ImGui::OpenPopup("track_ctx");
 			}
 		}
 
@@ -844,6 +1031,32 @@ namespace aq
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(60.f);
 			ImGui::DragFloat("x", &playSpeed_, 0.05f, 0.1f, 5.f, "%.1f");
+
+			// スクラブ時刻でキーフレーム追加
+			ImGui::SameLine();
+			const bool canAddKey = selClipTrackIdx_ >= 0 &&
+			                       selClipTrackIdx_ < (int)clip.clipTracks.size() &&
+			                       selPropTrackIdx_ >= 0 &&
+			                       selPropTrackIdx_ < (int)clip.clipTracks[selClipTrackIdx_].tracks.size();
+			if (!canAddKey) ImGui::BeginDisabled();
+			if (ImGui::Button("+ Key"))
+			{
+				auto& ct = clip.clipTracks[selClipTrackIdx_];
+				auto& pt = ct.tracks[selPropTrackIdx_];
+				float val = obj ? pt.ReadFrom(obj) : pt.Sample(scrubTime_);
+				UIKeyframe kf{ scrubTime_, val, EaseType::Linear };
+				pt.keyframes.push_back(kf);
+				std::sort(pt.keyframes.begin(), pt.keyframes.end(),
+				          [](const UIKeyframe& a, const UIKeyframe& b)
+				          { return a.time < b.time; });
+				for (int ni = 0; ni < (int)pt.keyframes.size(); ++ni)
+				{
+					if (std::abs(pt.keyframes[ni].time - scrubTime_) < 1e-5f)
+					{ selKeyframeIdx_ = ni; break; }
+				}
+			}
+			if (!canAddKey) ImGui::EndDisabled();
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("選択トラックにスクラブ時刻でキーフレームを追加");
 
 			// 復元ボタン
 			if (hasSnapshot_)

@@ -36,6 +36,9 @@ namespace aq
 			NineSliceBorderRight,
 			NineSliceBorderTop,
 			NineSliceBorderBottom,
+
+			// UITextComponent
+			TextCharCount,  // 表示文字数 (タイプライター演出用); -1 = 全表示
 		};
 
 	} // namespace ui

@@ -30,7 +30,8 @@ namespace aq
 			float             boxH       = 0.f;      // 縦クリップ幅 (0=なし)
 			TextAlignH        alignH     = TextAlignH::Left;
 			TextAlignV        alignV     = TextAlignV::Top;
-			bool              wordWrap   = false;
+			bool              wordWrap         = false;
+			int               visibleCharCount = -1;       // -1 = 全文字表示
 		};
 
 		struct TextLayoutResult

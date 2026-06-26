@@ -336,7 +336,7 @@ namespace aq
 						math::Vector4 fillTop    = (txt->color.w > 0.f) ? txt->color
 						                         : (style ? style->fillColor : math::Vector4{1,1,1,1});
 						math::Vector4 fillBottom = fillTop;
-						if (style && style->gradient.enabled)
+						if (style && style->gradient.enabled && txt->color.w <= 0.f)
 						{
 							fillTop    = style->gradient.topColor;
 							fillBottom = style->gradient.bottomColor;
@@ -350,9 +350,10 @@ namespace aq
 						layoutP.colorBottom = fillBottom;
 						layoutP.boxW        = transform->worldRect.w;
 						layoutP.boxH        = transform->worldRect.h;
-						layoutP.alignH      = txt->alignH;
-						layoutP.alignV      = txt->alignV;
-						layoutP.wordWrap    = txt->wordWrap;
+						layoutP.alignH           = txt->alignH;
+						layoutP.alignV           = txt->alignV;
+						layoutP.wordWrap         = txt->wordWrap;
+						layoutP.visibleCharCount = txt->visibleCharCount;
 
 						const TextLayoutResult layout = TextLayout::Layout(
 							txt->content, layoutP,

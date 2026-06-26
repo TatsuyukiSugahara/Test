@@ -117,7 +117,9 @@ namespace aq
 			const float lineH     = font.GetLineHeight()  * scale;
 			const float ascender  = font.GetAscender()    * scale;
 
-			const std::vector<char32_t> cps = DecodeUTF8(text);
+			std::vector<char32_t> cps = DecodeUTF8(text);
+			if (p.visibleCharCount >= 0 && static_cast<size_t>(p.visibleCharCount) < cps.size())
+				cps.resize(static_cast<size_t>(p.visibleCharCount));
 
 			// ---- 行分割 --------------------------------------------------------
 			// 改行文字 '\n' と wordWrap による折り返しを処理し、行の [begin, end) を収集。

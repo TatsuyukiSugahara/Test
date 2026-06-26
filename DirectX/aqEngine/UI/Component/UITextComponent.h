@@ -31,9 +31,12 @@ namespace aq
 			math::Vector2 offset    = { 0.f, 0.f };             // Transform 矩形内の追加オフセット (px)
 
 			// --- レイアウト ---
-			TextAlignH    alignH    = TextAlignH::Center;
-			TextAlignV    alignV    = TextAlignV::Middle;
-			bool          wordWrap  = false;
+			TextAlignH    alignH         = TextAlignH::Center;
+			TextAlignV    alignV         = TextAlignV::Middle;
+			bool          wordWrap       = false;
+
+			// --- タイプライター ---
+			int           visibleCharCount = -1;  // -1 = 全文字表示
 		};
 
 	} // namespace ui

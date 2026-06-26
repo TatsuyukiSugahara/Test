@@ -123,6 +123,7 @@ namespace aq
 					visitor.Field("Roughness",     staticMesh_.RoughnessRef());
 					visitor.Field("Specular F0",   staticMesh_.SpecularRef());
 					visitor.Field("EmissiveScale", staticMesh_.EmissiveScaleRef());
+					visitor.Field("Translucent",   staticMesh_.TranslucentRef());
 				}
 			}
 #endif
@@ -204,6 +205,7 @@ namespace aq
 					visitor.Field("Roughness",     skeletalMesh_.RoughnessRef());
 					visitor.Field("Specular F0",   skeletalMesh_.SpecularRef());
 					visitor.Field("EmissiveScale", skeletalMesh_.EmissiveScaleRef());
+					visitor.Field("Translucent",   skeletalMesh_.TranslucentRef());
 				}
 			}
 #endif

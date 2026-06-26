@@ -149,6 +149,9 @@ namespace app
 				tc->scale.Set(1.0f);
 
 				auto* skelComp = entity.GetComponent<aq::ecs::SkeletalMeshComponent>();
+				// ディファード PBR で描画（SetTranslucent によるディザ半透明を使うため）。
+				// SetShaderType は SetModelPath より前に呼ぶこと（ロード後の変更は再初期化されない）。
+				skelComp->SetShaderType(aq::graphics::SkeletalMesh::ShaderType::SkeletalPBRLit);
 				skelComp->SetModelPath("Assets/unityChan.tkm");
 				skelComp->GetSkeletalMesh()->SetCastShadow(true);
 				skelComp->GetSkeletalMesh()->SetReceiveShadow(true);

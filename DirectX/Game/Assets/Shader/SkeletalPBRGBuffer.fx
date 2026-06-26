@@ -103,6 +103,9 @@ float3 TBNToWorld(float3 tN, float3 T, float3 B, float3 N)
 
 PSOutput PSMain(PSInput input)
 {
+    // 擬似半透明: dither<1.0 のピクセルをスクリーンスペース ディザで discard
+    PBR_DitherClip(input.svPos.xy);
+
     float3 baseColor = baseColorTex.Sample(samp, input.uv).rgb;
 
     float3 N;

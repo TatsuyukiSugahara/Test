@@ -199,19 +199,19 @@ namespace aq
 			if (current_.gradient.enabled)
 			{
 				// AddText は単色のみなので水平ストリップに分割して lerp color で描画
-				constexpr int kStrips = 16;
+				constexpr int STRIPS = 16;
 				const auto& tc = current_.gradient.topColor;
 				const auto& bc = current_.gradient.bottomColor;
-				for (int i = 0; i < kStrips; ++i)
+				for (int i = 0; i < STRIPS; ++i)
 				{
-					const float t  = (i + 0.5f) / kStrips;
+					const float t  = (i + 0.5f) / STRIPS;
 					const ImU32 sc = IM_COL32(
 						static_cast<int>((tc.x + (bc.x - tc.x) * t) * 255),
 						static_cast<int>((tc.y + (bc.y - tc.y) * t) * 255),
 						static_cast<int>((tc.z + (bc.z - tc.z) * t) * 255),
 						static_cast<int>((tc.w + (bc.w - tc.w) * t) * 255));
-					const float clipY0 = ty + textSz.y * (static_cast<float>(i)     / kStrips);
-					const float clipY1 = ty + textSz.y * (static_cast<float>(i + 1) / kStrips);
+					const float clipY0 = ty + textSz.y * (static_cast<float>(i)     / STRIPS);
+					const float clipY1 = ty + textSz.y * (static_cast<float>(i + 1) / STRIPS);
 					dl->PushClipRect(ImVec2(p0.x, clipY0), ImVec2(p1.x, clipY1), true);
 					dl->AddText(font, fontSize, ImVec2(tx, ty), sc, previewBuf_);
 					dl->PopClipRect();

@@ -57,7 +57,7 @@ namespace aq
 		void UIEditorDebugPanel::RenderAnchorPicker(UITransformComponent* tc)
 		{
 			struct Preset { const char* label; float minX, minY, maxX, maxY; };
-			static const Preset kGrid[9] = {
+			static const Preset GRID[9] = {
 				{"↖", 0.f,  0.f,  0.f,  0.f },
 				{"↑", .5f,  0.f,  .5f,  0.f },
 				{"↗", 1.f,  0.f,  1.f,  0.f },
@@ -68,7 +68,7 @@ namespace aq
 				{"↓", .5f,  1.f,  .5f,  1.f },
 				{"↘", 1.f,  1.f,  1.f,  1.f },
 			};
-			static const Preset kStretch[3] = {
+			static const Preset STRETCH[3] = {
 				{"←→", 0.f, .5f, 1.f, .5f},
 				{" ↕ ", .5f, 0.f, .5f, 1.f},
 				{"All", 0.f, 0.f, 1.f, 1.f},
@@ -80,16 +80,16 @@ namespace aq
 			{
 				if (i % 3 != 0) ImGui::SameLine(0.f, 2.f);
 				ImGui::PushID(i);
-				const bool active = (tc->anchor.min.x == kGrid[i].minX &&
-				                     tc->anchor.min.y == kGrid[i].minY &&
-				                     tc->anchor.max.x == kGrid[i].maxX &&
-				                     tc->anchor.max.y == kGrid[i].maxY);
+				const bool active = (tc->anchor.min.x == GRID[i].minX &&
+				                     tc->anchor.min.y == GRID[i].minY &&
+				                     tc->anchor.max.x == GRID[i].maxX &&
+				                     tc->anchor.max.y == GRID[i].maxY);
 				if (active)
 					ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-				if (ImGui::Button(kGrid[i].label, btnSz))
+				if (ImGui::Button(GRID[i].label, btnSz))
 				{
-					tc->anchor.min = {kGrid[i].minX, kGrid[i].minY};
-					tc->anchor.max = {kGrid[i].maxX, kGrid[i].maxY};
+					tc->anchor.min = {GRID[i].minX, GRID[i].minY};
+					tc->anchor.max = {GRID[i].maxX, GRID[i].maxY};
 				}
 				if (active) ImGui::PopStyleColor();
 				ImGui::PopID();
@@ -100,16 +100,16 @@ namespace aq
 			{
 				ImGui::SameLine(0.f, 4.f);
 				ImGui::PushID(100 + i);
-				const bool active = (tc->anchor.min.x == kStretch[i].minX &&
-				                     tc->anchor.min.y == kStretch[i].minY &&
-				                     tc->anchor.max.x == kStretch[i].maxX &&
-				                     tc->anchor.max.y == kStretch[i].maxY);
+				const bool active = (tc->anchor.min.x == STRETCH[i].minX &&
+				                     tc->anchor.min.y == STRETCH[i].minY &&
+				                     tc->anchor.max.x == STRETCH[i].maxX &&
+				                     tc->anchor.max.y == STRETCH[i].maxY);
 				if (active)
 					ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-				if (ImGui::Button(kStretch[i].label, {38.f, 22.f}))
+				if (ImGui::Button(STRETCH[i].label, {38.f, 22.f}))
 				{
-					tc->anchor.min = {kStretch[i].minX, kStretch[i].minY};
-					tc->anchor.max = {kStretch[i].maxX, kStretch[i].maxY};
+					tc->anchor.min = {STRETCH[i].minX, STRETCH[i].minY};
+					tc->anchor.max = {STRETCH[i].maxX, STRETCH[i].maxY};
 				}
 				if (active) ImGui::PopStyleColor();
 				ImGui::PopID();
@@ -443,15 +443,15 @@ namespace aq
 					// --- レイアウト ---
 					ImGui::Checkbox("Word Wrap", &txt->wordWrap);
 					{
-						static const char* kAlignH[] = { "Left", "Center", "Right" };
+						static const char* ALIGN_H[] = { "Left", "Center", "Right" };
 						int idx = static_cast<int>(txt->alignH);
-						if (ImGui::Combo("Align H", &idx, kAlignH, 3))
+						if (ImGui::Combo("Align H", &idx, ALIGN_H, 3))
 							txt->alignH = static_cast<TextAlignH>(idx);
 					}
 					{
-						static const char* kAlignV[] = { "Top", "Middle", "Bottom" };
+						static const char* ALIGN_V[] = { "Top", "Middle", "Bottom" };
 						int idx = static_cast<int>(txt->alignV);
-						if (ImGui::Combo("Align V", &idx, kAlignV, 3))
+						if (ImGui::Combo("Align V", &idx, ALIGN_V, 3))
 							txt->alignV = static_cast<TextAlignV>(idx);
 					}
 				}

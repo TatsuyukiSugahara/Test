@@ -21,13 +21,13 @@ namespace aq
 {
 	namespace ui
 	{
-		static constexpr float kRowH         = 22.f;
-		static constexpr float kLabelW       = 170.f;
-		static constexpr float kRulerH       = 24.f;
-		static constexpr float kCtHeaderH    = 26.f;
-		static constexpr float kDiamondR     = 5.f;
-		static constexpr float kMinZoom      = 40.f;
-		static constexpr float kMaxZoom      = 800.f;
+		static constexpr float ROW_H         = 22.f;
+		static constexpr float LABEL_W       = 170.f;
+		static constexpr float RULER_H       = 24.f;
+		static constexpr float CT_HEADER_H   = 26.f;
+		static constexpr float DIAMOND_R     = 5.f;
+		static constexpr float MIN_ZOOM      = 40.f;
+		static constexpr float MAX_ZOOM      = 800.f;
 
 
 		// ---- メニュー登録 -------------------------------------------------------
@@ -321,7 +321,7 @@ namespace aq
 				selPropTrackIdx_ = selKeyframeIdx_ = -1;
 			}
 
-			static const char* kCondLabels[] = { "Default", "Bool", "Trigger" };
+			static const char* COND_LABELS[] = { "Default", "Bool", "Trigger" };
 
 			for (int ci = 0; ci < (int)clip.clipTracks.size(); ++ci)
 			{
@@ -355,7 +355,7 @@ namespace aq
 
 					int condIdx = static_cast<int>(ct.condition);
 					ImGui::SetNextItemWidth(80.f);
-					if (ImGui::Combo("Cond", &condIdx, kCondLabels, 3))
+					if (ImGui::Combo("Cond", &condIdx, COND_LABELS, 3))
 						ct.condition = static_cast<UITrackCondition>(condIdx);
 
 					if (ct.condition != UITrackCondition::Default)
@@ -381,7 +381,7 @@ namespace aq
 					}
 
 					// PropTrack リスト
-					static const char* kPropLabels[] = {
+					static const char* PROP_LABELS[] = {
 						"PositionX","PositionY","PositionZ",
 						"ScaleX","ScaleY","Rotation",
 						"SizeDeltaX","SizeDeltaY",
@@ -391,7 +391,7 @@ namespace aq
 						"NineSliceBorderTop","NineSliceBorderBottom",
 						"TextCharCount",
 					};
-					static const UIAnimatedProperty kPropValues[] = {
+					static const UIAnimatedProperty PROP_VALUES[] = {
 						UIAnimatedProperty::PositionX, UIAnimatedProperty::PositionY,
 						UIAnimatedProperty::PositionZ, UIAnimatedProperty::ScaleX,
 						UIAnimatedProperty::ScaleY,    UIAnimatedProperty::Rotation,
@@ -405,7 +405,7 @@ namespace aq
 						UIAnimatedProperty::NineSliceBorderBottom,
 						UIAnimatedProperty::TextCharCount,
 					};
-					constexpr int kPropCount = 19;
+					constexpr int PROP_COUNT = 19;
 
 					if (ImGui::SmallButton("+ PropTrack"))
 					{
@@ -448,13 +448,13 @@ namespace aq
 
 						// Property ドロップダウン
 						int propIdx = 0;
-						for (int k = 0; k < kPropCount; ++k)
+						for (int k = 0; k < PROP_COUNT; ++k)
 						{
-							if (kPropValues[k] == pt.property) { propIdx = k; break; }
+							if (PROP_VALUES[k] == pt.property) { propIdx = k; break; }
 						}
 						ImGui::SetNextItemWidth(140.f);
-						if (ImGui::Combo("##prop", &propIdx, kPropLabels, kPropCount))
-							pt.property = kPropValues[propIdx];
+						if (ImGui::Combo("##prop", &propIdx, PROP_LABELS, PROP_COUNT))
+							pt.property = PROP_VALUES[propIdx];
 
 						ImGui::SameLine();
 						if (ImGui::SmallButton("-##pt"))
@@ -489,8 +489,8 @@ namespace aq
 			for (auto& ct : clip.clipTracks)
 				totalRows += 1 + (int)ct.tracks.size();
 
-			const float contentW = kLabelW + totalW + 20.f;
-			const float contentH = kRulerH + totalRows * kRowH + 10.f;
+			const float contentW = LABEL_W + totalW + 20.f;
+			const float contentH = RULER_H + totalRows * ROW_H + 10.f;
 
 			// 操作ヒント
 			ImGui::TextDisabled("右クリック: キー追加/削除  |  Ctrl+Click: キー追加  |  Delete: 削除  |  Drag: 移動  |  Wheel: ズーム");
@@ -505,7 +505,7 @@ namespace aq
 				float wheel = ImGui::GetIO().MouseWheel;
 				if (wheel != 0.f)
 					zoomPxPerSec_ = std::clamp(zoomPxPerSec_ * (1.f + wheel * 0.1f),
-					                            kMinZoom, kMaxZoom);
+					                            MIN_ZOOM, MAX_ZOOM);
 			}
 
 			ImDrawList* dl  = ImGui::GetWindowDrawList();
@@ -514,9 +514,9 @@ namespace aq
 			const float  sy = ImGui::GetScrollY();
 
 			// content 座標 -> screen 座標: screen_x = wp.x + content_x - sx
-			// ラベル列: content x = 0 .. kLabelW (スクロール時は画面外へ)
-			// タイムライン: content x = kLabelW ..
-			const float tlX = wp.x + kLabelW - sx;  // タイムライン開始 screen x
+			// ラベル列: content x = 0 .. LABEL_W (スクロール時は画面外へ)
+			// タイムライン: content x = LABEL_W ..
+			const float tlX = wp.x + LABEL_W - sx;  // タイムライン開始 screen x
 			const float tlY = wp.y - sy;             // 先頭 screen y
 
 			// 全体背景
@@ -529,7 +529,7 @@ namespace aq
 			DrawRuler(dl, tlX, tlY, totalW, totalDur);
 
 			// トラック行描画
-			float rowY = tlY + kRulerH;
+			float rowY = tlY + RULER_H;
 			for (int ci = 0; ci < (int)clip.clipTracks.size(); ++ci)
 			{
 				auto& ct = clip.clipTracks[ci];
@@ -537,10 +537,10 @@ namespace aq
 				// ClipTrack ヘッダ行
 				float hdrLeft  = wp.x - sx;          // content x = 0
 				float hdrRight = wp.x - sx + contentW;
-				dl->AddRectFilled(ImVec2(hdrLeft, rowY), ImVec2(hdrRight, rowY + kCtHeaderH),
+				dl->AddRectFilled(ImVec2(hdrLeft, rowY), ImVec2(hdrRight, rowY + CT_HEADER_H),
 				                  IM_COL32(60, 60, 80, 220));
-				dl->AddLine(ImVec2(hdrLeft, rowY + kCtHeaderH - 1),
-				            ImVec2(hdrRight, rowY + kCtHeaderH - 1),
+				dl->AddLine(ImVec2(hdrLeft, rowY + CT_HEADER_H - 1),
+				            ImVec2(hdrRight, rowY + CT_HEADER_H - 1),
 				            IM_COL32(100, 100, 140, 200));
 
 				char ctLabel[128];
@@ -548,19 +548,19 @@ namespace aq
 				              UIAnimationSerializer::ConditionToStr(ct.condition), ct.name.c_str());
 				// ラベルは固定位置 (wp.x) でクリップ
 				dl->AddText(ImVec2(wp.x + 4.f, rowY + 4.f), IM_COL32(200, 210, 230, 255), ctLabel);
-				rowY += kCtHeaderH;
+				rowY += CT_HEADER_H;
 
 				// PropTrack 行
 				for (int pi = 0; pi < (int)ct.tracks.size(); ++pi)
 				{
-					DrawTrackRow(dl, clip, ci, pi, tlX, rowY, kRowH, totalDur);
-					rowY += kRowH;
+					DrawTrackRow(dl, clip, ci, pi, tlX, rowY, ROW_H, totalDur);
+					rowY += ROW_H;
 				}
 			}
 
 			// スクラバー縦線 + 三角ヘッド
 			const float scrubX = tlX + scrubTime_ * zoomPxPerSec_;
-			dl->AddLine(ImVec2(scrubX, tlY + kRulerH),
+			dl->AddLine(ImVec2(scrubX, tlY + RULER_H),
 			            ImVec2(scrubX, tlY + contentH),
 			            IM_COL32(255, 200, 50, 220), 2.f);
 			dl->AddTriangleFilled(
@@ -575,7 +575,7 @@ namespace aq
 			// ルーラー範囲でクリック / ドラッグ → スクラブ
 			const ImVec2 mouse = ImGui::GetMousePos();
 			const bool inRuler = mouse.x >= tlX && mouse.x <= tlX + totalW &&
-			                     mouse.y >= tlY && mouse.y <= tlY + kRulerH;
+			                     mouse.y >= tlY && mouse.y <= tlY + RULER_H;
 
 			if (inRuler && ImGui::IsMouseDown(0) && ImGui::IsWindowHovered())
 			{
@@ -676,14 +676,14 @@ namespace aq
 							auto& kf = pt.keyframes[selKeyframeIdx_];
 							ImGui::TextDisabled("t=%.3f  v=%.3f", kf.time, kf.value);
 							ImGui::Separator();
-							static const char* kEaseMenuLabels[] =
+							static const char* EASE_MENU_LABELS[] =
 								{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
 							if (ImGui::BeginMenu("Ease"))
 							{
 								for (int ei = 0; ei < 5; ++ei)
 								{
 									bool isCur = (static_cast<int>(kf.ease) == ei);
-									if (ImGui::MenuItem(kEaseMenuLabels[ei], nullptr, isCur))
+									if (ImGui::MenuItem(EASE_MENU_LABELS[ei], nullptr, isCur))
 										kf.ease = static_cast<EaseType>(ei);
 								}
 								ImGui::EndMenu();
@@ -766,7 +766,7 @@ namespace aq
 			ImDrawList* dl, float ox, float oy, float w, float duration)
 		{
 			dl->AddRectFilled(ImVec2(ox, oy),
-			                  ImVec2(ox + w, oy + kRulerH),
+			                  ImVec2(ox + w, oy + RULER_H),
 			                  IM_COL32(40, 40, 50, 255));
 
 			// 目盛り間隔: ズームに応じて 0.1 / 0.5 / 1.0 / 2.0 s 単位で切り替え
@@ -779,9 +779,9 @@ namespace aq
 			{
 				float x = ox + t * zoomPxPerSec_;
 				bool  major = (std::fmod(t + 1e-5f, 1.f) < step * 0.5f);
-				float tickH = major ? kRulerH * 0.6f : kRulerH * 0.3f;
-				dl->AddLine(ImVec2(x, oy + kRulerH - tickH),
-				            ImVec2(x, oy + kRulerH),
+				float tickH = major ? RULER_H * 0.6f : RULER_H * 0.3f;
+				dl->AddLine(ImVec2(x, oy + RULER_H - tickH),
+				            ImVec2(x, oy + RULER_H),
 				            IM_COL32(180, 180, 180, 200));
 				if (major)
 				{
@@ -804,11 +804,11 @@ namespace aq
 			const bool   rowSel = (ctIdx == selClipTrackIdx_ && ptIdx == selPropTrackIdx_);
 			const ImVec2 mouse  = ImGui::GetMousePos();
 
-			// ラベル列 (ox - kLabelW .. ox) — content スクロールに乗る
+			// ラベル列 (ox - LABEL_W .. ox) — content スクロールに乗る
 			const ImU32 lblBg = rowSel ? IM_COL32(50, 80, 120, 210) : IM_COL32(35, 38, 48, 210);
-			dl->AddRectFilled(ImVec2(ox - kLabelW, rowY), ImVec2(ox, rowY + rowH), lblBg);
+			dl->AddRectFilled(ImVec2(ox - LABEL_W, rowY), ImVec2(ox, rowY + rowH), lblBg);
 			// ラベルテキストは window 左端固定 (スクロールしても読める)
-			dl->AddText(ImVec2(ox - kLabelW + 4.f, rowY + 4.f),
+			dl->AddText(ImVec2(ox - LABEL_W + 4.f, rowY + 4.f),
 			            IM_COL32(200, 215, 235, 255),
 			            UIAnimationSerializer::PropertyToStr(pt.property));
 
@@ -821,7 +821,7 @@ namespace aq
 			            IM_COL32(55, 55, 75, 180));
 
 			// ラベル列クリックで選択
-			const bool inLabel = mouse.x >= ox - kLabelW && mouse.x < ox &&
+			const bool inLabel = mouse.x >= ox - LABEL_W && mouse.x < ox &&
 			                     mouse.y >= rowY           && mouse.y < rowY + rowH;
 			if (inLabel && ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered())
 			{
@@ -846,19 +846,19 @@ namespace aq
 					? (isDraggingKf_ ? IM_COL32(255, 220, 50, 140) : IM_COL32(255, 220, 50, 255))
 					: IM_COL32(120, 200, 120, 255);
 				dl->AddQuadFilled(
-					ImVec2(kx,             cy - kDiamondR),
-					ImVec2(kx + kDiamondR, cy),
-					ImVec2(kx,             cy + kDiamondR),
-					ImVec2(kx - kDiamondR, cy),
+					ImVec2(kx,              cy - DIAMOND_R),
+					ImVec2(kx + DIAMOND_R,  cy),
+					ImVec2(kx,              cy + DIAMOND_R),
+					ImVec2(kx - DIAMOND_R,  cy),
 					kCol);
 				dl->AddQuad(
-					ImVec2(kx,             cy - kDiamondR),
-					ImVec2(kx + kDiamondR, cy),
-					ImVec2(kx,             cy + kDiamondR),
-					ImVec2(kx - kDiamondR, cy),
+					ImVec2(kx,              cy - DIAMOND_R),
+					ImVec2(kx + DIAMOND_R,  cy),
+					ImVec2(kx,              cy + DIAMOND_R),
+					ImVec2(kx - DIAMOND_R,  cy),
 					IM_COL32(255, 255, 255, 100));
 
-				const float kHit = kDiamondR + 2.f;
+				const float kHit = DIAMOND_R + 2.f;
 				const bool inKf = mouse.x >= kx - kHit && mouse.x <= kx + kHit &&
 				                  mouse.y >= cy - kHit && mouse.y <= cy + kHit;
 
@@ -936,11 +936,11 @@ namespace aq
 			ImGui::SetNextItemWidth(100.f);
 			ImGui::DragFloat("Value", &kf.value, 0.01f,  -9999.f, 9999.f,  "%.3f");
 
-			static const char* kEaseLabels[] =
+			static const char* EASE_LABELS[] =
 				{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
 			int easeIdx = static_cast<int>(kf.ease);
 			ImGui::SetNextItemWidth(120.f);
-			if (ImGui::Combo("Ease", &easeIdx, kEaseLabels, 5))
+			if (ImGui::Combo("Ease", &easeIdx, EASE_LABELS, 5))
 				kf.ease = static_cast<EaseType>(easeIdx);
 
 			// Delete ボタン or Delete キー

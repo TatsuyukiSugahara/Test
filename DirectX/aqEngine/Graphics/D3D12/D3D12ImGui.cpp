@@ -285,17 +285,18 @@ float4 PSMain(PS_INPUT input) : SV_Target
 						return SUCCEEDED(g_device->CreateCommittedResource(&upHeap, D3D12_HEAP_FLAG_NONE, &d,
 						       D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(res)));
 					};
+					// frames-in-flight 分を 1 資源にまとめて確保し、フレームごとの領域を使う。
 					if (vtxCount > g_vbCap)
 					{
 						SafeReleaseD3D12(g_vb);
 						g_vbCap = vtxCount + 5000;
-						if (!makeBuffer(&g_vb, g_vbCap * sizeof(ImDrawVert))) return false;
+						if (!makeBuffer(&g_vb, g_vbCap * sizeof(ImDrawVert) * D3D12_FRAME_COUNT)) return false;
 					}
 					if (idxCount > g_ibCap)
 					{
 						SafeReleaseD3D12(g_ib);
 						g_ibCap = idxCount + 10000;
-						if (!makeBuffer(&g_ib, g_ibCap * sizeof(ImDrawIdx))) return false;
+						if (!makeBuffer(&g_ib, g_ibCap * sizeof(ImDrawIdx) * D3D12_FRAME_COUNT)) return false;
 					}
 					return true;
 				}
@@ -348,10 +349,17 @@ float4 PSMain(PS_INPUT input) : SV_Target
 				if (drawData->TotalVtxCount <= 0) return;
 				if (!EnsureBuffers(drawData->TotalVtxCount, drawData->TotalIdxCount)) return;
 
-				// VB/IB へ全描画リストを連結コピー
-				ImDrawVert* vtxDst = nullptr; ImDrawIdx* idxDst = nullptr;
-				g_vb->Map(0, nullptr, reinterpret_cast<void**>(&vtxDst));
-				g_ib->Map(0, nullptr, reinterpret_cast<void**>(&idxDst));
+				// frames-in-flight: このフレームの VB/IB 領域オフセット
+				const uint32_t frame    = D3D12GraphicsDeviceImpl::GetStaticFrameIndex();
+				const UINT64   vbOffset = static_cast<UINT64>(frame) * g_vbCap * sizeof(ImDrawVert);
+				const UINT64   ibOffset = static_cast<UINT64>(frame) * g_ibCap * sizeof(ImDrawIdx);
+
+				// VB/IB へ全描画リストを連結コピー (現在フレームの領域へ)
+				uint8_t* vtxBase = nullptr; uint8_t* idxBase = nullptr;
+				g_vb->Map(0, nullptr, reinterpret_cast<void**>(&vtxBase));
+				g_ib->Map(0, nullptr, reinterpret_cast<void**>(&idxBase));
+				ImDrawVert* vtxDst = reinterpret_cast<ImDrawVert*>(vtxBase + vbOffset);
+				ImDrawIdx*  idxDst = reinterpret_cast<ImDrawIdx*>(idxBase + ibOffset);
 				for (int n = 0; n < drawData->CmdListsCount; ++n)
 				{
 					const ImDrawList* cl = drawData->CmdLists[n];
@@ -368,13 +376,13 @@ float4 PSMain(PS_INPUT input) : SV_Target
 				cmdList->RSSetViewports(1, &vp);
 
 				D3D12_VERTEX_BUFFER_VIEW vbv = {};
-				vbv.BufferLocation = g_vb->GetGPUVirtualAddress();
+				vbv.BufferLocation = g_vb->GetGPUVirtualAddress() + vbOffset;
 				vbv.SizeInBytes    = g_vbCap * sizeof(ImDrawVert);
 				vbv.StrideInBytes  = sizeof(ImDrawVert);
 				cmdList->IASetVertexBuffers(0, 1, &vbv);
 
 				D3D12_INDEX_BUFFER_VIEW ibv = {};
-				ibv.BufferLocation = g_ib->GetGPUVirtualAddress();
+				ibv.BufferLocation = g_ib->GetGPUVirtualAddress() + ibOffset;
 				ibv.SizeInBytes    = g_ibCap * sizeof(ImDrawIdx);
 				ibv.Format         = sizeof(ImDrawIdx) == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
 				cmdList->IASetIndexBuffer(&ibv);
@@ -406,7 +414,12 @@ float4 PSMain(PS_INPUT input) : SV_Target
 				const D3D12_GPU_DESCRIPTOR_HANDLE heapGpu0 = g_srvHeap->GetGPUDescriptorHandleForHeapStart();
 				const UINT64 gpuLo = heapGpu0.ptr;
 				const UINT64 gpuHi = heapGpu0.ptr + static_cast<UINT64>(HEAP_SIZE) * g_srvSize;
-				g_dynNext = 1;  // slot 0 はフォント。動的スロットは毎フレーム巻き戻す。
+				// frames-in-flight: slot 0=フォント、残りを FRAME_COUNT 区画に分け、
+				// このフレームの区画だけ使う (GPUが前フレームのディスクリプタを読む間の上書き防止)。
+				const uint32_t dynRegion  = (HEAP_SIZE - 1) / D3D12_FRAME_COUNT;
+				const uint32_t dynBegin   = 1 + D3D12GraphicsDeviceImpl::GetStaticFrameIndex() * dynRegion;
+				const uint32_t dynEnd     = dynBegin + dynRegion;
+				g_dynNext = dynBegin;
 
 				// 描画コマンドを発行
 				const ImVec2 clipOff = drawData->DisplayPos;
@@ -435,7 +448,7 @@ float4 PSMain(PS_INPUT input) : SV_Target
 						{
 							tex.ptr = id;
 						}
-						else if (id != 0 && g_dynNext < HEAP_SIZE)
+						else if (id != 0 && g_dynNext < dynEnd)
 						{
 							auto* srv = reinterpret_cast<D3D12SRV*>(id);
 							srv->TransitionToSRV(cmdList);  // PIXEL_SHADER_RESOURCE へ

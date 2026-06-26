@@ -13,6 +13,13 @@ namespace aq
 {
 	namespace graphics
 	{
+		// frames-in-flight 数。CPU が GPU より先行できるフレーム数。
+		// バックバッファ枚数 (RENDER_TARGET_COUNT) と一致させる。
+		// 毎フレーム CPU が書き込む動的リソース (定数バッファ / 動的VB・IB / SRVリング /
+		// コマンドアロケータ) はこの数だけ多重化し、フェンスで世代管理する。
+		constexpr uint32_t D3D12_FRAME_COUNT = 2;
+
+
 		// COM ポインタを安全に解放する (D3D11 層の手動 Release パターンに合わせる)
 		template<typename T>
 		inline void SafeReleaseD3D12(T*& p)

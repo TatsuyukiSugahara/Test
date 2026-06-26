@@ -27,6 +27,7 @@
 #include <imgui/imgui_impl_dx11.h>
 #elif defined(ENGINE_GRAPHICS_D3D12)
 #include "Graphics/D3D12/D3D12ImGui.h"
+#include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
 #endif
 #endif
 #ifdef AQ_DEBUG_IMGUI
@@ -321,6 +322,41 @@ namespace aq
 			aq::graphics::D3D12ImGui::NewFrame();
 #endif
 			ImGui::NewFrame();
+
+			// FPS オーバーレイ (常時表示・左上)
+			{
+				const float fps = aq::Engine::GetFPS();
+				const float ms  = (fps > 0.0f) ? (1000.0f / fps) : 0.0f;
+				ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_Always);
+				ImGui::SetNextWindowBgAlpha(0.35f);
+				const ImGuiWindowFlags flags =
+					ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+					ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+					ImGuiWindowFlags_NoMove;
+				if (ImGui::Begin("##FPSOverlay", nullptr, flags))
+				{
+#if defined(ENGINE_GRAPHICS_D3D12)
+					const char* backend = "D3D12";
+#elif defined(ENGINE_GRAPHICS_D3D11)
+					const char* backend = "D3D11";
+#else
+					const char* backend = "?";
+#endif
+					ImGui::Text("%s  %.1f FPS (%.2f ms)", backend, fps, ms);
+
+#if defined(ENGINE_GRAPHICS_D3D12)
+					// VSync を実機で切り替えられるようにする
+					auto* d3d12 = static_cast<aq::graphics::D3D12GraphicsDeviceImpl*>(
+						aq::graphics::GraphicsDevice::Get().GetImplRaw());
+					if (d3d12)
+					{
+						bool vsync = d3d12->GetVSync();
+						if (ImGui::Checkbox("VSync", &vsync)) d3d12->SetVSync(vsync);
+					}
+#endif
+				}
+				ImGui::End();
+			}
 
 			OnImGuiRender();
 

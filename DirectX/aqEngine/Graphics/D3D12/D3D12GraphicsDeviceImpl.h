@@ -108,6 +108,16 @@ namespace aq
 			/** リソースクラス向け静的アクセサ (D3D11 層の GetStaticDevice と同じパターン) */
 			static ID3D12Device* GetStaticDevice();
 
+			/** 現在の frames-in-flight インデックス [0, FRAME_COUNT)。
+			 *  動的リソース (CB / 動的VB・IB / imgui) がフレーム別領域を選ぶのに使う。 */
+			uint32_t GetCurrentFrameIndex() const { return frameIndex_; }
+			static uint32_t GetStaticFrameIndex();
+			static constexpr uint32_t GetFrameCount() { return FRAME_COUNT; }
+
+			// VSync の実行時トグル (ImGui から操作)
+			void SetVSync(bool enabled) { vsyncEnabled_ = enabled; }
+			bool GetVSync() const       { return vsyncEnabled_; }
+
 		private:
 			bool CreateDeviceAndQueues();
 			bool CreateSwapChain(void* hwnd, uint32_t width, uint32_t height);
@@ -119,10 +129,11 @@ namespace aq
 
 		private:
 			static constexpr uint32_t RENDER_TARGET_COUNT = 2;
+			static constexpr uint32_t FRAME_COUNT         = 2;  // = D3D12_FRAME_COUNT (cpp で static_assert)
 
 			ID3D12Device*              device_        = nullptr;
 			ID3D12CommandQueue*        commandQueue_  = nullptr;
-			ID3D12CommandAllocator*    commandAlloc_  = nullptr;
+			ID3D12CommandAllocator*    commandAlloc_[FRAME_COUNT] = {};  // frames-in-flight 分
 			ID3D12GraphicsCommandList* commandList_   = nullptr;
 			IDXGISwapChain3*           swapChain_     = nullptr;
 			ID3D12Resource*            backBuffers_[RENDER_TARGET_COUNT] = {};
@@ -140,6 +151,9 @@ namespace aq
 			ID3D12Fence*               fence_         = nullptr;
 			void*                      fenceEvent_    = nullptr;  // HANDLE
 			uint64_t                   fenceValue_    = 0;
+			uint64_t                   frameFenceValue_[FRAME_COUNT] = {};  // 各フレームスロットの完了印
+			uint32_t                   frameIndex_    = 0;                  // 現在の frames-in-flight スロット
+			bool                       vsyncEnabled_  = true;              // Present の同期間隔 (ImGui トグル)
 
 			// メイン RT(深度付きオフスクリーン)。シーンはここへ描画し CopyToBackBuffer でバックバッファへ複写。
 			std::unique_ptr<D3D12RenderTarget> mainRenderTargets_[RENDER_TARGET_COUNT];
@@ -158,8 +172,9 @@ namespace aq
 			uint32_t                   srvDescriptorSize_    = 0;
 			uint32_t                   srvStagingCapacity_   = 0;
 			uint32_t                   srvStagingNext_       = 0;        // 次に割り当てる staging スロット
-			uint32_t                   srvShaderRingCapacity_= 0;
-			uint32_t                   srvShaderRingNext_    = 0;        // フレーム内 ring 位置 (BeginFrame で reset)
+			uint32_t                   srvShaderRingCapacity_= 0;        // 全体容量 (= FRAME_COUNT * srvRegionSize_)
+			uint32_t                   srvRegionSize_        = 0;        // 1 フレーム分の区画サイズ
+			uint32_t                   srvShaderRingNext_    = 0;        // フレーム内 ring 位置 (BeginFrame で区画先頭へ)
 			uint32_t                   nullSRVIndex_         = 0;        // staging 内の null SRV 位置
 			uint64_t                   frameGeneration_      = 0;        // BeginFrameIfNeeded で開くたびに +1
 		};

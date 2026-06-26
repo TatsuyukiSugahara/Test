@@ -123,7 +123,7 @@ namespace aq
 				fenceEvent_ = nullptr;
 			}
 			SafeReleaseD3D12(commandList_);
-			SafeReleaseD3D12(commandAlloc_);
+			for (auto& a : commandAlloc_) SafeReleaseD3D12(a);
 			SafeReleaseD3D12(swapChain_);
 			SafeReleaseD3D12(commandQueue_);
 			SafeReleaseD3D12(device_);
@@ -178,11 +178,17 @@ namespace aq
 			hr = device_->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue_));
 			if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コマンドキュー作成失敗"); return false; }
 
-			// コマンドアロケータ + コマンドリスト (Phase 0 は 1 本のみ・同期実行)
-			hr = device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc_));
-			if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コマンドアロケータ作成失敗"); return false; }
+			// コマンドアロケータ (frames-in-flight 分) + コマンドリスト 1 本。
+			// コマンドリストは Submit 後すぐ Reset できるが、アロケータは GPU 実行完了まで Reset 不可。
+			// よってアロケータをフレーム数だけ用意し、フェンスで使い回しを世代管理する。
+			static_assert(FRAME_COUNT == D3D12_FRAME_COUNT, "FRAME_COUNT 不一致");
+			for (uint32_t i = 0; i < FRAME_COUNT; ++i)
+			{
+				hr = device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc_[i]));
+				if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コマンドアロケータ作成失敗"); return false; }
+			}
 
-			hr = device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc_, nullptr,
+			hr = device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc_[0], nullptr,
 			                                IID_PPV_ARGS(&commandList_));
 			if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コマンドリスト作成失敗"); return false; }
 			commandList_->Close();  // 記録は Present 時に Reset してから行う
@@ -330,10 +336,11 @@ namespace aq
 				if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 SRV ステージングヒープ作成失敗"); return false; }
 			}
 
-			// シェーダー可視 ring ヒープ。1 フレーム分の SRV テーブル確保用。
-			// Present が毎フレーム WaitForGPU する同期実行のため、毎フレーム先頭に巻き戻して再利用できる。
+			// シェーダー可視 ring ヒープ。frames-in-flight 分の区画に分け、各フレームは自区画を使う。
+			// GPU が前フレームの区画を読んでいる間に上書きしないよう、区画をフレームごとに分離する。
 			constexpr uint32_t MAX_TABLES_PER_FRAME = 4096;
-			srvShaderRingCapacity_ = MAX_TABLES_PER_FRAME * D3D12RootSignature::SRV_TABLE_SIZE;
+			srvRegionSize_         = MAX_TABLES_PER_FRAME * D3D12RootSignature::SRV_TABLE_SIZE;
+			srvShaderRingCapacity_ = srvRegionSize_ * FRAME_COUNT;
 			{
 				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
 				desc.NumDescriptors = srvShaderRingCapacity_;
@@ -362,12 +369,14 @@ namespace aq
 
 		bool D3D12GraphicsDeviceImpl::AllocateSRVTableRange(uint32_t count, uint32_t& outBaseIndex)
 		{
-			if (count == 0 || count > srvShaderRingCapacity_) return false;
-			if (srvShaderRingNext_ + count > srvShaderRingCapacity_)
+			if (count == 0 || count > srvRegionSize_) return false;
+			// 現在フレームの区画 [frameIndex_*region, (frameIndex_+1)*region) 内で bump 確保する。
+			const uint32_t regionBegin = frameIndex_ * srvRegionSize_;
+			const uint32_t regionEnd   = regionBegin + srvRegionSize_;
+			if (srvShaderRingNext_ + count > regionEnd)
 			{
-				// 同期実行のため超過時は先頭へ巻き戻す (1 フレームで使い切るのは想定外)。
-				EngineAssertMsg(false, "D3D12 SRV ring 容量超過。MAX_TABLES_PER_FRAME を増やす必要あり");
-				srvShaderRingNext_ = 0;
+				EngineAssertMsg(false, "D3D12 SRV ring 区画超過。MAX_TABLES_PER_FRAME を増やす必要あり");
+				srvShaderRingNext_ = regionBegin;
 			}
 			outBaseIndex = srvShaderRingNext_;
 			srvShaderRingNext_ += count;
@@ -385,22 +394,31 @@ namespace aq
 		{
 			if (frameOpen_) return;
 
+			// この frames-in-flight スロットを前回使ったフレームの GPU 処理が終わるまで待つ。
+			// (CPU が GPU より FRAME_COUNT フレーム以上先行したときだけブロックする)
+			if (fence_->GetCompletedValue() < frameFenceValue_[frameIndex_])
+			{
+				fence_->SetEventOnCompletion(frameFenceValue_[frameIndex_], static_cast<HANDLE>(fenceEvent_));
+				WaitForSingleObject(static_cast<HANDLE>(fenceEvent_), INFINITE);
+			}
+
 			currentBackBufferIndex_ = swapChain_->GetCurrentBackBufferIndex();
 
-			commandAlloc_->Reset();
-			commandList_->Reset(commandAlloc_, nullptr);
+			// このフレームスロットのアロケータを Reset (GPU はもう使っていない)。コマンドリストは 1 本を使い回す。
+			commandAlloc_[frameIndex_]->Reset();
+			commandList_->Reset(commandAlloc_[frameIndex_], nullptr);
 
 			// バックバッファのバインド/クリアはしない。シーンはメイン RT(オフスクリーン)へ描画し、
 			// Present 前に CopyToBackBuffer でバックバッファへ複写する。
 			// RT/DSV のバインドとクリアは RenderContext の OMSetRenderTargets/ClearRenderTargetView が行う。
 
-			// shader-visible SRV ヒープをバインドし、フレーム ring を巻き戻す。
+			// shader-visible SRV ヒープをバインドし、このフレームの区画先頭へ巻き戻す。
 			// SetGraphicsRootDescriptorTable より前に SetDescriptorHeaps が必要。
 			if (srvShaderHeap_)
 			{
 				ID3D12DescriptorHeap* heaps[] = { srvShaderHeap_ };
 				commandList_->SetDescriptorHeaps(1, heaps);
-				srvShaderRingNext_ = 0;
+				srvShaderRingNext_ = frameIndex_ * srvRegionSize_;
 			}
 
 			// ルートシグネチャを設定 (CBV ルートディスクリプタ / SRV テーブルのバインドに必要)
@@ -483,8 +501,13 @@ namespace aq
 			ID3D12CommandList* lists[] = { commandList_ };
 			commandQueue_->ExecuteCommandLists(1, lists);
 
-			swapChain_->Present(1, 0);
-			WaitForGPU();
+			swapChain_->Present(vsyncEnabled_ ? 1 : 0, 0);
+
+			// frames-in-flight: GPU 完了を待たずに次フレームへ進む。
+			// このフレームの完了印をフェンスに刻み、次にこのスロットを再利用する時 (BeginFrame) に待つ。
+			commandQueue_->Signal(fence_, ++fenceValue_);
+			frameFenceValue_[frameIndex_] = fenceValue_;
+			frameIndex_ = (frameIndex_ + 1) % FRAME_COUNT;
 
 			frameOpen_ = false;
 		}
@@ -509,6 +532,13 @@ namespace aq
 			)->device_;
 		}
 
+		uint32_t D3D12GraphicsDeviceImpl::GetStaticFrameIndex()
+		{
+			return static_cast<D3D12GraphicsDeviceImpl*>(
+				GraphicsDevice::Get().GetImplRaw()
+			)->frameIndex_;
+		}
+
 
 		// ── リソースファクトリ ────────────────────────────────────────────────
 		std::unique_ptr<IVertexBuffer> D3D12GraphicsDeviceImpl::CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
@@ -520,9 +550,9 @@ namespace aq
 
 		std::unique_ptr<IVertexBuffer> D3D12GraphicsDeviceImpl::CreateDynamicVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data)
 		{
-			// アップロードヒープ常駐のため静的版と同じ実装で動的更新も可能
+			// frames-in-flight 競合を避けるため内部で FRAME_COUNT 本リングする動的版を使う
 			auto vb = std::make_unique<D3D12VertexBuffer>();
-			if (!vb->Create(vertexNum, stride, data)) return nullptr;
+			if (!vb->CreateDynamic(vertexNum, stride, data)) return nullptr;
 			return vb;
 		}
 

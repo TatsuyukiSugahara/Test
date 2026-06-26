@@ -2,6 +2,7 @@
 #include "D3D12Common.h"
 #include "D3D12Buffers.h"
 #include "D3D12GraphicsDeviceImpl.h"
+#include <algorithm>
 
 
 namespace aq
@@ -11,8 +12,7 @@ namespace aq
 		namespace
 		{
 			// アップロードヒープ上にバッファリソースを作成し、永続 Map する。
-			// 成功時 outResource / outMapped を埋めて true を返す。
-			bool CreateUploadBuffer(uint32_t byteSize, ID3D12Resource*& outResource, void*& outMapped)
+			bool CreateUploadBuffer(uint32_t byteSize, ID3D12Resource*& outResource, uint8_t*& outMapped)
 			{
 				ID3D12Device* device = D3D12GraphicsDeviceImpl::GetStaticDevice();
 				if (!device || byteSize == 0) return false;
@@ -39,12 +39,14 @@ namespace aq
 				if (FAILED(hr)) return false;
 
 				D3D12_RANGE readRange = { 0, 0 };  // CPU は読まない
-				hr = outResource->Map(0, &readRange, &outMapped);
+				void* mapped = nullptr;
+				hr = outResource->Map(0, &readRange, &mapped);
 				if (FAILED(hr))
 				{
 					SafeReleaseD3D12(outResource);
 					return false;
 				}
+				outMapped = static_cast<uint8_t*>(mapped);
 				return true;
 			}
 
@@ -56,20 +58,29 @@ namespace aq
 
 
 		// ── D3D12VertexBuffer ────────────────────────────────────────────────
-		bool D3D12VertexBuffer::Create(uint32_t vertexNum, uint32_t stride, const void* data)
+		bool D3D12VertexBuffer::CreateInternal(uint32_t byteSize, uint32_t stride, const void* data, bool dynamic)
 		{
 			Release();
-			const uint32_t byteSize = stride * vertexNum;
-			if (!CreateUploadBuffer(byteSize, resource_, mapped_)) return false;
+			const uint32_t frames = dynamic ? D3D12_FRAME_COUNT : 1;
+			if (!CreateUploadBuffer(byteSize * frames, resource_, mapped_)) return false;
 
-			if (data) memcpy(mapped_, data, byteSize);
-
-			stride_   = stride;
-			capacity_ = byteSize;
-			view_.BufferLocation = resource_->GetGPUVirtualAddress();
-			view_.SizeInBytes    = byteSize;
-			view_.StrideInBytes  = stride;
+			stride_        = stride;
+			bytesPerFrame_ = byteSize;
+			dynamic_       = dynamic;
+			if (data)
+				for (uint32_t f = 0; f < frames; ++f)  // 全フレーム領域へ初期データを複製
+					memcpy(mapped_ + f * byteSize, data, byteSize);
 			return true;
+		}
+
+		bool D3D12VertexBuffer::Create(uint32_t vertexNum, uint32_t stride, const void* data)
+		{
+			return CreateInternal(stride * vertexNum, stride, data, /*dynamic*/false);
+		}
+
+		bool D3D12VertexBuffer::CreateDynamic(uint32_t vertexNum, uint32_t stride, const void* data)
+		{
+			return CreateInternal(stride * vertexNum, stride, data, /*dynamic*/true);
 		}
 
 		void D3D12VertexBuffer::Release()
@@ -77,16 +88,27 @@ namespace aq
 			if (resource_ && mapped_) resource_->Unmap(0, nullptr);
 			mapped_ = nullptr;
 			SafeReleaseD3D12(resource_);
-			stride_   = 0;
-			capacity_ = 0;
-			view_     = {};
+			stride_ = 0;
+			bytesPerFrame_ = 0;
+			dynamic_ = false;
+			view_ = {};
 		}
 
 		bool D3D12VertexBuffer::Update(const void* data, uint32_t byteSize)
 		{
-			if (!mapped_ || !data || byteSize > capacity_) return false;
-			memcpy(mapped_, data, byteSize);
+			if (!mapped_ || !data || byteSize > bytesPerFrame_) return false;
+			const uint32_t frame = dynamic_ ? D3D12GraphicsDeviceImpl::GetStaticFrameIndex() : 0;
+			memcpy(mapped_ + static_cast<size_t>(frame) * bytesPerFrame_, data, byteSize);
 			return true;
+		}
+
+		const D3D12_VERTEX_BUFFER_VIEW& D3D12VertexBuffer::GetView() const
+		{
+			const uint32_t frame = dynamic_ ? D3D12GraphicsDeviceImpl::GetStaticFrameIndex() : 0;
+			view_.BufferLocation = resource_->GetGPUVirtualAddress() + static_cast<UINT64>(frame) * bytesPerFrame_;
+			view_.SizeInBytes    = bytesPerFrame_;
+			view_.StrideInBytes  = stride_;
+			return view_;
 		}
 
 
@@ -96,14 +118,10 @@ namespace aq
 			Release();
 			const uint32_t byteSize = sizeof(uint32_t) * indexNum;
 			if (!CreateUploadBuffer(byteSize, resource_, mapped_)) return false;
-
 			if (data) memcpy(mapped_, data, byteSize);
-
-			format_   = IndexFormat::UInt32;
-			capacity_ = byteSize;
-			view_.BufferLocation = resource_->GetGPUVirtualAddress();
-			view_.SizeInBytes    = byteSize;
-			view_.Format         = DXGI_FORMAT_R32_UINT;
+			format_        = IndexFormat::UInt32;
+			bytesPerFrame_ = byteSize;
+			dynamic_       = false;
 			return true;
 		}
 
@@ -111,15 +129,13 @@ namespace aq
 		{
 			Release();
 			const uint32_t byteSize = IndexFormatStride(format) * indexNum;
-			if (!CreateUploadBuffer(byteSize, resource_, mapped_)) return false;
-
-			if (data) memcpy(mapped_, data, byteSize);
-
-			format_   = format;
-			capacity_ = byteSize;
-			view_.BufferLocation = resource_->GetGPUVirtualAddress();
-			view_.SizeInBytes    = byteSize;
-			view_.Format         = (format == IndexFormat::UInt16) ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+			if (!CreateUploadBuffer(byteSize * D3D12_FRAME_COUNT, resource_, mapped_)) return false;
+			format_        = format;
+			bytesPerFrame_ = byteSize;
+			dynamic_       = true;
+			if (data)
+				for (uint32_t f = 0; f < D3D12_FRAME_COUNT; ++f)
+					memcpy(mapped_ + f * byteSize, data, byteSize);
 			return true;
 		}
 
@@ -128,29 +144,41 @@ namespace aq
 			if (resource_ && mapped_) resource_->Unmap(0, nullptr);
 			mapped_ = nullptr;
 			SafeReleaseD3D12(resource_);
-			format_   = IndexFormat::UInt32;
-			capacity_ = 0;
-			view_     = {};
+			format_ = IndexFormat::UInt32;
+			bytesPerFrame_ = 0;
+			dynamic_ = false;
+			view_ = {};
 		}
 
 		bool D3D12IndexBuffer::Update(const void* data, uint32_t byteSize)
 		{
-			if (!mapped_ || !data || byteSize > capacity_) return false;
-			memcpy(mapped_, data, byteSize);
+			if (!mapped_ || !data || byteSize > bytesPerFrame_) return false;
+			const uint32_t frame = dynamic_ ? D3D12GraphicsDeviceImpl::GetStaticFrameIndex() : 0;
+			memcpy(mapped_ + static_cast<size_t>(frame) * bytesPerFrame_, data, byteSize);
 			return true;
+		}
+
+		const D3D12_INDEX_BUFFER_VIEW& D3D12IndexBuffer::GetView() const
+		{
+			const uint32_t frame = dynamic_ ? D3D12GraphicsDeviceImpl::GetStaticFrameIndex() : 0;
+			view_.BufferLocation = resource_->GetGPUVirtualAddress() + static_cast<UINT64>(frame) * bytesPerFrame_;
+			view_.SizeInBytes    = bytesPerFrame_;
+			view_.Format         = (format_ == IndexFormat::UInt16) ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+			return view_;
 		}
 
 
 		// ── D3D12ConstantBuffer ──────────────────────────────────────────────
+		// 全 CB は毎フレーム Update されるため常にフレームリングする (256B アライン領域 × FRAME_COUNT)。
 		bool D3D12ConstantBuffer::Create(const void* data, uint32_t size)
 		{
 			Release();
-			dataSize_ = size;
-			// CBV は 256 バイトアライメントが必須
-			size_ = (size + 255u) & ~255u;
-			if (!CreateUploadBuffer(size_, resource_, mapped_)) return false;
-
-			if (data) memcpy(mapped_, data, size);
+			dataSize_    = size;
+			alignedSize_ = (size + 255u) & ~255u;  // CBV は 256B アライン必須
+			if (!CreateUploadBuffer(alignedSize_ * D3D12_FRAME_COUNT, resource_, mapped_)) return false;
+			if (data)
+				for (uint32_t f = 0; f < D3D12_FRAME_COUNT; ++f)
+					memcpy(mapped_ + f * alignedSize_, data, size);
 			return true;
 		}
 
@@ -159,19 +187,22 @@ namespace aq
 			if (resource_ && mapped_) resource_->Unmap(0, nullptr);
 			mapped_ = nullptr;
 			SafeReleaseD3D12(resource_);
-			size_     = 0;
-			dataSize_ = 0;
+			alignedSize_ = 0;
+			dataSize_    = 0;
 		}
 
 		void D3D12ConstantBuffer::Update(const void* data)
 		{
 			if (!mapped_ || !data) return;
-			memcpy(mapped_, data, dataSize_);
+			const uint32_t frame = D3D12GraphicsDeviceImpl::GetStaticFrameIndex();
+			memcpy(mapped_ + static_cast<size_t>(frame) * alignedSize_, data, dataSize_);
 		}
 
 		D3D12_GPU_VIRTUAL_ADDRESS D3D12ConstantBuffer::GetGPUAddress() const
 		{
-			return resource_ ? resource_->GetGPUVirtualAddress() : 0;
+			if (!resource_) return 0;
+			const uint32_t frame = D3D12GraphicsDeviceImpl::GetStaticFrameIndex();
+			return resource_->GetGPUVirtualAddress() + static_cast<UINT64>(frame) * alignedSize_;
 		}
 	}
 }

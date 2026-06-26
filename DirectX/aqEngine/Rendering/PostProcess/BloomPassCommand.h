@@ -14,6 +14,9 @@ namespace aq
 
 	namespace rendering
 	{
+		// BloomComposite.fx / BloomBrightExtract.fx の cbuffer レイアウトと一致させること。
+		// 先頭 5 フィールド (offset 0..16) は既存。トーンマップ用フィールドを末尾に追記している
+		// ため、それらを読まない抽出/ブラーシェーダーには影響しない。
 		struct BloomCBData
 		{
 			float    threshold;
@@ -21,6 +24,10 @@ namespace aq
 			uint32_t width;
 			uint32_t height;
 			uint32_t isVertical;
+			float    exposure;     // 露出倍率 (トーンマップ前に乗算)
+			uint32_t tonemapMode;  // 0=None 1=Reinhard 2=ReinhardExt 3=ACES 4=Uncharted2
+			float    whitePoint;   // ReinhardExt 用
+			uint32_t applyGamma;   // 1 なら sRGB エンコード
 			uint32_t pad[3];
 		};
 
@@ -47,7 +54,11 @@ namespace aq
 				float                                                 intensity,
 				uint32_t                                              blurPasses,
 				uint32_t                                              width,
-				uint32_t                                              height);
+				uint32_t                                              height,
+				float                                                 exposure,
+				uint32_t                                              tonemapMode,
+				float                                                 whitePoint,
+				uint32_t                                              applyGamma);
 
 			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;
 
@@ -70,6 +81,11 @@ namespace aq
 			uint32_t blurPasses_;
 			uint32_t width_;
 			uint32_t height_;
+
+			float    exposure_;
+			uint32_t tonemapMode_;
+			float    whitePoint_;
+			uint32_t applyGamma_;
 		};
 	}
 }

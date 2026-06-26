@@ -26,7 +26,11 @@ namespace aq
 			float                                                 intensity,
 			uint32_t                                              blurPasses,
 			uint32_t                                              width,
-			uint32_t                                              height)
+			uint32_t                                              height,
+			float                                                 exposure,
+			uint32_t                                              tonemapMode,
+			float                                                 whitePoint,
+			uint32_t                                              applyGamma)
 			: extractShader_(extractShader)
 			, dualDownShader_(dualDownShader)
 			, dualUpShader_(dualUpShader)
@@ -42,6 +46,10 @@ namespace aq
 			, blurPasses_(blurPasses)
 			, width_(width)
 			, height_(height)
+			, exposure_(exposure)
+			, tonemapMode_(tonemapMode)
+			, whitePoint_(whitePoint)
+			, applyGamma_(applyGamma)
 		{
 			for (uint32_t i = 0; i < BloomRenderer::kMaxLevels; ++i)
 				pyramidRTHandles_[i] = pyramidRTs[i];
@@ -67,10 +75,14 @@ namespace aq
 			ctx.OMSetRenderTargets(0, nullptr);
 
 			BloomCBData cb{};
-			cb.threshold = threshold_;
-			cb.intensity = intensity_;
-			cb.width     = width_;
-			cb.height    = height_;
+			cb.threshold   = threshold_;
+			cb.intensity   = intensity_;
+			cb.width       = width_;
+			cb.height      = height_;
+			cb.exposure    = exposure_;
+			cb.tonemapMode = tonemapMode_;
+			cb.whitePoint  = whitePoint_;
+			cb.applyGamma  = applyGamma_;
 			ctx.UpdateSubresource(*bloomCB_, cb);
 			ctx.CSSetConstantBuffer(0, *bloomCB_);
 			ctx.CSSetSampler(0, *sampler_);

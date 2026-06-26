@@ -308,8 +308,10 @@ namespace aq
 				uav.ptr += static_cast<SIZE_T>(uavIdx) * srvDescriptorSize_;
 
 				mainRenderTargets_[i] = std::make_unique<D3D12RenderTarget>();
+				// メイン RT は HDR (R16G16B16A16_FLOAT)。PBR ライティングの 1.0 超の値をクランプせず保持し、
+				// ポストプロセス(Bloom 合成)でトーンマップして LDR バックバッファへ出力する。
 				if (!mainRenderTargets_[i]->CreateOffscreen(device_, width, height,
-				        DXGI_FORMAT_R8G8B8A8_UNORM, /*hasDepth*/true, rtv, dsv, srv, uav))
+				        DXGI_FORMAT_R16G16B16A16_FLOAT, /*hasDepth*/true, rtv, dsv, srv, uav))
 				{
 					return false;
 				}

@@ -277,9 +277,11 @@ namespace aq
 		{
 			SampleDesc sampleDesc;
 			for (uint32_t i = 0; i < RENDER_TARGET_COUNT; ++i) {
+				// メイン RT は HDR (R16G16B16A16_FLOAT)。PBR ライティングの 1.0 超の値をクランプせず保持し、
+				// ポストプロセス(Bloom 合成)でトーンマップして LDR バックバッファへ出力する。
 				bool ret = mainRenderTargets_[i].Create(
 					width, height, 1,
-					PixelFormat::R8G8B8A8_Unorm,
+					PixelFormat::R16G16B16A16_Float,
 					PixelFormat::D24_Unorm_S8_Uint,
 					sampleDesc
 				);

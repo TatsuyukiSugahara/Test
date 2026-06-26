@@ -8,7 +8,7 @@ namespace aq
 	{
 		class BloomRenderer;
 
-		/** Bloom パラメータのデバッグ UI パネル。 */
+		/** ポストエフェクト(Bloom + トーンマップ)のデバッグ UI パネル。 */
 		class BloomDebugPanel : public IDebugRenderable
 		{
 		public:
@@ -17,7 +17,7 @@ namespace aq
 			void        DebugRenderMenu()          override;
 			void        DebugRender()              override;
 			void        RenderContent()            override;
-			const char* GetDebugLabel() const      override { return "Bloom"; }
+			const char* GetDebugLabel() const      override { return "ポストエフェクト"; }
 
 		private:
 			BloomRenderer& renderer_;

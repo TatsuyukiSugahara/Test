@@ -54,15 +54,22 @@ namespace aq
 				return false;
 			}
 
-			// 全解像度 RT（輝度抽出後にアップサンプル結果でも上書きして再利用する）
-			graphics::RenderTargetDesc fullDesc;
-			fullDesc.width       = width;
-			fullDesc.height      = height;
-			fullDesc.colorFormat = graphics::PixelFormat::R8G8B8A8_Unorm;
-			fullDesc.hasDepth    = false;
+			// 輝度抽出 RT は HDR (R16F)。シーン RT が HDR になったため、1.0 超の輝度をクランプせず
+			// ブルームピラミッドへ運ぶ。最終 RT のみ LDR (トーンマップ済みの表示出力)。
+			graphics::RenderTargetDesc brightDesc;
+			brightDesc.width       = width;
+			brightDesc.height      = height;
+			brightDesc.colorFormat = graphics::PixelFormat::R16G16B16A16_Float;
+			brightDesc.hasDepth    = false;
 
-			brightRTHandle_ = gd.CreateOffscreenRenderTarget(fullDesc);
-			finalRTHandle_  = gd.CreateOffscreenRenderTarget(fullDesc);
+			graphics::RenderTargetDesc finalDesc;
+			finalDesc.width       = width;
+			finalDesc.height      = height;
+			finalDesc.colorFormat = graphics::PixelFormat::R8G8B8A8_Unorm;  // トーンマップ後 LDR 表示
+			finalDesc.hasDepth    = false;
+
+			brightRTHandle_ = gd.CreateOffscreenRenderTarget(brightDesc);
+			finalRTHandle_  = gd.CreateOffscreenRenderTarget(finalDesc);
 
 			if (!brightRTHandle_.IsValid() || !finalRTHandle_.IsValid())
 			{
@@ -76,7 +83,7 @@ namespace aq
 				graphics::RenderTargetDesc desc;
 				desc.width       = (width  >> (i + 1)) > 0u ? (width  >> (i + 1)) : 1u;
 				desc.height      = (height >> (i + 1)) > 0u ? (height >> (i + 1)) : 1u;
-				desc.colorFormat = graphics::PixelFormat::R8G8B8A8_Unorm;
+				desc.colorFormat = graphics::PixelFormat::R16G16B16A16_Float;  // HDR ブルームピラミッド
 				desc.hasDepth    = false;
 				pyramidRTHandles_[i] = gd.CreateOffscreenRenderTarget(desc);
 				if (!pyramidRTHandles_[i].IsValid())
@@ -121,7 +128,11 @@ namespace aq
 				intensity_,
 				blurPasses_,
 				width,
-				height);
+				height,
+				exposure_,
+				static_cast<uint32_t>(tonemapMode_),
+				whitePoint_,
+				applyGamma_ ? 1u : 0u);
 		}
 
 #ifdef AQ_DEBUG_IMGUI

@@ -10,11 +10,11 @@ namespace aq
 	namespace rendering
 	{
 		SetRenderTargetCommand::SetRenderTargetCommand(uint32_t numViews, const RenderTargetHandle* handles)
-			: numViews_(numViews)
+			: numViews_((numViews <= MAX_MRT) ? numViews : MAX_MRT)
 		{
 			assert(numViews >= 1 && numViews <= MAX_MRT);
-			uint32_t count = (numViews <= MAX_MRT) ? numViews : MAX_MRT;
-			for (uint32_t i = 0; i < count; ++i)
+			// numViews_ は MAX_MRT にクランプ済み。Execute() の handles_[]/rts[] 配列外アクセスを防ぐ。
+			for (uint32_t i = 0; i < numViews_; ++i)
 				handles_[i] = handles[i];
 		}
 

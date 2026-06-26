@@ -22,8 +22,8 @@ namespace aq
 		{
 		public:
 			// 1フレームで描画できる最大クワッド数 (4 頂点 / クワッド, 6 インデックス / クワッド)
-			static constexpr uint32_t kMaxVertices = 65536u;
-			static constexpr uint32_t kMaxIndices  = kMaxVertices / 4u * 6u;  // = 98304
+			static constexpr uint32_t MAX_VERTICES = 65536u;
+			static constexpr uint32_t MAX_INDICES  = MAX_VERTICES / 4u * 6u;  // = 98304
 
 			UIRenderPipeline();
 			~UIRenderPipeline();
@@ -50,21 +50,17 @@ namespace aq
 			void UpdateSdfTextCB(graphics::RenderContext& ctx,
 			                     const struct SdfTextParams& params);
 
-			// DrawIndexed (startIndex オフセットあり, D3D11 直呼び)
-			void DrawIndexed(uint32_t indexCount, uint32_t startIndex);
-
 		private:
 			std::unique_ptr<graphics::IShader>         vs_;
 			std::unique_ptr<graphics::IShader>         standardPS_;
 			std::unique_ptr<graphics::IShader>         circleGaugePS_;
 			std::unique_ptr<graphics::IShader>         sdfTextPS_;
 			std::unique_ptr<graphics::IVertexBuffer>   vb_;          // DYNAMIC
+			std::unique_ptr<graphics::IIndexBuffer>    ib_;          // DYNAMIC, R16_UINT
 			std::unique_ptr<graphics::ISamplerState>   sampler_;
 			std::unique_ptr<graphics::IConstantBuffer> gaugeCB_;
 			std::unique_ptr<graphics::IConstantBuffer> sdfTextCB_;
-			void*    ib_              = nullptr;  // ID3D11Buffer* R16_UINT DYNAMIC
-			uint32_t ibCapacityBytes_ = 0;
-			bool     ready_           = false;
+			bool                                       ready_ = false;
 		};
 
 	} // namespace ui

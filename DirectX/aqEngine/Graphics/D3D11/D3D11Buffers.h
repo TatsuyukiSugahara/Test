@@ -84,17 +84,26 @@ namespace aq
 			inline ID3D11Buffer*& GetBody() { return vb_; }
 		};
 
+		/** 静的 (R32_UINT) / 動的 (R16・R32) の両方に対応するインデックスバッファ。
+		 *  Create()        : 静的 R32_UINT (メッシュ用、従来挙動)
+		 *  CreateDynamic() : 動的、フォーマット指定可 (UI など毎フレーム書き換え用)
+		 */
 		class IndexBuffer : public IIndexBuffer
 		{
 		private:
-			ID3D11Buffer* indexBuffer_;
+			ID3D11Buffer* indexBuffer_ = nullptr;
+			IndexFormat   format_      = IndexFormat::UInt32;
+			uint32_t      capacity_    = 0;  // bytes。0 なら静的バッファ (Update 不可)
 
 		public:
 			IndexBuffer();
 			~IndexBuffer();
 
-			bool Create(uint32_t indexNum, const void* srcIndexBuffer) override;
-			void Release() override;
+			bool        Create(uint32_t indexNum, const void* srcIndexBuffer) override;
+			bool        CreateDynamic(uint32_t indexNum, IndexFormat format, const void* data);
+			void        Release() override;
+			bool        Update(const void* data, uint32_t byteSize) override;
+			IndexFormat GetFormat() const override { return format_; }
 
 			inline ID3D11Buffer*& GetBody() { return indexBuffer_; }
 		};

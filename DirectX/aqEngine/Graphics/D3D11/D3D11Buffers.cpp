@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D11
 #include "D3D11Buffers.h"
 #include "D3D11GraphicsDeviceImpl.h"
 
@@ -163,8 +164,17 @@ namespace aq
 		/*******************************************/
 
 
+		namespace
+		{
+			// インデックス 1 個あたりのバイト数
+			uint32_t IndexFormatStride(IndexFormat format)
+			{
+				return format == IndexFormat::UInt16 ? sizeof(uint16_t) : sizeof(uint32_t);
+			}
+		}
+
+
 		IndexBuffer::IndexBuffer()
-			: indexBuffer_(nullptr)
 		{
 		}
 
@@ -192,6 +202,47 @@ namespace aq
 			if (FAILED(hr)) {
 				return false;
 			}
+			format_   = IndexFormat::UInt32;
+			capacity_ = 0;  // 静的
+			return true;
+		}
+
+
+		bool IndexBuffer::CreateDynamic(uint32_t indexNum, IndexFormat format, const void* data)
+		{
+			Release();
+			const uint32_t byteWidth = IndexFormatStride(format) * indexNum;
+			D3D11_BUFFER_DESC desc = {};
+			desc.Usage          = D3D11_USAGE_DYNAMIC;
+			desc.ByteWidth      = byteWidth;
+			desc.BindFlags      = D3D11_BIND_INDEX_BUFFER;
+			desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+			HRESULT hr;
+			if (data) {
+				D3D11_SUBRESOURCE_DATA initData = {};
+				initData.pSysMem = data;
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&desc, &initData, &indexBuffer_);
+			} else {
+				hr = D3D11GraphicsDeviceImpl::GetStaticDevice()->CreateBuffer(&desc, nullptr, &indexBuffer_);
+			}
+			if (FAILED(hr)) {
+				return false;
+			}
+			format_   = format;
+			capacity_ = byteWidth;
+			return true;
+		}
+
+
+		bool IndexBuffer::Update(const void* data, uint32_t byteSize)
+		{
+			if (!indexBuffer_ || !data || capacity_ == 0 || byteSize > capacity_) return false;
+			ID3D11DeviceContext* ctx = D3D11GraphicsDeviceImpl::GetStaticDeviceContext();
+			D3D11_MAPPED_SUBRESOURCE mapped = {};
+			if (FAILED(ctx->Map(indexBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return false;
+			memcpy(mapped.pData, data, byteSize);
+			ctx->Unmap(indexBuffer_, 0);
 			return true;
 		}
 
@@ -202,6 +253,8 @@ namespace aq
 				indexBuffer_->Release();
 				indexBuffer_ = nullptr;
 			}
+			format_   = IndexFormat::UInt32;
+			capacity_ = 0;
 		}
 
 
@@ -250,3 +303,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D11

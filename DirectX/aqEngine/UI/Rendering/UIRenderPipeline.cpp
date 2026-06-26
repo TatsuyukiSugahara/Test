@@ -5,7 +5,6 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/RenderContext.h"
-#include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
 
 namespace aq
 {
@@ -52,30 +51,19 @@ namespace aq
 			}
 
 			// --- 動的 VB (抽象 API 経由) ---
-			vb_ = gfx.CreateDynamicVertexBuffer(kMaxVertices, sizeof(UIVertex), nullptr);
+			vb_ = gfx.CreateDynamicVertexBuffer(MAX_VERTICES, sizeof(UIVertex), nullptr);
 			if (!vb_)
 			{
 				EngineAssertMsg(false, "UI 動的 VB 作成失敗");
 				return;
 			}
 
-			// --- 動的 IB (R16_UINT, D3D11 直接) ---
+			// --- 動的 IB (R16_UINT, 抽象 API 経由) ---
+			ib_ = gfx.CreateDynamicIndexBuffer(MAX_INDICES, graphics::IndexFormat::UInt16, nullptr);
+			if (!ib_)
 			{
-				ibCapacityBytes_ = kMaxIndices * sizeof(uint16_t);
-				D3D11_BUFFER_DESC desc  = {};
-				desc.ByteWidth          = ibCapacityBytes_;
-				desc.Usage              = D3D11_USAGE_DYNAMIC;
-				desc.BindFlags          = D3D11_BIND_INDEX_BUFFER;
-				desc.CPUAccessFlags     = D3D11_CPU_ACCESS_WRITE;
-				ID3D11Buffer* ibBuf     = nullptr;
-				HRESULT hr = graphics::D3D11GraphicsDeviceImpl::GetStaticDevice()
-				                         ->CreateBuffer(&desc, nullptr, &ibBuf);
-				if (FAILED(hr))
-				{
-					EngineAssertMsg(false, "UI 動的 IB 作成失敗");
-					return;
-				}
-				ib_ = ibBuf;
+				EngineAssertMsg(false, "UI 動的 IB 作成失敗");
+				return;
 			}
 
 			// --- サンプラー (bilinear / clamp) ---
@@ -116,39 +104,22 @@ namespace aq
 		}
 
 
-		UIRenderPipeline::~UIRenderPipeline()
-		{
-			if (ib_)
-			{
-				static_cast<ID3D11Buffer*>(ib_)->Release();
-				ib_ = nullptr;
-			}
-		}
+		UIRenderPipeline::~UIRenderPipeline() = default;
 
 
 		void UIRenderPipeline::Upload(const std::vector<UIVertex>& vtx,
 		                               const std::vector<uint16_t>& idx)
 		{
 			if (!ready_ || vtx.empty() || idx.empty()) return;
-			if (vtx.size() > kMaxVertices || idx.size() > kMaxIndices) return;
+			if (vtx.size() > MAX_VERTICES || idx.size() > MAX_INDICES) return;
 
 			// VB: IVertexBuffer::Update() (DynamicVertexBuffer が Map/Unmap する)
 			const uint32_t vbBytes = static_cast<uint32_t>(vtx.size() * sizeof(UIVertex));
 			vb_->Update(vtx.data(), vbBytes);
 
-			// IB: D3D11 Map/Unmap (R16_UINT)
+			// IB: IIndexBuffer::Update() (R16_UINT 動的バッファ)
 			const uint32_t ibBytes = static_cast<uint32_t>(idx.size() * sizeof(uint16_t));
-			if (ibBytes <= ibCapacityBytes_)
-			{
-				ID3D11DeviceContext* dxCtx = graphics::D3D11GraphicsDeviceImpl::GetStaticDeviceContext();
-				D3D11_MAPPED_SUBRESOURCE mapped = {};
-				if (SUCCEEDED(dxCtx->Map(static_cast<ID3D11Buffer*>(ib_),
-				                         0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-				{
-					memcpy(mapped.pData, idx.data(), ibBytes);
-					dxCtx->Unmap(static_cast<ID3D11Buffer*>(ib_), 0);
-				}
-			}
+			ib_->Update(idx.data(), ibBytes);
 		}
 
 
@@ -160,11 +131,7 @@ namespace aq
 			ctx.IASetInputLayout(*vs_);
 			ctx.IASetPrimitiveTopology(graphics::PrimitiveTopology::TriangleList);
 			ctx.IASetVertexBuffer(*vb_);
-
-			// IB: R16_UINT, D3D11 直接 (抽象インターフェースは R32_UINT 固定のため)
-			ID3D11DeviceContext* dxCtx = graphics::D3D11GraphicsDeviceImpl::GetStaticDeviceContext();
-			dxCtx->IASetIndexBuffer(static_cast<ID3D11Buffer*>(ib_), DXGI_FORMAT_R16_UINT, 0);
-
+			ctx.IASetIndexBuffer(*ib_);  // フォーマット (R16_UINT) はバッファが保持
 			ctx.PsSetSampler(0, *sampler_);
 		}
 
@@ -206,14 +173,6 @@ namespace aq
 			data.smoothing      = params.smoothing;
 			ctx.UpdateSubresource(*sdfTextCB_, data);
 			ctx.PSSetConstantBuffer(1, *sdfTextCB_);
-		}
-
-
-		void UIRenderPipeline::DrawIndexed(uint32_t indexCount, uint32_t startIndex)
-		{
-			if (!ready_) return;
-			ID3D11DeviceContext* dxCtx = graphics::D3D11GraphicsDeviceImpl::GetStaticDeviceContext();
-			dxCtx->DrawIndexed(indexCount, startIndex, 0);
 		}
 
 	} // namespace ui

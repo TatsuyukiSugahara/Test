@@ -167,6 +167,10 @@ namespace aq
 			{
 				impl_->DrawIndexed(indexCount);
 			}
+			void DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation)
+			{
+				impl_->DrawIndexed(indexCount, startIndexLocation);
+			}
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z)
 			{
 				impl_->Dispatch(x, y, z);

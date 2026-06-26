@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <memory>
 #include "Graphics/IGraphicsDeviceImpl.h"
 
 // D3D12/DXGI の COM インターフェースを前方宣言する。
@@ -8,6 +9,9 @@ struct ID3D12CommandQueue;
 struct ID3D12CommandAllocator;
 struct ID3D12GraphicsCommandList;
 struct ID3D12Fence;
+struct ID3D12Resource;
+struct ID3D12DescriptorHeap;
+struct ID3D12RootSignature;
 struct IDXGISwapChain3;
 struct IDXGIFactory4;
 
@@ -16,6 +20,9 @@ namespace aq
 {
 	namespace graphics
 	{
+		class D3D12RenderTarget;
+		class D3D12RootSignature;
+		class D3D12PipelineStateCache;
 		/**
 		 * DirectX 12 Concrete Implementor (Bridge Pattern)
 		 *
@@ -56,35 +63,57 @@ namespace aq
 			uint32_t CreateOffscreenRenderTarget(uint32_t /*width*/, uint32_t /*height*/) override { return ~0u; }
 			uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& /*desc*/) override { return ~0u; }
 
+			// ── リソースファクトリ (Phase 0: クリア画面のため未実装。Phase 1〜2 で実装) ──
 			std::unique_ptr<IVertexBuffer>       CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
+			std::unique_ptr<IVertexBuffer>       CreateDynamicVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
 			std::unique_ptr<IIndexBuffer>        CreateIndexBuffer(uint32_t indexNum, const void* data) override;
+			std::unique_ptr<IIndexBuffer>        CreateDynamicIndexBuffer(uint32_t indexNum, IndexFormat format, const void* data) override;
 			std::unique_ptr<IConstantBuffer>     CreateConstantBuffer(const void* data, uint32_t size) override;
 			std::unique_ptr<IShader>             CreateShader(const char* filePath, const char* entryFunc, IShader::ShaderType type) override;
 			std::unique_ptr<ISamplerState>       CreateSamplerState(const SamplerDesc& desc) override;
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) override;
+			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) override;
 
-			/** D3D12RenderContextImpl がコマンドリストを取得するためのアクセサ */
-			ID3D12GraphicsCommandList* GetCommandList() const { return commandList_; }
+			/** D3D12RenderContextImpl が記録に使うアクセサ */
+			ID3D12GraphicsCommandList* GetCommandList() const  { return commandList_; }
 			ID3D12CommandQueue*        GetCommandQueue() const { return commandQueue_; }
+			ID3D12RootSignature*       GetRootSignature() const;
+			D3D12PipelineStateCache*   GetPipelineCache() const { return psoCache_.get(); }
+
+			/** RenderContext から呼ばれ、フレーム未オープンならコマンドリストを開いて RT を準備する */
+			void BeginFrameIfNeeded();
+
+			/** リソースクラス向け静的アクセサ (D3D11 層の GetStaticDevice と同じパターン) */
+			static ID3D12Device* GetStaticDevice();
 
 		private:
-			bool CreateDeviceAndQueues(void* hwnd, uint32_t width, uint32_t height);
+			bool CreateDeviceAndQueues();
 			bool CreateSwapChain(void* hwnd, uint32_t width, uint32_t height);
-			bool CreateRenderTargets(uint32_t width, uint32_t height);
+			bool CreateRenderTargets();
 			void WaitForGPU();
 
 		private:
+			static constexpr uint32_t RENDER_TARGET_COUNT = 2;
+
 			ID3D12Device*              device_        = nullptr;
 			ID3D12CommandQueue*        commandQueue_  = nullptr;
 			ID3D12CommandAllocator*    commandAlloc_  = nullptr;
 			ID3D12GraphicsCommandList* commandList_   = nullptr;
 			IDXGISwapChain3*           swapChain_     = nullptr;
+			ID3D12DescriptorHeap*      rtvHeap_       = nullptr;
+			ID3D12Resource*            backBuffers_[RENDER_TARGET_COUNT] = {};
+			uint32_t                   rtvDescriptorSize_ = 0;
+
 			ID3D12Fence*               fence_         = nullptr;
+			void*                      fenceEvent_    = nullptr;  // HANDLE
 			uint64_t                   fenceValue_    = 0;
 
-			static constexpr uint32_t RENDER_TARGET_COUNT = 2;
-			// TODO: D3D12RenderTarget mainRenderTargets_[RENDER_TARGET_COUNT];
-			uint32_t currentRTIndex_ = 0;
+			std::unique_ptr<D3D12RenderTarget> mainRenderTargets_[RENDER_TARGET_COUNT];
+			uint32_t                   currentRTIndex_ = 0;
+
+			std::unique_ptr<D3D12RootSignature>     rootSignature_;
+			std::unique_ptr<D3D12PipelineStateCache> psoCache_;
+			bool                       frameOpen_ = false;  // BeginFrameIfNeeded で開かれているか
 		};
 	}
 }

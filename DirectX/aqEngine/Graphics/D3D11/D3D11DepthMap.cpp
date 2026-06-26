@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D11
 #include "D3D11DepthMap.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include "Graphics/GraphicsTypes.h"
@@ -99,3 +100,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D11

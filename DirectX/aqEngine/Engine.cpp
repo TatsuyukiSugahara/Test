@@ -5,6 +5,8 @@
 #include "Physics/PhysicsBackend.h"
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
+#elif defined(ENGINE_GRAPHICS_D3D12)
+#include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
 #endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
@@ -132,10 +134,12 @@ namespace aq
 		renderWidth_  = initializeParameter.renderWidth;
 		renderHeight_ = initializeParameter.renderHeight;
 
-		// 選択された API の実装を注入 (将来 D3D12 / Vulkan に替える場合は define を変えてここを追加する)
+		// 選択された API の実装を注入 (将来 Vulkan に替える場合は define を変えてここを追加する)
 #ifdef ENGINE_GRAPHICS_D3D11
 		aq::graphics::GraphicsDevice::Create<aq::graphics::D3D11GraphicsDeviceImpl>();
-#endif // ENGINE_GRAPHICS_D3D11
+#elif defined(ENGINE_GRAPHICS_D3D12)
+		aq::graphics::GraphicsDevice::Create<aq::graphics::D3D12GraphicsDeviceImpl>();
+#endif
 
 		if (!aq::graphics::GraphicsDevice::Get().Initialize({ hWnd_ }, renderWidth_, renderHeight_)) {
 			return false;

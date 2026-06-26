@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "GraphicsTypes.h"
 
 
 namespace aq
@@ -23,8 +24,12 @@ namespace aq
 		{
 		public:
 			virtual ~IIndexBuffer() = default;
-			virtual bool Create(uint32_t indexNum, const void* data) = 0;
-			virtual void Release() = 0;
+			virtual bool        Create(uint32_t indexNum, const void* data) = 0;
+			virtual void        Release() = 0;
+			/** インデックスフォーマットを返す (静的IBの既定は 32bit) */
+			virtual IndexFormat GetFormat() const { return IndexFormat::UInt32; }
+			/** 動的IB専用: Map/memcpy/Unmap で内容を更新する。静的IBはデフォルト false を返す */
+			virtual bool        Update(const void* /*data*/, uint32_t /*byteSize*/) { return false; }
 		};
 
 		/** 定数バッファ インターフェース */

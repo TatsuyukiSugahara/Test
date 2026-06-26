@@ -1,13 +1,13 @@
 ﻿#pragma once
+#include "D3D12Common.h"
 #include "Graphics/IRenderContextImpl.h"
-
-struct ID3D12GraphicsCommandList;
 
 
 namespace aq
 {
 	namespace graphics
 	{
+		class D3D12GraphicsDeviceImpl;
 		/**
 		 * DirectX 12 RenderContext Concrete Implementor (Bridge Pattern)
 		 *
@@ -48,15 +48,18 @@ namespace aq
 		class D3D12RenderContextImpl : public IRenderContextImpl
 		{
 		public:
-			explicit D3D12RenderContextImpl(ID3D12GraphicsCommandList* cmdList);
+			explicit D3D12RenderContextImpl(D3D12GraphicsDeviceImpl* device);
 			~D3D12RenderContextImpl() override = default;
 
 			void OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget) override;
 			void OMSetMRTRenderTargets(uint32_t, IRenderTarget* const*) override {}
 			void OMSetRenderTargetWithDepth(IRenderTarget&, IRenderTarget&) override {}
 			void OMSetDepthMode(DepthMode) override {}
+			void OMSetBlendMode(BlendMode) override {}
 			void ClearDepthBuffer() override {}
 			void RSSetViewport(float topLeftX, float topLeftY, float width, float height) override;
+			void RSSetScissorEnabled(bool enabled) override;
+			void RSSetScissorRect(int x, int y, int w, int h) override;
 			void ClearRenderTargetView(uint32_t index, float* clearColor) override;
 
 			void IASetVertexBuffer(IVertexBuffer& vertexBuffer) override;
@@ -85,21 +88,27 @@ namespace aq
 			void OMSetDepthOnlyTarget(IDepthMap&) override {}
 			void ClearDepthMap(IDepthMap&) override {}
 			void PSUnsetShader() override {}
-			void PSSetSampler(uint32_t, ISamplerState&) override {}
 
 			void Draw(uint32_t vertexCount, uint32_t startVertexLocation) override;
 			void DrawIndexed(uint32_t indexCount) override;
+			void DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation) override;
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
 
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;
 
 		private:
-			ID3D12GraphicsCommandList* cmdList_;
+			// 描画時に PSO を解決してパイプラインを確定する
+			void FlushPipeline();
 
-			// VSSetShader / PSSetShader と最初の Draw の間で保持する。
-			// 描画時にオンデマンドで PSO を検索または生成するために使う。
-			IShader* pendingVS_ = nullptr;
-			IShader* pendingPS_ = nullptr;
+		private:
+			D3D12GraphicsDeviceImpl* device_ = nullptr;
+
+			// 保留ステート (DX11 のイミディエイト設定を DX12 の PSO/記録に変換するため溜める)
+			IShader*          pendingVS_ = nullptr;
+			IShader*          pendingPS_ = nullptr;
+			BlendMode         blend_     = BlendMode::Opaque;
+			DepthMode         depth_     = DepthMode::ReadWrite;
+			PrimitiveTopology topology_  = PrimitiveTopology::TriangleList;
 		};
 	}
 }

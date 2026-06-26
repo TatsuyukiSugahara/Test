@@ -522,7 +522,7 @@ namespace aq
 
 				// 頂点を追加 (インデックスをオフセット補正)
 				uint32_t baseVtxU = static_cast<uint32_t>(payload->vertices.size());
-				if (baseVtxU + static_cast<uint32_t>(item.vertices.size()) > UIRenderPipeline::kMaxVertices)
+				if (baseVtxU + static_cast<uint32_t>(item.vertices.size()) > UIRenderPipeline::MAX_VERTICES)
 					continue; // 上限超過: スキップ (TODO: バッチ分割)
 				uint16_t baseVtx = static_cast<uint16_t>(baseVtxU);
 				payload->vertices.insert(payload->vertices.end(),

@@ -25,6 +25,18 @@ namespace aq
 
 
 		/**
+		 * インデックスバッファのフォーマット (API 非依存)
+		 * D3D11/D3D12: DXGI_FORMAT_R16_UINT / R32_UINT
+		 * Vulkan: VK_INDEX_TYPE_UINT16 / UINT32
+		 */
+		enum class IndexFormat : uint8_t
+		{
+			UInt16,  // 2 bytes / index
+			UInt32,  // 4 bytes / index
+		};
+
+
+		/**
 		 * API 非依存の Map 種別
 		 * D3D11: D3D11_MAP_*
 		 */

@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D11
 #include "D3D11Shader.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include <filesystem>
@@ -251,3 +252,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D11

@@ -21,6 +21,18 @@
 #pragma comment(lib,"d3dcompiler.lib")
 #endif // ENGINE_GRAPHICS_D3D11
 
+#ifdef ENGINE_GRAPHICS_D3D12
+#pragma warning(push)
+#pragma warning(disable:4005)
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#pragma warning(pop)
+#pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "dxgi.lib")
+#include <d3dcompiler.h>
+#pragma comment(lib,"d3dcompiler.lib")
+#endif // ENGINE_GRAPHICS_D3D12
+
 
 //DirectInput
 #define	DIRECTINPUT_VERSION	0x0800

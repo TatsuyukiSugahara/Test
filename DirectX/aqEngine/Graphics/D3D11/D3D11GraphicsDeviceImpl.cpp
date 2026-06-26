@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D11
 #include "D3D11GraphicsDeviceImpl.h"
 #include "D3D11RenderContextImpl.h"
 #include "D3D11Buffers.h"
@@ -236,6 +237,13 @@ namespace aq
 			return ib;
 		}
 
+		std::unique_ptr<IIndexBuffer> D3D11GraphicsDeviceImpl::CreateDynamicIndexBuffer(uint32_t indexNum, IndexFormat format, const void* data)
+		{
+			auto ib = std::make_unique<IndexBuffer>();
+			if (!ib->CreateDynamic(indexNum, format, data)) return nullptr;
+			return ib;
+		}
+
 		std::unique_ptr<IConstantBuffer> D3D11GraphicsDeviceImpl::CreateConstantBuffer(const void* data, uint32_t size)
 		{
 			auto cb = std::make_unique<ConstantBuffer>();
@@ -283,3 +291,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D11

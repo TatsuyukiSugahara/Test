@@ -80,8 +80,8 @@ namespace aq
 					pipeline.UpdateSdfTextCB(ctx, range.sdfText);
 				}
 
-				// DrawIndexed (startIndex オフセットあり、D3D11 直呼び)
-				pipeline.DrawIndexed(range.indexCount, range.indexOffset);
+				// DrawIndexed (startIndex オフセットあり、抽象 API 経由)
+				ctx.DrawIndexed(range.indexCount, range.indexOffset);
 			}
 
 			// テクスチャ SRV をアンバインド (次パスへのハザード防止)

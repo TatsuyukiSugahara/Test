@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D11
 #include "D3D11RenderContextImpl.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include "D3D11RenderResources.h"
@@ -216,8 +217,11 @@ namespace aq
 
 		void D3D11RenderContextImpl::IASetIndexBuffer(IIndexBuffer& ib)
 		{
-			auto* d3dBuf = static_cast<IndexBuffer&>(ib).GetBody();
-			context_->IASetIndexBuffer(d3dBuf, DXGI_FORMAT_R32_UINT, 0);
+			auto& d3dIB     = static_cast<IndexBuffer&>(ib);
+			DXGI_FORMAT fmt = (d3dIB.GetFormat() == IndexFormat::UInt16)
+			                      ? DXGI_FORMAT_R16_UINT
+			                      : DXGI_FORMAT_R32_UINT;
+			context_->IASetIndexBuffer(d3dIB.GetBody(), fmt, 0);
 		}
 
 
@@ -350,6 +354,12 @@ namespace aq
 		}
 
 
+		void D3D11RenderContextImpl::DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation)
+		{
+			context_->DrawIndexed(indexCount, startIndexLocation, 0);
+		}
+
+
 		void D3D11RenderContextImpl::Dispatch(uint32_t x, uint32_t y, uint32_t z)
 		{
 			context_->Dispatch(x, y, z);
@@ -424,3 +434,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D11

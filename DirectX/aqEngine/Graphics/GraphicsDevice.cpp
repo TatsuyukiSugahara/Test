@@ -104,6 +104,11 @@ namespace aq
 			return impl_->CreateIndexBuffer(indexNum, data);
 		}
 
+		std::unique_ptr<IIndexBuffer> GraphicsDevice::CreateDynamicIndexBuffer(uint32_t indexNum, IndexFormat format, const void* data)
+		{
+			return impl_->CreateDynamicIndexBuffer(indexNum, format, data);
+		}
+
 		std::unique_ptr<IConstantBuffer> GraphicsDevice::CreateConstantBuffer(const void* data, uint32_t size)
 		{
 			return impl_->CreateConstantBuffer(data, size);

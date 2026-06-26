@@ -1,4 +1,7 @@
 #include "aq.h"
+// 注: このファイルは D3D11 具象リソース (SamplerState/SRV/UAV/RenderTarget) の実装。
+// D3D12 選択時は D3D12 側の実装を使うためビルド対象外にする。
+#ifdef ENGINE_GRAPHICS_D3D11
 #include "D3D11/D3D11RenderResources.h"
 
 
@@ -96,3 +99,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D11

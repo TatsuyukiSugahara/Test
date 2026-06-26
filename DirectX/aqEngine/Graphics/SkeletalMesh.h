@@ -83,6 +83,8 @@ namespace aq
 			void SetMetallic(float v)  { pbrMaterialCB_.metallic  = v; }
 			void SetRoughness(float v) { pbrMaterialCB_.roughness = v; }
 			void SetSpecular(float v)  { pbrMaterialCB_.specular  = v; }
+			// 擬似半透明（ディファード）。1.0=不透明, 0.0=透明。SkeletalPBRLit シェーダー時のみ有効。
+			void SetTranslucent(float v) { pbrMaterialCB_.dither   = v; }
 			void SetMetallicRoughnessTex(res::RefGPUResource r)
 			{
 				SetTexture(rendering::TextureSlot::MetallicRoughness, r);
@@ -115,6 +117,7 @@ namespace aq
 			float& RoughnessRef()     { return pbrMaterialCB_.roughness; }
 			float& SpecularRef()      { return pbrMaterialCB_.specular; }
 			float& EmissiveScaleRef() { return pbrMaterialCB_.emissiveScale; }
+			float& TranslucentRef()   { return pbrMaterialCB_.dither; }
 
 			/** AnimationComponent からボーン行列を注入する */
 			void SetBoneMatrices(std::shared_ptr<std::vector<math::Matrix4x4>> matrices)

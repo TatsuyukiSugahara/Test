@@ -96,6 +96,7 @@ namespace aq
 			float& RoughnessRef()     { return pbrMaterialCB_.roughness; }
 			float& SpecularRef()      { return pbrMaterialCB_.specular; }
 			float& EmissiveScaleRef() { return pbrMaterialCB_.emissiveScale; }
+			float& TranslucentRef()   { return pbrMaterialCB_.dither; }
 
 			void SetCastShadow(bool v)    { castShadow_ = v; }
 			void SetReceiveShadow(bool v) { receiveShadow_ = v; SetMaterialFlag(MatFlag_ReceiveShadow, v); }
@@ -109,6 +110,8 @@ namespace aq
 			void SetMetallic(float v)      { pbrMaterialCB_.metallic  = v; }
 			void SetRoughness(float v)     { pbrMaterialCB_.roughness = v; }
 			void SetSpecular(float v)      { pbrMaterialCB_.specular  = v; }
+			// 擬似半透明（ディファード）。1.0=不透明, 0.0=透明。PBRLit シェーダー時のみ有効。
+			void SetTranslucent(float v)   { pbrMaterialCB_.dither    = v; }
 			void SetMetallicRoughnessTex(aq::res::RefGPUResource r)
 			{
 				SetTexture(rendering::TextureSlot::MetallicRoughness, r);

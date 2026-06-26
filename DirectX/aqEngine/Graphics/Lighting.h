@@ -93,7 +93,8 @@ namespace aq
 			float         emissiveScale = 1.0f;
 			uint32_t      flags         = 0;
 			float         specular      = 0.5f;    // 誘電体 F0 スケール (0.5 → F0=0.04)
-			float         _pad[3]       = {};
+			float         dither        = 1.0f;    // [0,1]: 1=不透明, 0=透明（スクリーンスペース ディザで擬似半透明）
+			float         _pad[2]       = {};
 			math::Vector4 _extra[7]     = {};      // Phase 2: subsurface, anisotropic, sheen, clearcoat...
 		};
 

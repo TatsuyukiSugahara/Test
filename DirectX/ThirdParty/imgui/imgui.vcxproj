@@ -108,7 +108,8 @@
     <ClCompile Include="imgui_widgets.cpp" />
     <ClCompile Include="imgui_impl_win32.cpp" />
     <ClCompile Include="imgui_impl_dx11.cpp" />
-    <!-- DX12バックエンド: DX12対応時に ExcludedFromBuild を削除 -->
+    <!-- 同梱の imgui_impl_dx12 はコア(1.92 WIP 19193)より新しく非互換のためビルド除外。
+         DX12 の ImGui 描画は aqEngine 側の D3D12ImGui.cpp が現行APIで自前実装する。 -->
     <ClCompile Include="imgui_impl_dx12.cpp">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>

@@ -150,6 +150,27 @@ namespace aq
 				return false;
 			}
 
+#ifdef _DEBUG
+			// デバッグレイヤの無害な警告を抑制する。
+			// 最適化クリア値を nullptr で生成しているため CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE が
+			// 毎フレーム大量に出る。これは性能のみの警告でクリア結果は正しいため除外する。
+			{
+				ID3D12InfoQueue* infoQueue = nullptr;
+				if (SUCCEEDED(device_->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+				{
+					D3D12_MESSAGE_ID denyIds[] = {
+						D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+						D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE,
+					};
+					D3D12_INFO_QUEUE_FILTER filter = {};
+					filter.DenyList.NumIDs  = _countof(denyIds);
+					filter.DenyList.pIDList = denyIds;
+					infoQueue->AddStorageFilterEntries(&filter);
+					infoQueue->Release();
+				}
+			}
+#endif
+
 			// コマンドキュー (DIRECT)
 			D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 			queueDesc.Type  = D3D12_COMMAND_LIST_TYPE_DIRECT;

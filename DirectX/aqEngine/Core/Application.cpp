@@ -25,6 +25,8 @@
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
 #include <imgui/imgui_impl_dx11.h>
+#elif defined(ENGINE_GRAPHICS_D3D12)
+#include "Graphics/D3D12/D3D12ImGui.h"
 #endif
 #endif
 #ifdef AQ_DEBUG_IMGUI
@@ -64,14 +66,8 @@ namespace aq
 #endif
 
 #ifdef AQ_IMGUI
-#ifdef ENGINE_GRAPHICS_D3D11
 		{
-			auto* d3d = dynamic_cast<aq::graphics::D3D11GraphicsDeviceImpl*>(
-				aq::graphics::GraphicsDevice::Get().GetImplRaw());
-			EngineAssertMsg(d3d != nullptr, "AQ_IMGUI requires D3D11GraphicsDeviceImpl");
-			if (d3d)
-			{
-				ImGui::CreateContext();
+			ImGui::CreateContext();
 
 				// 日本語フォントを Windows フォントフォルダから読み込む
 				// GetWindowsDirectoryA でフォントパスを動的に解決する
@@ -118,21 +114,27 @@ namespace aq
 						io.Fonts->AddFontDefault();
 				}
 
-				const bool winOk  = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
-				const bool dx11Ok = winOk && ImGui_ImplDX11_Init(d3d->GetDevice(), d3d->GetDeviceContext());
-				if (dx11Ok)
-				{
-					imguiReady_ = true;
-				}
-				else
-				{
-					if (winOk) ImGui_ImplWin32_Shutdown();
-					ImGui::DestroyContext();
-					EngineAssertMsg(false, "ImGui backend initialization failed");
-				}
+			const bool winOk = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
+			bool backendOk = false;
+#ifdef ENGINE_GRAPHICS_D3D11
+			auto* d3d = dynamic_cast<aq::graphics::D3D11GraphicsDeviceImpl*>(
+				aq::graphics::GraphicsDevice::Get().GetImplRaw());
+			EngineAssertMsg(d3d != nullptr, "AQ_IMGUI requires D3D11GraphicsDeviceImpl");
+			backendOk = winOk && d3d && ImGui_ImplDX11_Init(d3d->GetDevice(), d3d->GetDeviceContext());
+#elif defined(ENGINE_GRAPHICS_D3D12)
+			backendOk = winOk && aq::graphics::D3D12ImGui::Init();
+#endif
+			if (backendOk)
+			{
+				imguiReady_ = true;
+			}
+			else
+			{
+				if (winOk) ImGui_ImplWin32_Shutdown();
+				ImGui::DestroyContext();
+				EngineAssertMsg(false, "ImGui backend initialization failed");
 			}
 		}
-#endif
 #endif
 
 		renderer_.SetUIRenderCallback([](aq::rendering::RenderCommandList& list) {
@@ -227,6 +229,8 @@ namespace aq
 		{
 #ifdef ENGINE_GRAPHICS_D3D11
 			ImGui_ImplDX11_Shutdown();
+#elif defined(ENGINE_GRAPHICS_D3D12)
+			aq::graphics::D3D12ImGui::Shutdown();
 #endif
 			ImGui_ImplWin32_Shutdown();
 			ImGui::DestroyContext();
@@ -313,6 +317,8 @@ namespace aq
 			ImGui_ImplWin32_NewFrame();
 #ifdef ENGINE_GRAPHICS_D3D11
 			ImGui_ImplDX11_NewFrame();
+#elif defined(ENGINE_GRAPHICS_D3D12)
+			aq::graphics::D3D12ImGui::NewFrame();
 #endif
 			ImGui::NewFrame();
 

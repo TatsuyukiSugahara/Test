@@ -176,6 +176,9 @@
     <ClCompile Include="Graphics\D3D12\D3D12DepthMap.cpp">
       <Filter>Graphics\D3D12</Filter>
     </ClCompile>
+    <ClCompile Include="Graphics\D3D12\D3D12ImGui.cpp">
+      <Filter>Graphics\D3D12</Filter>
+    </ClCompile>
     <ClCompile Include="Graphics\D3D12\D3D12GraphicsDeviceImpl.cpp">
       <Filter>Graphics\D3D12</Filter>
     </ClCompile>
@@ -545,6 +548,9 @@
       <Filter>Graphics\D3D12</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\D3D12\D3D12DepthMap.h">
+      <Filter>Graphics\D3D12</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\D3D12\D3D12ImGui.h">
       <Filter>Graphics\D3D12</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\D3D12\D3D12GraphicsDeviceImpl.h">

@@ -176,6 +176,7 @@
     <ClCompile Include="Graphics\D3D12\D3D12RootSignature.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12RenderContextImpl.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12DepthMap.cpp" />
+    <ClCompile Include="Graphics\D3D12\D3D12ImGui.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12RenderTarget.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12Resources.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12Shader.cpp" />
@@ -283,6 +284,7 @@
     <ClInclude Include="Graphics\D3D12\D3D12RenderContextImpl.h" />
     <ClInclude Include="Graphics\D3D12\D3D12RootSignature.h" />
     <ClInclude Include="Graphics\D3D12\D3D12DepthMap.h" />
+    <ClInclude Include="Graphics\D3D12\D3D12ImGui.h" />
     <ClInclude Include="Graphics\D3D12\D3D12RenderTarget.h" />
     <ClInclude Include="Graphics\D3D12\D3D12Resources.h" />
     <ClInclude Include="Graphics\D3D12\D3D12Shader.h" />

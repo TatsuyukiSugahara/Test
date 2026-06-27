@@ -226,6 +226,7 @@
     <ClCompile Include="UI\Animation\UIAnimationSerializer.cpp" />
     <ClCompile Include="UI\Font\TextStyle.cpp" />
     <ClCompile Include="UI\Font\FontAsset.cpp" />
+    <ClCompile Include="UI\Font\FontResource.cpp" />
     <ClCompile Include="UI\Font\TextLayout.cpp" />
     <ClCompile Include="Component\OceanComponent.cpp" />
     <ClCompile Include="Rendering\OceanDrawCommand.cpp" />
@@ -378,6 +379,7 @@
     <ClInclude Include="UI\Font\TextStyleCache.h" />
     <ClInclude Include="UI\Font\FontAsset.h" />
     <ClInclude Include="UI\Font\FontAssetCache.h" />
+    <ClInclude Include="UI\Font\FontResource.h" />
     <ClInclude Include="UI\Font\TextLayout.h" />
     <ClInclude Include="Component\OceanComponent.h" />
     <ClInclude Include="Rendering\OceanDrawCommand.h" />

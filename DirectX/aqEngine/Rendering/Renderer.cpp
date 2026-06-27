@@ -65,11 +65,13 @@ namespace aq
 			// build 時に useGpuCull を確定し、描画コマンドと整合させる (1フレームの toggle ズレ防止)。
 			if (IsClusterCullEnabled() && GpuClusterCuller::Get().IsReady())
 			{
+				// 小メッシュは dispatch/間接描画の固定コストが削減効果を上回るため閾値でスキップ。
+				const uint32_t minClusters = GetClusterCullMinClusters();
 				auto runCull = [&](std::vector<RenderItem>& items)
 				{
 					for (RenderItem& item : items)
 					{
-						if (item.clusterCount > 0 && item.gpuOutIndices && item.gpuArgs)
+						if (item.clusterCount >= minClusters && item.gpuOutIndices && item.gpuArgs)
 						{
 							item.useGpuCull = true;
 							outList.Enqueue<ClusterCullCommand>(item, frame.camera);

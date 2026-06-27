@@ -77,6 +77,13 @@ namespace aq
 					if (ImGui::Checkbox("Cluster Culling (GPU)", &cull))
 						rendering::SetClusterCullEnabled(cull);
 
+					// 適用する最小クラスタ数 (小メッシュは固定コスト>効果のためスキップ)
+					ImGui::SameLine();
+					int minCl = static_cast<int>(rendering::GetClusterCullMinClusters());
+					ImGui::SetNextItemWidth(120.0f);
+					if (ImGui::DragInt("min clusters", &minCl, 4.0f, 0, 4096))
+						rendering::SetClusterCullMinClusters(static_cast<uint32_t>(minCl < 0 ? 0 : minCl));
+
 					// 統計表示 (ゲームスレッドで毎クラスタ判定するため CPU コストあり・既定OFF)
 					ImGui::SameLine();
 					bool stats = ecs::RenderSystem::IsClusterStatsEnabled();

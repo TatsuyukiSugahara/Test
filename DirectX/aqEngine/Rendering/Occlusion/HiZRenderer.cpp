@@ -12,7 +12,7 @@
 #include <cfloat>
 #include <DirectXMath.h>
 #ifdef AQ_DEBUG_IMGUI
-#include "HiZDebugPanel.h"
+#include "Rendering/Occlusion/Debug/HiZDebugPanel.h"
 #endif
 
 

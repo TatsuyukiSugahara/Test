@@ -5,13 +5,13 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include <memory>
 #ifdef AQ_DEBUG_IMGUI
-#include "Rendering/RenderingDebugPanel.h"
-#include "Rendering/LightingDebugPanel.h"
-#include "Ocean/OceanDebugPanel.h"
+#include "Rendering/Debug/RenderingDebugPanel.h"
+#include "Rendering/Debug/LightingDebugPanel.h"
+#include "Ocean/Debug/OceanDebugPanel.h"
 #include "UI/Debug/UIEditorDebugPanel.h"
 #include "UI/Debug/TextStyleEditorPanel.h"
 #include "UI/Debug/UIAnimationEditor.h"
-#include "Util/ProfilerDebugPanel.h"
+#include "Util/Debug/ProfilerDebugPanel.h"
 #include <memory>
 #endif
 

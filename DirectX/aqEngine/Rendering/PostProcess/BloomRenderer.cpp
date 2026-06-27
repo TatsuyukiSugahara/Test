@@ -6,7 +6,7 @@
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/IShader.h"
 #ifdef AQ_DEBUG_IMGUI
-#include "BloomDebugPanel.h"
+#include "Rendering/PostProcess/Debug/BloomDebugPanel.h"
 #endif
 
 

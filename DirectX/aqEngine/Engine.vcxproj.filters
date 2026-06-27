@@ -206,6 +206,9 @@
     <ClCompile Include="Graphics\D3D12\D3D12RootSignature.cpp">
       <Filter>Graphics\D3D12</Filter>
     </ClCompile>
+    <ClCompile Include="Graphics\D3D12\D3D12GpuBuffer.cpp">
+      <Filter>Graphics\D3D12</Filter>
+    </ClCompile>
     <ClCompile Include="Graphics\D3D12\D3D12Shader.cpp">
       <Filter>Graphics\D3D12</Filter>
     </ClCompile>
@@ -609,6 +612,12 @@
     </ClInclude>
     <ClInclude Include="Graphics\D3D12\D3D12RootSignature.h">
       <Filter>Graphics\D3D12</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\D3D12\D3D12GpuBuffer.h">
+      <Filter>Graphics\D3D12</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\IGpuBuffer.h">
+      <Filter>Graphics</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\D3D12\D3D12Shader.h">
       <Filter>Graphics\D3D12</Filter>

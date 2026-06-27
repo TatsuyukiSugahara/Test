@@ -93,6 +93,16 @@ namespace aq
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data);
 			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height);
 
+			// GPU 駆動用バッファ
+			std::unique_ptr<IGpuBuffer> CreateStructuredBuffer(uint32_t stride, uint32_t count, const void* data)
+			{
+				return impl_->CreateStructuredBuffer(stride, count, data);
+			}
+			std::unique_ptr<IGpuBuffer> CreateRawBuffer(uint32_t byteSize, bool srv, bool uav, const void* initData)
+			{
+				return impl_->CreateRawBuffer(byteSize, srv, uav, initData);
+			}
+
 
 		private:
 			std::unique_ptr<IGraphicsDeviceImpl> impl_;

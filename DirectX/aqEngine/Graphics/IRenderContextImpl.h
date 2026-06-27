@@ -6,6 +6,7 @@
 #include "ISamplerState.h"
 #include "IUnorderedAccessView.h"
 #include "IDepthMap.h"
+#include "IGpuBuffer.h"
 
 
 namespace aq
@@ -79,6 +80,12 @@ namespace aq
 			virtual void DrawIndexed(uint32_t indexCount) = 0;
 			virtual void DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation) = 0;
 			virtual void Dispatch(uint32_t x, uint32_t y, uint32_t z) = 0;
+
+			// ── GPU 駆動 間接描画 (クラスタカリング)。未対応バックエンドは no-op。 ──
+			/** GPU バッファをインデックスバッファとしてバインドする (R32_UINT)。 */
+			virtual void IASetIndexBufferGpu(IGpuBuffer& /*indexBuffer*/) {}
+			/** 間接引数バッファ (DRAW_INDEXED 1 件) で間接描画する。 */
+			virtual void DrawIndexedIndirect(IGpuBuffer& /*argsBuffer*/) {}
 
 			virtual void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) = 0;
 

@@ -9,6 +9,7 @@
 #include "D3D12DepthMap.h"
 #include "D3D12PipelineStateCache.h"
 #include "D3D12RootSignature.h"
+#include "D3D12GpuBuffer.h"
 
 // ─────────────────────────────────────────────────────────────────────────
 // Phase 1b: コマンドリスト記録。DX11 のイミディエイト設定を「保留ステート + Draw 時 flush」
@@ -424,6 +425,8 @@ namespace aq
 			const uint32_t size = device_->GetSRVDescriptorSize();
 			D3D12_CPU_DESCRIPTOR_HANDLE nullSrc = device_->GetSRVStagingHeap()->GetCPUDescriptorHandleForHeapStart();
 			nullSrc.ptr += static_cast<SIZE_T>(device_->GetNullSRVIndex()) * size;
+			D3D12_CPU_DESCRIPTOR_HANDLE nullUav = device_->GetSRVStagingHeap()->GetCPUDescriptorHandleForHeapStart();
+			nullUav.ptr += static_cast<SIZE_T>(device_->GetNullUAVIndex()) * size;
 
 			// t0..t1: SRV テーブル (未バインドは null SRV)
 			{
@@ -445,8 +448,8 @@ namespace aq
 				}
 			}
 
-			// u0: UAV テーブル (ブルームは常に u0 をバインドする)
-			if (csUAV_[0].ptr)
+			// u0..u1: UAV テーブル (未バインドスロットは null UAV = 先頭スロットを流用しない)
+			if (csUAV_[0].ptr || csUAV_[1].ptr)
 			{
 				uint32_t base = 0;
 				if (device_->AllocateSRVTableRange(CS_UAV_COUNT, base))
@@ -455,7 +458,14 @@ namespace aq
 					dstCPU.ptr += static_cast<SIZE_T>(base) * size;
 					D3D12_GPU_DESCRIPTOR_HANDLE dstGPU = heap->GetGPUDescriptorHandleForHeapStart();
 					dstGPU.ptr += static_cast<UINT64>(base) * size;
-					dev->CopyDescriptorsSimple(1, dstCPU, csUAV_[0], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+					for (uint32_t i = 0; i < CS_UAV_COUNT; ++i)
+					{
+						D3D12_CPU_DESCRIPTOR_HANDLE slot = dstCPU;
+						slot.ptr += static_cast<SIZE_T>(i) * size;
+						// 未バインドは null UAV で埋める (UAV テーブルなので SRV null は型不一致)。
+						const D3D12_CPU_DESCRIPTOR_HANDLE src = csUAV_[i].ptr ? csUAV_[i] : nullUav;
+						dev->CopyDescriptorsSimple(1, slot, src, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+					}
 					list->SetComputeRootDescriptorTable(D3D12RootSignature::CS_PARAM_UAV_TABLE, dstGPU);
 				}
 			}
@@ -464,6 +474,30 @@ namespace aq
 
 			// 次の描画はグラフィクスルートシグネチャを張り直す必要があるため dirty 化する。
 			srvDirty_ = true;
+		}
+
+
+		void D3D12RenderContextImpl::IASetIndexBufferGpu(IGpuBuffer& indexBuffer)
+		{
+			device_->BeginFrameIfNeeded();
+			auto& b = static_cast<D3D12GpuBuffer&>(indexBuffer);
+			// compute(UAV) → INDEX_BUFFER へ遷移 (バリアが compute 書き込み完了の同期も担う)
+			b.Transition(device_->GetCommandList(), D3D12_RESOURCE_STATE_INDEX_BUFFER);
+			D3D12_INDEX_BUFFER_VIEW view = b.GetIndexBufferView();
+			device_->GetCommandList()->IASetIndexBuffer(&view);
+		}
+
+
+		void D3D12RenderContextImpl::DrawIndexedIndirect(IGpuBuffer& argsBuffer)
+		{
+			device_->BeginFrameIfNeeded();
+			FlushPipeline();
+			FlushDescriptors();
+			auto& b = static_cast<D3D12GpuBuffer&>(argsBuffer);
+			b.Transition(device_->GetCommandList(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+			ID3D12CommandSignature* sig = device_->GetDrawIndexedCommandSignature();
+			if (!sig) return;
+			device_->GetCommandList()->ExecuteIndirect(sig, 1, b.GetResource(), 0, nullptr, 0);
 		}
 
 

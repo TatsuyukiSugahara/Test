@@ -96,6 +96,8 @@ namespace aq
 			void DrawIndexed(uint32_t indexCount) override;
 			void DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation) override;
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
+			void IASetIndexBufferGpu(IGpuBuffer& indexBuffer) override;
+			void DrawIndexedIndirect(IGpuBuffer& argsBuffer) override;
 
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;
 
@@ -136,7 +138,7 @@ namespace aq
 
 			// 保留コンピュート状態 (Phase 4: ブルーム)。Dispatch 時に確定する。
 			static constexpr uint32_t CS_SRV_COUNT = 2;  // t0..t1
-			static constexpr uint32_t CS_UAV_COUNT = 1;  // u0
+			static constexpr uint32_t CS_UAV_COUNT = 2;  // u0..u1
 			IShader*                    pendingCS_   = nullptr;
 			D3D12_GPU_VIRTUAL_ADDRESS   csCBAddr_    = 0;
 			D3D12_CPU_DESCRIPTOR_HANDLE csSRV_[CS_SRV_COUNT] = {};

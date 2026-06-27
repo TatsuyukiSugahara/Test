@@ -184,6 +184,10 @@ namespace aq
 			{
 				impl_->DrawIndexedIndirect(argsBuffer);
 			}
+			void UavBarrier(IGpuBuffer& buffer)
+			{
+				impl_->UavBarrier(buffer);
+			}
 
 			template <typename SrcData>
 			void UpdateSubresource(IConstantBuffer& buf, const SrcData& data)

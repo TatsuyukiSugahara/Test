@@ -98,10 +98,13 @@ namespace aq
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
 			void IASetIndexBufferGpu(IGpuBuffer& indexBuffer) override;
 			void DrawIndexedIndirect(IGpuBuffer& argsBuffer) override;
+			void UavBarrier(IGpuBuffer& buffer) override;
 
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;
 
 		private:
+			// Dispatch 後など、グラフィクスルートシグネチャが失われていれば張り直す。
+			void EnsureGraphicsRootSig();
 			// 描画時に PSO を解決してパイプラインを確定する
 			void FlushPipeline();
 			// SRV バインドに変更があれば ring からテーブルを確保しコピー・バインドする
@@ -135,6 +138,7 @@ namespace aq
 			D3D12_CPU_DESCRIPTOR_HANDLE pendingSRV_[SRV_SLOT_COUNT] = {};
 			bool                        srvDirty_     = false;
 			uint64_t                    lastFrameGen_ = 0;  // SRV テーブルを張り直したフレーム世代
+			bool                        graphicsRootDirty_ = false;  // Dispatch 後に graphics root sig 張り直しが必要
 
 			// 保留コンピュート状態 (Phase 4: ブルーム)。Dispatch 時に確定する。
 			static constexpr uint32_t CS_SRV_COUNT = 2;  // t0..t1

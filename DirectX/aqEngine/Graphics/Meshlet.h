@@ -12,9 +12,11 @@
 #pragma once
 #include <cstdint>
 #include <vector>
+#include <memory>
 #include "Math/Vector.h"
 #include "Math/Matrix.h"
 #include "Math/Bounds.h"
+#include "IGpuBuffer.h"
 
 namespace aq
 {
@@ -29,6 +31,29 @@ namespace aq
 			float         coneCutoff = 2.0f;  // バックフェース判定閾値 (2.0=判定不能で常に可視)
 			uint32_t      triOffset = 0;  // クラスタ先頭の三角形インデックス (×3 で index offset)
 			uint32_t      triCount  = 0;  // クラスタ内三角形数
+		};
+
+
+		/**
+		 * GPU 駆動クラスタカリング用のバッファ群。メッシュが 1 セット保持する。
+		 * Create() で生成し、RenderItem へ shared_ptr をコピーして描画コマンドに渡す。
+		 */
+		struct GpuClusterBuffers
+		{
+			std::shared_ptr<IGpuBuffer> clusters;     // 構造化SRV (MeshCluster)
+			std::shared_ptr<IGpuBuffer> srcIndices;   // RAW SRV (並べ替えインデックス)
+			std::shared_ptr<IGpuBuffer> outIndices;   // RAW UAV + IB (compact 出力)
+			std::shared_ptr<IGpuBuffer> args;         // RAW UAV + 間接引数
+			uint32_t                    clusterCount = 0;
+
+			bool Valid() const
+			{
+				return clusters && srcIndices && outIndices && args && clusterCount > 0;
+			}
+
+			/** クラスタ記述子と並べ替えインデックスから GPU バッファを生成する。 */
+			void Create(const std::vector<MeshCluster>& clusters,
+			            const std::vector<uint32_t>& reorderedIndices);
 		};
 
 

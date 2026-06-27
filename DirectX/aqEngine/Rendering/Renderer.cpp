@@ -4,6 +4,8 @@
 #include "OceanDrawCommand.h"
 #include "FrameCommands.h"
 #include "FrameContext.h"
+#include "Occlusion/ClusterCull.h"
+#include "Occlusion/GpuClusterCuller.h"
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/GraphicsDevice.h"
@@ -56,6 +58,26 @@ namespace aq
 			if (shadowRenderer_) {
 				shadowRenderer_->FillShadowCBData(frame.lighting, frame.shadow);
 				shadowRenderer_->BuildShadowCommandList(frame, outList, rtHandle, viewportW, viewportH);
+			}
+
+			// Pass 1.5: GPU 駆動クラスタ(トライアングル)カリング (compute フェーズ)。
+			// 有効時、各アイテムの可視クラスタを compact し間接引数を構築する。
+			// build 時に useGpuCull を確定し、描画コマンドと整合させる (1フレームの toggle ズレ防止)。
+			if (IsClusterCullEnabled() && GpuClusterCuller::Get().IsReady())
+			{
+				auto runCull = [&](std::vector<RenderItem>& items)
+				{
+					for (RenderItem& item : items)
+					{
+						if (item.clusterCount > 0 && item.gpuOutIndices && item.gpuArgs)
+						{
+							item.useGpuCull = true;
+							outList.Enqueue<ClusterCullCommand>(item, frame.camera);
+						}
+					}
+				};
+				runCull(frame.items);
+				runCull(frame.forwardItems);
 			}
 
 			if (deferredRenderer_)

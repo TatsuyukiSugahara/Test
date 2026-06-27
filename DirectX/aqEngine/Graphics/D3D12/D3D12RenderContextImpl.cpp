@@ -71,8 +71,18 @@ namespace aq
 		}
 
 
+		void D3D12RenderContextImpl::EnsureGraphicsRootSig()
+		{
+			if (!graphicsRootDirty_) return;
+			device_->GetCommandList()->SetGraphicsRootSignature(device_->GetRootSignature());
+			graphicsRootDirty_ = false;
+			srvDirty_          = true;  // root sig 変更でテーブルバインドが失われるため張り直す
+		}
+
+
 		void D3D12RenderContextImpl::FlushPipeline()
 		{
+			EnsureGraphicsRootSig();
 			ID3D12GraphicsCommandList* list = device_->GetCommandList();
 			D3D12PipelineStateCache*   cache = device_->GetPipelineCache();
 			auto* vs = static_cast<D3D12Shader*>(pendingVS_);
@@ -300,6 +310,7 @@ namespace aq
 		{
 			if (startSlot >= D3D12RootSignature::MAX_ROOT_CBV) return;
 			device_->BeginFrameIfNeeded();
+			EnsureGraphicsRootSig();  // 直前に Dispatch があれば graphics root sig を復元
 			device_->GetCommandList()->SetGraphicsRootConstantBufferView(
 				startSlot, static_cast<D3D12ConstantBuffer&>(cb).GetGPUAddress());
 		}
@@ -308,6 +319,7 @@ namespace aq
 		{
 			if (startSlot >= D3D12RootSignature::MAX_ROOT_CBV) return;
 			device_->BeginFrameIfNeeded();
+			EnsureGraphicsRootSig();
 			device_->GetCommandList()->SetGraphicsRootConstantBufferView(
 				startSlot, static_cast<D3D12ConstantBuffer&>(cb).GetGPUAddress());
 		}
@@ -472,8 +484,9 @@ namespace aq
 
 			list->Dispatch(x, y, z);
 
-			// 次の描画はグラフィクスルートシグネチャを張り直す必要があるため dirty 化する。
-			srvDirty_ = true;
+			// 次の描画はグラフィクスルートシグネチャ + SRV テーブルを張り直す必要がある。
+			srvDirty_          = true;
+			graphicsRootDirty_ = true;
 		}
 
 
@@ -498,6 +511,17 @@ namespace aq
 			ID3D12CommandSignature* sig = device_->GetDrawIndexedCommandSignature();
 			if (!sig) return;
 			device_->GetCommandList()->ExecuteIndirect(sig, 1, b.GetResource(), 0, nullptr, 0);
+		}
+
+
+		void D3D12RenderContextImpl::UavBarrier(IGpuBuffer& buffer)
+		{
+			device_->BeginFrameIfNeeded();
+			auto& b = static_cast<D3D12GpuBuffer&>(buffer);
+			D3D12_RESOURCE_BARRIER barrier = {};
+			barrier.Type          = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			barrier.UAV.pResource = b.GetResource();
+			device_->GetCommandList()->ResourceBarrier(1, &barrier);
 		}
 
 

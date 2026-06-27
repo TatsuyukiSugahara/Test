@@ -69,13 +69,15 @@ namespace aq
 			);
 			indicesSize_ = meshResource_->GetIndicesSize();
 
-			// クラスタカリング用: 並べ替えインデックスで動的IBを作る (compact 描画の宛先)
+			// クラスタカリング用: 並べ替えインデックスで動的IBを作る (CPU 方式の compact 宛先)
 			const std::vector<uint32_t>& reordered = meshResource_->GetReorderedIndices();
 			if (!reordered.empty())
 			{
 				cullIndexBuffer_ = GraphicsDevice::Get().CreateDynamicIndexBuffer(
 					static_cast<uint32_t>(reordered.size()), IndexFormat::UInt32, reordered.data());
 			}
+			// GPU 駆動クラスタカリング用バッファ
+			gpuClusterBuffers_.Create(meshResource_->GetClusters(), reordered);
 
 			Initialize(shaderType);
 		}
@@ -238,6 +240,15 @@ namespace aq
 						meshResource_, &meshResource_->GetClusters());
 					item.reorderedIndices = std::shared_ptr<const std::vector<uint32_t>>(
 						meshResource_, &meshResource_->GetReorderedIndices());
+				}
+				// GPU 駆動クラスタカリング用バッファ
+				if (gpuClusterBuffers_.Valid())
+				{
+					item.gpuClusters   = gpuClusterBuffers_.clusters;
+					item.gpuSrcIndices = gpuClusterBuffers_.srcIndices;
+					item.gpuOutIndices = gpuClusterBuffers_.outIndices;
+					item.gpuArgs       = gpuClusterBuffers_.args;
+					item.clusterCount  = gpuClusterBuffers_.clusterCount;
 				}
 			}
 

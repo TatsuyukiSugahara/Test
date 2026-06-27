@@ -85,14 +85,22 @@ namespace aq
 				ctx.PsSetSampler(0, *item_.samplerState);
 
 			ctx.IASetVertexBuffer(*item_.vertexBuffer);
-			// クラスタ(トライアングル)カリングを適用し IB をバインド + 描画数を取得
-			const uint32_t drawCount = BindCulledIndices(ctx, item_, camera_);
 			ctx.IASetPrimitiveTopology(graphics::PrimitiveTopology::TriangleList);
 			ctx.VSSetShader(*item_.vs);
 			ctx.PSSetShader(*item_.ps);
 			ctx.IASetInputLayout(*item_.vs);
 
-			ctx.DrawIndexed(drawCount);
+			if (item_.useGpuCull && item_.gpuOutIndices && item_.gpuArgs)
+			{
+				// GPU 駆動: compute が compact した IB + 間接引数で描画
+				ctx.IASetIndexBufferGpu(*item_.gpuOutIndices);
+				ctx.DrawIndexedIndirect(*item_.gpuArgs);
+			}
+			else
+			{
+				const uint32_t drawCount = BindCulledIndices(ctx, item_, camera_);
+				ctx.DrawIndexed(drawCount);
+			}
 		}
 	}
 }

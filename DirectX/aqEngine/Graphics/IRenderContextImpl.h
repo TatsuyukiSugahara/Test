@@ -86,6 +86,8 @@ namespace aq
 			virtual void IASetIndexBufferGpu(IGpuBuffer& /*indexBuffer*/) {}
 			/** 間接引数バッファ (DRAW_INDEXED 1 件) で間接描画する。 */
 			virtual void DrawIndexedIndirect(IGpuBuffer& /*argsBuffer*/) {}
+			/** UAV バリア (前の compute 書き込みを次の compute 読み取りへ可視化)。 */
+			virtual void UavBarrier(IGpuBuffer& /*buffer*/) {}
 
 			virtual void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) = 0;
 

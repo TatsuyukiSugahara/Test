@@ -293,6 +293,9 @@
     <ClCompile Include="Rendering\Occlusion\ClusterCull.cpp">
       <Filter>Rendering\Occlusion</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\GpuClusterCuller.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Occlusion\HiZRenderer.cpp">
       <Filter>Rendering\Occlusion</Filter>
     </ClCompile>
@@ -761,6 +764,9 @@
       <Filter>Rendering\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Occlusion\ClusterCull.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\GpuClusterCuller.h">
       <Filter>Rendering\Occlusion</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Occlusion\HiZRenderer.h">

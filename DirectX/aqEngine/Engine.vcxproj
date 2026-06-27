@@ -214,6 +214,7 @@
     <ClCompile Include="Rendering\PostProcess\BloomRenderer.cpp" />
     <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp" />
     <ClCompile Include="Rendering\Occlusion\ClusterCull.cpp" />
+    <ClCompile Include="Rendering\Occlusion\GpuClusterCuller.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZRenderer.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZBuildCommand.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZReadbackCommand.cpp" />
@@ -398,6 +399,7 @@
     <ClInclude Include="Rendering\OceanDrawCommand.h" />
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h" />
     <ClInclude Include="Rendering\Occlusion\ClusterCull.h" />
+    <ClInclude Include="Rendering\Occlusion\GpuClusterCuller.h" />
     <ClInclude Include="Rendering\Occlusion\HiZRenderer.h" />
     <ClInclude Include="Rendering\Occlusion\HiZBuildCommand.h" />
     <ClInclude Include="Rendering\Occlusion\HiZReadbackCommand.h" />

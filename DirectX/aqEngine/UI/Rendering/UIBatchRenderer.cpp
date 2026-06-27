@@ -323,10 +323,14 @@ namespace aq
 
 				if (!fontPath.empty())
 				{
-					auto fontAsset = FontAssetCache::Get().Load(fontPath);
+					auto fontRes = FontAssetCache::Get().Load(fontPath);
 
-					if (fontAsset && fontAsset->IsLoaded())
+					// IsCompleted() は atomic。worker のパース完了を安全に検知し、
+					// 完了までテキスト描画をスキップする (メインスレッドは止めない)。
+					if (fontRes && fontRes->IsCompleted())
 					{
+						const FontAsset* fontAsset = fontRes->GetFontAsset();
+
 						// フォントサイズ決定: (コンポーネント override > スタイル > デフォルト) × scale
 						const float baseFontSize = (txt->fontSize > 0.f) ? txt->fontSize
 						                          : (style ? style->fontSize : 24.f);
@@ -344,7 +348,7 @@ namespace aq
 
 						// レイアウト
 						TextLayoutParams layoutP;
-						layoutP.font        = fontAsset.get();
+						layoutP.font        = fontAsset;
 						layoutP.fontSize    = fontSize;
 						layoutP.colorTop    = fillTop;
 						layoutP.colorBottom = fillBottom;

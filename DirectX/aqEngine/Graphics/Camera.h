@@ -69,6 +69,11 @@ namespace aq
 		/** カメラ座標取得 */
 		const math::Vector3& GetPosition() const { return position_; }
 
+		/** 近平面取得 */
+		float GetNear() const { return near_; }
+		/** 遠平面取得 */
+		float GetFar()  const { return far_; }
+
 		/** ビュー行列取得 */
 		const math::Matrix4x4& GetViewMatrix() const
 		{

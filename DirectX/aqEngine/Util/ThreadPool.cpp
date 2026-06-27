@@ -1,5 +1,7 @@
 #include "aq.h"
 #include "ThreadPool.h"
+#include "Profiler.h"
+#include <string>
 
 
 namespace aq
@@ -13,7 +15,7 @@ namespace aq
 			: stop_(false)
 		{
 			for (uint32_t i = 0; i < threadCount; ++i) {
-				workers_.emplace_back([this] { WorkerThread(); });
+				workers_.emplace_back([this, i] { WorkerThread(i); });
 			}
 		}
 
@@ -33,8 +35,11 @@ namespace aq
 		}
 
 
-		void ThreadPool::WorkerThread()
+		void ThreadPool::WorkerThread(uint32_t index)
 		{
+#ifdef AQ_PROFILE_ENABLED
+			profile::Profiler::Get().SetThreadName(("Worker " + std::to_string(index)).c_str());
+#endif
 			while (true) {
 				std::function<void()> task;
 				{

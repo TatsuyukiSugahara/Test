@@ -420,6 +420,7 @@ namespace aq
 
 			// 動的VBへアップロード
 			mesh_.UpdateVertices(vertCache_.data(), static_cast<uint32_t>(vertCache_.size()));
+			boundsValid_ = false;  // 高さが変わったので AABB を作り直す
 		}
 
 
@@ -430,6 +431,7 @@ namespace aq
 			desc_.terrainSize = size;
 			ComputeVertices(heightData_, hmapWidth_, hmapHeight_, desc_, vertCache_);
 			mesh_.UpdateVertices(vertCache_.data(), static_cast<uint32_t>(vertCache_.size()));
+			boundsValid_ = false;
 		}
 
 
@@ -450,9 +452,31 @@ namespace aq
 		}
 
 
+		void HeightmapChunk::RecomputeBounds() const
+		{
+			math::AABBBuilder builder;
+			for (const graphics::VertexData& v : vertCache_)
+				builder.Add(v.position);
+			localBounds_ = builder.Build();
+			boundsValid_ = builder.HasPoint();
+		}
+
+
 		bool HeightmapChunk::FillRenderItem(rendering::RenderItem& item) const
 		{
-			return mesh_.FillRenderItem(item);
+			if (!mesh_.FillRenderItem(item))
+				return false;
+
+			// 生バッファ初期化のため StaticMesh 側ではバウンディングが付かない。
+			// vertCache_ から計算したローカル AABB をカリング用に載せる。
+			if (!boundsValid_ && !vertCache_.empty())
+				RecomputeBounds();
+			if (boundsValid_)
+			{
+				item.localBounds = localBounds_;
+				item.hasBounds   = true;
+			}
+			return true;
 		}
 
 

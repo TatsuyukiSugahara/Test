@@ -59,6 +59,14 @@ namespace aq
 		}
 
 
+		bool GraphicsDevice::ReadbackOffscreenR32(rendering::RenderTargetHandle handle,
+		                                          uint32_t width, uint32_t height, std::vector<float>& outData)
+		{
+			if (!handle.IsValid()) return false;
+			return impl_->ReadbackOffscreenR32(handle.index, width, height, outData);
+		}
+
+
 		rendering::RenderTargetHandle GraphicsDevice::CreateOffscreenRenderTarget(uint32_t width, uint32_t height)
 		{
 			return rendering::RenderTargetHandle{ impl_->CreateOffscreenRenderTarget(width, height) };

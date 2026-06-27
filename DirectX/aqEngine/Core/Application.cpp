@@ -18,6 +18,9 @@
 #include "Component/HierarchicalTransformComponent.h"
 #include "Component/BodyComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
+#include "Util/Profiler.h"
+#include "Rendering/Deferred/DeferredRenderer.h"
+#include "Rendering/Occlusion/HiZRenderer.h"
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_win32.h>
@@ -47,6 +50,9 @@ namespace aq
 {
 	bool Application::Initialize(aq::graphics::RenderContext& renderContext)
 	{
+#ifdef AQ_PROFILE_ENABLED
+		aq::profile::Profiler::Get().SetThreadName("Main");
+#endif
 		renderThread_.Initialize(&renderContext);
 		renderThreadReady_ = true;
 
@@ -144,6 +150,29 @@ namespace aq
 
 		if (!OnInitialize()) return false;
 
+		// Hi-Z (オクリュージョン基盤): ディファードが有効なときのみ。
+		// G-Buffer の worldPos から深度ピラミッドを構築する。
+		if (auto* dr = dynamic_cast<rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer()))
+		{
+			hiZRenderer_ = std::make_unique<rendering::HiZRenderer>();
+			if (hiZRenderer_->Initialize(Engine::Get().GetRenderWidth(), Engine::Get().GetRenderHeight()))
+			{
+				const rendering::RenderTargetHandle gb2 = dr->GetGBuffer2Handle();
+				auto* hiZ = hiZRenderer_.get();
+				renderer_.SetHiZBuildCallback(
+					[hiZ, gb2](const rendering::RenderFrame& f, rendering::RenderCommandList& l)
+					{
+						hiZ->BuildCommandList(f, l, gb2);
+					});
+				// オクリュージョンカリングのテスターとして登録
+				aq::ecs::RenderSystem::SetOcclusionTester(hiZ);
+			}
+			else
+			{
+				hiZRenderer_.reset();
+			}
+		}
+
 #ifdef AQ_DEBUG_IMGUI
 		// OnInitialize() でゲーム側が Shadow/Bloom 等のレンダラを設定した後にパネルを生成する
 		{
@@ -207,6 +236,18 @@ namespace aq
 			// UI Animation Editor
 			uiAnimationEditor_ = std::make_unique<aq::ui::UIAnimationEditor>();
 			aq::DebugUI::Get().Register(uiAnimationEditor_.get());
+
+			// Profiler パネル
+			profilerDebugPanel_ = std::make_unique<aq::profile::ProfilerDebugPanel>();
+			aq::DebugUI::Get().Register(profilerDebugPanel_.get());
+
+			// Hi-Z 可視化タブ
+			if (hiZRenderer_)
+			{
+				auto panel = hiZRenderer_->CreateDebugPanel();
+				renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
+				renderingDebugPanel_->TakeOwnership(std::move(panel));
+			}
 		}
 #endif
 
@@ -252,6 +293,14 @@ namespace aq
 
 	void Application::Update()
 	{
+#ifdef AQ_PROFILE_ENABLED
+		// 前フレームの計測結果を publish (メイン + アイドル状態のワーカー)。
+		// この時点で前フレームの EntityContext::Update() は完了済みでワーカーはアイドル。
+		aq::profile::Profiler::Get().PublishThisThread();
+		aq::profile::Profiler::Get().PublishWorkers();
+#endif
+		AQ_PROFILE_SCOPE("Application::Update");
+
 #ifdef AQ_IMGUI
 		if (imguiReady_)
 		{
@@ -261,10 +310,17 @@ namespace aq
 		}
 #endif
 		aq::hid::InputManager::Get().Update();
-		aq::ecs::EntityContext::Get().Update();
-		aq::res::ResourceManager::Get().Update();
+		{
+			AQ_PROFILE_SCOPE("EntityContext::Update");
+			aq::ecs::EntityContext::Get().Update();
+		}
+		{
+			AQ_PROFILE_SCOPE("ResourceManager::Update");
+			aq::res::ResourceManager::Get().Update();
+		}
 		OnUpdate();
 		{
+			AQ_PROFILE_SCOPE("UI::Update");
 			auto& ui = aq::ui::UIContext::Get();
 			ui.GetInputSystem().Update(ui.Screens(), aq::hid::InputManager::Get());
 			ui.Screens().Update(aq::Engine::GetDeltaTime());
@@ -303,6 +359,7 @@ namespace aq
 
 	void Application::Render()
 	{
+		AQ_PROFILE_SCOPE("Application::Render");
 		const float renderW = static_cast<float>(Engine::Get().GetRenderWidth());
 		const float renderH = static_cast<float>(Engine::Get().GetRenderHeight());
 		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -394,9 +451,15 @@ namespace aq
 		mainCmdList->Enqueue<aq::rendering::SetViewportCommand>(0.0f, 0.0f, renderW, renderH);
 		aq::rendering::RenderFrame mainFrame;
 		mainFrame.lighting = aq::graphics::LightManager::Get().GetLightingData();
-		aq::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
-		renderer_.BuildCommandList(mainFrame, *mainCmdList,
-		                          Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+		{
+			AQ_PROFILE_SCOPE("BuildRenderFrame");
+			aq::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
+		}
+		{
+			AQ_PROFILE_SCOPE("BuildCommandList");
+			renderer_.BuildCommandList(mainFrame, *mainCmdList,
+			                          Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+		}
 #ifdef AQ_IMGUI
 		if (imguiDrawData)
 			mainCmdList->Enqueue<aq::rendering::ImGuiRenderCommand>(imguiDrawData);

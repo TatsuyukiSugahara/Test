@@ -43,6 +43,9 @@
     <Filter Include="Rendering\Deferred">
       <UniqueIdentifier>{b2c3d4e5-f6a7-8901-bcde-f01234567890}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\Occlusion">
+      <UniqueIdentifier>{a1b2c3d4-e5f6-7890-abcd-ef0123456789}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Rendering\PostProcess">
       <UniqueIdentifier>{a1e2f3b4-c5d6-7890-ef12-34567890abcd}</UniqueIdentifier>
     </Filter>
@@ -150,6 +153,9 @@
       <Filter>Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\SkeletalMesh.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Meshlet.cpp">
       <Filter>Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\StaticMesh.cpp">
@@ -281,6 +287,21 @@
     <ClCompile Include="Rendering\RenderThread.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\ClusterCull.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\HiZRenderer.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\HiZBuildCommand.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\HiZReadbackCommand.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\HiZDebugPanel.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Deferred\DeferredRenderer.cpp">
       <Filter>Rendering\Deferred</Filter>
     </ClCompile>
@@ -333,6 +354,12 @@
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="Util\ThreadPool.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\Profiler.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\ProfilerDebugPanel.cpp">
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="Util\SimpleJson.cpp">
@@ -532,6 +559,9 @@
     <ClInclude Include="Graphics\StaticMesh.h">
       <Filter>Graphics</Filter>
     </ClInclude>
+    <ClInclude Include="Graphics\Meshlet.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
     <ClInclude Include="Graphics\D3D11\D3D11Buffers.h">
       <Filter>Graphics\D3D11</Filter>
     </ClInclude>
@@ -599,6 +629,9 @@
       <Filter>Math</Filter>
     </ClInclude>
     <ClInclude Include="Math\Vector.h">
+      <Filter>Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Math\Bounds.h">
       <Filter>Math</Filter>
     </ClInclude>
     <ClInclude Include="Memory\AllocatedArray.h">
@@ -718,6 +751,24 @@
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h">
       <Filter>Rendering\Deferred</Filter>
     </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\ClusterCull.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\HiZRenderer.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\HiZBuildCommand.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\HiZReadbackCommand.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\HiZDebugPanel.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\IOcclusionTester.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
     <ClInclude Include="Rendering\Deferred\DeferredRenderer.h">
       <Filter>Rendering\Deferred</Filter>
     </ClInclude>
@@ -785,6 +836,12 @@
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\ThreadPool.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\Profiler.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\ProfilerDebugPanel.h">
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\SimpleJson.h">

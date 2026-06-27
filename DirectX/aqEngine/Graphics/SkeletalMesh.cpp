@@ -71,6 +71,14 @@ namespace aq
 			);
 			indicesSize_ = skeletalMeshResource_->GetIndexCount();
 
+			// クラスタカリング用: 並べ替えインデックスで動的IBを作る (compact 描画の宛先)
+			const std::vector<uint32_t>& reordered = skeletalMeshResource_->GetReorderedIndices();
+			if (!reordered.empty())
+			{
+				cullIndexBuffer_ = GraphicsDevice::Get().CreateDynamicIndexBuffer(
+					static_cast<uint32_t>(reordered.size()), IndexFormat::UInt32, reordered.data());
+			}
+
 			// バインドポーズ (単位行列) でボーン行列を初期化
 			const uint32_t boneCount = std::max(skeletalMeshResource_->GetBoneCount(), 1u);
 			boneMatrices_ = std::make_shared<std::vector<math::Matrix4x4>>(
@@ -170,6 +178,29 @@ namespace aq
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
 			item.boneMatrices  = boneMatrices_;
+
+			// カリング用バウンディング。バインドポーズ AABB にアニメ変形分の
+			// マージン (extent を 1.5 倍) を付けて保守的にする。
+			if (skeletalMeshResource_)
+			{
+				constexpr float ANIM_MARGIN = 1.5f;
+				const math::AABB& bind = skeletalMeshResource_->GetLocalAABB();
+				item.localBounds = math::AABB(bind.center,
+					math::Vector3(bind.extent.x * ANIM_MARGIN,
+					              bind.extent.y * ANIM_MARGIN,
+					              bind.extent.z * ANIM_MARGIN));
+				item.hasBounds = true;
+
+				// クラスタカリング用データ (リソースを alias して寿命を繋ぐ)
+				if (cullIndexBuffer_)
+				{
+					item.cullIndexBuffer  = cullIndexBuffer_;
+					item.clusters         = std::shared_ptr<const std::vector<MeshCluster>>(
+						skeletalMeshResource_, &skeletalMeshResource_->GetClusters());
+					item.reorderedIndices = std::shared_ptr<const std::vector<uint32_t>>(
+						skeletalMeshResource_, &skeletalMeshResource_->GetReorderedIndices());
+				}
+			}
 
 			// ディファード対象なら G-Buffer PS をセット（エイリアシングで寿命を繋げる）
 			if (gbufferPSShaderResource_ && gbufferPSShaderResource_->IsCompleted())

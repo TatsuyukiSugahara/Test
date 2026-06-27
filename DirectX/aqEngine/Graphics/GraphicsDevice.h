@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include <memory>
 #include <cstdint>
+#include <vector>
 #include "IGraphicsDeviceImpl.h"
 #include "Rendering/RenderTargetHandle.h"
 
@@ -50,6 +51,17 @@ namespace aq
 
 			/** ハンドルが示す RT を返す（メイン・オフスクリーン両対応）。無効なら nullptr */
 			IRenderTarget* GetRenderTarget(rendering::RenderTargetHandle handle);
+
+			/** R32_Float オフスクリーン RT を CPU へリードバックする (詳細は IGraphicsDeviceImpl)。 */
+			bool ReadbackOffscreenR32(rendering::RenderTargetHandle handle,
+			                          uint32_t width, uint32_t height, std::vector<float>& outData);
+
+			/** デバッグ: リードバック診断カウンタを取得する。 */
+			void GetReadbackDebug(uint32_t& copies, uint32_t& maps, uint32_t& createFails,
+			                      uint32_t& stamps, uint32_t& validCount, uint32_t& fenceReady)
+			{
+				impl_->GetReadbackDebug(copies, maps, createFails, stamps, validCount, fenceReady);
+			}
 
 			/** オフスクリーン RT を生成してハンドルを返す。失敗時は INVALID ハンドル */
 			rendering::RenderTargetHandle CreateOffscreenRenderTarget(uint32_t width, uint32_t height);

@@ -52,7 +52,7 @@ namespace aq
 			uint32_t ThreadCount() const { return static_cast<uint32_t>(workers_.size()); }
 
 		private:
-			void WorkerThread();
+			void WorkerThread(uint32_t index);
 
 		private:
 			std::vector<std::thread>          workers_;

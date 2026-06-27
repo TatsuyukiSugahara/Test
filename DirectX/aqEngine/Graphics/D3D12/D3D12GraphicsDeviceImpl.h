@@ -78,6 +78,12 @@ namespace aq
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) override;
 			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) override;
 
+			bool ReadbackOffscreenR32(uint32_t rtIndex, uint32_t width, uint32_t height,
+			                          std::vector<float>& outData) override;
+
+			void GetReadbackDebug(uint32_t& copies, uint32_t& maps, uint32_t& createFails,
+			                      uint32_t& stamps, uint32_t& validCount, uint32_t& fenceReady) override;
+
 			/** D3D12RenderContextImpl が記録に使うアクセサ */
 			ID3D12GraphicsCommandList* GetCommandList() const   { return commandList_; }
 			ID3D12CommandQueue*        GetCommandQueue() const  { return commandQueue_; }
@@ -177,6 +183,28 @@ namespace aq
 			uint32_t                   srvShaderRingNext_    = 0;        // フレーム内 ring 位置 (BeginFrame で区画先頭へ)
 			uint32_t                   nullSRVIndex_         = 0;        // staging 内の null SRV 位置
 			uint64_t                   frameGeneration_      = 0;        // BeginFrameIfNeeded で開くたびに +1
+
+			// ── Hi-Z リードバックリング (オクリュージョン用 GPU→CPU) ──
+			// 専用 READBACK バッファを巡回。各フレームでコピーを記録し、別スロットの
+			// GPU 完了済みデータ (フェンス確認) を CPU へ読む (数フレーム遅延)。
+			// frameIndex_ とは独立した書き込みインデックスを使い、常に完了済みスロットを読めるようにする。
+			static constexpr uint32_t READBACK_SLOTS = 3;
+			ID3D12Resource* readbackBuf_[READBACK_SLOTS]   = {};
+			uint64_t        readbackFence_[READBACK_SLOTS] = {};  // 0 = 未確定、>0 = この値完了でデータ有効
+			bool            readbackValid_[READBACK_SLOTS] = {};  // コピー記録済み
+			uint32_t        readbackWriteIdx_ = 0;                 // 次に書くスロット
+			int             readbackJustWrote_ = -1;               // 今フレーム書いたスロット (Present で確定)
+			uint32_t        readbackW_        = 0;
+			uint32_t        readbackH_        = 0;
+			uint32_t        readbackRowPitch_ = 0;
+
+			// 診断カウンタ
+			uint32_t        dbgReadbackCopies_     = 0;
+			uint32_t        dbgReadbackMaps_       = 0;
+			uint32_t        dbgReadbackCreateFails_ = 0;
+			uint32_t        dbgReadbackStamps_     = 0;
+			uint32_t        dbgReadbackReadFound_  = 0;  // 完了済みスロットを発見した回数
+			uint32_t        dbgReadbackMapHr_      = 0;  // 直近 Map の HRESULT
 		};
 	}
 }

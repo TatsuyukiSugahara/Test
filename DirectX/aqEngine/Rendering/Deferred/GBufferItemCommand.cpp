@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "GBufferItemCommand.h"
 #include "Rendering/FrameContext.h"
+#include "Rendering/Occlusion/ClusterCull.h"
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/Lighting.h"
@@ -86,13 +87,14 @@ namespace aq
 				ctx.PsSetSampler(0, *item_.samplerState);
 
 			ctx.IASetVertexBuffer(*item_.vertexBuffer);
-			ctx.IASetIndexBuffer(*item_.indexBuffer);
+			// クラスタ(トライアングル)カリングを適用し IB をバインド + 描画数を取得
+			const uint32_t drawCount = BindCulledIndices(ctx, item_, camera_);
 			ctx.IASetPrimitiveTopology(graphics::PrimitiveTopology::TriangleList);
 			ctx.VSSetShader(*item_.vs);
 			ctx.PSSetShader(*item_.gbufferPS);   // G-Buffer PS を使用
 			ctx.IASetInputLayout(*item_.vs);
 
-			ctx.DrawIndexed(item_.indexCount);
+			ctx.DrawIndexed(drawCount);
 		}
 	}
 }

@@ -8,6 +8,8 @@
 #include "Rendering/RenderFrame.h"
 #include "Component/OceanComponent.h"
 
+namespace aq { namespace rendering { class IOcclusionTester; } }
+
 
 namespace aq
 {
@@ -228,8 +230,49 @@ namespace aq
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame);
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame, aq::CameraType cameraType);
 
+			// --- フラスタムカリング ---
+			static void SetFrustumCullingEnabled(bool enabled) { frustumCullingEnabled_ = enabled; }
+			static bool IsFrustumCullingEnabled()              { return frustumCullingEnabled_; }
+			// 直近の BuildRenderFrame(Main) でのバウンディング持ちアイテム数と可視数
+			static uint32_t GetCullingTotalCount()   { return cullingTotalCount_; }
+			static uint32_t GetCullingVisibleCount() { return cullingVisibleCount_; }
+
+			// --- オクリュージョンカリング (Hi-Z) ---
+			static void SetOcclusionTester(const aq::rendering::IOcclusionTester* t) { occlusionTester_ = t; }
+			static void SetOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled_ = enabled; }
+			static bool IsOcclusionCullingEnabled()              { return occlusionCullingEnabled_; }
+			static bool IsOcclusionAvailable()                   { return occlusionTester_ != nullptr; }
+			// 直近の BuildRenderFrame(Main) でオクルードして除外した数
+			static uint32_t GetOccludedCount() { return occludedCount_; }
+
+			// --- トライアングル(クラスタ)カリング 統計 (描画はまだ削減しない・潜在効果の可視化) ---
+			static void SetClusterStatsEnabled(bool e) { clusterStatsEnabled_ = e; }
+			static bool IsClusterStatsEnabled()        { return clusterStatsEnabled_; }
+			static uint32_t GetClusterTotal()      { return clusterTotal_; }
+			static uint32_t GetClusterVisible()    { return clusterVisible_; }
+			static uint32_t GetClusterTriTotal()   { return clusterTriTotal_; }
+			static uint32_t GetClusterTriVisible() { return clusterTriVisible_; }
+			static uint32_t GetClusterConeUsable() { return clusterConeUsable_; }
+			static uint32_t GetClusterBackface()   { return clusterBackface_; }
+
 		private:
 			static RenderSystem* instance_;
+
+			static bool     frustumCullingEnabled_;
+			static uint32_t cullingTotalCount_;
+			static uint32_t cullingVisibleCount_;
+
+			static const aq::rendering::IOcclusionTester* occlusionTester_;
+			static bool     occlusionCullingEnabled_;
+			static uint32_t occludedCount_;
+
+			static bool     clusterStatsEnabled_;
+			static uint32_t clusterTotal_;
+			static uint32_t clusterVisible_;
+			static uint32_t clusterTriTotal_;
+			static uint32_t clusterTriVisible_;
+			static uint32_t clusterConeUsable_;
+			static uint32_t clusterBackface_;
 
 
 		public:

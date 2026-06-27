@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "System.h"
 #include "Util/ThreadPool.h"
+#include "Util/Profiler.h"
 #include <queue>
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
@@ -29,8 +30,14 @@ namespace aq
 				for (size_t idx : updateOrder_) {
 					if (systemEntries_[idx].level != wave) continue;
 					SystemBase* system = systemEntries_[idx].system.get();
+					// displayName は systemEntries_ が保持し続けるため const char* の寿命は安全
+					const char* name = systemEntries_[idx].displayName.c_str();
 					waveFutures.push_back(
-						util::ThreadPool::Get().Submit([system]() { system->Update(); })
+						util::ThreadPool::Get().Submit([system, name]()
+						{
+							AQ_PROFILE_SCOPE(name);
+							system->Update();
+						})
 					);
 				}
 

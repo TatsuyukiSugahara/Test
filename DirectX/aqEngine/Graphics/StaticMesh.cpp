@@ -69,6 +69,14 @@ namespace aq
 			);
 			indicesSize_ = meshResource_->GetIndicesSize();
 
+			// クラスタカリング用: 並べ替えインデックスで動的IBを作る (compact 描画の宛先)
+			const std::vector<uint32_t>& reordered = meshResource_->GetReorderedIndices();
+			if (!reordered.empty())
+			{
+				cullIndexBuffer_ = GraphicsDevice::Get().CreateDynamicIndexBuffer(
+					static_cast<uint32_t>(reordered.size()), IndexFormat::UInt32, reordered.data());
+			}
+
 			Initialize(shaderType);
 		}
 
@@ -213,6 +221,25 @@ namespace aq
 
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
+
+			// カリング用ローカル AABB (MeshResource 経由でロードした場合のみ)。
+			// 生バッファ初期化 (InitializeDynamic 等) では meshResource_ が無いため
+			// hasBounds = false のままとし、フラスタムカリングの対象外とする。
+			if (meshResource_)
+			{
+				item.localBounds = meshResource_->GetLocalAABB();
+				item.hasBounds   = true;
+
+				// クラスタカリング用データ (リソースを alias して寿命を繋ぐ)
+				if (cullIndexBuffer_)
+				{
+					item.cullIndexBuffer  = cullIndexBuffer_;
+					item.clusters         = std::shared_ptr<const std::vector<MeshCluster>>(
+						meshResource_, &meshResource_->GetClusters());
+					item.reorderedIndices = std::shared_ptr<const std::vector<uint32_t>>(
+						meshResource_, &meshResource_->GetReorderedIndices());
+				}
+			}
 
 			// ディファード対象なら G-Buffer PS をセット（エイリアシングで寿命を繋げる）
 			if (gbufferPSShaderResource_ && gbufferPSShaderResource_->IsCompleted())

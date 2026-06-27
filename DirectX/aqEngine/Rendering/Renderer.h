@@ -58,6 +58,16 @@ namespace aq
 			}
 
 			/**
+			 * Hi-Z ピラミッド構築コールバックを設定する。
+			 * G-Buffer パスの直後 (worldPos 確定後) に呼ばれる。
+			 * Renderer が Occlusion 層に直接依存しないよう std::function で疎結合にする。
+			 */
+			void SetHiZBuildCallback(std::function<void(const RenderFrame&, RenderCommandList&)> cb)
+			{
+				hiZBuildCallback_ = std::move(cb);
+			}
+
+			/**
 			 * ポストプロセスが設定されている場合はその最終出力 RT を、そうでなければ sceneRT を返す。
 			 * RenderThread::Submit の displayRT に渡す値を決めるために使う。
 			 */
@@ -91,6 +101,7 @@ namespace aq
 			std::unique_ptr<IPostProcessRenderer>   postProcessRenderer_;
 			std::unique_ptr<IDeferredRenderer>      deferredRenderer_;
 			std::function<void(RenderCommandList&)> uiRenderCallback_;
+			std::function<void(const RenderFrame&, RenderCommandList&)> hiZBuildCallback_;
 			RenderTargetHandle                      mainRTHandle_;
 			float                                   mainViewportW_ = 0.f;
 			float                                   mainViewportH_ = 0.f;

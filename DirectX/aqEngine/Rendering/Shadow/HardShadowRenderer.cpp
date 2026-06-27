@@ -8,7 +8,7 @@
 #include <cmath>
 #include <algorithm>
 #ifdef AQ_DEBUG_IMGUI
-#include "ShadowDebugPanel.h"
+#include "Rendering/Shadow/Debug/ShadowDebugPanel.h"
 #endif
 
 

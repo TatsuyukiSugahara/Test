@@ -23,7 +23,7 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #ifdef AQ_DEBUG_IMGUI
-#include "Rendering/Occlusion/CullingDebugPanel.h"
+#include "Rendering/Occlusion/Debug/CullingDebugPanel.h"
 #endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
@@ -39,8 +39,8 @@
 #endif
 #ifdef AQ_DEBUG_IMGUI
 #include "DebugUI.h"
-#include "Ocean/OceanDebugPanel.h"
-#include "Rendering/RenderingDebugPanel.h"
+#include "Ocean/Debug/OceanDebugPanel.h"
+#include "Rendering/Debug/RenderingDebugPanel.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/SceneHierarchySystem.h"

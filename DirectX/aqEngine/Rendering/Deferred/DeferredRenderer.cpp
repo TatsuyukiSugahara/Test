@@ -9,7 +9,7 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #ifdef AQ_DEBUG_IMGUI
-#include "DeferredDebugPanel.h"
+#include "Rendering/Deferred/Debug/DeferredDebugPanel.h"
 #endif
 
 

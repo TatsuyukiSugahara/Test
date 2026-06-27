@@ -13,6 +13,7 @@ struct ID3D12Fence;
 struct ID3D12Resource;
 struct ID3D12DescriptorHeap;
 struct ID3D12RootSignature;
+struct ID3D12CommandSignature;
 struct IDXGISwapChain3;
 struct IDXGIFactory4;
 
@@ -81,6 +82,13 @@ namespace aq
 			bool ReadbackOffscreenR32(uint32_t rtIndex, uint32_t width, uint32_t height,
 			                          std::vector<float>& outData) override;
 
+			// ── GPU 駆動用バッファ (クラスタカリング) ──
+			std::unique_ptr<IGpuBuffer> CreateStructuredBuffer(uint32_t stride, uint32_t count, const void* data) override;
+			std::unique_ptr<IGpuBuffer> CreateRawBuffer(uint32_t byteSize, bool srv, bool uav, const void* initData) override;
+
+			/** DRAW_INDEXED 用 command signature (ExecuteIndirect)。 */
+			ID3D12CommandSignature* GetDrawIndexedCommandSignature() const { return drawIndexedCmdSig_; }
+
 			void GetReadbackDebug(uint32_t& copies, uint32_t& maps, uint32_t& createFails,
 			                      uint32_t& stamps, uint32_t& validCount, uint32_t& fenceReady) override;
 
@@ -98,6 +106,7 @@ namespace aq
 			ID3D12DescriptorHeap* GetSRVStagingHeap() const { return srvStagingHeap_; }
 			uint32_t              GetSRVDescriptorSize() const { return srvDescriptorSize_; }
 			uint32_t              GetNullSRVIndex() const { return nullSRVIndex_; }
+			uint32_t              GetNullUAVIndex() const { return nullUAVIndex_; }
 
 			/** shader-visible ring から count 個連続の SRV スロットを確保し、先頭インデックスを返す。
 			 *  フレーム内 bump アロケータ。容量超過時 false (呼び側は描画スキップ)。 */
@@ -169,6 +178,7 @@ namespace aq
 
 			std::unique_ptr<D3D12RootSignature>     rootSignature_;
 			std::unique_ptr<D3D12PipelineStateCache> psoCache_;
+			ID3D12CommandSignature*    drawIndexedCmdSig_ = nullptr;  // ExecuteIndirect 用
 			bool                       frameOpen_ = false;  // BeginFrameIfNeeded で開かれているか
 
 			// ── SRV ディスクリプタヒープ (Phase 2) ──
@@ -182,6 +192,7 @@ namespace aq
 			uint32_t                   srvRegionSize_        = 0;        // 1 フレーム分の区画サイズ
 			uint32_t                   srvShaderRingNext_    = 0;        // フレーム内 ring 位置 (BeginFrame で区画先頭へ)
 			uint32_t                   nullSRVIndex_         = 0;        // staging 内の null SRV 位置
+			uint32_t                   nullUAVIndex_         = 0;        // staging 内の null UAV 位置
 			uint64_t                   frameGeneration_      = 0;        // BeginFrameIfNeeded で開くたびに +1
 
 			// ── Hi-Z リードバックリング (オクリュージョン用 GPU→CPU) ──

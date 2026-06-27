@@ -21,6 +21,7 @@
 #include "Util/Profiler.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
+#include "Rendering/Occlusion/GpuClusterCuller.h"
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_win32.h>
@@ -149,6 +150,9 @@ namespace aq
 		});
 
 		if (!OnInitialize()) return false;
+
+		// GPU 駆動クラスタ(トライアングル)カリング: compute シェーダをロード
+		aq::rendering::GpuClusterCuller::Get().Initialize();
 
 		// Hi-Z (オクリュージョン基盤): ディファードが有効なときのみ。
 		// G-Buffer の worldPos から深度ピラミッドを構築する。

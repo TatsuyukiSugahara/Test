@@ -149,6 +149,13 @@ namespace aq
 					planes_[i].Normalize();
 			}
 
+			/** 6 平面を (a,b,c,d) の Vector4 として取り出す (GPU CB へ渡す用)。 */
+			void GetPlanes(Vector4 out[PLANE_COUNT]) const
+			{
+				for (int i = 0; i < PLANE_COUNT; ++i)
+					out[i] = Vector4(planes_[i].a, planes_[i].b, planes_[i].c, planes_[i].d);
+			}
+
 			/**
 			 * ワールド空間 AABB が視錐台と交差 (または内包) するか。
 			 * 1 つでも完全に外側の平面があれば false (カリング対象)。

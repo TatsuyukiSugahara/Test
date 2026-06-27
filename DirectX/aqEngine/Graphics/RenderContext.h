@@ -176,6 +176,19 @@ namespace aq
 				impl_->Dispatch(x, y, z);
 			}
 
+			void IASetIndexBufferGpu(IGpuBuffer& indexBuffer)
+			{
+				impl_->IASetIndexBufferGpu(indexBuffer);
+			}
+			void DrawIndexedIndirect(IGpuBuffer& argsBuffer)
+			{
+				impl_->DrawIndexedIndirect(argsBuffer);
+			}
+			void UavBarrier(IGpuBuffer& buffer)
+			{
+				impl_->UavBarrier(buffer);
+			}
+
 			template <typename SrcData>
 			void UpdateSubresource(IConstantBuffer& buf, const SrcData& data)
 			{

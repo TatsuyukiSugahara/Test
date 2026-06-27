@@ -16,12 +16,17 @@ namespace aq
 		{
 			// 既定OFF: CPU方式 (毎フレーム compact + IB アップロード) は小メッシュで割に合わない。
 			// 巨大メッシュ / GPU 律速シーンで手動 ON するための機能。
-			std::atomic<bool> g_clusterCullEnabled{ false };
+			std::atomic<bool>     g_clusterCullEnabled{ false };
+			// 小メッシュは dispatch/間接描画の固定コストが効果を上回るため、これ未満は通常描画。
+			std::atomic<uint32_t> g_clusterCullMinClusters{ 256u };
 		}
 
 
 		void SetClusterCullEnabled(bool enabled) { g_clusterCullEnabled.store(enabled); }
 		bool IsClusterCullEnabled()              { return g_clusterCullEnabled.load(); }
+
+		void     SetClusterCullMinClusters(uint32_t m) { g_clusterCullMinClusters.store(m); }
+		uint32_t GetClusterCullMinClusters()           { return g_clusterCullMinClusters.load(); }
 
 
 		uint32_t BindCulledIndices(graphics::RenderContext& ctx,

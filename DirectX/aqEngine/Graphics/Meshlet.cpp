@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "Meshlet.h"
+#include "GraphicsDevice.h"
 #include <algorithm>
 #include <cmath>
 #include <cfloat>
@@ -25,6 +26,27 @@ namespace aq
 			{
 				return Part1By2(x) | (Part1By2(y) << 1) | (Part1By2(z) << 2);
 			}
+		}
+
+
+		void GpuClusterBuffers::Create(const std::vector<MeshCluster>& clustersIn,
+		                               const std::vector<uint32_t>& reorderedIndices)
+		{
+			clusterCount = 0;
+			if (clustersIn.empty() || reorderedIndices.empty()) return;
+
+			auto& gd = GraphicsDevice::Get();
+			const uint32_t idxBytes = static_cast<uint32_t>(reorderedIndices.size()) * 4u;
+
+			clusters   = gd.CreateStructuredBuffer(
+				static_cast<uint32_t>(sizeof(MeshCluster)),
+				static_cast<uint32_t>(clustersIn.size()), clustersIn.data());
+			srcIndices = gd.CreateRawBuffer(idxBytes, /*srv*/true,  /*uav*/false, reorderedIndices.data());
+			outIndices = gd.CreateRawBuffer(idxBytes, /*srv*/false, /*uav*/true,  nullptr);
+			args       = gd.CreateRawBuffer(20u,      /*srv*/false, /*uav*/true,  nullptr);  // DRAW_INDEXED_ARGS
+
+			if (clusters && srcIndices && outIndices && args)
+				clusterCount = static_cast<uint32_t>(clustersIn.size());
 		}
 
 

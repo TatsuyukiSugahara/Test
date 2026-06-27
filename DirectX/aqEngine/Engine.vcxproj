@@ -178,6 +178,7 @@
     <ClCompile Include="Graphics\D3D12\D3D12GraphicsDeviceImpl.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12PipelineStateCache.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12RootSignature.cpp" />
+    <ClCompile Include="Graphics\D3D12\D3D12GpuBuffer.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12RenderContextImpl.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12DepthMap.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12ImGui.cpp" />
@@ -213,6 +214,7 @@
     <ClCompile Include="Rendering\PostProcess\BloomRenderer.cpp" />
     <ClCompile Include="Rendering\PostProcess\BloomDebugPanel.cpp" />
     <ClCompile Include="Rendering\Occlusion\ClusterCull.cpp" />
+    <ClCompile Include="Rendering\Occlusion\GpuClusterCuller.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZRenderer.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZBuildCommand.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZReadbackCommand.cpp" />
@@ -295,6 +297,8 @@
     <ClInclude Include="Graphics\D3D12\D3D12PipelineStateCache.h" />
     <ClInclude Include="Graphics\D3D12\D3D12RenderContextImpl.h" />
     <ClInclude Include="Graphics\D3D12\D3D12RootSignature.h" />
+    <ClInclude Include="Graphics\D3D12\D3D12GpuBuffer.h" />
+    <ClInclude Include="Graphics\IGpuBuffer.h" />
     <ClInclude Include="Graphics\D3D12\D3D12DepthMap.h" />
     <ClInclude Include="Graphics\D3D12\D3D12ImGui.h" />
     <ClInclude Include="Graphics\D3D12\D3D12RenderTarget.h" />
@@ -395,6 +399,7 @@
     <ClInclude Include="Rendering\OceanDrawCommand.h" />
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h" />
     <ClInclude Include="Rendering\Occlusion\ClusterCull.h" />
+    <ClInclude Include="Rendering\Occlusion\GpuClusterCuller.h" />
     <ClInclude Include="Rendering\Occlusion\HiZRenderer.h" />
     <ClInclude Include="Rendering\Occlusion\HiZBuildCommand.h" />
     <ClInclude Include="Rendering\Occlusion\HiZReadbackCommand.h" />

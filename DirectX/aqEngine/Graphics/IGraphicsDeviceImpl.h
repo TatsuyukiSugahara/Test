@@ -7,6 +7,7 @@
 #include "IShaderResourceView.h"
 #include "ISamplerState.h"
 #include "IDepthMap.h"
+#include "IGpuBuffer.h"
 #include "GraphicsTypes.h"
 
 
@@ -103,6 +104,12 @@ namespace aq
 			{
 				copies = 0; maps = 0; createFails = 0; stamps = 0; validCount = 0; fenceReady = 0;
 			}
+
+			// ── GPU 駆動用バッファ (クラスタカリング)。未対応バックエンドは nullptr。 ──
+			/** 構造化バッファ (SRV 読み取り専用, 初期データあり)。 */
+			virtual std::unique_ptr<IGpuBuffer> CreateStructuredBuffer(uint32_t /*stride*/, uint32_t /*count*/, const void* /*data*/) { return nullptr; }
+			/** RAW(ByteAddress) バッファ。srv/uav を指定。uav=true は GPU 書き込み (DEFAULT ヒープ)。 */
+			virtual std::unique_ptr<IGpuBuffer> CreateRawBuffer(uint32_t /*byteSize*/, bool /*srv*/, bool /*uav*/, const void* /*initData*/) { return nullptr; }
 		};
 	}
 }

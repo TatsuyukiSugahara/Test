@@ -6,6 +6,7 @@
 #include "Math/Bounds.h"
 #include "Graphics/Meshlet.h"
 #include "Graphics/IBuffer.h"
+#include "Graphics/IGpuBuffer.h"
 #include "Graphics/IShader.h"
 #include "Graphics/ISamplerState.h"
 #include "Graphics/IShaderResourceView.h"
@@ -84,6 +85,14 @@ namespace aq
 			std::shared_ptr<graphics::IIndexBuffer>                        cullIndexBuffer;
 			std::shared_ptr<const std::vector<graphics::MeshCluster>>      clusters;
 			std::shared_ptr<const std::vector<uint32_t>>                   reorderedIndices;
+
+			// GPU 駆動クラスタカリング用バッファ (全て揃っていれば GPU パスを使う)
+			std::shared_ptr<graphics::IGpuBuffer> gpuClusters;     // 構造化SRV (MeshCluster)
+			std::shared_ptr<graphics::IGpuBuffer> gpuSrcIndices;   // RAW SRV (並べ替えインデックス)
+			std::shared_ptr<graphics::IGpuBuffer> gpuOutIndices;   // RAW UAV + IB (compact 出力)
+			std::shared_ptr<graphics::IGpuBuffer> gpuArgs;         // RAW UAV + 間接引数
+			uint32_t                              clusterCount = 0;
+			bool                                  useGpuCull   = false;  // build時に確定 (カリングパスと描画の整合)
 
 			// SkeletalMesh 用ボーン行列。nullptr = StaticMesh (スキンなし)
 			// shared_ptr で共有することでフレーム跨ぎのコピーコストを抑える

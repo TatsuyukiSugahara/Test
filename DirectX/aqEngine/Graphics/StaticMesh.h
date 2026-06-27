@@ -32,7 +32,8 @@ namespace aq
 		private:
 			std::shared_ptr<IVertexBuffer>   vertexBuffer_;
 			std::shared_ptr<IIndexBuffer>    indexBuffer_;
-			std::shared_ptr<IIndexBuffer>    cullIndexBuffer_;  // クラスタ compact 描画用 動的IB
+			std::shared_ptr<IIndexBuffer>    cullIndexBuffer_;  // クラスタ compact 描画用 動的IB (CPU方式)
+			GpuClusterBuffers                gpuClusterBuffers_; // GPU 駆動クラスタカリング用
 			uint32_t                         indicesSize_;
 			std::shared_ptr<ISamplerState>   samplerState_;
 			math::Matrix4x4                  worldMatrix_;

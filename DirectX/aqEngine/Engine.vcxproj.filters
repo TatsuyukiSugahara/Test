@@ -206,6 +206,9 @@
     <ClCompile Include="Graphics\D3D12\D3D12RootSignature.cpp">
       <Filter>Graphics\D3D12</Filter>
     </ClCompile>
+    <ClCompile Include="Graphics\D3D12\D3D12GpuBuffer.cpp">
+      <Filter>Graphics\D3D12</Filter>
+    </ClCompile>
     <ClCompile Include="Graphics\D3D12\D3D12Shader.cpp">
       <Filter>Graphics\D3D12</Filter>
     </ClCompile>
@@ -288,6 +291,9 @@
       <Filter>Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\Occlusion\ClusterCull.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\GpuClusterCuller.cpp">
       <Filter>Rendering\Occlusion</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\Occlusion\HiZRenderer.cpp">
@@ -610,6 +616,12 @@
     <ClInclude Include="Graphics\D3D12\D3D12RootSignature.h">
       <Filter>Graphics\D3D12</Filter>
     </ClInclude>
+    <ClInclude Include="Graphics\D3D12\D3D12GpuBuffer.h">
+      <Filter>Graphics\D3D12</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\IGpuBuffer.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
     <ClInclude Include="Graphics\D3D12\D3D12Shader.h">
       <Filter>Graphics\D3D12</Filter>
     </ClInclude>
@@ -752,6 +764,9 @@
       <Filter>Rendering\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Occlusion\ClusterCull.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\GpuClusterCuller.h">
       <Filter>Rendering\Occlusion</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Occlusion\HiZRenderer.h">

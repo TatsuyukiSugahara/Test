@@ -9,6 +9,7 @@
 #include "D3D12Resources.h"
 #include "D3D12RootSignature.h"
 #include "D3D12PipelineStateCache.h"
+#include "D3D12GpuBuffer.h"
 #include "Graphics/GraphicsDevice.h"
 #include <vector>
 
@@ -86,6 +87,19 @@ namespace aq
 			if (!rootSignature_->Create(device_)) return false;
 			if (!rootSignature_->CreateCompute(device_)) return false;
 			psoCache_ = std::make_unique<D3D12PipelineStateCache>();
+
+			// DRAW_INDEXED 用 command signature (ExecuteIndirect・GPU 駆動クラスタカリング)
+			{
+				D3D12_INDIRECT_ARGUMENT_DESC arg = {};
+				arg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
+				D3D12_COMMAND_SIGNATURE_DESC csd = {};
+				csd.ByteStride       = sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);  // 20 bytes
+				csd.NumArgumentDescs = 1;
+				csd.pArgumentDescs   = &arg;
+				// DRAW_INDEXED のみで root 引数を変えないため root signature は不要 (nullptr)
+				HRESULT hr = device_->CreateCommandSignature(&csd, nullptr, IID_PPV_ARGS(&drawIndexedCmdSig_));
+				if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 command signature 作成失敗"); return false; }
+			}
 			return true;
 		}
 
@@ -106,6 +120,7 @@ namespace aq
 			// GPU が全コマンドを実行し終えてから解放する
 			if (commandQueue_ && fence_) WaitForGPU();
 
+			SafeReleaseD3D12(drawIndexedCmdSig_);
 			psoCache_.reset();
 			rootSignature_.reset();
 			offscreenRTs_.clear();
@@ -353,8 +368,9 @@ namespace aq
 				if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 SRV シェーダー可視ヒープ作成失敗"); return false; }
 			}
 
-			// null SRV をステージング末尾スロットに作成 (未バインドのテーブルスロットを埋める)。
+			// null SRV / null UAV をステージング末尾スロットに作成 (未バインドのテーブルスロットを埋める)。
 			nullSRVIndex_   = srvStagingCapacity_ - 1;
+			nullUAVIndex_   = srvStagingCapacity_ - 2;
 			srvStagingNext_ = 0;
 			{
 				D3D12_SHADER_RESOURCE_VIEW_DESC nullDesc = {};
@@ -365,6 +381,14 @@ namespace aq
 				D3D12_CPU_DESCRIPTOR_HANDLE h = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
 				h.ptr += static_cast<SIZE_T>(nullSRVIndex_) * srvDescriptorSize_;
 				device_->CreateShaderResourceView(nullptr, &nullDesc, h);
+			}
+			{
+				D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav = {};
+				nullUav.Format        = DXGI_FORMAT_R8G8B8A8_UNORM;
+				nullUav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+				D3D12_CPU_DESCRIPTOR_HANDLE h = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
+				h.ptr += static_cast<SIZE_T>(nullUAVIndex_) * srvDescriptorSize_;
+				device_->CreateUnorderedAccessView(nullptr, nullptr, &nullUav, h);
 			}
 			return true;
 		}
@@ -674,6 +698,54 @@ namespace aq
 		}
 
 
+		std::unique_ptr<IGpuBuffer> D3D12GraphicsDeviceImpl::CreateStructuredBuffer(
+			uint32_t stride, uint32_t count, const void* data)
+		{
+			if (!device_ || stride == 0 || count == 0) return nullptr;
+			if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 staging 枯渇"); return nullptr; }
+
+			const uint32_t srvIdx = srvStagingNext_++;
+			D3D12_CPU_DESCRIPTOR_HANDLE srvH = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
+			srvH.ptr += static_cast<SIZE_T>(srvIdx) * srvDescriptorSize_;
+
+			auto buf = std::make_unique<D3D12GpuBuffer>();
+			if (!buf->Create(device_, stride * count, stride, /*srv*/true, /*uav*/false, data, srvH, {}))
+				return nullptr;
+			return buf;
+		}
+
+
+		std::unique_ptr<IGpuBuffer> D3D12GraphicsDeviceImpl::CreateRawBuffer(
+			uint32_t byteSize, bool srv, bool uav, const void* initData)
+		{
+			if (!device_ || byteSize == 0) return nullptr;
+			// 16B 境界へ切り上げ (RAW ビューは 4B 要素、安全側に)
+			byteSize = (byteSize + 15u) & ~15u;
+
+			D3D12_CPU_DESCRIPTOR_HANDLE srvH = {};
+			D3D12_CPU_DESCRIPTOR_HANDLE uavH = {};
+			if (srv)
+			{
+				if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 staging 枯渇"); return nullptr; }
+				const uint32_t i = srvStagingNext_++;
+				srvH = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
+				srvH.ptr += static_cast<SIZE_T>(i) * srvDescriptorSize_;
+			}
+			if (uav)
+			{
+				if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 staging 枯渇"); return nullptr; }
+				const uint32_t i = srvStagingNext_++;
+				uavH = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
+				uavH.ptr += static_cast<SIZE_T>(i) * srvDescriptorSize_;
+			}
+
+			auto buf = std::make_unique<D3D12GpuBuffer>();
+			if (!buf->Create(device_, byteSize, /*structuredStride*/0, srv, uav, initData, srvH, uavH))
+				return nullptr;
+			return buf;
+		}
+
+
 		ID3D12Device* D3D12GraphicsDeviceImpl::GetStaticDevice()
 		{
 			return static_cast<D3D12GraphicsDeviceImpl*>(
@@ -746,7 +818,7 @@ namespace aq
 		{
 			const DXGI_FORMAT format = ToDXGIFormat(texDesc.format);
 			if (format == DXGI_FORMAT_UNKNOWN) { EngineAssertMsg(false, "D3D12 CreateTexture2D: 未対応フォーマット"); return nullptr; }
-			if (srvStagingNext_ >= nullSRVIndex_) { EngineAssertMsg(false, "D3D12 SRV ステージングヒープ枯渇"); return nullptr; }
+			if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 SRV ステージングヒープ枯渇"); return nullptr; }
 
 			const uint32_t mipLevels = texDesc.mipLevels > 0 ? texDesc.mipLevels : 1;
 			const uint32_t arraySize = texDesc.arraySize > 0 ? texDesc.arraySize : 1;

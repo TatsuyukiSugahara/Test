@@ -70,25 +70,42 @@ namespace aq
 						"occluded %u", ecs::RenderSystem::GetOccludedCount());
 				}
 
-				// トライアングル(クラスタ)カリング統計 — 削減可能量の可視化 (描画はまだ未削減)
+				// トライアングル(クラスタ)カリング — GPU 駆動 (実描画) と CPU 統計を分離
 				{
-					const uint32_t clTot  = ecs::RenderSystem::GetClusterTotal();
-					const uint32_t clVis  = ecs::RenderSystem::GetClusterVisible();
-					const uint32_t triTot = ecs::RenderSystem::GetClusterTriTotal();
-					const uint32_t triVis = ecs::RenderSystem::GetClusterTriVisible();
-					bool cs = ecs::RenderSystem::IsClusterStatsEnabled();
-					if (ImGui::Checkbox("Cluster Culling", &cs))
-					{
-						ecs::RenderSystem::SetClusterStatsEnabled(cs);  // 統計 (ゲームスレッド)
-						rendering::SetClusterCullEnabled(cs);            // 実描画カリング (レンダースレッド)
-					}
+					// GPU カリング本体 (レンダースレッドで compute → ExecuteIndirect)
+					bool cull = rendering::IsClusterCullEnabled();
+					if (ImGui::Checkbox("Cluster Culling (GPU)", &cull))
+						rendering::SetClusterCullEnabled(cull);
+
+					// 適用する最小クラスタ数 (小メッシュは固定コスト>効果のためスキップ)
 					ImGui::SameLine();
-					const float triPct = (triTot > 0) ? (100.0f * triVis / triTot) : 0.0f;
-					ImGui::TextColored(ImVec4(0.85f, 0.8f, 1.0f, 1.0f),
-						"clusters %u/%u  tris %u/%u (%.0f%% drawn, %u culled)",
-						clVis, clTot, triVis, triTot, triPct, (triTot >= triVis) ? (triTot - triVis) : 0u);
-					ImGui::TextDisabled("  cluster diag: coneUsable=%u/%u  backfaceCulled=%u",
-						ecs::RenderSystem::GetClusterConeUsable(), clTot, ecs::RenderSystem::GetClusterBackface());
+					int minCl = static_cast<int>(rendering::GetClusterCullMinClusters());
+					ImGui::SetNextItemWidth(120.0f);
+					if (ImGui::DragInt("min clusters", &minCl, 4.0f, 0, 4096))
+						rendering::SetClusterCullMinClusters(static_cast<uint32_t>(minCl < 0 ? 0 : minCl));
+
+					// 統計表示 (ゲームスレッドで毎クラスタ判定するため CPU コストあり・既定OFF)
+					ImGui::SameLine();
+					bool stats = ecs::RenderSystem::IsClusterStatsEnabled();
+					if (ImGui::Checkbox("Stats", &stats))
+						ecs::RenderSystem::SetClusterStatsEnabled(stats);
+
+					ImGui::SameLine();
+					if (stats)
+					{
+						const uint32_t clTot  = ecs::RenderSystem::GetClusterTotal();
+						const uint32_t clVis  = ecs::RenderSystem::GetClusterVisible();
+						const uint32_t triTot = ecs::RenderSystem::GetClusterTriTotal();
+						const uint32_t triVis = ecs::RenderSystem::GetClusterTriVisible();
+						const float triPct = (triTot > 0) ? (100.0f * triVis / triTot) : 0.0f;
+						ImGui::TextColored(ImVec4(0.85f, 0.8f, 1.0f, 1.0f),
+							"clusters %u/%u  tris %u/%u (%.0f%% drawn, %u culled)",
+							clVis, clTot, triVis, triTot, triPct, (triTot >= triVis) ? (triTot - triVis) : 0u);
+					}
+					else
+					{
+						ImGui::TextDisabled("(Stats OFF: %% drawn を見るなら Stats を ON。CPU コスト増)");
+					}
 				}
 			}
 

@@ -3,6 +3,8 @@
 #include <vector>
 #include "Math/Matrix.h"
 #include "Math/Vector.h"
+#include "Math/Bounds.h"
+#include "Graphics/Meshlet.h"
 #include "Graphics/IBuffer.h"
 #include "Graphics/IShader.h"
 #include "Graphics/ISamplerState.h"
@@ -22,6 +24,8 @@ namespace aq
 			math::Matrix4x4 viewMatrix;
 			math::Matrix4x4 projectionMatrix;
 			math::Vector3   position;
+			float           nearZ = 0.1f;
+			float           farZ  = 1000.0f;
 		};
 
 
@@ -68,6 +72,18 @@ namespace aq
 			graphics::MaterialCBData  materialCB;
 			bool                      castShadow    = false;
 			bool                      receiveShadow = false;
+
+			// カリング用ローカル空間 AABB。hasBounds == false のアイテムは
+			// バウンディング未確定としてフラスタムカリングの対象外 (常に可視) とする。
+			math::AABB                localBounds;
+			bool                      hasBounds     = false;
+
+			// トライアングル(クラスタ)カリング用。clusters/reorderedIndices はリソースを
+			// alias した共有ポインタ (コピー安価)。cullIndexBuffer は compact 描画用の動的IB。
+			// いずれか nullptr ならクラスタカリングせず通常描画する。
+			std::shared_ptr<graphics::IIndexBuffer>                        cullIndexBuffer;
+			std::shared_ptr<const std::vector<graphics::MeshCluster>>      clusters;
+			std::shared_ptr<const std::vector<uint32_t>>                   reorderedIndices;
 
 			// SkeletalMesh 用ボーン行列。nullptr = StaticMesh (スキンなし)
 			// shared_ptr で共有することでフレーム跨ぎのコピーコストを抑える

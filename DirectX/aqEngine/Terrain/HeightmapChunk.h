@@ -89,8 +89,14 @@ namespace aq
 			void BuildMesh(const std::vector<float>& heights,
 			               uint32_t mapW, uint32_t mapH,
 			               const Desc& desc);
+			/** vertCache_ からローカル AABB を再計算しキャッシュする (カリング用) */
+			void RecomputeBounds() const;
 
 			graphics::StaticMesh mesh_;
+
+			// カリング用ローカル AABB キャッシュ。頂点が変わったら boundsValid_=false にする。
+			mutable math::AABB localBounds_;
+			mutable bool       boundsValid_ = false;
 
 			// CPU 側高さデータ (GetHeight + RebuildFromHeights で使用)
 			std::vector<float>               heightData_;

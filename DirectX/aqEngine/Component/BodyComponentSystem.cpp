@@ -5,6 +5,7 @@
 #include "Graphics/Camera.h"
 #include "Component/TerrainComponent.h"
 #include "Component/DecalComponent.h"
+#include "Rendering/Occlusion/IOcclusionTester.h"
 #include "Resource/Resource.h"
 #include "Engine.h"
 
@@ -342,6 +343,21 @@ namespace aq
 
 
 		RenderSystem* RenderSystem::instance_ = nullptr;
+		bool          RenderSystem::frustumCullingEnabled_ = true;
+		uint32_t      RenderSystem::cullingTotalCount_     = 0;
+		uint32_t      RenderSystem::cullingVisibleCount_   = 0;
+
+		const aq::rendering::IOcclusionTester* RenderSystem::occlusionTester_ = nullptr;
+		bool          RenderSystem::occlusionCullingEnabled_ = true;
+		uint32_t      RenderSystem::occludedCount_           = 0;
+
+		bool          RenderSystem::clusterStatsEnabled_  = false;  // 既定OFF: CPU方式は小メッシュで割に合わない
+		uint32_t      RenderSystem::clusterTotal_         = 0;
+		uint32_t      RenderSystem::clusterVisible_       = 0;
+		uint32_t      RenderSystem::clusterTriTotal_      = 0;
+		uint32_t      RenderSystem::clusterTriVisible_    = 0;
+		uint32_t      RenderSystem::clusterConeUsable_    = 0;
+		uint32_t      RenderSystem::clusterBackface_      = 0;
 
 
 		RenderSystem::RenderSystem()
@@ -434,27 +450,109 @@ namespace aq
 			frame.camera.viewMatrix       = camera->GetViewMatrix();
 			frame.camera.projectionMatrix = camera->GetProjectionMatrix();
 			frame.camera.position         = camera->GetPosition();
+			frame.camera.nearZ            = camera->GetNear();
+			frame.camera.farZ             = camera->GetFar();
 
 			// 現在の方針: 同じ描画対象を cameraType で指定した別カメラから映す。
 			// カメラごとに描画対象を絞りたい場合は RenderItem / Component 側に
 			// RenderLayer 等を追加して検討する。
 
+			// --- フラスタムカリング 準備 ---
+			// メインカメラの視錐台でアイテムを絞る。バウンディング未確定 (hasBounds==false)
+			// のアイテムは保守的に常に可視とする。影 (castShadow) はライト視錐台で別途
+			// 判定すべきため、ここではメインカメラ視錐台で切らない。
+			math::Frustum frustum;
+			frustum.FromViewProjection(camera->GetViewProjectionMatrix());
+			const bool cullEnabled = frustumCullingEnabled_ && (cameraType == CameraType::Main);
+
+			// オクリュージョン用 viewProj (= view * projection) と near/far
+			const math::Matrix4x4 viewProj = camera->GetViewProjectionMatrix();
+			const float occNear = camera->GetNear();
+			const float occFar  = camera->GetFar();
+			const bool occEnabled = occlusionCullingEnabled_ && (occlusionTester_ != nullptr)
+			                      && (cameraType == CameraType::Main);
+
+			uint32_t cullTotal   = 0;
+			uint32_t cullVisible = 0;
+			uint32_t occluded    = 0;
+			auto isVisible = [&](const aq::rendering::RenderItem& item) -> bool
+			{
+				if (!cullEnabled || !item.hasBounds) return true;
+				if (item.castShadow) return true;  // 影はライト視錐台で別途判定するため切らない
+				++cullTotal;
+				const math::AABB worldBox = item.localBounds.Transformed(item.worldMatrix);
+				if (!frustum.Intersects(worldBox)) return false;  // 視錐台外
+				// 視錐台内 → オクリュージョン判定
+				if (occEnabled && occlusionTester_->IsOccluded(worldBox, viewProj, occNear, occFar))
+				{
+					++occluded;
+					return false;
+				}
+				++cullVisible;
+				return true;
+			};
+
+			// --- クラスタ(メッシュレット)カリング統計 ---
+			// 可視アイテムのクラスタを集計し、フラスタム+バックフェース錐で削減可能な
+			// 三角形量を計測する (まだ描画は減らさない・潜在効果の可視化)。
+			const math::Vector3 camPos = camera->GetPosition();
+			const bool clusterStats = clusterStatsEnabled_ && (cameraType == CameraType::Main);
+			uint32_t clTotal = 0, clVis = 0, triTotal = 0, triVis = 0;
+			uint32_t coneUsable = 0, backfaceCulled = 0;
+			auto accumClusters = [&](const aq::rendering::RenderItem& item,
+			                         const std::vector<aq::graphics::MeshCluster>* clusters)
+			{
+				if (!clusterStats || !clusters) return;
+				for (const aq::graphics::MeshCluster& cl : *clusters)
+				{
+					++clTotal;
+					triTotal += cl.triCount;
+					if (cl.coneCutoff < 2.0f) ++coneUsable;
+
+					const math::AABB worldBox = aq::math::AABB(cl.center, cl.extent).Transformed(item.worldMatrix);
+					const bool frustumIn = frustum.Intersects(worldBox);
+					bool backface = false;
+					if (frustumIn)
+					{
+						DirectX::XMVECTOR axis = DirectX::XMVector3Normalize(
+							DirectX::XMVector3TransformNormal(cl.coneAxis, item.worldMatrix));
+						math::Vector3 viewDir(worldBox.center.x - camPos.x,
+						                      worldBox.center.y - camPos.y,
+						                      worldBox.center.z - camPos.z);
+						const float d = DirectX::XMVectorGetX(
+							DirectX::XMVector3Dot(DirectX::XMVector3Normalize(viewDir), axis));
+						backface = (d >= cl.coneCutoff);
+					}
+					if (frustumIn && !backface)
+					{
+						++clVis;
+						triVis += cl.triCount;
+					}
+					else if (backface)
+					{
+						++backfaceCulled;
+					}
+				}
+			};
+
 			// SimpleBox は forward-only（G-Buffer パスなし）
-			aq::ecs::Foreach<BoxStaticMeshComponent>([&frame](const aq::ecs::Entity&, BoxStaticMeshComponent* comp)
+			aq::ecs::Foreach<BoxStaticMeshComponent>([&frame, &isVisible](const aq::ecs::Entity&, BoxStaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
-					if (comp->GetStaticMesh()->FillRenderItem(item)) {
+					if (comp->GetStaticMesh()->FillRenderItem(item) && isVisible(item)) {
 						frame.forwardItems.push_back(item);
 					}
 				});
 
 			// ShaderType で deferred / forward を振り分け
-			aq::ecs::Foreach<StaticMeshComponent>([&frame](const aq::ecs::Entity&, StaticMeshComponent* comp)
+			aq::ecs::Foreach<StaticMeshComponent>([&frame, &isVisible, &accumClusters](const aq::ecs::Entity&, StaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
 					if (!comp->GetStaticMesh()->FillRenderItem(item)) return;
+					if (!isVisible(item)) return;
+					accumClusters(item, comp->GetStaticMesh()->GetClusters());
 
 					using ShaderType = aq::graphics::StaticMesh::ShaderType;
 					switch (comp->GetStaticMesh()->GetShaderType())
@@ -480,11 +578,11 @@ namespace aq
 				});
 
 			// Terrain は deferred（ステージオブジェクトのため G-Buffer に書き込む）
-			aq::ecs::Foreach<TerrainComponent>([&frame](const aq::ecs::Entity&, TerrainComponent* comp)
+			aq::ecs::Foreach<TerrainComponent>([&frame, &isVisible](const aq::ecs::Entity&, TerrainComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
-					if (comp->GetChunk()->FillRenderItem(item)) {
+					if (comp->GetChunk()->FillRenderItem(item) && isVisible(item)) {
 						if (item.gbufferPS)
 							frame.items.push_back(item);
 						// gbufferPS 未ロード中はスキップ（MaterialCB 誤解釈を防ぐ）
@@ -492,11 +590,13 @@ namespace aq
 				});
 
 			// SkeletalMesh: PBR は gbufferPS がない間スキップ、それ以外は gbufferPS 有無で振り分け
-			aq::ecs::Foreach<SkeletalMeshComponent>([&frame](const aq::ecs::Entity&, SkeletalMeshComponent* comp)
+			aq::ecs::Foreach<SkeletalMeshComponent>([&frame, &isVisible, &accumClusters](const aq::ecs::Entity&, SkeletalMeshComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::RenderItem item;
 					if (!comp->GetSkeletalMesh()->FillRenderItem(item)) return;
+					if (!isVisible(item)) return;
+					accumClusters(item, comp->GetSkeletalMesh()->GetClusters());
 
 					using ShaderType = aq::graphics::SkeletalMesh::ShaderType;
 					const bool isPBR = comp->GetSkeletalMesh()->GetShaderType() == ShaderType::SkeletalPBRLit;
@@ -529,6 +629,20 @@ namespace aq
 						frame.decalItems.push_back(item);
 					}
 				});
+
+			// メインカメラのカリング統計を記録 (デバッグ表示用)
+			if (cameraType == CameraType::Main)
+			{
+				cullingTotalCount_   = cullTotal;
+				cullingVisibleCount_ = cullVisible;
+				occludedCount_       = occluded;
+				clusterTotal_        = clTotal;
+				clusterVisible_      = clVis;
+				clusterTriTotal_     = triTotal;
+				clusterTriVisible_   = triVis;
+				clusterConeUsable_   = coneUsable;
+				clusterBackface_     = backfaceCulled;
+			}
 		}
 	}
 }

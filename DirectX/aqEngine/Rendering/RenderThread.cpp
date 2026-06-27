@@ -6,6 +6,7 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/Lighting.h"
 #include "Ocean/OceanData.h"
+#include "Util/Profiler.h"
 
 
 namespace aq
@@ -104,6 +105,10 @@ namespace aq
 
 		void RenderThread::Run()
 		{
+#ifdef AQ_PROFILE_ENABLED
+			profile::Profiler::Get().SetThreadName("Render");
+			profile::Profiler::Get().MarkSelfPublishing();
+#endif
 			while (true)
 			{
 				int slot;
@@ -132,6 +137,7 @@ namespace aq
 
 				if (list)
 				{
+					AQ_PROFILE_SCOPE("RenderThread::Execute");
 					// b1 ライティング CB / b3 シャドウ CB をフレーム先頭で 1 回更新
 					context_->UpdateSubresource(*slots_[slot]->lightingCB, slots_[slot]->lightingData);
 					if (slots_[slot]->shadowCB) {
@@ -151,7 +157,10 @@ namespace aq
 						&slots_[slot]->oceanPool,
 						slots_[slot]->displayRT
 					};
-					list->Execute(*context_, fc);
+					{
+						AQ_PROFILE_SCOPE("CommandList");
+						list->Execute(*context_, fc);
+					}
 					list->Reset();  // shared_ptr を解放し、アリーナカーソルをリセット
 
 					// CopyToBackBuffer と Present は D3D11 デバイスコンテキストへの呼び出しであり、
@@ -161,6 +170,7 @@ namespace aq
 					const RenderTargetHandle displayRT = slots_[slot]->displayRT;
 					if (displayRT.IsValid())
 					{
+						AQ_PROFILE_SCOPE("Present");
 						auto* rt = graphics::GraphicsDevice::Get().GetRenderTarget(displayRT);
 						if (rt)
 						{
@@ -176,6 +186,11 @@ namespace aq
 					readSlot_ = (readSlot_ + 1) % FRAMES_IN_FLIGHT;
 				}
 				cvGame_.notify_all();
+
+#ifdef AQ_PROFILE_ENABLED
+				// このフレームの計測結果を publish (Execute スコープは上で閉じている)
+				profile::Profiler::Get().PublishThisThread();
+#endif
 			}
 
 			cvGame_.notify_all();

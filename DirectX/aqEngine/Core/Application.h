@@ -2,6 +2,8 @@
 #include "IApplication.h"
 #include "Rendering/Renderer.h"
 #include "Rendering/RenderThread.h"
+#include "Rendering/Occlusion/HiZRenderer.h"
+#include <memory>
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/RenderingDebugPanel.h"
 #include "Rendering/LightingDebugPanel.h"
@@ -9,6 +11,7 @@
 #include "UI/Debug/UIEditorDebugPanel.h"
 #include "UI/Debug/TextStyleEditorPanel.h"
 #include "UI/Debug/UIAnimationEditor.h"
+#include "Util/ProfilerDebugPanel.h"
 #include <memory>
 #endif
 
@@ -26,6 +29,7 @@ namespace aq
 
 	private:
 		bool renderThreadReady_ = false;
+		std::unique_ptr<aq::rendering::HiZRenderer> hiZRenderer_;  // オクリュージョン基盤 (Hi-Z)
 
 	public:
 		bool Initialize(aq::graphics::RenderContext& renderContext) override;
@@ -69,6 +73,7 @@ namespace aq
 		std::unique_ptr<aq::ui::UIEditorDebugPanel>         uiEditorDebugPanel_;
 		std::unique_ptr<aq::ui::TextStyleEditorPanel>       textStyleEditorPanel_;
 		std::unique_ptr<aq::ui::UIAnimationEditor>          uiAnimationEditor_;
+		std::unique_ptr<aq::profile::ProfilerDebugPanel>    profilerDebugPanel_;
 #endif
 	};
 }

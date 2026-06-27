@@ -32,6 +32,7 @@ namespace aq
 		private:
 			std::shared_ptr<IVertexBuffer>   vertexBuffer_;
 			std::shared_ptr<IIndexBuffer>    indexBuffer_;
+			std::shared_ptr<IIndexBuffer>    cullIndexBuffer_;  // クラスタ compact 描画用 動的IB
 			uint32_t                         indicesSize_;
 			std::shared_ptr<ISamplerState>   samplerState_;
 			math::Matrix4x4                  worldMatrix_;
@@ -128,6 +129,12 @@ namespace aq
 			}
 
 			ShaderType GetShaderType() const { return shaderType_; }
+
+			/** トライアングルカリング用クラスタ (MeshResource 経由のみ)。無ければ nullptr。 */
+			const std::vector<graphics::MeshCluster>* GetClusters() const
+			{
+				return meshResource_ ? &meshResource_->GetClusters() : nullptr;
+			}
 
 			/**
 			 * 描画に必要な情報を RenderItem へコピーする。

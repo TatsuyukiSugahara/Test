@@ -63,6 +63,10 @@ namespace aq
 				// Pass 2a: G-Buffer パス（deferred items を MRT に書き込む）
 				deferredRenderer_->BuildGBufferCommandList(frame, outList);
 
+				// Pass 2a.5: Hi-Z ピラミッド構築（worldPos 確定後・オクリュージョン用）
+				if (hiZBuildCallback_)
+					hiZBuildCallback_(frame, outList);
+
 				// Pass 2.5: 投影デカールパス（GBuffer0 albedo へ書き戻す。ライティング前）
 				deferredRenderer_->BuildDecalCommandList(frame, outList);
 

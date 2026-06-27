@@ -111,6 +111,7 @@ namespace aq
 			offscreenRTs_.clear();
 			for (auto& rt : mainRenderTargets_) rt.reset();
 			for (auto& bb : backBuffers_)       SafeReleaseD3D12(bb);
+			for (auto& rb : readbackBuf_)       SafeReleaseD3D12(rb);
 
 			SafeReleaseD3D12(srvShaderHeap_);
 			SafeReleaseD3D12(srvStagingHeap_);
@@ -509,6 +510,13 @@ namespace aq
 			// このフレームの完了印をフェンスに刻み、次にこのスロットを再利用する時 (BeginFrame) に待つ。
 			commandQueue_->Signal(fence_, ++fenceValue_);
 			frameFenceValue_[frameIndex_] = fenceValue_;
+			// このフレームで Hi-Z リードバックコピーを記録していれば、その完了フェンス値を確定する。
+			if (readbackJustWrote_ >= 0)
+			{
+				readbackFence_[readbackJustWrote_] = fenceValue_;
+				readbackJustWrote_                 = -1;
+				++dbgReadbackStamps_;
+			}
 			frameIndex_ = (frameIndex_ + 1) % FRAME_COUNT;
 
 			frameOpen_ = false;
@@ -524,6 +532,145 @@ namespace aq
 				fence_->SetEventOnCompletion(value, static_cast<HANDLE>(fenceEvent_));
 				WaitForSingleObject(static_cast<HANDLE>(fenceEvent_), INFINITE);
 			}
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::ReadbackOffscreenR32(uint32_t rtIndex, uint32_t width, uint32_t height,
+		                                                   std::vector<float>& outData)
+		{
+			if (width == 0 || height == 0 || !device_) return false;
+			IRenderTarget* irt = GetRenderTarget(rtIndex);
+			if (!irt) return false;
+			auto* rt = static_cast<D3D12RenderTarget*>(irt);
+			ID3D12Resource* src = rt->GetResource();
+			if (!src) return false;
+
+			// コピー可能フットプリント (行ピッチは 256 アライン)
+			D3D12_RESOURCE_DESC srcDesc = src->GetDesc();
+			D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+			UINT   numRows      = 0;
+			UINT64 rowSizeBytes = 0;
+			UINT64 totalBytes   = 0;
+			device_->GetCopyableFootprints(&srcDesc, 0, 1, 0, &footprint, &numRows, &rowSizeBytes, &totalBytes);
+
+			// バッファ未生成 or サイズ変更時に (再)生成
+			if (readbackBuf_[0] == nullptr || readbackW_ != width || readbackH_ != height)
+			{
+				WaitForGPU();  // 進行中のコピー完了を待ってから差し替える
+				for (uint32_t i = 0; i < READBACK_SLOTS; ++i)
+				{
+					SafeReleaseD3D12(readbackBuf_[i]);
+					readbackValid_[i] = false;
+					readbackFence_[i] = 0;
+				}
+				readbackWriteIdx_  = 0;
+				readbackJustWrote_ = -1;
+
+				D3D12_HEAP_PROPERTIES rbHeap = {};
+				rbHeap.Type = D3D12_HEAP_TYPE_READBACK;
+				D3D12_RESOURCE_DESC bd = {};
+				bd.Dimension        = D3D12_RESOURCE_DIMENSION_BUFFER;
+				bd.Width            = totalBytes;
+				bd.Height           = 1;
+				bd.DepthOrArraySize = 1;
+				bd.MipLevels        = 1;
+				bd.Format           = DXGI_FORMAT_UNKNOWN;
+				bd.SampleDesc.Count = 1;
+				bd.Layout           = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+				for (uint32_t i = 0; i < READBACK_SLOTS; ++i)
+				{
+					HRESULT hr = device_->CreateCommittedResource(
+						&rbHeap, D3D12_HEAP_FLAG_NONE, &bd,
+						D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbackBuf_[i]));
+					if (FAILED(hr)) { ++dbgReadbackCreateFails_; return false; }
+				}
+				readbackW_        = width;
+				readbackH_        = height;
+				readbackRowPitch_ = footprint.Footprint.RowPitch;
+			}
+
+			// 1) GPU 完了済みの最新スロットから CPU へ読む
+			bool got = false;
+			const uint64_t completed = fence_->GetCompletedValue();
+			uint32_t bestSlot = READBACK_SLOTS;
+			uint64_t bestFence = 0;
+			for (uint32_t i = 0; i < READBACK_SLOTS; ++i)
+			{
+				if (readbackValid_[i] && readbackFence_[i] != 0 &&
+				    readbackFence_[i] <= completed && readbackFence_[i] >= bestFence)
+				{
+					bestSlot  = i;
+					bestFence = readbackFence_[i];
+				}
+			}
+			if (bestSlot < READBACK_SLOTS)
+			{
+				++dbgReadbackReadFound_;
+				void* mapped = nullptr;
+				// read range は nullptr (= 全体を読む可能性) で安全側に。範囲指定はバッファ実サイズと
+				// ずれると Map 失敗/UB の恐れがあるため使わない。
+				const HRESULT hr = readbackBuf_[bestSlot]->Map(0, nullptr, &mapped);
+				dbgReadbackMapHr_ = static_cast<uint32_t>(hr);
+				if (SUCCEEDED(hr) && mapped)
+				{
+					outData.resize(static_cast<size_t>(width) * height);
+					const uint8_t* base = static_cast<const uint8_t*>(mapped);
+					for (uint32_t y = 0; y < height; ++y)
+					{
+						const float* row = reinterpret_cast<const float*>(base + static_cast<size_t>(y) * readbackRowPitch_);
+						memcpy(&outData[static_cast<size_t>(y) * width], row, sizeof(float) * width);
+					}
+					D3D12_RANGE noWrite = { 0, 0 };
+					readbackBuf_[bestSlot]->Unmap(0, &noWrite);
+					got = true;
+					++dbgReadbackMaps_;
+					readbackValid_[bestSlot] = false;  // 成功時のみ消費
+				}
+			}
+
+			// 2) 今フレームのコピーを書き込みスロットへ記録
+			BeginFrameIfNeeded();
+			const D3D12_RESOURCE_STATES prev = rt->GetState();
+			if (prev != D3D12_RESOURCE_STATE_COPY_SOURCE)
+			{
+				TransitionBarrier(commandList_, src, prev, D3D12_RESOURCE_STATE_COPY_SOURCE);
+				rt->SetState(D3D12_RESOURCE_STATE_COPY_SOURCE);
+			}
+
+			const uint32_t slot = readbackWriteIdx_;
+			D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
+			dstLoc.pResource       = readbackBuf_[slot];
+			dstLoc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+			dstLoc.PlacedFootprint = footprint;
+			D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+			srcLoc.pResource        = src;
+			srcLoc.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+			srcLoc.SubresourceIndex = 0;
+			commandList_->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, nullptr);
+			++dbgReadbackCopies_;
+
+			readbackValid_[slot] = true;
+			readbackFence_[slot] = 0;     // Present で確定
+			readbackJustWrote_   = static_cast<int>(slot);
+			readbackWriteIdx_    = (slot + 1) % READBACK_SLOTS;
+
+			return got;
+		}
+
+
+		void D3D12GraphicsDeviceImpl::GetReadbackDebug(uint32_t& copies, uint32_t& maps, uint32_t& createFails,
+		                                              uint32_t& stamps, uint32_t& validCount, uint32_t& fenceReady)
+		{
+			copies      = dbgReadbackCopies_;
+			maps        = dbgReadbackMaps_;
+			createFails = dbgReadbackReadFound_;   // 流用: 完了スロット発見回数
+			stamps      = dbgReadbackStamps_;
+			validCount  = dbgReadbackMapHr_;        // 流用: 直近 Map HRESULT
+
+			uint64_t maxF = 0;
+			for (uint32_t i = 0; i < READBACK_SLOTS; ++i)
+				if (readbackFence_[i] > maxF) maxF = readbackFence_[i];
+			fenceReady = (fence_ && maxF > 0 && fence_->GetCompletedValue() >= maxF) ? 1u : 0u;
 		}
 
 

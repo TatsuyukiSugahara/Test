@@ -14,6 +14,8 @@
 #include "Graphics/IShader.h"
 #include "Graphics/IShaderResourceView.h"
 #include "Graphics/Shader.h"
+#include "Graphics/Meshlet.h"
+#include "Math/Bounds.h"
 #include "Util/CRC32.h"
 #include "Util/ThreadPool.h"
 
@@ -178,8 +180,56 @@ public:\
 			const std::string& GetTexturePath()           const { return Get()->material.albedo; }
 			bool HasTexturePath()                         const { return !Get()->material.albedo.empty(); }
 
+			/**
+			 * ローカル空間の AABB を返す (カリング用)。
+			 * 初回呼び出し時に頂点列から計算してキャッシュする。
+			 * ゲームスレッドからのみ呼ぶこと (ロード完了後)。
+			 */
+			const math::AABB& GetLocalAABB() const
+			{
+				if (!aabbComputed_)
+				{
+					math::AABBBuilder builder;
+					for (const graphics::VertexData& v : Get()->vertics)
+						builder.Add(v.position);
+					localAABB_    = builder.Build();
+					aabbComputed_ = true;
+				}
+				return localAABB_;
+			}
+
+			/** トライアングルカリング用クラスタ (メッシュレット)。初回アクセスで生成しキャッシュ。 */
+			const std::vector<graphics::MeshCluster>& GetClusters() const
+			{
+				EnsureClusters();
+				return clusters_;
+			}
+			/** クラスタ順に並べ替えたインデックス列 (compact 描画の元データ)。 */
+			const std::vector<uint32_t>& GetReorderedIndices() const
+			{
+				EnsureClusters();
+				return reorderedIndices_;
+			}
+
 		private:
 			inline MeshData* Get() const { return static_cast<MeshData*>(data_); }
+
+			void EnsureClusters() const
+			{
+				if (clustersComputed_) return;
+				std::vector<math::Vector3> positions;
+				positions.reserve(Get()->vertics.size());
+				for (const graphics::VertexData& v : Get()->vertics)
+					positions.push_back(v.position);
+				graphics::GenerateClusters(positions, Get()->indices, 64u, clusters_, reorderedIndices_);
+				clustersComputed_ = true;
+			}
+
+			mutable math::AABB localAABB_;
+			mutable bool       aabbComputed_ = false;
+			mutable std::vector<graphics::MeshCluster> clusters_;
+			mutable std::vector<uint32_t>              reorderedIndices_;
+			mutable bool       clustersComputed_ = false;
 		};
 		using RefMeshResource = std::shared_ptr<MeshResource>;
 
@@ -272,8 +322,56 @@ public:\
 			const std::vector<BoneData>&                    GetBones()    const { return Get()->bones;    }
 			const MaterialTexturePaths&                     GetMaterial() const { return Get()->material; }
 
+			/**
+			 * バインドポーズの頂点から計算したローカル AABB (カリング用)。
+			 * アニメで頂点が膨らむ分はマージンを呼び出し側で付与すること。
+			 * 初回呼び出し時に計算してキャッシュする。
+			 */
+			const math::AABB& GetLocalAABB() const
+			{
+				if (!aabbComputed_)
+				{
+					math::AABBBuilder builder;
+					for (const graphics::SkinnedVertexData& v : Get()->vertices)
+						builder.Add(v.position);
+					localAABB_    = builder.Build();
+					aabbComputed_ = true;
+				}
+				return localAABB_;
+			}
+
+			/** トライアングルカリング用クラスタ (バインドポーズ基準)。初回アクセスで生成。 */
+			const std::vector<graphics::MeshCluster>& GetClusters() const
+			{
+				EnsureClusters();
+				return clusters_;
+			}
+			/** クラスタ順に並べ替えたインデックス列 (compact 描画の元データ)。 */
+			const std::vector<uint32_t>& GetReorderedIndices() const
+			{
+				EnsureClusters();
+				return reorderedIndices_;
+			}
+
 		private:
 			inline SkeletalMeshData* Get() const { return static_cast<SkeletalMeshData*>(data_); }
+
+			void EnsureClusters() const
+			{
+				if (clustersComputed_) return;
+				std::vector<math::Vector3> positions;
+				positions.reserve(Get()->vertices.size());
+				for (const graphics::SkinnedVertexData& v : Get()->vertices)
+					positions.push_back(v.position);
+				graphics::GenerateClusters(positions, Get()->indices, 64u, clusters_, reorderedIndices_);
+				clustersComputed_ = true;
+			}
+
+			mutable math::AABB localAABB_;
+			mutable bool       aabbComputed_ = false;
+			mutable std::vector<graphics::MeshCluster> clusters_;
+			mutable std::vector<uint32_t>              reorderedIndices_;
+			mutable bool       clustersComputed_ = false;
 		};
 		using RefSkeletalMeshResource = std::shared_ptr<SkeletalMeshResource>;
 

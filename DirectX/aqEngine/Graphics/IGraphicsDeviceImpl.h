@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include <cstdint>
 #include <memory>
+#include <vector>
 #include "IBuffer.h"
 #include "IShader.h"
 #include "IShaderResourceView.h"
@@ -80,6 +81,28 @@ namespace aq
 			virtual std::unique_ptr<ISamplerState>       CreateSamplerState(const SamplerDesc& desc) = 0;
 			virtual std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) = 0;
 			virtual std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) = 0;
+
+			/**
+			 * R32_Float オフスクリーン RT (rtIndex) の内容を CPU へ取得する (GPU→CPU リードバック)。
+			 * frames-in-flight を考慮した遅延リードバック: 直近で GPU 完了済みのデータがあれば
+			 * outData (width*height 個の float) に格納して true を返し、同時に今フレームのコピーを記録する。
+			 * 未完了・未対応バックエンドでは false (呼び出し側は前回値を保持 = 保守的に全可視)。
+             * レンダースレッドのコマンド記録中に呼ぶこと。
+			 */
+			virtual bool ReadbackOffscreenR32(uint32_t /*rtIndex*/, uint32_t /*width*/, uint32_t /*height*/,
+			                                  std::vector<float>& /*outData*/) { return false; }
+
+			/**
+			 * デバッグ: リードバック診断。
+			 * copies=コピー記録回数 / maps=Map成功回数 / createFails=バッファ生成失敗回数 /
+			 * stamps=Presentでフェンス刻印した回数 / validCount=現在有効なスロット数 /
+			 * fenceReady=完了フェンスが刻印値に追いついているか(1/0)。
+			 */
+			virtual void GetReadbackDebug(uint32_t& copies, uint32_t& maps, uint32_t& createFails,
+			                              uint32_t& stamps, uint32_t& validCount, uint32_t& fenceReady)
+			{
+				copies = 0; maps = 0; createFails = 0; stamps = 0; validCount = 0; fenceReady = 0;
+			}
 		};
 	}
 }

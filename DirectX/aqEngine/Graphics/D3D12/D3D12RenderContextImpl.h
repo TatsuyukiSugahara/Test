@@ -141,7 +141,7 @@ namespace aq
 			bool                        graphicsRootDirty_ = false;  // Dispatch 後に graphics root sig 張り直しが必要
 
 			// 保留コンピュート状態 (Phase 4: ブルーム)。Dispatch 時に確定する。
-			static constexpr uint32_t CS_SRV_COUNT = 2;  // t0..t1
+			static constexpr uint32_t CS_SRV_COUNT = 3;  // t0..t2 (t2 = クラスタカリング Hi-Z)
 			static constexpr uint32_t CS_UAV_COUNT = 2;  // u0..u1
 			IShader*                    pendingCS_   = nullptr;
 			D3D12_GPU_VIRTUAL_ADDRESS   csCBAddr_    = 0;

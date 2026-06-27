@@ -22,6 +22,9 @@
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Rendering/Occlusion/CullingDebugPanel.h"
+#endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_win32.h>
@@ -170,6 +173,8 @@ namespace aq
 					});
 				// オクリュージョンカリングのテスターとして登録
 				aq::ecs::RenderSystem::SetOcclusionTester(hiZ);
+				// GPU 駆動クラスタカリングの Hi-Z オクリュージョン供給元として登録
+				aq::rendering::GpuClusterCuller::Get().SetHiZSource(hiZ);
 			}
 			else
 			{
@@ -225,6 +230,13 @@ namespace aq
 					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
 					renderingDebugPanel_->TakeOwnership(std::move(panel));
 				}
+			}
+
+			// Culling (フラスタム / オクリュージョン / クラスタ GPU)。Profiler から移設。
+			{
+				auto cullingPanel = std::make_unique<aq::rendering::CullingDebugPanel>();
+				renderingDebugPanel_->AddTab(cullingPanel->GetDebugLabel(), cullingPanel.get());
+				renderingDebugPanel_->TakeOwnership(std::move(cullingPanel));
 			}
 
 			aq::DebugUI::Get().Register(renderingDebugPanel_.get());

@@ -12,19 +12,26 @@ namespace aq
 	namespace rendering
 	{
 		struct FrameContext;
+		class HiZRenderer;
 
 		/**
-		 * ClusterCull.fx の cbuffer と一致。先頭 176B が有効データ。
+		 * ClusterCull.fx の b0 cbuffer と一致 (単一 CBV)。先頭 164B が有効データ。
 		 * perDrawCBPool (= sizeof(VSConstantBuffer) = 192B) を流用するため 192B に揃える
-		 * (UpdateSubresource が slot サイズ分コピーするため OOB を防ぐ)。
+		 * (D3D12ConstantBuffer::Update が slot サイズ分コピーするため OOB を防ぐ)。
+		 * フラスタム平面は viewProj からシェーダ内で導出するため別途持たない。
 		 */
 		struct ClusterCullCBData
 		{
 			math::Matrix4x4 world;        // 64
-			math::Vector4   planes[6];    // 96 (a,b,c,d ワールド視錐台)
+			math::Matrix4x4 viewProj;     // 64 clip空間 view*proj
 			math::Vector3   camPos;       // 12
-			uint32_t        clusterCount; //  4
-			math::Vector4   _pad;         // 16 → 192B (perDrawCBPool slot に一致)
+			uint32_t        clusterCount; //  4 -> 144
+			float           hiZW;         //  4 バインドした Hi-Z レベル幅 (0=Hi-Z無効)
+			float           hiZH;         //  4 同 高さ
+			float           nearZ;        //  4
+			float           farZ;         //  4 -> 160
+			uint32_t        hiZValid;     //  4 0=Hi-Z無効(オクリュージョンスキップ)
+			float           _pad[7];      // 28 -> 192
 		};
 		static_assert(sizeof(ClusterCullCBData) == 192, "ClusterCullCBData must match perDrawCBPool slot (192B)");
 
@@ -42,6 +49,9 @@ namespace aq
 			bool Initialize();   // compute シェーダをロード
 			bool IsReady() const { return ready_; }
 
+			/** Hi-Z オクリュージョンを供給する (任意)。null ならクラスタ判定はフラスタム+バックフェースのみ。 */
+			void SetHiZSource(HiZRenderer* hiZ) { hiZSource_ = hiZ; }
+
 			/** 1 アイテムを GPU カリング (item の gpuOutIndices / gpuArgs を更新)。レンダースレッドから。 */
 			void Cull(graphics::RenderContext& ctx, FrameContext& fc,
 			          const RenderItem& item, const CameraData& camera);
@@ -49,6 +59,7 @@ namespace aq
 		private:
 			std::shared_ptr<graphics::IShader> resetCS_;
 			std::shared_ptr<graphics::IShader> cullCS_;
+			HiZRenderer* hiZSource_ = nullptr;  // 任意。Hi-Z オクリュージョン供給元 (寿命は Application)
 			bool ready_ = false;
 		};
 

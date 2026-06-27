@@ -32,9 +32,14 @@ namespace aq
 		uint32_t BindCulledIndices(graphics::RenderContext& ctx,
 		                           const RenderItem& item, const CameraData& camera)
 		{
+			// CPU 方式は次の経路でのみ走る (DX12 主経路は GPU 駆動の DrawIndexedIndirect):
+			//   - DX11 (GPU 駆動クラスタ未対応 → gpuOutIndices/gpuArgs が無く useGpuCull=false)
+			//   - 閾値未満で GPU 機構をスキップしたメッシュ (下の min-clusters ゲートで通常描画に倒す)
+			// min-clusters ゲートを GPU 経路 (Renderer.cpp) と揃え、小メッシュを CPU でも cull しない。
 			if (g_clusterCullEnabled.load() &&
 			    item.cullIndexBuffer && item.clusters && item.reorderedIndices &&
-			    !item.clusters->empty())
+			    !item.clusters->empty() &&
+			    item.clusters->size() >= g_clusterCullMinClusters.load())
 			{
 				math::Matrix4x4 viewProj;
 				viewProj.Mull(camera.viewMatrix, camera.projectionMatrix);

@@ -610,13 +610,35 @@ namespace aq
 
 			// 海描画アイテム収集
 			const float totalTime = aq::Engine::GetTotalTime();
-			aq::ecs::Foreach<OceanComponent>([&frame, totalTime](const aq::ecs::Entity&, OceanComponent* comp)
+			aq::ecs::Foreach<OceanComponent>([&frame, totalTime, &frustum, cullEnabled](const aq::ecs::Entity&, OceanComponent* comp)
 				{
 					if (!comp->IsCompleted()) return;
 					aq::rendering::OceanRenderItem item;
-					if (comp->GetMesh()->FillRenderItem(item, comp->GetParams(), totalTime)) {
-						frame.oceanItems.push_back(item);
+					if (!comp->GetMesh()->FillRenderItem(item, comp->GetParams(), totalTime))
+						return;
+
+					// オブジェクト単位フラスタムカリング。海は meshResource_ を持たず hasBounds=false の
+					// ため isVisible を使えない。ローカルグリッド [0,size]x{0}x[0,size] を、波の最大振幅で
+					// Y を、Gerstner 水平変位の保険で XZ をわずかに膨らませた保守 AABB で視錐台判定する。
+					if (cullEnabled)
+					{
+						const auto& p = comp->GetParams();
+						float ampMax = 0.0f;
+						for (int i = 0; i < 4; ++i)
+						{
+							const float a = p.waves[i].amplitude;
+							ampMax += (a < 0.0f) ? -a : a;
+						}
+						const float half = p.size * 0.5f;
+						const math::AABB local(
+							math::Vector3(half, 0.0f, half),
+							math::Vector3(half + ampMax, ampMax + 0.01f, half + ampMax));
+						const math::AABB worldBox = local.Transformed(item.base.worldMatrix);
+						if (!frustum.Intersects(worldBox))
+							return;  // 視錐台外 → 描画しない
 					}
+
+					frame.oceanItems.push_back(item);
 				});
 
 			// 投影デカール収集 (ワールド変換を使って GBuffer へ投影)

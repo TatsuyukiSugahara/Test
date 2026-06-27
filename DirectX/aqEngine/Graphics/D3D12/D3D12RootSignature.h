@@ -29,10 +29,10 @@ namespace aq
 
 			// ── コンピュート用 (Phase 4: ブルーム等) ──
 			//   [0] CBV b0 (ルートディスクリプタ)
-			//   [1] SRV テーブル t0..t1
+			//   [1] SRV テーブル t0..t2
 			//   [2] UAV テーブル u0
 			//   静的サンプラー s0 = Linear/Clamp
-			static constexpr uint32_t CS_SRV_TABLE_SIZE = 2;  // t0..t1
+			static constexpr uint32_t CS_SRV_TABLE_SIZE = 3;  // t0..t2 (t2 = クラスタカリング Hi-Z)
 			static constexpr uint32_t CS_UAV_TABLE_SIZE = 2;  // u0..u1 (u1 = クラスタカリング間接引数)
 			static constexpr uint32_t CS_PARAM_CBV       = 0;
 			static constexpr uint32_t CS_PARAM_SRV_TABLE = 1;

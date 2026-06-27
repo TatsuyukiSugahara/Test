@@ -6,7 +6,9 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/IShader.h"
 #include "Graphics/IGpuBuffer.h"
+#include "Graphics/IRenderTarget.h"
 #include "Math/Bounds.h"
+#include "HiZRenderer.h"
 
 
 namespace aq
@@ -48,15 +50,31 @@ namespace aq
 			graphics::IConstantBuffer* cb = fc.perDrawCBPool ? fc.perDrawCBPool->Allocate() : nullptr;
 			if (!cb) return;
 
-			ClusterCullCBData data;
-			data.world = item.worldMatrix;
-			math::Matrix4x4 viewProj;
-			viewProj.Mull(camera.viewMatrix, camera.projectionMatrix);
-			math::Frustum frustum;
-			frustum.FromViewProjection(viewProj);
-			frustum.GetPlanes(data.planes);
+			ClusterCullCBData data{};
+			data.world        = item.worldMatrix;
+			data.viewProj.Mull(camera.viewMatrix, camera.projectionMatrix);
 			data.camPos       = camera.position;
 			data.clusterCount = item.clusterCount;
+			data.nearZ        = camera.nearZ;
+			data.farZ         = camera.farZ;
+			data.hiZValid     = 0;
+
+			// Hi-Z オクリュージョン (任意): 前フレームのピラミッドを SRV で供給する 1 フレーム遅延方式。
+			// Pass 1.5 は今フレームの Hi-Z 構築前なので、ピラミッドには前フレームの内容が残る。
+			graphics::IShaderResourceView* hiZSRV = nullptr;
+			if (hiZSource_)
+			{
+				const RenderTargetHandle h = hiZSource_->GetReadbackHandle();
+				uint32_t w = 0, hgt = 0;
+				hiZSource_->GetLevelSize(hiZSource_->GetReadbackLevel(), w, hgt);
+				if (auto* rt = graphics::GraphicsDevice::Get().GetRenderTarget(h))
+				{
+					hiZSRV        = &rt->GetRenderTargetSRV();
+					data.hiZW     = static_cast<float>(w);
+					data.hiZH     = static_cast<float>(hgt);
+					data.hiZValid = 1;
+				}
+			}
 			ctx.UpdateSubresource(*cb, data);
 
 			// 1) reset: 間接引数を {0,1,0,0,0} へ (u0 = args, u1 未使用)
@@ -67,16 +85,18 @@ namespace aq
 			ctx.CSUnsetUnorderedAccessView(0);
 			ctx.UavBarrier(*item.gpuArgs);  // reset → cull の可視化
 
-			// 2) cull: t0=clusters t1=srcIndices / u0=outIndices u1=args
+			// 2) cull: t0=clusters t1=srcIndices t2=Hi-Z / u0=outIndices u1=args / b0
 			ctx.CSSetShader(*cullCS_);
 			ctx.CSSetConstantBuffer(0, *cb);
 			ctx.CSSetShaderResource(0, *clustersSRV);
 			ctx.CSSetShaderResource(1, *srcSRV);
+			if (hiZSRV) ctx.CSSetShaderResource(2, *hiZSRV);
 			ctx.CSSetUnorderedAccessView(0, *outUAV);
 			ctx.CSSetUnorderedAccessView(1, *argsUAV);
 			ctx.Dispatch((item.clusterCount + 63u) / 64u, 1, 1);
 			ctx.CSUnsetShaderResource(0);
 			ctx.CSUnsetShaderResource(1);
+			if (hiZSRV) ctx.CSUnsetShaderResource(2);
 			ctx.CSUnsetUnorderedAccessView(0);
 			ctx.CSUnsetUnorderedAccessView(1);
 			ctx.CSUnsetShader();

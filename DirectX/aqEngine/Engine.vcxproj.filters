@@ -308,6 +308,9 @@
     <ClCompile Include="Rendering\Occlusion\HiZDebugPanel.cpp">
       <Filter>Rendering\Occlusion</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Occlusion\CullingDebugPanel.cpp">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Deferred\DeferredRenderer.cpp">
       <Filter>Rendering\Deferred</Filter>
     </ClCompile>
@@ -779,6 +782,9 @@
       <Filter>Rendering\Occlusion</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Occlusion\HiZDebugPanel.h">
+      <Filter>Rendering\Occlusion</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Occlusion\CullingDebugPanel.h">
       <Filter>Rendering\Occlusion</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Occlusion\IOcclusionTester.h">

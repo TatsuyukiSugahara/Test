@@ -219,6 +219,7 @@
     <ClCompile Include="Rendering\Occlusion\HiZBuildCommand.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZReadbackCommand.cpp" />
     <ClCompile Include="Rendering\Occlusion\HiZDebugPanel.cpp" />
+    <ClCompile Include="Rendering\Occlusion\CullingDebugPanel.cpp" />
     <ClCompile Include="Rendering\Deferred\DeferredRenderer.cpp" />
     <ClCompile Include="Rendering\Deferred\GBufferItemCommand.cpp" />
     <ClCompile Include="Rendering\Deferred\DeferredLightingCommand.cpp" />
@@ -404,6 +405,7 @@
     <ClInclude Include="Rendering\Occlusion\HiZBuildCommand.h" />
     <ClInclude Include="Rendering\Occlusion\HiZReadbackCommand.h" />
     <ClInclude Include="Rendering\Occlusion\HiZDebugPanel.h" />
+    <ClInclude Include="Rendering\Occlusion\CullingDebugPanel.h" />
     <ClInclude Include="Rendering\Occlusion\IOcclusionTester.h" />
     <ClInclude Include="Rendering\Deferred\DeferredRenderer.h" />
     <ClInclude Include="Rendering\Deferred\GBufferItemCommand.h" />

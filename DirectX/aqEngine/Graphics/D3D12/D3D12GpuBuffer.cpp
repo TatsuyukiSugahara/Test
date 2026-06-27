@@ -32,8 +32,10 @@ namespace aq
 			desc.Layout           = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 			desc.Flags            = uav ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
 
+			// バッファは常に COMMON で生成される (UAV でも InitialState は無視される)。
+			// COMMON のバッファは初回使用時に UAV/INDEX/INDIRECT へ暗黙昇格でき、明示遷移も可能。
 			const D3D12_RESOURCE_STATES initState = uav
-				? D3D12_RESOURCE_STATE_UNORDERED_ACCESS      // GPU 書き込み用 (以後 Transition で切替)
+				? D3D12_RESOURCE_STATE_COMMON
 				: D3D12_RESOURCE_STATE_GENERIC_READ;         // UPLOAD は常時 GENERIC_READ
 
 			HRESULT hr = device->CreateCommittedResource(

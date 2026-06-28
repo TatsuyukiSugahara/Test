@@ -42,3 +42,6 @@ DirectX/ThirdParty/DirectXTex/x64/
 vk_debug.log
 # stray imgui.ini when run from DirectX/ (proper one is Game/imgui.ini)
 /DirectX/imgui.ini
+
+# Vulkan SDK installer (~300MB, GitHub 100MB 上限超のため除外。bat が自動DL)
+Tools/SetupVulkan/*.exe

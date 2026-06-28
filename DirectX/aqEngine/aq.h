@@ -6,7 +6,7 @@
 // Define ENGINE_GRAPHICS_D3D11 here, or pass it via project preprocessor settings.
 //#define ENGINE_GRAPHICS_D3D11
 #define ENGINE_GRAPHICS_D3D12
-// #define ENGINE_GRAPHICS_VULKAN
+//#define ENGINE_GRAPHICS_VULKAN
 
 #define NOMINMAX
 #include <windows.h>
@@ -32,6 +32,12 @@
 #include <d3dcompiler.h>
 #pragma comment(lib,"d3dcompiler.lib")
 #endif // ENGINE_GRAPHICS_D3D12
+
+#ifdef ENGINE_GRAPHICS_VULKAN
+// Vulkan ヘッダ本体は Graphics/Vulkan/VulkanCommon.h 側で取り込む (VK_USE_PLATFORM_WIN32_KHR 定義込み)。
+// ここでは最終リンクへ vulkan-1.lib を要求する (ライブラリパスは Game vcxproj の $(VULKAN_SDK)\Lib)。
+#pragma comment(lib, "vulkan-1.lib")
+#endif // ENGINE_GRAPHICS_VULKAN
 
 
 //DirectInput

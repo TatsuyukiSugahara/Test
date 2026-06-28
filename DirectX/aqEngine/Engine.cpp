@@ -7,6 +7,8 @@
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
 #elif defined(ENGINE_GRAPHICS_D3D12)
 #include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
+#elif defined(ENGINE_GRAPHICS_VULKAN)
+#include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
 #endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
@@ -139,6 +141,8 @@ namespace aq
 		aq::graphics::GraphicsDevice::Create<aq::graphics::D3D11GraphicsDeviceImpl>();
 #elif defined(ENGINE_GRAPHICS_D3D12)
 		aq::graphics::GraphicsDevice::Create<aq::graphics::D3D12GraphicsDeviceImpl>();
+#elif defined(ENGINE_GRAPHICS_VULKAN)
+		aq::graphics::GraphicsDevice::Create<aq::graphics::VulkanGraphicsDeviceImpl>();
 #endif
 
 		if (!aq::graphics::GraphicsDevice::Get().Initialize({ hWnd_ }, renderWidth_, renderHeight_)) {

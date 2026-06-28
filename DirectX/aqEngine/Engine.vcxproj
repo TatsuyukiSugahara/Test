@@ -107,7 +107,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
@@ -124,7 +124,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
@@ -184,6 +184,20 @@
     <ClCompile Include="Graphics\D3D12\D3D12ImGui.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12RenderTarget.cpp" />
     <ClCompile Include="Graphics\D3D12\D3D12Resources.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanRenderContextImpl.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanBuffers.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanShader.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanVMAImpl.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanPipelineLayout.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanPipelineCache.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanRenderTarget.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanResources.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanDepthMap.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanImGui.cpp" />
+    <ClCompile Include="..\ThirdParty\spirv_reflect\spirv_reflect.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Graphics\D3D12\D3D12Shader.cpp" />
     <ClCompile Include="Graphics\D3D11\D3D11Resources.cpp" />
     <ClCompile Include="Graphics\D3D11\D3D11DepthMap.cpp" />
@@ -305,6 +319,17 @@
     <ClInclude Include="Graphics\D3D12\D3D12RenderTarget.h" />
     <ClInclude Include="Graphics\D3D12\D3D12Resources.h" />
     <ClInclude Include="Graphics\D3D12\D3D12Shader.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanCommon.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanRenderContextImpl.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanBuffers.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanShader.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanPipelineLayout.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanPipelineCache.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanRenderTarget.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanResources.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanDepthMap.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanImGui.h" />
     <ClInclude Include="Graphics\GPUBuffer.h" />
     <ClInclude Include="Graphics\GraphicsDevice.h" />
     <ClInclude Include="Graphics\GraphicsTypes.h" />

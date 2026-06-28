@@ -35,6 +35,8 @@
 #elif defined(ENGINE_GRAPHICS_D3D12)
 #include "Graphics/D3D12/D3D12ImGui.h"
 #include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
+#elif defined(ENGINE_GRAPHICS_VULKAN)
+#include "Graphics/Vulkan/VulkanImGui.h"
 #endif
 #endif
 #ifdef AQ_DEBUG_IMGUI
@@ -134,6 +136,8 @@ namespace aq
 			backendOk = winOk && d3d && ImGui_ImplDX11_Init(d3d->GetDevice(), d3d->GetDeviceContext());
 #elif defined(ENGINE_GRAPHICS_D3D12)
 			backendOk = winOk && aq::graphics::D3D12ImGui::Init();
+#elif defined(ENGINE_GRAPHICS_VULKAN)
+			backendOk = winOk && aq::graphics::VulkanImGui::Init();
 #endif
 			if (backendOk)
 			{
@@ -289,6 +293,8 @@ namespace aq
 			ImGui_ImplDX11_Shutdown();
 #elif defined(ENGINE_GRAPHICS_D3D12)
 			aq::graphics::D3D12ImGui::Shutdown();
+#elif defined(ENGINE_GRAPHICS_VULKAN)
+			aq::graphics::VulkanImGui::Shutdown();
 #endif
 			ImGui_ImplWin32_Shutdown();
 			ImGui::DestroyContext();
@@ -393,6 +399,8 @@ namespace aq
 			ImGui_ImplDX11_NewFrame();
 #elif defined(ENGINE_GRAPHICS_D3D12)
 			aq::graphics::D3D12ImGui::NewFrame();
+#elif defined(ENGINE_GRAPHICS_VULKAN)
+			aq::graphics::VulkanImGui::NewFrame();
 #endif
 			ImGui::NewFrame();
 

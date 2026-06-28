@@ -2,6 +2,7 @@
 #include "Graphics/IGraphicsDeviceImpl.h"
 #include "Graphics/RenderContext.h"
 #include "D3D11RenderResources.h"
+#include "RenderConfig.h"
 
 
 namespace aq
@@ -23,7 +24,7 @@ namespace aq
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) override;
 			void Finalize() override;
 			void SetupRenderContext(RenderContext& outContext) override;
-			uint32_t GetMainRenderTargetCount() const override { return RENDER_TARGET_COUNT; }
+			uint32_t GetMainRenderTargetCount() const override { return MAIN_RT_COUNT; }
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;
 			IRenderTarget* GetRenderTarget(uint32_t index) override;
 			uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
@@ -63,8 +64,15 @@ namespace aq
 			D3D_DRIVER_TYPE         driverType_;
 			D3D_FEATURE_LEVEL       featureLevel_;
 
+			// オフスクリーン RT ハンドルの基点（スワップチェーンとは独立。常に 2 で固定）。
 			static constexpr uint32_t RENDER_TARGET_COUNT = 2;
-			RenderTarget mainRenderTargets_[RENDER_TARGET_COUNT];
+			// メイン HDR RT の実枚数。非同期モードのみダブルバッファ（2 枚）にする。
+#ifdef AQ_RENDER_PIPELINED
+			static constexpr uint32_t MAIN_RT_COUNT = 2;
+#else
+			static constexpr uint32_t MAIN_RT_COUNT = 1;
+#endif
+			RenderTarget mainRenderTargets_[MAIN_RT_COUNT];
 			uint32_t     currentRenderTargetIndex_;
 
 			std::vector<std::unique_ptr<RenderTarget>> offscreenRenderTargets_;

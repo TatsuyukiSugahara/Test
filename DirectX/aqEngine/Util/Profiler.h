@@ -91,6 +91,12 @@ namespace aq
 			/** QueryPerformanceCounter の 1 tick あたりのミリ秒。startTick の差分換算に使う。 */
 			double MsPerTick() const { return ticksToMs_; }
 
+			/**
+			 * 直近 1 フレームの実時間 (ms)。PublishWorkers() 呼び出し間隔 = メインスレッドの
+			 * フレーム周期で計測する（FlushRender の待ちも含む実フレーム時間）。
+			 */
+			double FrameMs() const { return frameMs_; }
+
 		private:
 			struct ThreadData
 			{
@@ -99,8 +105,12 @@ namespace aq
 				std::string         name;
 				std::vector<Sample> samples;          // 所有スレッドのみが書き込む
 				std::vector<int>    stack;            // 開いているスコープの index スタック
-				std::mutex          publishMutex;     // display 保護
-				std::vector<Sample> display;          // publish 済み (UI が読む)
+				std::mutex          publishMutex;     // display / history 保護
+				std::vector<Sample> display;          // publish 済み 最新 (UI が読む)
+				// selfPublishing スレッド (Render) のみ: 直近数フレームの publish 履歴。
+				// 非同期パイプラインでは Render の最新フレームが Main の表示フレームと別周期に
+				// なり得るため、CaptureSnapshot で「同じ周期に走っていたフレーム」を選ぶのに使う。
+				std::vector<std::vector<Sample>> history;
 				bool                selfPublishing = false;
 			};
 
@@ -110,6 +120,10 @@ namespace aq
 			std::vector<std::shared_ptr<ThreadData>> threads_;
 			std::atomic<int>                         nextOrderIndex_ { 0 };
 			double                                   ticksToMs_ = 0.0;  // QPC frequency 由来
+
+			// フレーム時間計測 (メインスレッドのみが PublishWorkers() で更新・読み取り)
+			int64_t                                  lastFramePublishTick_ = 0;
+			double                                   frameMs_              = 0.0;
 
 			Profiler();
 		};

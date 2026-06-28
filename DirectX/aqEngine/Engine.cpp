@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "Engine.h"
+#include "RenderConfig.h"
 #include "Core/IApplication.h"
 #include "Util/ThreadPool.h"
 #include "Physics/PhysicsBackend.h"
@@ -169,6 +170,13 @@ namespace aq
 	void Engine::Update()
 	{
 		gameTimer_.Tick();
+#ifdef AQ_RENDER_PIPELINED
+		// 非同期: フレーム N とフレーム N+1 で別のメイン RT を使う。
+		// これによりレンダースレッドがフレーム N（旧 RT）を実行している間に、
+		// メインスレッドがフレーム N+1（新 RT）を構築でき、データ競合なく重複できる。
+		// コマンドは記録時にハンドル index を焼き込むため、トグル後の構築でも整合する。
+		ToggleMainRenderTarget();
+#endif
 		application_->Update();
 		// FlushRender() はレンダースレッドがコマンドリストの実行・RT コピー・Present を
 		// 完了するまで待機する。描画に関わるすべての D3D11 コンテキスト呼び出しは

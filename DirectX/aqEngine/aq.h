@@ -8,6 +8,11 @@
 #define ENGINE_GRAPHICS_D3D12
 //#define ENGINE_GRAPHICS_VULKAN
 
+// レンダリング同期モードの切り替え (AQ_RENDER_PIPELINED) はここではなく
+// RenderConfig.h で行う（単一ソース）。include して全 TU から見えるようにする。
+#include "RenderConfig.h"
+
+
 #define NOMINMAX
 #include <windows.h>
 

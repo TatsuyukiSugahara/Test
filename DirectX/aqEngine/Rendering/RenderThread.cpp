@@ -75,6 +75,7 @@ namespace aq
 				slots_[writeSlot_]->ready        = true;
 				slots_[writeSlot_]->done         = false;
 				writeSlot_ = (writeSlot_ + 1) % FRAMES_IN_FLIGHT;
+				++submittedCount_;
 			}
 			cvRender_.notify_one();
 		}
@@ -82,24 +83,21 @@ namespace aq
 
 		void RenderThread::WaitForCompletion()
 		{
-			// writeSlot_ を読む前にロックを取得する。
-			// Submit() が writeSlot_ を更新するのと同じ mutex を使うことで競合を防ぐ。
+			// 提出済みの全コマンドが完了するまで待つ（直列モード）。
 			std::unique_lock<std::mutex> lock(mutex_);
-			int prev = (writeSlot_ - 1 + FRAMES_IN_FLIGHT) % FRAMES_IN_FLIGHT;
-			cvGame_.wait(lock, [this, prev] { return slots_[prev]->done; });
+			cvGame_.wait(lock, [this] { return completedCount_ >= submittedCount_; });
 		}
 
 
-		void RenderThread::WaitForPreviousFrame()
+		void RenderThread::WaitForPipelinedFrame()
 		{
-			// FRAMES_IN_FLIGHT==2 のとき、Submit(list_N) 後の writeSlot_ は
-			// list_{N-1}（前フレーム）が入っていたスロットと一致する。
-			// そこを待つことで、レンダースレッドがフレーム N-1 の描画中に
-			// ゲームスレッドがフレーム N を構築できる（1フレーム分の重複）。
-			// 前提: リングスロットごとに独立したレンダーターゲット（ダブルバッファRT）が必要。
+			// 非同期モード。フレーム N の Submit 群の直後に呼ばれる前提。
+			// 入った時点で submittedCount_ = S_N、prevFrameMark_ = S_{N-1}。
+			// フレーム N-1 の全コマンド完了（completedCount_ >= S_{N-1}）だけを待ち、
+			// フレーム N は実行中のまま戻る → 呼び出し元はフレーム N+1 の構築へ進める。
 			std::unique_lock<std::mutex> lock(mutex_);
-			int prevPrev = writeSlot_;  // FRAMES_IN_FLIGHT==2 では (writeSlot_ - 2 + 2) % 2 と等価
-			cvGame_.wait(lock, [this, prevPrev] { return slots_[prevPrev]->done; });
+			cvGame_.wait(lock, [this] { return completedCount_ >= prevFrameMark_; });
+			prevFrameMark_ = submittedCount_;  // 今フレーム末尾の提出点を次回用に記録
 		}
 
 
@@ -123,10 +121,11 @@ namespace aq
 
 					if (!running_.load())
 					{
-						// Submit/WaitForCompletion の呼び出し元をアンブロックするため
-						// 全スロットを done にする。
+						// Submit/WaitForCompletion/WaitForPipelinedFrame の呼び出し元を
+						// アンブロックするため全スロットを done にし、カウンタも追いつかせる。
 						// 未実行リストは Finalize() 内で join() 後に slot->list.reset() される。
 						for (auto& s : slots_) { s->done = true; s->list.reset(); }
+						completedCount_ = submittedCount_;
 						break;
 					}
 
@@ -183,6 +182,7 @@ namespace aq
 				{
 					std::lock_guard<std::mutex> lock(mutex_);
 					slots_[slot]->done = true;
+					++completedCount_;
 					readSlot_ = (readSlot_ + 1) % FRAMES_IN_FLIGHT;
 				}
 				cvGame_.notify_all();

@@ -47,8 +47,7 @@ namespace aq
 		{
 			for (auto& rt : offscreenRenderTargets_) rt->Release();
 			offscreenRenderTargets_.clear();
-			mainRenderTargets_[0].Release();
-			mainRenderTargets_[1].Release();
+			for (auto& rt : mainRenderTargets_) rt.Release();
 			if (rasterizerState_) {
 				rasterizerState_->Release();
 				rasterizerState_ = nullptr;
@@ -77,17 +76,24 @@ namespace aq
 
 		IRenderTarget& D3D11GraphicsDeviceImpl::GetMainRenderTarget(uint32_t index)
 		{
-			EngineAssert(index < RENDER_TARGET_COUNT);
-			if (index >= RENDER_TARGET_COUNT) index = 0;
+			EngineAssert(index < MAIN_RT_COUNT);
+			if (index >= MAIN_RT_COUNT) index = 0;
 			return mainRenderTargets_[index];
 		}
 
 
 		IRenderTarget* D3D11GraphicsDeviceImpl::GetRenderTarget(uint32_t index)
 		{
-			if (index < RENDER_TARGET_COUNT)
+			// [0, MAIN_RT_COUNT) = メイン RT。[MAIN_RT_COUNT, RENDER_TARGET_COUNT) は
+			// 直列モードで未使用の予約領域（メイン RT 1 枚時の index 1）。
+			// オフスクリーンはハンドル基点を RENDER_TARGET_COUNT 固定にして安定させる。
+			if (index < MAIN_RT_COUNT)
 			{
 				return &mainRenderTargets_[index];
+			}
+			if (index < RENDER_TARGET_COUNT)
+			{
+				return nullptr;
 			}
 			const uint32_t offIdx = index - RENDER_TARGET_COUNT;
 			if (offIdx < static_cast<uint32_t>(offscreenRenderTargets_.size()))
@@ -276,7 +282,7 @@ namespace aq
 		bool D3D11GraphicsDeviceImpl::CreateMainRenderTargets(uint32_t width, uint32_t height)
 		{
 			SampleDesc sampleDesc;
-			for (uint32_t i = 0; i < RENDER_TARGET_COUNT; ++i) {
+			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i) {
 				// メイン RT は HDR (R16G16B16A16_FLOAT)。PBR ライティングの 1.0 超の値をクランプせず保持し、
 				// ポストプロセス(Bloom 合成)でトーンマップして LDR バックバッファへ出力する。
 				bool ret = mainRenderTargets_[i].Create(

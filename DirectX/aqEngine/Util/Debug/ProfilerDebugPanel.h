@@ -33,6 +33,7 @@ namespace aq
 			                int index, double threadTotalMs);
 
 			std::vector<ThreadFrame> snapshot_;
+			double                   snapshotFrameMs_ = 0.0;  // snapshot_ と同時に凍結する 1F 時間
 			bool                     show_   = false;
 			bool                     paused_ = false;
 			float                    zoom_   = 1.0f;  // タイムライン横方向ズーム

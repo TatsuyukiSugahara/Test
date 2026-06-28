@@ -2,6 +2,7 @@
 #include <memory>
 #include <vector>
 #include "Graphics/IGraphicsDeviceImpl.h"
+#include "RenderConfig.h"
 
 // D3D12/DXGI の COM インターフェースを前方宣言する。
 // d3d12.h は .cpp 実装側でのみ include する。
@@ -143,8 +144,16 @@ namespace aq
 			void WaitForGPU();
 
 		private:
+			// スワップチェーンのバックバッファ数（フリップモデルのため 2 固定）。
+			// オフスクリーン RT ハンドルの基点も兼ねる。
 			static constexpr uint32_t RENDER_TARGET_COUNT = 2;
 			static constexpr uint32_t FRAME_COUNT         = 2;  // = D3D12_FRAME_COUNT (cpp で static_assert)
+			// メイン HDR RT の実枚数。非同期モードのみダブルバッファ（2 枚）にする。
+#ifdef AQ_RENDER_PIPELINED
+			static constexpr uint32_t MAIN_RT_COUNT = 2;
+#else
+			static constexpr uint32_t MAIN_RT_COUNT = 1;
+#endif
 
 			ID3D12Device*              device_        = nullptr;
 			ID3D12CommandQueue*        commandQueue_  = nullptr;
@@ -171,7 +180,7 @@ namespace aq
 			bool                       vsyncEnabled_  = true;              // Present の同期間隔 (ImGui トグル)
 
 			// メイン RT(深度付きオフスクリーン)。シーンはここへ描画し CopyToBackBuffer でバックバッファへ複写。
-			std::unique_ptr<D3D12RenderTarget> mainRenderTargets_[RENDER_TARGET_COUNT];
+			std::unique_ptr<D3D12RenderTarget> mainRenderTargets_[MAIN_RT_COUNT];
 			std::vector<std::unique_ptr<D3D12RenderTarget>> offscreenRTs_;
 			uint32_t                   currentBackBufferIndex_ = 0;
 			uint32_t                   backBufferStates_[RENDER_TARGET_COUNT] = {};  // D3D12_RESOURCE_STATES

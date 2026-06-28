@@ -307,7 +307,7 @@ namespace aq
 		bool D3D12GraphicsDeviceImpl::CreateMainRenderTargets(uint32_t width, uint32_t height)
 		{
 			// メイン RT は深度付きオフスクリーン (D3D11 backend と同じ。最後に CopyToBackBuffer)。
-			for (uint32_t i = 0; i < RENDER_TARGET_COUNT; ++i)
+			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i)
 			{
 				const uint32_t rtvIdx = rtvNext_++;
 				const uint32_t dsvIdx = dsvNext_++;
@@ -465,23 +465,26 @@ namespace aq
 
 		uint32_t D3D12GraphicsDeviceImpl::GetMainRenderTargetCount() const
 		{
-			return RENDER_TARGET_COUNT;
+			return MAIN_RT_COUNT;
 		}
 
 
 		IRenderTarget& D3D12GraphicsDeviceImpl::GetMainRenderTarget(uint32_t index)
 		{
-			EngineAssert(index < RENDER_TARGET_COUNT);
-			if (index >= RENDER_TARGET_COUNT) index = 0;
+			EngineAssert(index < MAIN_RT_COUNT);
+			if (index >= MAIN_RT_COUNT) index = 0;
 			return *mainRenderTargets_[index];
 		}
 
 
 		IRenderTarget* D3D12GraphicsDeviceImpl::GetRenderTarget(uint32_t index)
 		{
-			// index < RENDER_TARGET_COUNT はメイン RT、それ以上はオフスクリーン RT。
+			// [0, MAIN_RT_COUNT) はメイン RT。[MAIN_RT_COUNT, RENDER_TARGET_COUNT) は
+			// 直列モードで未使用の予約領域（メイン RT 1 枚時の index 1）。
+			// オフスクリーンはハンドル基点を RENDER_TARGET_COUNT 固定にして安定させる。
 			// (CreateOffscreenRenderTarget が RENDER_TARGET_COUNT + listIndex を返すのに対応)
-			if (index < RENDER_TARGET_COUNT) return mainRenderTargets_[index].get();
+			if (index < MAIN_RT_COUNT) return mainRenderTargets_[index].get();
+			if (index < RENDER_TARGET_COUNT) return nullptr;
 			const uint32_t off = index - RENDER_TARGET_COUNT;
 			if (off < offscreenRTs_.size()) return offscreenRTs_[off].get();
 			return nullptr;

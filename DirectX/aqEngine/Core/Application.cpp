@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "Application.h"
 #include "Engine.h"
+#include "RenderConfig.h"
 #include "Resource/Resource.h"
 #include "ECS/EntityContext.h"
 #include "HID/Input.h"
@@ -356,7 +357,13 @@ namespace aq
 	void Application::FlushRender()
 	{
 		if (!renderThreadReady_) return;
+#ifdef AQ_RENDER_PIPELINED
+		// 非同期: 前フレームの完了だけを待ち、今フレームは実行中のまま次へ進む（1フレーム重複）。
+		renderThread_.WaitForPipelinedFrame();
+#else
+		// 直列: 今フレームの全描画完了を待ってから次へ進む。
 		renderThread_.WaitForCompletion();
+#endif
 	}
 
 

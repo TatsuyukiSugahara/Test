@@ -3,6 +3,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include <algorithm>
 #include <imgui/imgui.h>
+#include "RenderConfig.h"
 
 
 namespace aq
@@ -27,9 +28,13 @@ namespace aq
 
 		void ProfilerDebugPanel::RenderContent()
 		{
-			// 停止中でなければ毎フレームスナップショットを更新
+			// 停止中でなければ毎フレームスナップショットを更新。
+			// FrameMs も同時に凍結し、Stop 中は時間軸が動かないようにする。
 			if (!paused_)
+			{
 				Profiler::Get().CaptureSnapshot(snapshot_);
+				snapshotFrameMs_ = Profiler::Get().FrameMs();
+			}
 
 			if (ImGui::Button(paused_ ? "Resume" : "Stop"))
 				paused_ = !paused_;
@@ -43,6 +48,56 @@ namespace aq
 			ImGui::SliderFloat("Zoom", &zoom_, 1.0f, 50.0f, "%.1fx");
 
 			// カリング系トグル/統計は Rendering タブの "Culling" へ移動 (CullingDebugPanel)。
+
+			ImGui::Separator();
+
+			// --- フレーム総時間 / 同期モード / スレッド別 CPU 時間 ---------------------
+			// 各スレッドのルートスコープ合計 (= そのスレッドの 1F あたり実働時間) を求める。
+			auto rootSumMs = [](const ThreadFrame& f) {
+				double sum = 0.0;
+				for (const Sample& s : f.samples)
+					if (s.parentIndex < 0) sum += s.durationMs;
+				return sum;
+			};
+			double mainMs = 0.0, renderMs = 0.0;
+			for (const ThreadFrame& f : snapshot_)
+			{
+				if (f.name == "Main")        mainMs   = rootSumMs(f);
+				else if (f.name == "Render") renderMs = rootSumMs(f);
+			}
+
+			const double frameMs = snapshotFrameMs_;
+			const double fps     = (frameMs > 0.0) ? (1000.0 / frameMs) : 0.0;
+
+			// 実フレーム時間 (FlushRender の待ちも含む真の 1F)
+			ImGui::Text("Frame:");
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1.0f, 0.95f, 0.5f, 1.0f), "%.2f ms  (%.1f FPS)", frameMs, fps);
+
+			// 同期モードのバッジ
+			ImGui::SameLine();
+			ImGui::TextDisabled(" | ");
+			ImGui::SameLine();
+#ifdef AQ_RENDER_PIPELINED
+			ImGui::TextColored(ImVec4(0.4f, 0.9f, 1.0f, 1.0f), "[Async: Render は 1 フレーム遅れ]");
+#else
+			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.4f, 1.0f), "[Serial: 毎フレーム完了待ち]");
+#endif
+
+			// スレッド別 CPU 時間。直列なら Main+Render≈Frame、非同期なら max(Main,Render)≈Frame。
+			const double sumMs = mainMs + renderMs;
+			const double maxMs = (mainMs > renderMs) ? mainMs : renderMs;
+			ImGui::Text("Main CPU: %.2f ms   Render CPU: %.2f ms   (sum %.2f / max %.2f)",
+			            mainMs, renderMs, sumMs, maxMs);
+			// 重複の目安: Frame が sum に近い→直列的、max に近い→重複できている。
+			if (frameMs > 0.0 && sumMs > 0.0)
+			{
+				const double overlapPct =
+					(sumMs > maxMs) ? ((sumMs - frameMs) / (sumMs - maxMs) * 100.0) : 0.0;
+				const double clamped = overlapPct < 0.0 ? 0.0 : (overlapPct > 100.0 ? 100.0 : overlapPct);
+				ImGui::SameLine();
+				ImGui::TextDisabled("overlap ~%.0f%%", clamped);
+			}
 
 			ImGui::Separator();
 
@@ -119,7 +174,11 @@ namespace aq
 				return;
 			}
 
-			const double totalMs = static_cast<double>(maxEndTick - originTick) * mspt;
+			double totalMs = static_cast<double>(maxEndTick - originTick) * mspt;
+			// フレーム周期全体を必ず表示する (Render が周期末尾で走るケースを見切れさせない)。
+			// 凍結した snapshotFrameMs_ を使い、Stop 中は軸が動かないようにする。
+			const double frameMs = snapshotFrameMs_;
+			if (frameMs > totalMs) totalMs = frameMs;
 
 			// レイアウト定数
 			const float labelW   = 90.0f;
@@ -173,6 +232,17 @@ namespace aq
 					snprintf(lbl, sizeof(lbl), "%.2fms", t);
 					dl->AddText(ImVec2(x + 2.0f, p0.y + 2.0f), labelCol, lbl);
 				}
+
+				// フレーム周期の終端マーカー (この線までが 1 フレーム)。
+				// Main(周期頭) と Render の位置関係が「同じ 1 フレーム内のどこか」を読み取れる。
+				if (frameMs > 0.0)
+				{
+					const float fx = timelineX0 + static_cast<float>(frameMs * pxPerMs);
+					dl->AddLine(ImVec2(fx, p0.y + axisH), ImVec2(fx, p0.y + contentH),
+					            ImGui::GetColorU32(ImVec4(1.0f, 0.85f, 0.3f, 0.6f)), 2.0f);
+					dl->AddText(ImVec2(fx - 64.0f, p0.y + 2.0f),
+					            ImGui::GetColorU32(ImVec4(1.0f, 0.85f, 0.3f, 0.9f)), "frame end");
+				}
 			}
 
 			// 各スレッドのレーンを描画
@@ -186,9 +256,44 @@ namespace aq
 			for (size_t i = 0; i < threads.size(); ++i)
 			{
 				const ThreadFrame* f = threads[i];
+				const float laneH = laneDepth[i] * rowH;
 
-				// レーン名
+				// このレーンの実働時間 (ルートスコープ合計)
+				double laneSumMs = 0.0;
+				for (const Sample& s : f->samples)
+					if (s.parentIndex < 0) laneSumMs += s.durationMs;
+
+				const bool isRender = (f->name == "Render");
+				(void)isRender;  // 直列ビルドでは未使用
+#ifdef AQ_RENDER_PIPELINED
+				// 非同期: Render レーンは「1 フレーム遅れで Main と重複実行」していることを
+				// 帯の背景色で明示する。Main のバーと時間軸上で重なって見えるのが正常。
+				if (isRender)
+				{
+					dl->AddRectFilled(
+						ImVec2(p0.x, laneY), ImVec2(p0.x + contentW, laneY + laneH),
+						ImGui::GetColorU32(ImVec4(0.25f, 0.55f, 0.75f, 0.12f)));
+				}
+#endif
+
+				// レーン名 (1 行目) + 実働時間 (2 行目)。背の低いレーンは 1 行目だけ。
 				dl->AddText(ImVec2(p0.x + 2.0f, laneY + 1.0f), labelCol, f->name.c_str());
+				char laneInfo[48];
+#ifdef AQ_RENDER_PIPELINED
+				if (isRender)
+					snprintf(laneInfo, sizeof(laneInfo), "%.2fms N-1", laneSumMs);
+				else
+					snprintf(laneInfo, sizeof(laneInfo), "%.2fms", laneSumMs);
+#else
+				snprintf(laneInfo, sizeof(laneInfo), "%.2fms", laneSumMs);
+#endif
+				// 背の高いレーン (Main / Render) のみ 2 行目に実働時間を表示。
+				// 背の低いワーカーは名前と重なるため省略 (合計はヘッダの Main/Render CPU 参照)。
+				if (laneH >= rowH * 2.0f - 2.0f)
+				{
+					const ImU32 infoCol = ImGui::GetColorU32(ImVec4(0.85f, 0.85f, 0.85f, 0.75f));
+					dl->AddText(ImVec2(p0.x + 2.0f, laneY + rowH), infoCol, laneInfo);
+				}
 
 				for (const Sample& s : f->samples)
 				{

@@ -37,3 +37,8 @@ DirectX/ThirdParty/DirectXTex/x64/
 
 # Claude Code 設定
 .claude/
+
+# Vulkan validation log (runtime)
+vk_debug.log
+# stray imgui.ini when run from DirectX/ (proper one is Game/imgui.ini)
+/DirectX/imgui.ini

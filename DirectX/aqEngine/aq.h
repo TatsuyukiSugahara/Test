@@ -3,10 +3,18 @@
 #pragma warning (disable  : 4201)
 
 // Graphics API selection.
-// Define ENGINE_GRAPHICS_D3D11 here, or pass it via project preprocessor settings.
+// Define one ENGINE_GRAPHICS_* macro in project settings to override the default.
 //#define ENGINE_GRAPHICS_D3D11
-#define ENGINE_GRAPHICS_D3D12
+//#define ENGINE_GRAPHICS_D3D12
 //#define ENGINE_GRAPHICS_VULKAN
+
+#if !defined(ENGINE_GRAPHICS_D3D11) && !defined(ENGINE_GRAPHICS_D3D12) && !defined(ENGINE_GRAPHICS_VULKAN)
+#define ENGINE_GRAPHICS_D3D12
+#endif
+
+#if (defined(ENGINE_GRAPHICS_D3D11) + defined(ENGINE_GRAPHICS_D3D12) + defined(ENGINE_GRAPHICS_VULKAN)) > 1
+#error "Define exactly one ENGINE_GRAPHICS_* backend"
+#endif
 
 // レンダリング同期モードの切り替え (AQ_RENDER_PIPELINED) はここではなく
 // RenderConfig.h で行う（単一ソース）。include して全 TU から見えるようにする。

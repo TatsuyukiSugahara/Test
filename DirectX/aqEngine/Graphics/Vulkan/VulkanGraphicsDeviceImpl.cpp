@@ -408,6 +408,7 @@ namespace aq
 					{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 8192 },
 					{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  8192 },
 					{ VK_DESCRIPTOR_TYPE_SAMPLER,        2048 },
+					{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  2048 },
 				};
 				VkDescriptorPoolCreateInfo dpci{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
 				dpci.maxSets       = 4096;

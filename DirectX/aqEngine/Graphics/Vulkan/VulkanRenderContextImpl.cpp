@@ -78,12 +78,15 @@ namespace aq
 			scissor_.extent = { (uint32_t)(w > 0 ? w : 0), (uint32_t)(h > 0 ? h : 0) };
 		}
 
-		void VulkanRenderContextImpl::ClearRenderTargetView(uint32_t /*index*/, float* clearColor)
+		void VulkanRenderContextImpl::ClearRenderTargetView(uint32_t index, float* clearColor)
 		{
 			// クリアは即 begin せず保留し、Draw 時の BeginRendering で loadOp=CLEAR に集約する
 			// (SRV バリアを rendering scope 外で打てるようにするため)。
-			if (clearColor) { for (int i = 0; i < 4; ++i) clearColor_[i] = clearColor[i]; }
-			pendingClear_ = true;
+			if (index >= rtCount_ || index >= MAX_MRT)
+				return;
+
+			if (clearColor) { for (int i = 0; i < 4; ++i) clearColors_[index][i] = clearColor[i]; }
+			pendingClearMask_ |= (1u << index);
 		}
 
 		// ── 入力アセンブラ ───────────────────────────────────────
@@ -237,12 +240,13 @@ namespace aq
 			VkRenderingAttachmentInfo colors[MAX_MRT]{};
 			for (uint32_t i = 0; i < rtCount_; ++i)
 			{
+				const bool clear = (pendingClearMask_ & (1u << i)) != 0;
 				colors[i] = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
 				colors[i].imageView   = curRTs_[i]->GetView();
 				colors[i].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-				colors[i].loadOp      = pendingClear_ ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+				colors[i].loadOp      = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
 				colors[i].storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
-				colors[i].clearValue.color = { { clearColor_[0], clearColor_[1], clearColor_[2], clearColor_[3] } };
+				colors[i].clearValue.color = { { clearColors_[i][0], clearColors_[i][1], clearColors_[i][2], clearColors_[i][3] } };
 			}
 
 			VkRenderingAttachmentInfo depth{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
@@ -266,14 +270,18 @@ namespace aq
 
 			vkCmdBeginRendering(cmd, &ri);
 			renderingActive_  = true;
-			pendingClear_     = false;
+			pendingClearMask_ &= ~((1u << rtCount_) - 1u);
 			pendingDepthClear_= false;
 		}
 
 		void VulkanRenderContextImpl::EndRenderingIfActive()
 		{
 			// 描画が無くてもクリアが保留されていれば begin/end で適用する。
-			if (!renderingActive_ && (pendingClear_ || pendingDepthClear_) && rtCount_ > 0 && curRTs_[0])
+			// depth-only (シャドウ) パスは rtCount_ == 0 のため、color/depth-only の両ターゲットを見る。
+			const bool hasColorTarget     = (rtCount_ > 0 && curRTs_[0]);
+			const bool hasDepthOnlyTarget = (depthOnlyMap_ != nullptr);
+			if (!renderingActive_ && (pendingClearMask_ || pendingDepthClear_) &&
+			    (hasColorTarget || hasDepthOnlyTarget))
 			{
 				device_->BeginFrameIfNeeded();
 				BarrierBeforePass();

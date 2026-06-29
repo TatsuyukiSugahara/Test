@@ -129,9 +129,18 @@ namespace aq
 			VkRect2D             scissor_  = {};
 			bool                 scissorEnabled_ = false;
 			bool                 renderingActive_ = false;
-			bool                 pendingClear_      = false;
 			bool                 pendingDepthClear_ = false;
-			float                clearColor_[4] = { 0, 0, 0, 1 };
+			uint32_t             pendingClearMask_ = 0;
+			float                clearColors_[MAX_MRT][4] = {
+				{ 0, 0, 0, 1 },
+				{ 0, 0, 0, 1 },
+				{ 0, 0, 0, 1 },
+				{ 0, 0, 0, 1 },
+				{ 0, 0, 0, 1 },
+				{ 0, 0, 0, 1 },
+				{ 0, 0, 0, 1 },
+				{ 0, 0, 0, 1 },
+			};
 			float                clearDepth_    = 1.0f;
 		};
 	}

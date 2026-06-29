@@ -6,9 +6,25 @@
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
 #include "UI/Font/FontResource.h"
+#include "Sound/SoundClip.h"
+#include "Sound/SoundEngine.h"
+#include "Sound/SoundStream.h"
+#include "Sound/SoundSource.h"
+#include "Sound/Component/SoundSystem.h"
+#include "Sound/Authoring/Audio.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Core/DebugUI.h"
+#include "Sound/Authoring/Debug/AudioAuthoringPanel.h"
+#endif
+#include <cmath>
 
 namespace app
 {
+	// unique_ptr<aq::sound::SoundStream> の破棄に完全型が必要なため、ここで定義する。
+	Application::Application() = default;
+	Application::~Application() = default;
+
+
 	bool Application::OnInitialize()
 	{
 		// オフスクリーン RT を生成してオフスクリーンカメラのアスペクト比を設定する。
@@ -78,19 +94,183 @@ namespace app
 			}
 		}
 
+#ifdef AQ_DEBUG_IMGUI
+		// オーディオ オーサリング/デバッグパネルを DebugUI に登録する。
+		if (aq::DebugUI::IsAvailable()) {
+			audioPanel_ = std::make_unique<aq::audio::AudioAuthoringPanel>();
+			aq::DebugUI::Get().Register(audioPanel_.get());
+		}
+#endif
+
 		return true;
 	}
 
 
 	void Application::OnFinalize()
 	{
+#ifdef AQ_DEBUG_IMGUI
+		if (audioPanel_ && aq::DebugUI::IsAvailable()) {
+			aq::DebugUI::Get().Unregister(audioPanel_.get());
+		}
+		audioPanel_.reset();
+#endif
+
+		// サウンドテストの後始末（SoundEngine 解放前に行う）。
+		bgmStream_.reset();
+		if (orbitSource_.IsValid() && aq::sound::SoundEngine::IsAvailable()) {
+			aq::sound::SoundEngine::Get().DestroySource(orbitSource_);
+		}
+
 		app::SceneManager::Release();
 		GameInput::Finalize();
 	}
 
 
+	void Application::UpdateSoundTest()
+	{
+		if (!aq::sound::SoundEngine::IsAvailable()) {
+			return;
+		}
+		aq::sound::SoundEngine& sound = aq::sound::SoundEngine::Get();
+
+		// 遅延ロード（バンク登録は OnRegister で行われ OnInitialize より後のため、ここで取得）。
+		if (!testClip_) {
+			testClip_ = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>("Assets/Sound/beep.wav");
+		}
+
+		// GetAsyncKeyState の最下位ビット = 前回呼び出し以降に押されたか（簡易エッジ検出）。
+		auto triggered = [](int vk) { return (GetAsyncKeyState(vk) & 1) != 0; };
+
+		// P: 2D ワンショット再生
+		if (triggered('P') && testClip_ && testClip_->IsCompleted()) {
+			sound.Play(testClip_, aq::sound::SoundBusId::SE);
+		}
+
+		// B: BGM ループのトグル（1 秒フェードイン / フェードアウト）
+		if (triggered('B')) {
+			if (!bgmPlaying_) {
+				bgmStream_ = sound.OpenStream("Assets/Sound/bgm.wav", aq::sound::SoundBusId::BGM);
+				if (bgmStream_) {
+					bgmStream_->Play(aq::sound::LoopRegion{ 0, 1, 0 });
+					bgmStream_->FadeIn(1.0f, 0.7f);
+					bgmPlaying_ = true;
+				}
+			}
+			else if (bgmStream_) {
+				bgmStream_->FadeOut(1.0f);   // フェード完了時に自動停止
+				bgmPlaying_ = false;
+			}
+		}
+
+		// M: 全体ポーズ / 再開のトグル
+		if (triggered('M')) {
+			if (!soundPaused_) { sound.PauseAll();  soundPaused_ = true;  }
+			else               { sound.ResumeAll(); soundPaused_ = false; }
+		}
+
+		// ── データ駆動オーディオ層（イベント）テスト ──
+		// E: イベント "Test_Beep"（Kind=SE, 120ms クールダウン）
+		if (triggered('E')) {
+			aq::audio::PostEvent("Test_Beep");
+		}
+		// G: BGM イベント トグル（Play_TitleBGM / Stop_TitleBGM, 1秒フェード）
+		if (triggered('G')) {
+			if (!eventBgmOn_) { aq::audio::PostEvent("Play_TitleBGM"); eventBgmOn_ = true; }
+			else              { aq::audio::PostEvent("Stop_TitleBGM"); eventBgmOn_ = false; }
+		}
+		// 1 / 2: 地面（Surface）スイッチを切り替え（Grass / Wood）
+		if (triggered('1')) { aq::audio::SetSwitch("Surface", "Grass"); }
+		if (triggered('2')) { aq::audio::SetSwitch("Surface", "Wood"); }
+		// F: 足音（Switch→Random。Surface に応じて grass/wood が選ばれ、毎回別の音・ピッチ/音量変化）
+		if (triggered('F')) {
+			aq::audio::PostEvent("Player_Footstep");
+		}
+		// T: アルペジオ（Sequence コンテナ。押すたび C→E→G→… と進む）
+		if (triggered('T')) {
+			aq::audio::PostEvent("Arpeggio_Step");
+		}
+		// 7: 3D イベント音（オーサリング層経由）の周回トグル。GameObject=99 を周回させ Beep3D をループ再生
+		if (triggered('7')) {
+			if (!event3DOn_) {
+				sound.GetListener().SetPosition(aq::math::Vector3(0.0f, 0.0f, 0.0f));
+				sound.GetListener().SetOrientation(aq::math::Vector3(0.0f, 0.0f, 1.0f),
+				                                   aq::math::Vector3(0.0f, 1.0f, 0.0f));
+				event3DAngle_ = 0.0f;
+				aq::audio::SetGameObjectTransform(99, aq::math::Vector3(8.0f, 0.0f, 0.0f),
+				    aq::math::Vector3(0.0f, 0.0f, 1.0f), aq::math::Vector3(0.0f, 1.0f, 0.0f),
+				    aq::math::Vector3(0.0f, 0.0f, 0.0f));
+				aq::audio::PostEvent("Play_Beep3D", 99);
+				event3DOn_ = true;
+			}
+			else {
+				aq::audio::UnregisterGameObject(99);   // 紐づく 3D ループ音を停止
+				event3DOn_ = false;
+			}
+		}
+		// 9 / 0: RTPC "Pitch3D" を変更（SE3D=Beep3D のピッチが連続変化。7 で再生中に試す）
+		if (triggered('9')) { aq::audio::SetRTPC("Pitch3D", 0.0f); }
+		if (triggered('0')) { aq::audio::SetRTPC("Pitch3D", 1.0f); }
+		// C / X: State "Music" を Combat / Explore に切替（stateRules で BGM クロスフェード）
+		if (triggered('C')) { aq::audio::SetState("Music", "Combat"); }
+		if (triggered('X')) { aq::audio::SetState("Music", "Explore"); }
+		// Y: セリフ（Voice バス）再生。再生中は VoiceDuck で BGM が自動的に下がる
+		if (triggered('Y')) { aq::audio::PostEvent("Play_Voice"); }
+		// GameObject 99 を周回させる（パン + ドップラーをオーサリング層で確認）
+		if (event3DOn_) {
+			const float angularSpeed = 2.0f;
+			const float radius       = 8.0f;
+			event3DAngle_ += aq::Engine::GetDeltaTime() * angularSpeed;
+			aq::audio::SetGameObjectTransform(99,
+			    aq::math::Vector3(cosf(event3DAngle_) * radius, 0.0f, sinf(event3DAngle_) * radius),
+			    aq::math::Vector3(0.0f, 0.0f, 1.0f), aq::math::Vector3(0.0f, 1.0f, 0.0f),
+			    aq::math::Vector3(-sinf(event3DAngle_) * radius * angularSpeed, 0.0f,
+			                       cosf(event3DAngle_) * radius * angularSpeed));
+		}
+
+		// 3: 3D 周回ソースのトグル（パン + ドップラーの確認）
+		if (triggered('3')) {
+			if (!orbitActive_ && testClip_ && testClip_->IsCompleted()) {
+				sound.GetListener().SetPosition(aq::math::Vector3(0.0f, 0.0f, 0.0f));
+				sound.GetListener().SetOrientation(aq::math::Vector3(0.0f, 0.0f, 1.0f),
+				                                   aq::math::Vector3(0.0f, 1.0f, 0.0f));
+				orbitSource_ = sound.CreateSource(testClip_, aq::sound::SoundBusId::SE);
+				if (aq::sound::SoundSource* src = sound.Resolve(orbitSource_)) {
+					src->SetAttenuation(aq::sound::AttenuationModel::Inverse);
+					src->SetDistances(1.0f, 40.0f);
+					src->SetDopplerFactor(1.0f);
+					src->Play(aq::sound::LoopRegion{ 0, 1, 0 });
+					orbitActive_ = true;
+				}
+			}
+			else if (orbitActive_) {
+				sound.DestroySource(orbitSource_);
+				orbitSource_ = aq::sound::SoundSourceHandle{};
+				orbitActive_ = false;
+			}
+		}
+
+		// 周回ソースの位置・速度を更新（SoundEngine::Update が定位を反映する）。
+		if (orbitActive_) {
+			if (aq::sound::SoundSource* src = sound.Resolve(orbitSource_)) {
+				const float angularSpeed = 2.0f;   // rad/s
+				const float radius       = 8.0f;
+				orbitAngle_ += aq::Engine::GetDeltaTime() * angularSpeed;
+
+				src->SetPosition(aq::math::Vector3(cosf(orbitAngle_) * radius, 0.0f, sinf(orbitAngle_) * radius));
+				src->SetVelocity(aq::math::Vector3(-sinf(orbitAngle_) * radius * angularSpeed, 0.0f,
+				                                    cosf(orbitAngle_) * radius * angularSpeed));
+			}
+			else {
+				orbitActive_ = false;
+			}
+		}
+	}
+
+
 	void Application::OnUpdate()
 	{
+		UpdateSoundTest();
+
 		app::SceneManager::Get().Update();
 
 		if (renderer_.GetShadowRenderer())
@@ -115,6 +295,7 @@ namespace app
 		aq::res::ResourceManager::RegisterBank<aq::res::SkeletalMeshResource, aq::res::TResourceBank<aq::res::SkeletalMeshResource>>();
 		aq::res::ResourceManager::RegisterBank<aq::res::AnimationResource, aq::res::TResourceBank<aq::res::AnimationResource>>();
 		aq::res::ResourceManager::RegisterBank<aq::ui::FontResource, aq::res::TResourceBank<aq::ui::FontResource>>();
+		aq::res::ResourceManager::RegisterBank<aq::sound::SoundClip, aq::res::TResourceBank<aq::sound::SoundClip>>();
 
 		aq::res::ResourceManager::Reflection<aq::res::GPUResource, aq::res::TextureLoader>();
 		aq::res::ResourceManager::Reflection<aq::res::MeshResource, aq::res::MeshLoader>();
@@ -123,6 +304,7 @@ namespace app
 		aq::res::ResourceManager::Reflection<aq::res::SkeletalMeshResource, aq::res::SkeletalMeshLoader>();
 		aq::res::ResourceManager::Reflection<aq::res::AnimationResource, aq::res::AnimationLoader>();
 		aq::res::ResourceManager::Reflection<aq::ui::FontResource, aq::ui::FontLoader>();
+		aq::res::ResourceManager::Reflection<aq::sound::SoundClip, aq::sound::SoundClipLoader>();
 
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::ActorStateMachineSystem>();
@@ -135,6 +317,13 @@ namespace app
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CameraEffectSystem,
 			app::ecs::CameraSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, app::ecs::CameraEffectSystem>();
+
+		// サウンド: ワールド変換確定後に 3D を反映する（HierarcicalTransformSystem に依存）。
+		aq::ecs::EntityContext::Get().AddSystem<aq::sound::SoundSystem,
+			aq::ecs::HierarcicalTransformSystem>();
+
+		// データ駆動オーディオ Bank をロード（SoundClip バンク登録後に行う）。
+		aq::audio::LoadBank("Assets/Audio/Main.audiobank.json");
 	}
 
 

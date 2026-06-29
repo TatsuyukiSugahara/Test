@@ -37,6 +37,24 @@
     <Filter Include="Physics">
       <UniqueIdentifier>{c739d076-df44-472d-873f-202f105a6f6a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Sound">
+      <UniqueIdentifier>{a7d1c2e3-4f50-4a6b-8c9d-0e1f2a3b4c5d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound\Decoder">
+      <UniqueIdentifier>{b8e2d3f4-5061-4b7c-9d0e-1f2a3b4c5d6e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound\XAudio2">
+      <UniqueIdentifier>{c9f3e405-6172-4c8d-ae1f-2a3b4c5d6e7f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound\Component">
+      <UniqueIdentifier>{d0a4f516-7283-4d9e-bf20-3b4c5d6e7f80}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound\Authoring">
+      <UniqueIdentifier>{e1b50627-8394-4ea0-c031-4c5d6e7f8091}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound\Authoring\Debug">
+      <UniqueIdentifier>{f2c61738-94a5-4fb1-d142-5d6e7f8091a2}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Rendering">
       <UniqueIdentifier>{a1b2c3d4-e5f6-7890-abcd-ef1234567890}</UniqueIdentifier>
     </Filter>
@@ -463,6 +481,57 @@
     </ClCompile>
     <ClCompile Include="UI\Resource\UIDocumentSerializer.cpp">
       <Filter>UI\Resource</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\SoundEngine.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\SoundClip.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\SoundStream.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\SoundSource.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Mixer3D.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Component\AudioSourceComponent.cpp">
+      <Filter>Sound\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Component\SoundSystem.cpp">
+      <Filter>Sound\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Component\AudioEventEmitterComponent.cpp">
+      <Filter>Sound\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Authoring\AudioBank.cpp">
+      <Filter>Sound\Authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Authoring\AudioDirector.cpp">
+      <Filter>Sound\Authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Authoring\Audio.cpp">
+      <Filter>Sound\Authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Authoring\Debug\AudioAuthoringPanel.cpp">
+      <Filter>Sound\Authoring\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Decoder\WavDecoder.cpp">
+      <Filter>Sound\Decoder</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Decoder\WavStreamDecoder.cpp">
+      <Filter>Sound\Decoder</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Decoder\MFDecoder.cpp">
+      <Filter>Sound\Decoder</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\XAudio2\XAudio2SoundBackend.cpp">
+      <Filter>Sound\XAudio2</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\XAudio2\XAudio2SoundVoice.cpp">
+      <Filter>Sound\XAudio2</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1027,5 +1096,89 @@
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Utility.h" />
+    <ClInclude Include="Sound\SoundTypes.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundHandle.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundFwd.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\ISoundVoice.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\ISoundBackend.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundClip.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundStream.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundListener.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundSource.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Mixer3D.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\VolumeEnvelope.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Component\AudioListenerComponent.h">
+      <Filter>Sound\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Component\AudioSourceComponent.h">
+      <Filter>Sound\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Component\SoundSystem.h">
+      <Filter>Sound\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Component\AudioEventEmitterComponent.h">
+      <Filter>Sound\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Authoring\AudioDefs.h">
+      <Filter>Sound\Authoring</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Authoring\AudioBank.h">
+      <Filter>Sound\Authoring</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Authoring\AudioDirector.h">
+      <Filter>Sound\Authoring</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Authoring\Audio.h">
+      <Filter>Sound\Authoring</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Authoring\Debug\AudioAuthoringPanel.h">
+      <Filter>Sound\Authoring\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundEngine.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\SoundBackend.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Decoder\ISoundDecoder.h">
+      <Filter>Sound\Decoder</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Decoder\WavDecoder.h">
+      <Filter>Sound\Decoder</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Decoder\WavStreamDecoder.h">
+      <Filter>Sound\Decoder</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Decoder\MFDecoder.h">
+      <Filter>Sound\Decoder</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\XAudio2\XAudio2SoundBackend.h">
+      <Filter>Sound\XAudio2</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\XAudio2\XAudio2SoundVoice.h">
+      <Filter>Sound\XAudio2</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

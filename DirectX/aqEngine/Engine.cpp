@@ -2,6 +2,8 @@
 #include "Engine.h"
 #include "RenderConfig.h"
 #include "Core/IApplication.h"
+#include "Platform/IPlatform.h"
+#include "Platform/PlatformBudget.h"
 #include "Util/ThreadPool.h"
 #include "Physics/PhysicsBackend.h"
 #include "Sound/SoundEngine.h"
@@ -14,12 +16,6 @@
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 #include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
 #endif
-#ifdef AQ_IMGUI
-#include <imgui/imgui.h>
-#include <imgui/imgui_impl_win32.h>
-// header 内で #if 0 されているため、使用する .cpp で前方宣言が必要
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-#endif
 
 
 namespace aq
@@ -28,8 +24,8 @@ namespace aq
 
 
 	Engine::Engine()
-		: hInstance_(nullptr)
-		, hWnd_(nullptr)
+		: platform_(nullptr)
+		, window_()
 		, renderContext_()
 		, currentMainRenderTarget_(0)
 		, screenWidth_(0)
@@ -48,6 +44,9 @@ namespace aq
 
 	bool Engine::Initialize(const InitializeParameter& initializeParameter)
 	{
+		platform_ = initializeParameter.platform;
+		EngineAssert(platform_);
+
 		// メモリマネージャを最初に初期化することで、ウィンドウ・グラフィクス初期化中の
 		// new/delete もエンジンアロケータ管理下に置く。
 		aq::memory::MemoryManager::Initialize(initializeParameter.memoryConfig);
@@ -61,7 +60,9 @@ namespace aq
 		if (!InitializeGraphicsAPI(initializeParameter)) {
 			return false;
 		}
-		aq::util::ThreadPool::Initialize();
+		// ThreadPool のワーカ数はリソース予算で決める。
+		// Win32 は 0(論理コア数)、Xbox(UWP)は 4コア占有+2コア共有に合わせて 6 固定。
+		aq::util::ThreadPool::Initialize(aq::platform::GetResourceBudget().threadPoolWorkerCount);
 
 		// サウンド: プラットフォームで選択したバックエンドを注入して初期化する（§10）。
 		aq::sound::SoundEngine::Create<aq::sound::DefaultSoundBackend>();
@@ -109,18 +110,11 @@ namespace aq
 
 	void Engine::RunGame()
 	{
-		MSG msg = { 0 };
-		while (WM_QUIT != msg.message)
+		// メッセージ/イベントのポンプはプラットフォーム層に委譲する。
+		// PumpEvents() が終了要求で false を返すまで Update を回す。
+		while (platform_->PumpEvents())
 		{
-			if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-			{
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
-			}
-			else
-			{
-				Update();
-			}
+			Update();
 		}
 	}
 
@@ -133,22 +127,10 @@ namespace aq
 		screenHeight_ = initializeParameter.screenHeight;
 		screenWidth_  = initializeParameter.screenWidth;
 
-		WNDCLASSEX wc = {
-			sizeof(WNDCLASSEX), CS_CLASSDC, MsgProc, 0L, 0L,
-			GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr,
-			TEXT("Application"), nullptr
-		};
-		RegisterClassEx(&wc);
-		RECT rc = { 0, 0, static_cast<LONG>(screenWidth_), static_cast<LONG>(screenHeight_) };
-		AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-		hWnd_ = CreateWindow(
-			TEXT("Application"), TEXT("Application"),
-			WS_OVERLAPPEDWINDOW, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
-			nullptr, nullptr, initializeParameter.hInstance, nullptr
-		);
-
-		ShowWindow(hWnd_, initializeParameter.nCmdShow);
-		return hWnd_ != nullptr;
+		aq::platform::WindowDesc desc;
+		desc.width  = initializeParameter.screenWidth;
+		desc.height = initializeParameter.screenHeight;
+		return platform_->CreateMainWindow(desc, window_);
 	}
 
 
@@ -166,7 +148,7 @@ namespace aq
 		aq::graphics::GraphicsDevice::Create<aq::graphics::VulkanGraphicsDeviceImpl>();
 #endif
 
-		if (!aq::graphics::GraphicsDevice::Get().Initialize({ hWnd_ }, renderWidth_, renderHeight_)) {
+		if (!aq::graphics::GraphicsDevice::Get().Initialize(window_, renderWidth_, renderHeight_)) {
 			return false;
 		}
 
@@ -207,37 +189,5 @@ namespace aq
 		// レンダースレッド側に集約され、メインスレッドは Submit() 以降コンテキストに触れない。
 		application_->FlushRender();
 		aq::memory::MemoryManager::Get().ResetStackAllocator();
-	}
-
-
-	LRESULT CALLBACK Engine::MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-	{
-#ifdef AQ_IMGUI
-		if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
-			return true;
-#endif
-
-		PAINTSTRUCT ps;
-		HDC hdc;
-
-		switch (msg)
-		{
-			case WM_PAINT:
-			{
-				hdc = BeginPaint(hWnd, &ps);
-				EndPaint(hWnd, &ps);
-				break;
-			}
-			case WM_DESTROY:
-			{
-				PostQuitMessage(0);
-				break;
-			}
-			default:
-			{
-				return DefWindowProc(hWnd, msg, wParam, lParam);
-			}
-		}
-		return 0;
 	}
 }

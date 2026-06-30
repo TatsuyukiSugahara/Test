@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Package.appxmanifest.template — UWP(Xbox 道A)パッケージマニフェスト雛形。
+
+  使い方: UWP vcxproj を作成したら "Package.appxmanifest" としてコピーし、
+  Identity の Name/Publisher を自分の Partner Center 登録に合わせて書き換える。
+  Assets(ロゴ画像)も差し替えること。
+
+  ※「Game(ゲーム)」分類による 5GB / 4+2 コア割り当ては、最終的には
+    Xbox Dev Home 側の「アプリの種類=ゲーム」設定で決まる(README §2)。
+    マニフェストのカテゴリは参考情報。デプロイ後に Dev Home で必ず Game に設定する。
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <!-- Name/Publisher は Partner Center の値に置き換える -->
+  <Identity
+    Name="com.example.aqEngineGame"
+    Publisher="CN=YOUR_PUBLISHER_ID"
+    Version="0.1.0.0" />
+
+  <Properties>
+    <DisplayName>aqEngine Game</DisplayName>
+    <PublisherDisplayName>Your Name</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
+    <!-- Xbox 固有 API を使う場合は Windows.Xbox も追加可:
+    <TargetDeviceFamily Name="Windows.Xbox" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" /> -->
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="ja-JP" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="aqEngine Game"
+        Description="aqEngine UWP build"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+      <!-- ゲーム分類のヒント(最終決定は Dev Home 側) -->
+      <Extensions>
+        <uap:Extension Category="windows.appExecutionAlias" />
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+  </Capabilities>
+</Package>

@@ -1,8 +1,12 @@
 #pragma once
-#include <windows.h>
 #include <cstddef>
+#include <cstdint>
+#if !defined(AQ_PLATFORM_UWP)
+#include <windows.h>
+#endif
 #include "Graphics/RenderContext.h"
 #include "Graphics/GraphicsDevice.h"
+#include "Graphics/GraphicsTypes.h"
 #include "Memory/MemoryManager.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Util/GameTimer.h"
@@ -11,15 +15,15 @@
 namespace aq
 {
 	class IApplication;
+	namespace platform { class IPlatform; }
 
 	struct InitializeParameter
 	{
-		HINSTANCE hInstance;
+		aq::platform::IPlatform* platform;     // ウィンドウ/ループ/ライフサイクルの実装（呼び出し側所有）
 		int32_t   screenWidth;
 		int32_t   screenHeight;
 		int32_t   renderWidth;
 		int32_t   renderHeight;
-		int32_t   nCmdShow;
 		uint8_t   gameObjectPriortyMax;
 		aq::memory::MemoryConfig memoryConfig; // アロケータサイズ設定 (デフォルト値あり)
 	};
@@ -27,8 +31,8 @@ namespace aq
 	class Engine
 	{
 	private:
-		HINSTANCE hInstance_;
-		HWND      hWnd_;
+		aq::platform::IPlatform*           platform_;
+		aq::graphics::NativeWindowHandle   window_;
 
 		aq::graphics::RenderContext renderContext_;
 
@@ -65,6 +69,10 @@ namespace aq
 
 		inline aq::util::GameTimer& GetTimer() { return gameTimer_; }
 
+		// アセット読み込みの基点パス。Win32 は nullptr(=Resource 側の従来探索に委ねる)、
+		// UWP はパッケージ install フォルダを返す。platform_ 未設定時も nullptr。
+		const char* GetContentRoot() const;
+
 		// static ラッパー (Engine::Get() を省略して呼べる)
 		static float GetDeltaTime() { return Get().gameTimer_.GetDeltaTime(); }
 		static float GetTotalTime() { return Get().gameTimer_.GetTotalTime(); }
@@ -82,8 +90,12 @@ namespace aq
 			return aq::rendering::RenderTargetHandle{ currentMainRenderTarget_ };
 		}
 
+#if !defined(AQ_PLATFORM_UWP)
 	public:
-		HWND GetHWND() { return hWnd_; }
+		// Win32 専用。DirectInput / ImGui_ImplWin32 など、まだ HWND を直接要求する
+		// サブシステム向け。これらが GameInput 等に抽象化されたら撤去する最後の Win32 接合点。
+		HWND GetHWND() const { return static_cast<HWND>(window_.handle); }
+#endif
 
 	public:
 		template <typename _Application>
@@ -110,9 +122,5 @@ namespace aq
 				instance_ = nullptr;
 			}
 		}
-
-
-	private:
-		static LRESULT CALLBACK MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	};
 }

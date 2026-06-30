@@ -5,6 +5,7 @@
 #include <memory>
 #include <chrono>
 #include "Math/Vector.h"
+#include "HID/IPadBackend.h"   // PadButton / PadAxis / PadState / IPadBackend
 
 namespace aq
 {
@@ -96,34 +97,22 @@ namespace aq
 
 
 		// ==========================================
-		// Pad (XInput, 最大 4 個対応)
+		// Pad (最大 4 個対応)
+		// 生のデバイス取得・振動は IPadBackend に委譲し、本体は正規化状態(PadState)に対する
+		// トリガー/長押し等の判定だけを持つ(プラットフォーム非依存)。
+		// PadButton / PadAxis / PadState は IPadBackend.h で定義。
 		// ==========================================
-
-		enum class PadButton : uint8_t
-		{
-			A, B, X, Y,
-			LB, RB, LT, RT,
-			DUp, DDown, DLeft, DRight,
-			Start, Back,
-			LStick, RStick,
-			Max,
-		};
-
-		enum class PadAxis : uint8_t
-		{
-			LX, LY, RX, RY, LTrigger, RTrigger,
-		};
-
 
 		class Pad
 		{
 		public:
 			Pad() = default;
 
-			void SetIndex(uint32_t index) { index_ = index; }
+			void SetIndex  (uint32_t index)      { index_ = index; }
+			void SetBackend(IPadBackend* backend) { backend_ = backend; }
 			void Update(float dt);
 
-			bool  IsConnected() const { return connected_; }
+			bool  IsConnected() const { return now_.connected; }
 			bool  IsTriggered(PadButton btn) const;
 			bool  IsPressed  (PadButton btn) const;
 			bool  IsReleased (PadButton btn) const;
@@ -135,17 +124,13 @@ namespace aq
 			void StopVibration() { Vibrate(0.0f, 0.0f); }
 
 		private:
-			bool  GetButtonState(const XINPUT_STATE& state, PadButton btn) const;
-			float NormalizeAxis (SHORT value, SHORT deadZone) const;
+			static constexpr uint32_t BTN_COUNT = PadState::BUTTON_COUNT;
 
-		private:
-			static constexpr uint32_t BTN_COUNT = static_cast<uint32_t>(PadButton::Max);
-
-			XINPUT_STATE now_{};
-			XINPUT_STATE old_{};
+			IPadBackend* backend_ = nullptr;
+			PadState     now_{};
+			PadState     old_{};
 			float        holdTimers_[BTN_COUNT]{};
-			bool         connected_ = false;
-			uint32_t     index_     = 0;
+			uint32_t     index_   = 0;
 		};
 
 
@@ -183,10 +168,11 @@ namespace aq
 			static void          Finalize()   { if (sInstance_) { delete sInstance_; sInstance_ = nullptr; } }
 
 		private:
-			LPDIRECTINPUT8            input_ = nullptr;
-			std::unique_ptr<KeyBoard> keyBoard_;
-			std::unique_ptr<Mouse>    mouse_;
-			Pad                       pads_[MAX_PAD_COUNT];
+			LPDIRECTINPUT8               input_ = nullptr;
+			std::unique_ptr<KeyBoard>    keyBoard_;
+			std::unique_ptr<Mouse>       mouse_;
+			std::unique_ptr<IPadBackend> padBackend_;
+			Pad                          pads_[MAX_PAD_COUNT];
 
 			using Clock = std::chrono::high_resolution_clock;
 			Clock::time_point lastTime_;

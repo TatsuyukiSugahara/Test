@@ -228,6 +228,15 @@ namespace aq
 					return cachedRoot;
 				}
 
+				// プラットフォームがコンテンツ基点を返す場合(UWP のパッケージ install
+				// フォルダ等)は、それを基点に採用し、ソースツリーの上方探索は行わない。
+				// sandbox では Game/Assets を遡れないため。Win32 は nullptr を返すので
+				// 従来どおり下の探索にフォールバックする。
+				if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
+					cachedRoot = contentRoot;
+					return cachedRoot;
+				}
+
 				std::error_code ec;
 				std::filesystem::path dir = std::filesystem::current_path(ec);
 				if (ec) {

@@ -37,6 +37,9 @@
     <Filter Include="Physics">
       <UniqueIdentifier>{c739d076-df44-472d-873f-202f105a6f6a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{f1a2b3c4-d5e6-47f8-9a0b-1c2d3e4f5a6b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Sound">
       <UniqueIdentifier>{a7d1c2e3-4f50-4a6b-8c9d-0e1f2a3b4c5d}</UniqueIdentifier>
     </Filter>
@@ -173,6 +176,9 @@
       <Filter>ECS</Filter>
     </ClCompile>
     <ClCompile Include="Engine.cpp" />
+    <ClCompile Include="Platform\PlatformWin32.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Memory\MemoryManager.cpp">
       <Filter>Memory</Filter>
     </ClCompile>
@@ -216,6 +222,9 @@
       <Filter>HID</Filter>
     </ClCompile>
     <ClCompile Include="HID\Input.cpp">
+      <Filter>HID</Filter>
+    </ClCompile>
+    <ClCompile Include="HID\XInputPadBackend.cpp">
       <Filter>HID</Filter>
     </ClCompile>
     <ClCompile Include="Util\GameTimer.cpp">
@@ -617,6 +626,15 @@
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="Engine.h" />
+    <ClInclude Include="Platform\IPlatform.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\PlatformBudget.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\PlatformWin32.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="aq.h" />
     <ClInclude Include="Graphics\AnimationClip.h">
       <Filter>Graphics</Filter>
@@ -748,6 +766,15 @@
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\InputBinding.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\IPadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\PadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\XInputPadBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="Util\JobSystem.h">

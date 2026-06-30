@@ -151,6 +151,7 @@
     <ClCompile Include="ECS\EntityManager.cpp" />
     <ClCompile Include="ECS\System.cpp" />
     <ClCompile Include="Engine.cpp" />
+    <ClCompile Include="Platform\PlatformWin32.cpp" />
     <ClCompile Include="Memory\MemoryManager.cpp" />
     <ClCompile Include="Memory\MemoryTracker.cpp" />
     <ClCompile Include="Memory\GlobalNew.cpp" />
@@ -166,6 +167,7 @@
     <ClCompile Include="Graphics\StaticMesh.cpp" />
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
+    <ClCompile Include="HID\XInputPadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\JobSystem.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
@@ -315,6 +317,9 @@
     <ClInclude Include="ECS\System.h" />
     <ClInclude Include="ECS\TypeInfo.h" />
     <ClInclude Include="Engine.h" />
+    <ClInclude Include="Platform\IPlatform.h" />
+    <ClInclude Include="Platform\PlatformBudget.h" />
+    <ClInclude Include="Platform\PlatformWin32.h" />
     <ClInclude Include="aq.h" />
     <ClInclude Include="Graphics\AnimationClip.h" />
     <ClInclude Include="Graphics\Camera.h" />
@@ -369,8 +374,11 @@
     <ClInclude Include="Graphics\SkeletalMesh.h" />
     <ClInclude Include="Graphics\StaticMesh.h" />
     <ClInclude Include="HID\ActionMap.h" />
+    <ClInclude Include="HID\IPadBackend.h" />
     <ClInclude Include="HID\Input.h" />
     <ClInclude Include="HID\InputBinding.h" />
+    <ClInclude Include="HID\PadBackend.h" />
+    <ClInclude Include="HID\XInputPadBackend.h" />
     <ClInclude Include="Util\JobSystem.h" />
     <ClInclude Include="Math\Bounds.h" />
     <ClInclude Include="Math\Matrix.h" />

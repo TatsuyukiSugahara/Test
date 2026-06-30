@@ -24,15 +24,15 @@ namespace aq
 			aq::math::Vector3    scale    = aq::math::Vector3::One;
 			aq::math::Quaternion rotation = aq::math::Quaternion::Identity;
 
-#ifdef AQ_DEBUG_IMGUI
+			// 永続フィールドの列挙（ImGui 編集 / JSON 保存 / JSON 読込で共有）。
+			// 第1引数=永続キー（JSON）、第3引数=UI 表示ラベル。
 			template <typename V>
-			void Inspect(V& visitor)
+			void Reflect(V& visitor)
 			{
-				visitor.Field("position (local)", position);
-				visitor.Field("scale    (local)", scale);
-				visitor.Field("rotation (local)", rotation);
+				visitor.Field("position", position, "position (local)");
+				visitor.Field("scale",    scale,    "scale    (local)");
+				visitor.Field("rotation", rotation, "rotation (local)");
 			}
-#endif
 		};
 	}
 }

@@ -129,6 +129,25 @@ namespace aq
 				}
 			}
 #endif
+
+			// 永続フィールドの列挙（JSON 保存/読込）。常時コンパイル。
+			// ImGui 編集は Inspect 側に分離している（パス入力のコミット制御が必要なため別実装）。
+			// パスは raw メンバを直接列挙し、ロード副作用は OnDeserialized へ退避する
+			// （SetModelPath を Reflect 内で呼ぶと shaderType 設定との順序が崩れるため）。
+			template <typename V>
+			void Reflect(V& visitor)
+			{
+				visitor.FieldPath("model",   modelPath_,   "Model Path");
+				visitor.FieldPath("texture", texturePath_, "Texture Path");
+			}
+
+			// deserialize 後に呼ぶ。読み込んだパスからメッシュのロードを発火する。
+			void OnDeserialized()
+			{
+				if (!modelPath_.empty())
+					SetModelPath(modelPath_.c_str(),
+					             texturePath_.empty() ? nullptr : texturePath_.c_str());
+			}
 		};
 
 

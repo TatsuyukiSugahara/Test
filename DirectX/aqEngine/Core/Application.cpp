@@ -40,12 +40,12 @@
 #include "Graphics/Vulkan/VulkanImGui.h"
 #endif
 #endif
+#include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #ifdef AQ_DEBUG_IMGUI
 #include "DebugUI.h"
 #include "Ocean/Debug/OceanDebugPanel.h"
 #include "Rendering/Debug/RenderingDebugPanel.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
-#include "ECS/ComponentRegistry.h"
 #include "ECS/SceneHierarchySystem.h"
 #include "UI/Debug/UIEditorDebugPanel.h"
 #include "UI/Debug/TextStyleEditorPanel.h"
@@ -76,8 +76,9 @@ namespace aq
 		aq::graphics::LightManager::Initialize();
 #ifdef AQ_DEBUG_IMGUI
 		aq::DebugUI::Initialize();
-		aq::ecs::ComponentRegistry::RegisterCoreComponents();
 #endif
+		// レジストリは JSON シリアライズ/デシリアライズに使うため、ビルド構成を問わず登録する。
+		aq::ecs::ComponentRegistry::RegisterCoreComponents();
 
 #ifdef AQ_IMGUI
 		{

@@ -306,6 +306,7 @@
     <ClInclude Include="ECS\SceneHierarchySystem.h" />
     <ClInclude Include="ECS\EntityDebugTag.h" />
     <ClInclude Include="ECS\ImGuiFieldVisitor.h" />
+    <ClInclude Include="ECS\JsonFieldVisitor.h" />
     <ClInclude Include="ECS\Chunk.h" />
     <ClInclude Include="ECS\ComponentArray.h" />
     <ClInclude Include="ECS\ECS.h" />

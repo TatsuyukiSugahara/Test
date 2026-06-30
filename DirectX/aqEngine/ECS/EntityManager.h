@@ -96,6 +96,35 @@ namespace aq
 
 
 			/**
+			 * 実行時 TypeInfo 列から Entity を遅延生成する（Prefab 生成の核心 primitive）。
+			 * ForEach / System Update 内から安全に呼べる（commandMutex_ のみ取得）。
+			 * 実体生成は次の FlushCommands で行われる。
+			 *
+			 * types     : コンポーネント集合（依存解決済みの完全な列を渡すこと）。重複は内部で除去する。
+			 * onCreated : 全コンポーネント構築後に呼ばれる。ここで deserialize 等を行う（GetComponent 有効）。
+			 */
+			void RequestCreateEntityFromTypes(
+				std::vector<TypeInfo>        types,
+				std::function<void(Entity)>  onCreated = nullptr)
+			{
+				EngineAssertMsg(!isInUserCallback_,
+					"EntityManager::RequestCreateEntityFromTypes: structural changes are forbidden inside onCreated/onAdded callback.");
+				if (isInUserCallback_) return;
+				std::lock_guard<std::mutex> lock(commandMutex_);
+				pendingCommands_.push_back({
+					[this, types = std::move(types), onCreated = std::move(onCreated)]() mutable {
+						// FlushCommands が既に iterationMutex_ を保持しているため NoLock 版を使う
+						Entity e = CreateEntityFromTypesNoLock(types);
+						if (e.IsValid() && onCreated) {
+							ScopedFlag cbGuard(isInUserCallback_);
+							onCreated(e);
+						}
+					}
+				});
+			}
+
+
+			/**
 			 * ハンドルの有効性確認（generation チェック付き）
 			 */
 			bool IsValid(const EntityHandle& handle) const;
@@ -320,6 +349,50 @@ namespace aq
 			void NewComponent(const EntityLocation& loc)
 			{
 				(new(chunkList_[loc.chunkIndex].GetComponent<Ts>(loc)) Ts(), ...);
+			}
+
+			// TypeInfo 列の重複除去（Archetype::AddType は重複を弾かないため呼び出し側で行う）。
+			static void DedupTypes(std::vector<TypeInfo>& types)
+			{
+				std::vector<TypeInfo> unique;
+				unique.reserve(types.size());
+				for (const TypeInfo& t : types) {
+					bool dup = false;
+					for (const TypeInfo& u : unique) {
+						if (u == t) { dup = true; break; }
+					}
+					if (!dup) unique.push_back(t);
+				}
+				types.swap(unique);
+			}
+
+			// 実行時 TypeInfo 列から即時生成する（ロックなし）。
+			// 呼び出し元が iterationMutex_ を保持していること（FlushCommands 内のコマンドが該当）。
+			// dedup + 上限診断 + 全コンポーネント構築までを行う。失敗時は無効な Entity を返す。
+			Entity CreateEntityFromTypesNoLock(std::vector<TypeInfo>& types)
+			{
+				DedupTypes(types);
+
+				// MAX 超過は無言で切り捨てず診断エラーにする（AddType は上限超過を無視するため）
+				EngineAssertMsg(types.size() <= MAX_COMPONENT_SIZE,
+					"CreateEntityFromTypes: component count exceeds MAX_COMPONENT_SIZE");
+				if (types.size() > MAX_COMPONENT_SIZE) return Entity();
+
+				Archetype archetype;
+				for (const TypeInfo& t : types) {
+					archetype.AddType(t);
+				}
+
+				Entity e = CreateEntityImpl(archetype);
+				EntityLocation* loc = ResolveLocation(e.GetHandle());
+				if (!loc) return Entity();
+
+				// 全コンポーネントを placement-new（生メモリのため triviality 無関係に構築する）
+				for (const TypeInfo& t : types) {
+					void* p = chunkList_[loc->chunkIndex].GetComponentByType(*loc, t);
+					if (p) t.Construct(p);
+				}
+				return e;
 			}
 
 			// true: 実際に除去した / false: T を持っていなかったため何もしなかった

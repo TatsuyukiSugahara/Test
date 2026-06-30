@@ -19,16 +19,30 @@ namespace aq
 		{
 			bool changed = false;
 
-			void Field(const char* label, float& value)
+			// Field の第1引数は永続キー（persistKey）。第3引数 displayLabel が指定されれば
+			// それを UI 表示に使う（省略時は persistKey をそのまま表示）。
+			// これにより JSON キーと UI 文言を分離できる（2 引数呼び出しは従来どおり persistKey 表示）。
+			static const char* Label(const char* persistKey, const char* displayLabel)
 			{
-				if (ImGui::DragFloat(label, &value, 0.01f))
+				return displayLabel ? displayLabel : persistKey;
+			}
+
+			void Field(const char* persistKey, float& value, const char* displayLabel = nullptr)
+			{
+				if (ImGui::DragFloat(Label(persistKey, displayLabel), &value, 0.01f))
 					changed = true;
 			}
 
-			void Field(const char* label, aq::math::Vector3& value)
+			void Field(const char* persistKey, int& value, const char* displayLabel = nullptr)
+			{
+				if (ImGui::DragInt(Label(persistKey, displayLabel), &value))
+					changed = true;
+			}
+
+			void Field(const char* persistKey, aq::math::Vector3& value, const char* displayLabel = nullptr)
 			{
 				float f[3] = { value.x, value.y, value.z };
-				if (ImGui::DragFloat3(label, f, 0.01f))
+				if (ImGui::DragFloat3(Label(persistKey, displayLabel), f, 0.01f))
 				{
 					value.x = f[0]; value.y = f[1]; value.z = f[2];
 					changed = true;
@@ -36,27 +50,28 @@ namespace aq
 			}
 
 			// Quaternion は Euler 角(度)に変換して表示・編集する。順序は YXZ。
-			void Field(const char* label, aq::math::Quaternion& value)
+			void Field(const char* persistKey, aq::math::Quaternion& value, const char* displayLabel = nullptr)
 			{
 				aq::math::Vector3 euler = QuaternionToEulerDeg(value);
 				float f[3] = { euler.x, euler.y, euler.z };
-				if (ImGui::DragFloat3(label, f, 0.5f))
+				if (ImGui::DragFloat3(Label(persistKey, displayLabel), f, 0.5f))
 				{
 					value   = EulerDegToQuaternion(aq::math::Vector3(f[0], f[1], f[2]));
 					changed = true;
 				}
 			}
 
-			void Field(const char* label, bool& value)
+			void Field(const char* persistKey, bool& value, const char* displayLabel = nullptr)
 			{
-				if (ImGui::Checkbox(label, &value))
+				if (ImGui::Checkbox(Label(persistKey, displayLabel), &value))
 					changed = true;
 			}
 
 			// ファイルパス入力。Enter キーで path を更新して true を返す。
 			// 編集中はウィジェット内部バッファが保持するため、毎フレーム path を渡しても問題ない。
-			bool FieldPath(const char* label, std::string& path)
+			bool FieldPath(const char* persistKey, std::string& path, const char* displayLabel = nullptr)
 			{
+				const char* label = Label(persistKey, displayLabel);
 				char buf[512];
 				strncpy_s(buf, sizeof(buf), path.c_str(), _TRUNCATE);
 				const bool committed = ImGui::InputText(

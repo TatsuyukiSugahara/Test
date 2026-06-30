@@ -75,20 +75,21 @@ namespace aq
 			/** ワールド変換 xf を使ってデカール描画アイテムを構築する。未準備なら false。 */
 			bool FillDecalItem(aq::rendering::DecalRenderItem& out, const aq::ecs::Transform& xf) const;
 
-#ifdef AQ_DEBUG_IMGUI
+			// 永続フィールドの列挙（ImGui 編集 / JSON 保存 / JSON 読込で共有）。
+			// FieldPath が true（= 値更新）を返すと SetTexturePath が走り、
+			// JSON 読込時にもテクスチャのロードが発火する。
 			template <typename V>
-			void Inspect(V& visitor)
+			void Reflect(V& visitor)
 			{
 				std::string newPath = texturePath_;
-				if (visitor.FieldPath("Texture", newPath))
+				if (visitor.FieldPath("texture", newPath, "Texture"))
 					SetTexturePath(newPath.empty() ? nullptr : newPath.c_str());
-				visitor.Field("Size (xz=範囲 y=深度)", size_);
-				visitor.Field("Color",                color_);
-				visitor.Field("Opacity",              opacity_);
-				visitor.Field("AngleFadeMin",         angleFadeMin_);
+				visitor.Field("size",         size_,         "Size (xz=範囲 y=深度)");
+				visitor.Field("color",        color_,        "Color");
+				visitor.Field("opacity",      opacity_,      "Opacity");
+				visitor.Field("angleFadeMin", angleFadeMin_, "AngleFadeMin");
 				visitor.ReadOnly("state", StateName());
 			}
-#endif
 		};
 	}
 }

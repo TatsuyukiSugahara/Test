@@ -61,6 +61,7 @@ namespace aq
 		public:
 			using DestructorFn = void(*)(void*);
 			using MoveFn = void(*)(void* dst, void* src);
+			using ConstructFn = void(*)(void*);
 
 		private:
 			size_t typeHash_;
@@ -68,15 +69,16 @@ namespace aq
 			size_t align_;
 			DestructorFn destructor_;
 			MoveFn mover_;
+			ConstructFn constructor_;
 
 
 		private:
-			constexpr explicit TypeInfo(const size_t typeHash, const size_t size, const size_t align, DestructorFn destructor, MoveFn mover)
-				: typeHash_(typeHash), size_(size), align_(align), destructor_(destructor), mover_(mover) {}
+			constexpr explicit TypeInfo(const size_t typeHash, const size_t size, const size_t align, DestructorFn destructor, MoveFn mover, ConstructFn constructor)
+				: typeHash_(typeHash), size_(size), align_(align), destructor_(destructor), mover_(mover), constructor_(constructor) {}
 
 
 		public:
-			constexpr TypeInfo() : typeHash_(-1), size_(0), align_(1), destructor_(nullptr), mover_(nullptr)
+			constexpr TypeInfo() : typeHash_(-1), size_(0), align_(1), destructor_(nullptr), mover_(nullptr), constructor_(nullptr)
 			{
 			}
 
@@ -110,6 +112,18 @@ namespace aq
 				return mover_;
 			}
 
+			[[nodiscard]] constexpr ConstructFn GetConstructor() const
+			{
+				return constructor_;
+			}
+
+			// 実行時 Archetype 構築経路で生メモリにコンポーネントを placement-new する。
+			// ConstructFn は全型で設定されるため、trivial 型でもゼロ初期化されオブジェクト寿命が確定する。
+			void Construct(void* p) const
+			{
+				if (constructor_) constructor_(p);
+			}
+
 			[[nodiscard]] constexpr size_t GetAlign() const
 			{
 				return align_;
@@ -123,18 +137,23 @@ namespace aq
 					sizeof(T),
 					alignof(T),
 					std::is_trivially_destructible_v<T> ? nullptr : &DestroyImpl<T>,
-					std::is_trivially_copyable_v<T>     ? nullptr : &MoveImpl<T>
+					std::is_trivially_copyable_v<T>     ? nullptr : &MoveImpl<T>,
+					&ConstructImpl<T>   // 構築は常に必須（Chunk は生メモリ、trivial 型も構築して未初期化を防ぐ）
 				);
 			}
 
 			static constexpr TypeInfo Create(const size_t hash, size_t size)
 			{
-				return TypeInfo(hash, size, 1, nullptr, nullptr);
+				return TypeInfo(hash, size, 1, nullptr, nullptr, nullptr);
 			}
 
 		private:
 			template <typename T>
 			static void DestroyImpl(void* p) { static_cast<T*>(p)->~T(); }
+
+			// 既定構築の placement-new（実行時 TypeInfo から構築するため）
+			template <typename T>
+			static void ConstructImpl(void* p) { new(p) T(); }
 
 			// 非 trivially-copyable な型の move-construct（src は moved-from 状態になる）
 			template <typename T>

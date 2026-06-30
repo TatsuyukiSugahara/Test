@@ -10,6 +10,7 @@
 #endif
 
 #include "Component/Prefab.h"
+#include "ECS/JsonFieldVisitor.h"
 #include "Component/AnimationComponentSystem.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
@@ -265,6 +266,63 @@ namespace app
 				rootPrefab.AddChild(childPrefab);
 
 				rootPrefab.Instantiate();
+			}
+
+			// ----- Prefab 生成 primitive テスト (RequestCreateEntityFromTypes) -----
+			// 実行時 TypeInfo 集合からの遅延生成を検証する。
+			//  - dedup    : 重複した TypeInfo を渡しても 1 つに集約される
+			//  - 全構築   : onCreated 時点で全コンポーネントが GetComponent で取得できる
+			//             （遅延 add→deserialize 問題の回避＝1 コマンド内で生成→構築→初期化）
+			//  - 遅延生成 : 実体化は次フレームの ECS::Update→FlushCommands で行われる
+			{
+				std::vector<aq::ecs::TypeInfo> types = {
+					aq::ecs::TypeInfo::Create<aq::ecs::TransformComponent>(),
+					aq::ecs::TypeInfo::Create<aq::ecs::HierarchicalTransformComponent>(),
+					aq::ecs::TypeInfo::Create<aq::ecs::BoxStaticMeshComponent>(),
+					aq::ecs::TypeInfo::Create<aq::ecs::TransformComponent>(),   // 重複（dedup 検証用）
+				};
+
+				aq::ecs::EntityContext::Get().RequestCreateEntityFromTypes(
+					std::move(types),
+					[spawnY](aq::ecs::Entity entity)
+					{
+						// onCreated 時点で全コンポーネントが実体化済みであること
+						auto* tc  = entity.GetComponent<aq::ecs::TransformComponent>();
+						auto* htc = entity.GetComponent<aq::ecs::HierarchicalTransformComponent>();
+						auto* box = entity.GetComponent<aq::ecs::BoxStaticMeshComponent>();
+						EngineAssertMsg(tc && htc && box,
+							"RequestCreateEntityFromTypes: 全コンポーネントが onCreated 時点で構築済みであること");
+						if (tc) tc->position.Set(-3.0f, spawnY, 5.0f);
+#ifdef AQ_DEBUG_IMGUI
+						if (auto* tag = entity.GetComponent<aq::ecs::EntityDebugTag>())
+							tag->SetName("PrefabPrimitiveTest");
+#endif
+					});
+			}
+
+			// ----- Reflect + JSON 往復テスト (JsonWrite/ReadVisitor) -----
+			// TransformComponent を JSON へ書き出し→文字列化→パース→読み込みし、値が一致することを検証する。
+			// レジストリ非依存（常時コンパイル）。Reflect が ImGui/JSON 共通基盤であることの確認。
+			{
+				aq::ecs::TransformComponent src;
+				src.position.Set(1.0f, 2.0f, 3.0f);
+				src.scale.Set(4.0f, 5.0f, 6.0f);
+				src.rotation = aq::math::Quaternion::Identity;   // (0,0,0,1)
+
+				aq::ecs::JsonWriteVisitor writer;
+				src.Reflect(writer);
+				const std::string json = aq::util::JsonSerializer::Stringify(writer.obj);
+
+				aq::util::JsonValue parsed = aq::util::JsonParser::ParseString(json);
+				aq::ecs::TransformComponent dst;   // 既定値から復元する
+				aq::ecs::JsonReadVisitor reader(parsed);
+				dst.Reflect(reader);
+
+				EngineAssertMsg(
+					dst.position.x == 1.0f && dst.position.y == 2.0f && dst.position.z == 3.0f &&
+					dst.scale.x    == 4.0f && dst.scale.y    == 5.0f && dst.scale.z    == 6.0f &&
+					dst.rotation.w == 1.0f,
+					"Transform JSON 往復: position/scale/rotation が一致すること");
 			}
 		}
 

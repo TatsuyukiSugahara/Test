@@ -74,6 +74,23 @@ namespace aq
 #endif
 			}
 
+			// 実行時 TypeInfo 列から Entity を遅延生成する（Prefab 生成の核心 primitive）。
+			// debug ビルドでは typed 版 CreateEntity と同様に EntityDebugTag を自動注入する。
+			void RequestCreateEntityFromTypes(
+				std::vector<TypeInfo>        types,
+				std::function<void(Entity)>  onCreated = nullptr)
+			{
+#ifdef AQ_DEBUG_IMGUI
+				const TypeInfo tag = TypeInfo::Create<EntityDebugTag>();
+				bool hasTag = false;
+				for (const TypeInfo& t : types) {
+					if (t == tag) { hasTag = true; break; }
+				}
+				if (!hasTag) types.push_back(tag);
+#endif
+				entityManager_.RequestCreateEntityFromTypes(std::move(types), std::move(onCreated));
+			}
+
 			bool IsValid(const EntityHandle& handle) const
 			{
 				return entityManager_.IsValid(handle);

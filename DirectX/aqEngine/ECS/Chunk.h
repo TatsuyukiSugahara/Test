@@ -113,6 +113,25 @@ namespace aq
 
 
 			/**
+			 * コンポーネント取得（実行時 TypeInfo 版）
+			 * 実行時 Archetype 構築経路（RequestCreateEntityFromTypes）で生メモリへ
+			 * placement-new するときに使う。type が Archetype に無ければ nullptr。
+			 */
+			void* GetComponentByType(const EntityLocation& loc, const TypeInfo& type)
+			{
+				assert(loc.index < size_ && "GetComponentByType: index out of bounds");
+				if (loc.index >= size_) return nullptr;
+
+				const size_t index = archetype_.GetIndexByTypeInfo(type);
+				if (index >= archetype_.GetArchetypeSize()) return nullptr;
+
+				const auto offset       = archetype_.GetOffsetByIndex(index) * capacity_;
+				const auto currentIndex = type.GetSize() * loc.index;
+				return begin_.get() + offset + currentIndex;
+			}
+
+
+			/**
 			 * コンポーネントにデータ設定
 			 */
 			template <typename T>

@@ -595,6 +595,9 @@
     <ClInclude Include="ECS\ImGuiFieldVisitor.h">
       <Filter>ECS</Filter>
     </ClInclude>
+    <ClInclude Include="ECS\JsonFieldVisitor.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
     <ClInclude Include="ECS\Chunk.h">
       <Filter>ECS</Filter>
     </ClInclude>

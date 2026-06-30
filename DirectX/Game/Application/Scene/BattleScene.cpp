@@ -9,7 +9,10 @@
 #include "ECS/EntityDebugTag.h"
 #endif
 
-#include "Component/Prefab.h"
+#include "ECS/Prefab.h"
+#include "ECS/PrefabSerializer.h"
+#include "ECS/PrefabRegistry.h"
+#include "ECS/SpawnSystem.h"
 #include "ECS/JsonFieldVisitor.h"
 #include "Component/AnimationComponentSystem.h"
 #include "ECS/ActorComponentSystem.h"
@@ -75,6 +78,7 @@ namespace app
 			splatmapPainter_.Attach(terrainComp->GetChunk(), aq::math::Vector3(-50.0f, 0.0f, -50.0f));
 			aq::DebugUI::Get().Register(&painter_);
 			aq::DebugUI::Get().Register(&splatmapPainter_);
+			aq::DebugUI::Get().Register(&prefabEditor_);
 #endif
 
 			// world(0,0) = terrain local(50,50) (XZオフセット -50 適用後)
@@ -226,46 +230,66 @@ namespace app
 #endif
 			}
 
-			// ----- Prefab 階層テスト -----
-			// ローカル座標と期待ワールド座標:
-			//   root        local (0, spawnY, 5)   → world (0, spawnY, 5)
-			//   └ child     local (+3, 0, 0)        → world (3, spawnY, 5)
-			//     └ grandchild local (0, +2, 0)     → world (3, spawnY+2, 5)
-			// HierarcicalTransformSystem が 1 フレーム後に HTC.transform を更新する。
+			// ----- Prefab ツリー遅延生成テスト (PrefabSerializer + Prefab::Instantiate) -----
+			// 単一 JSON プラン（root→child→grandchild、各ノードに Transform のみ）から
+			// ツリーを遅延生成する Phase 3 の検証。
+			//   - JSON → PrefabData（不変プラン）への変換（PrefabSerializer::FromJson）
+			//   - 1 コマンドでツリー全体を遅延生成（shared_ptr 寿命ルール・§4.3）
+			//   - components キー（"Transform"）→ TypeInfo 解決 + requiredWith(HTC) 自動補完
+			//   - 各ノードの deserialize（local position 復元）
+			//   - HTC 親子付け（root→child→grandchild）
+			// HierarchicalTransformSystem は 1 フレーム後にワールド座標を更新するため、
+			// onComplete では deserialize 済みの local position と親子構造のみ検証する。
 			{
-				auto grandchildPrefab = aq::ecs::Prefab::Create<
-					aq::ecs::TransformComponent,
-					aq::ecs::HierarchicalTransformComponent,
-					aq::ecs::BoxStaticMeshComponent>(
-					"PrefabTest_Grandchild",
-					[](aq::ecs::Entity entity)
-					{
-						entity.GetComponent<aq::ecs::TransformComponent>()->position.Set(0.0f, 2.0f, 0.0f);
-					});
+				const char* prefabJson = R"({
+					"name": "PrefabTreeTest_Root",
+					"components": { "Transform": { "position": [0, 1, 5] } },
+					"children": [
+						{
+							"name": "PrefabTreeTest_Child",
+							"components": { "Transform": { "position": [3, 0, 0] } },
+							"children": [
+								{
+									"name": "PrefabTreeTest_Grandchild",
+									"components": { "Transform": { "position": [0, 2, 0] } }
+								}
+							]
+						}
+					]
+				})";
 
-				auto childPrefab = aq::ecs::Prefab::Create<
-					aq::ecs::TransformComponent,
-					aq::ecs::HierarchicalTransformComponent,
-					aq::ecs::BoxStaticMeshComponent>(
-					"PrefabTest_Child",
-					[](aq::ecs::Entity entity)
-					{
-						entity.GetComponent<aq::ecs::TransformComponent>()->position.Set(3.0f, 0.0f, 0.0f);
-					});
-				childPrefab.AddChild(grandchildPrefab);
+				aq::util::JsonValue planJson = aq::util::JsonParser::ParseString(prefabJson);
+				aq::ecs::Prefab prefab = aq::ecs::PrefabSerializer::FromJson(planJson);
+				EngineAssertMsg(prefab.IsValid(), "PrefabSerializer::FromJson: 有効な Prefab を返すこと");
 
-				auto rootPrefab = aq::ecs::Prefab::Create<
-					aq::ecs::TransformComponent,
-					aq::ecs::HierarchicalTransformComponent,
-					aq::ecs::BoxStaticMeshComponent>(
-					"PrefabTest_Root",
-					[spawnY](aq::ecs::Entity entity)
+				prefab.Instantiate(aq::ecs::EntityHandle(),
+					[](aq::ecs::Entity root)
 					{
-						entity.GetComponent<aq::ecs::TransformComponent>()->position.Set(0.0f, spawnY, 5.0f);
-					});
-				rootPrefab.AddChild(childPrefab);
+						auto& ctx = aq::ecs::EntityContext::Get();
 
-				rootPrefab.Instantiate();
+						auto* rootTc = root.GetComponent<aq::ecs::TransformComponent>();
+						EngineAssertMsg(rootTc &&
+							rootTc->position.x == 0.0f && rootTc->position.y == 1.0f && rootTc->position.z == 5.0f,
+							"Prefab ツリー: root の local position が JSON から復元されること");
+
+						auto rootChildren = ctx.GetChildren(root.GetHandle());
+						EngineAssertMsg(rootChildren.size() == 1,
+							"Prefab ツリー: root の子が 1 つ親子付けされていること");
+
+						auto* childTc = ctx.GetComponent<aq::ecs::TransformComponent>(rootChildren[0]);
+						EngineAssertMsg(childTc &&
+							childTc->position.x == 3.0f && childTc->position.y == 0.0f && childTc->position.z == 0.0f,
+							"Prefab ツリー: child の local position が復元されること");
+
+						auto childChildren = ctx.GetChildren(rootChildren[0]);
+						EngineAssertMsg(childChildren.size() == 1,
+							"Prefab ツリー: child の子（grandchild）が親子付けされていること");
+
+						auto* grandTc = ctx.GetComponent<aq::ecs::TransformComponent>(childChildren[0]);
+						EngineAssertMsg(grandTc &&
+							grandTc->position.x == 0.0f && grandTc->position.y == 2.0f && grandTc->position.z == 0.0f,
+							"Prefab ツリー: grandchild の local position が復元されること");
+					});
 			}
 
 			// ----- Prefab 生成 primitive テスト (RequestCreateEntityFromTypes) -----
@@ -324,12 +348,134 @@ namespace app
 					dst.rotation.w == 1.0f,
 					"Transform JSON 往復: position/scale/rotation が一致すること");
 			}
+
+			// ----- PrefabRegistry + Spawner テスト (Phase 4) -----
+			// データ参照（文字列キー）→ ランタイム解決（PrefabId）→ System が遅延スポーン、を検証する。
+			//   - Register/Resolve のキャッシュ一貫性（同一キー→同一 id、別キー→別 id）
+			//   - Find が登録済み id で shared_ptr を返し、無効 id で nullptr を返す
+			//   - SpawnerComponent を持つ実エンティティを配置し、SpawnSystem が毎フレーム遅延生成する
+			{
+				auto& reg = aq::ecs::PrefabRegistry::Get();
+
+				// スポーン対象（小さな箱 1 個）の不変プランを in-memory 登録する。
+				const char* payloadJson = R"({
+					"name": "SpawnedBox",
+					"components": { "Transform": { "position": [0, 0, 0] } }
+				})";
+				aq::util::JsonValue payloadPlan = aq::util::JsonParser::ParseString(payloadJson);
+				aq::ecs::Prefab payloadPrefab   = aq::ecs::PrefabSerializer::FromJson(payloadPlan);
+
+				const char* payloadKey = "mem://phase4_spawn_payload";
+				aq::ecs::PrefabId id1 = reg.Register(payloadKey, payloadPrefab);
+				aq::ecs::PrefabId id2 = reg.Resolve(payloadKey);   // キャッシュヒット（再ロードしない）
+				EngineAssertMsg(id1.IsValid() && id1.value == id2.value,
+					"PrefabRegistry: 同一キーは同一 PrefabId を返すこと");
+
+				EngineAssertMsg(reg.Find(id1) != nullptr,
+					"PrefabRegistry: 登録済み id で PrefabData を取得できること");
+				EngineAssertMsg(reg.Find(aq::ecs::PrefabId{ 0 }) == nullptr,
+					"PrefabRegistry: 無効 id では nullptr を返すこと");
+
+				aq::ecs::PrefabId other = reg.Register("mem://phase4_other", payloadPrefab);
+				EngineAssertMsg(other.IsValid() && other.value != id1.value,
+					"PrefabRegistry: 別キーは別 PrefabId を割り当てること");
+
+				// SpawnerComponent を持つエンティティを生成し、ランタイムスポーンを起動する。
+				// 実体化は遅延（SpawnSystem→Instantiate→次 FlushCommands）で行われる。
+				{
+					std::vector<aq::ecs::TypeInfo> spawnerTypes = {
+						aq::ecs::TypeInfo::Create<aq::ecs::TransformComponent>(),
+						aq::ecs::TypeInfo::Create<aq::ecs::HierarchicalTransformComponent>(),
+						aq::ecs::TypeInfo::Create<aq::ecs::SpawnerComponent>(),
+					};
+					aq::ecs::EntityContext::Get().RequestCreateEntityFromTypes(
+						std::move(spawnerTypes),
+						[payloadKey, spawnY](aq::ecs::Entity entity)
+						{
+							auto* spawner = entity.GetComponent<aq::ecs::SpawnerComponent>();
+							EngineAssertMsg(spawner != nullptr,
+								"Spawner: onCreated 時点で SpawnerComponent が構築済みであること");
+							if (spawner) {
+								spawner->prefabPath = payloadKey;   // 文字列正本（in-memory 登録済み）
+								spawner->interval   = 1.0f;
+								spawner->maxCount   = 3;            // 動的生成を 3 個に制限
+							}
+							if (auto* tc = entity.GetComponent<aq::ecs::TransformComponent>())
+								tc->position.Set(6.0f, spawnY, 5.0f);
+#ifdef AQ_DEBUG_IMGUI
+							if (auto* tag = entity.GetComponent<aq::ecs::EntityDebugTag>())
+								tag->SetName("Phase4_Spawner");
+#endif
+						});
+				}
+			}
+
+			// ----- overrides 意味論テスト (Phase 6) -----
+			// 子ノードの base components に overrides を適用する解決パス（PrefabSerializer の ApplyPatch）を検証する。
+			//   - components の deep merge（position 上書き / scale 保持）
+			//   - addedComponents（新規 Spawner 追加）
+			//   - removedComponents（Decal 除去）
+			// ネスト参照（"prefab"）のファイル展開も同じ ApplyPatch を共有する（ファイル IO を伴うため本テストは
+			// インライン base + overrides で意味論のみを検証する）。
+			{
+				const char* overrideJson = R"({
+					"name": "OverrideRoot",
+					"components": { "Transform": { "position": [0, 0, 0] } },
+					"children": [
+						{
+							"name": "OverrideChild",
+							"components": {
+								"Transform": { "position": [1, 1, 1], "scale": [2, 2, 2] },
+								"Decal":     {}
+							},
+							"overrides": {
+								"components":        { "Transform": { "position": [9, 9, 9] } },
+								"addedComponents":   { "Spawner":   { "interval": 5 } },
+								"removedComponents": [ "Decal" ]
+							}
+						}
+					]
+				})";
+
+				aq::util::JsonValue plan = aq::util::JsonParser::ParseString(overrideJson);
+				aq::ecs::Prefab prefab  = aq::ecs::PrefabSerializer::FromJson(plan);
+				EngineAssertMsg(prefab.IsValid(), "Phase6: overrides 適用後も有効な Prefab を返すこと");
+
+				prefab.Instantiate(aq::ecs::EntityHandle(),
+					[](aq::ecs::Entity root)
+					{
+						auto& ctx = aq::ecs::EntityContext::Get();
+						auto children = ctx.GetChildren(root.GetHandle());
+						EngineAssertMsg(children.size() == 1, "Phase6: 子が 1 つ生成されること");
+						if (children.empty()) return;
+
+						const aq::ecs::EntityHandle child = children[0];
+
+						auto* tc = ctx.GetComponent<aq::ecs::TransformComponent>(child);
+						EngineAssertMsg(tc &&
+							tc->position.x == 9.0f && tc->position.y == 9.0f && tc->position.z == 9.0f,
+							"Phase6: overrides.components の position が deep merge で上書きされること");
+						EngineAssertMsg(tc &&
+							tc->scale.x == 2.0f && tc->scale.y == 2.0f && tc->scale.z == 2.0f,
+							"Phase6: deep merge 後も base の scale が保持されること");
+
+						EngineAssertMsg(ctx.GetComponent<aq::ecs::DecalComponent>(child) == nullptr,
+							"Phase6: removedComponents の Decal が除去されること");
+
+						auto* spawner = ctx.GetComponent<aq::ecs::SpawnerComponent>(child);
+						EngineAssertMsg(spawner != nullptr,
+							"Phase6: addedComponents の Spawner が追加されること");
+						EngineAssertMsg(spawner && spawner->interval == 5.0f,
+							"Phase6: addedComponents の Spawner.interval が復元されること");
+					});
+			}
 		}
 
 
 		void BattleScene::Finalize()
 		{
 #ifdef AQ_DEBUG_IMGUI
+			aq::DebugUI::Get().Unregister(&prefabEditor_);
 			aq::DebugUI::Get().Unregister(&splatmapPainter_);
 			aq::DebugUI::Get().Unregister(&painter_);
 			splatmapPainter_.Detach();

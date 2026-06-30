@@ -19,6 +19,7 @@
 #include "Component/HierarchicalTransformComponent.h"
 #include "Component/BodyComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
+#include "ECS/SpawnSystem.h"
 #include "Util/Profiler.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
@@ -372,6 +373,7 @@ namespace aq
 	{
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::AnimationSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::SpawnSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::RenderSystem>();
 
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::HierarcicalTransformSystem>();
@@ -458,7 +460,6 @@ namespace aq
 				if (ImGui::BeginMainMenuBar())
 				{
 					aq::ecs::EntityContext::Get().DebugRenderMenu();
-					aq::ecs::EntityContext::Get().DebugRenderSystemMenus();
 					aq::DebugUI::Get().DebugRenderMenuAll();
 					OnDebugRenderMenu();
 					ImGui::EndMainMenuBar();

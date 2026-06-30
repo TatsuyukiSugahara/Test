@@ -204,6 +204,22 @@ struct PrefabData { PrefabNodeData root; };    // 不変
 - 生成は §4.3 のとおり「型リスト（components のキー→TypeInfo）→ 遅延生成 → 各コンポーネント `deserialize`(JsonValue)」。
 - **初期実装は毎スポーン deserialize**。CopyFn ブループリント最適化は後段（§10）で、この JsonValue 経路の上に載せる。
 
+> **実装状況（Phase 3 完了）**: 単一 JSON プランからツリーを遅延生成し、実機（BattleScene 初期化）で検証済み。
+> - `PrefabData` / `PrefabNodeData`（JsonValue ベースの不変プラン）+ 薄いハンドル `Prefab`（`shared_ptr<const PrefabData>` 保持）… [Prefab.h](Prefab.h)。
+> - ツリー遅延生成（`Prefab::Instantiate`）… [Prefab.cpp](Prefab.cpp)。**shared_ptr を値捕獲**（§4.3 寿命ルール）。
+>   1 コマンド内で root→子→孫を再帰生成し、各ノードで `CollectTypes`（components キー→TypeInfo + **requiredWith 推移展開**）→生成→`deserialize`(JsonValue)→DebugTag 命名→HTC 親子付け。
+>   末尾で `onComplete(root)`。即時版 `InstantiateImmediate`（init/エディタ用・ForEach 外限定）も提供。
+> - 生成プリミティブ … [EntityManager.h](EntityManager.h)：`RequestDeferredBuild`（複数 Entity を 1 コマンドで生成する遅延フック・registry 非依存）+ `CreateEntityFromTypes`（即時・ロック版）。
+>   [EntityContext.h](EntityContext.h) のラッパで EntityDebugTag を注入（`InjectDebugTag` に共通化）。
+> - JSON 層 … [PrefabSerializer.h](PrefabSerializer.h) / .cpp：`Load(path)` / `FromJson(JsonValue)`。**Phase 3 はインライン components/children のみ**（"prefab" ネスト参照・overrides・循環検出は Phase 6）。
+> - レジストリ拡張 … [ComponentRegistry.h](ComponentRegistry.h)：`Find(typeName)` / `TypeOf(typeName)`（名前→meta / 名前→TypeInfo）。
+> - 検証テスト（root→child→grandchild の Transform-only ツリーを JSON から遅延生成し、`onComplete` で local position 復元と親子構造を assert）… BattleScene 初期化ブロック。Debug|x64 ビルド成功。
+> - **旧コードベース `Prefab`（`Component/Prefab.{h,cpp}` の `Prefab::Create<Cs...>`）は削除**（新データ駆動 `aq::ecs::Prefab` へ置換）。BattleScene の旧階層テストは上記 JSON ツリーテストへ移行。
+>
+> **未完（Phase 3 残・Phase 6 へ）**:
+> - `onComplete` は現状 `isInUserCallback_` 未設定で呼ばれる（builder 全体が構造変更可コンテキスト）。厳密化は primitive を汚さない形で後段検討。
+> - "prefab" ネスト参照展開・overrides 意味論・循環検出（§7.3/§7.4）は Phase 6。
+
 ### 6.2 エディタ = 型消去コンポーネント実体（編集用ワーキングコピー）
 
 エディタは編集 UX のため、コンポーネントを**実体**として保持し既存 Inspector を再利用する。
@@ -252,6 +268,22 @@ struct PrefabNode
 
 → エディタ・シリアライザ・ランタイム生成が **`Reflect` を単一の真実**として共有。
 
+> **実装状況（Phase 5 完了）**: ImGui で Prefab を作成・編集・保存・ロード・プレビュー生成可能。Debug/Release 両ビルド成功。
+> - `AlignedStorage`（型消去・`operator new(align_val_t)` でアライン確保・move-only=ヒープポインタ移譲・破棄/構築は TypeInfo 経由）… [AlignedStorage.h](AlignedStorage.h)。
+>   ※ ヒープ確保のため move はポインタ移譲で十分（`GetMover()` は不要）。`construct`/`destruct` は AlignedStorage が TypeInfo で行うため meta には持たせない。
+> - ComponentMeta に **型消去 void\* 版** `serializePtr` / `deserializePtr` / `drawInspectorPtr` を追加（`drawInspectorPtr` のみ `#ifdef AQ_DEBUG_IMGUI`）… [ComponentRegistry.h](ComponentRegistry.h)。
+>   Reflect 化済みコンポーネント（Transform/StaticMesh/Decal/PrefabReference/Spawner）へ `FillReflectPtrFns<T>` で一括設定… [ComponentRegistry.cpp](ComponentRegistry.cpp)。Reflect を単一経路として共有。
+> - エディタパネル `PrefabEditorPanel`（`IDebugRenderable`）… [PrefabEditor.h](PrefabEditor.h) / .cpp：
+>   編集ツリー（`PrefabEditNode`=name+型消去 components+children・ポインタ安定のため children は `unique_ptr`）、
+>   階層ツリー UI（選択・Add Child・Delete は描画後に予約実行）、インスペクター（`drawInspectorPtr(void*)` で実体編集・Add Component パレットは drawInspectorPtr を持つ型のみ・重複除外・Remove）、
+>   Save（編集ツリー→JSON→`.prefab.json`）、Load（JSON→`AlignedStorage`+`deserializePtr`）、Spawn Preview（編集ツリー→JSON→`PrefabSerializer::FromJson`→`Instantiate`）。
+> - BattleScene で `DebugUI` に登録/解除… [BattleScene.cpp](../../Game/Application/Scene/BattleScene.cpp)。
+>
+> **未完（Phase 5 残・Phase 6 へ）**:
+> - PrefabReference のドロップダウン（登録 Prefab 一覧）は未実装（現状は文字列 path を直接編集）。
+> - 編集ツリーの `prefabRef` / `overrides`（ネスト参照・バリアント）は Phase 6。
+> - StaticMesh はエディタ実体編集で `OnDeserialized`（メッシュロード副作用）を呼ばない（パス文字列のみ編集）。
+
 ## 7. JSON プレハブ形式とオーバーライド
 
 ### 7.1 形式（`.prefab.json`）
@@ -293,6 +325,20 @@ struct PrefabNode
 欠落/失敗は診断エラー（無言フォールバックしない）・正規化パスでキャッシュ。
 **展開は Load 時に完了**し、`PrefabData` には参照を残さない（ランタイムは自己完結）。
 
+> **実装状況（Phase 6 完了）**: ネスト参照展開・循環検出・overrides 意味論を実装し検証済み。Debug/Release 両ビルド成功。
+> - `PrefabSerializer` を全面拡張… [PrefabSerializer.cpp](PrefabSerializer.cpp)：
+>   `ResolveNode`（"prefab" 参照を baseDir 相対で解決→再帰展開、name/overrides 適用）、
+>   `LoadContext`（**ロードスタックで循環検出**・正規化パスで **parseCache**・**最大深度 32**）、
+>   欠落/循環/深度超過は `EnginePrintf` で診断ログを出し空ノードを返す（クラッシュせず無言フォールバックもしない）。
+>   **展開は Load/FromJson 時に完了**し、`PrefabData` には参照を残さない。
+> - overrides 意味論 `ApplyPatch` / `PatchComponents`：
+>   `components`=deep merge（`JsonValue::Merge`）/ `addedComponents`=新規 / `removedComponents`=除去、
+>   `children`=name 同定（同名は再帰 `ApplyPatch`・無ければ新規解決して追加）/ `removedChildren`=name 除去、name 上書き対応。
+> - `FromJson(root, baseDir="")` オーバーロード追加（ファイルを介さない動的生成でも baseDir 相対参照を解決可能）… [PrefabSerializer.h](PrefabSerializer.h)。
+> - 検証（インライン base + overrides で deep merge / addedComponents / removedComponents を Instantiate→onComplete で assert）… BattleScene 初期化ブロック。
+>   ファイル参照展開は同じ ApplyPatch を共有（ファイル IO を伴うためテストは意味論をインラインで検証）。
+> - **旧 API 廃止**: 旧コードベース `Prefab` は Phase 3 で削除済み。「Save as Prefab」相当はエディタの Save（Phase 5）で実現済み。
+
 ## 8. コンポーネントに Prefab 参照を持たせて生成する
 
 ### 8.1 PrefabId と PrefabRegistry（参照の正本は文字列）
@@ -314,6 +360,23 @@ public:
 - **JSON / シリアライズ上の正本は path または GUID 文字列**。`uint64` ハッシュは保存しない
   （衝突・パス正規化差・アセット移動・ハッシュ実装変更で復元不能になるため）。
 - `uint64 PrefabId` は **ランタイム専用のキャッシュキー**。Registry で衝突検出＋診断。
+
+> **実装状況（Phase 4 完了）**: データ参照→ランタイム解決→System 遅延スポーンを実機（BattleScene）で検証済み。
+> - `PrefabRegistry`（シングルトン）… [PrefabRegistry.h](PrefabRegistry.h) / .cpp：
+>   `Resolve(pathOrGuid)`（正規化=バックスラッシュ→スラッシュ・キャッシュ・未ロード時 `PrefabSerializer::Load`）、
+>   `Register(key, Prefab)`（ファイルを介さない in-memory 登録・動的生成/テスト用）、
+>   `Find(PrefabId)`（shared_ptr 返却・§4.3 値捕獲）、`Clear()`。
+>   uint64 キーは FNV-1a で内部生成し、**衝突は線形プローブで別キー割当 + 診断エラー**。`value==0` は無効値に予約。
+> - `PrefabReferenceComponent` / `SpawnerComponent`（正本=prefabPath 文字列、resolved/timer/spawned はランタイム・非 serialize）
+>   + `SpawnSystem`（interval ごとに `Find`→`Prefab(data).Instantiate(htc->parentHandle)`・maxCount 制限）… [SpawnSystem.h](SpawnSystem.h) / .cpp。
+>   ForEach 中の遅延生成は commandMutex_ のみ取得のため安全。dt は `aq::Engine::GetDeltaTime()`。
+> - ComponentRegistry に PrefabReference / Spawner を登録（serialize/deserialize/drawInspector）… [ComponentRegistry.cpp](ComponentRegistry.cpp)。
+> - SpawnSystem を engine core で登録（HierarcicalTransform/Animation と並ぶ常設 System）… [Core/Application.cpp](../Core/Application.cpp)。
+> - 検証（Register/Resolve のキャッシュ一貫性・Find の有効/無効 id・Spawner エンティティ配置でランタイムスポーン起動）… BattleScene 初期化ブロック。Debug|x64 ビルド成功。
+>
+> **未完（Phase 4 残・後続へ）**:
+> - スポーンの親付けは設計例どおり `htc->parentHandle`（spawner の親＝兄弟として生成）。弾のようにワールド直置きしたい場合の選択肢（無親 / 専用コンテナ）は要追加。
+> - 大量スポーンの CopyFn ブループリント最適化（§10）は未着手（現状は毎スポーン deserialize）。
 
 ### 8.2 コンポーネント例：PrefabReference / Spawner
 
@@ -365,14 +428,22 @@ void SpawnSystem::Update()
 
 ## 9. 段階導入プラン（改訂4）
 
-| Phase | 内容 | 成果 / 検証 |
-|---|---|---|
-| **1（核心）** | `TypeInfo::ConstructFn`（**全型**）+ `RequestCreateEntityFromTypes`（遅延・requiredWith 補完・**dedup**・**MAX 超過診断エラー**・DebugTag 注入）+ 単体テスト | ForEach 内でも安全に完全な Entity を遅延生成 |
-| **2** | `Reflect` 化（per-component 書き直し・キー/ラベル分離）+ Json visitor + レジストリ serialize/deserialize | 単一エンティティの JSON 保存・復元 |
-| **3** | `ECS/Prefab`+`PrefabData`（JsonValue プラン）+ `PrefabSerializer::Load` + ツリー遅延生成（§4.3・**shared_ptr 寿命ルール**） | 単一 JSON からツリーを遅延生成 |
-| **4** | `PrefabRegistry`（文字列正本・衝突検出）+ `PrefabReference`/`Spawner` + `SpawnSystem` | データ参照からの動的スポーン |
-| **5** | Prefab エディタ（`AlignedStorage` 型消去 + drawInspectorPtr + パレット再利用） | ImGui で Prefab 作成・保存 |
-| **6** | `prefab` 参照展開 + 循環検出 + overrides 意味論 + 「Save as Prefab」→ 旧 API 廃止 | ネスト・バリアント・運用 |
+> **全 Phase 完了（Phase 1〜6）**。各 Phase の実装詳細は §4〜§7 のインライン「実装状況」ブロックを参照。
+
+| Phase | 内容 | 成果 / 検証 | 状況 |
+|---|---|---|---|
+| **1（核心）** | `TypeInfo::ConstructFn`（**全型**）+ `RequestCreateEntityFromTypes`（遅延・requiredWith 補完・**dedup**・**MAX 超過診断エラー**・DebugTag 注入）+ 単体テスト | ForEach 内でも安全に完全な Entity を遅延生成 | ✅ 完了 |
+| **2** | `Reflect` 化（per-component 書き直し・キー/ラベル分離）+ Json visitor + レジストリ serialize/deserialize | 単一エンティティの JSON 保存・復元 | ✅ 完了 |
+| **3** | `ECS/Prefab`+`PrefabData`（JsonValue プラン）+ `PrefabSerializer::Load` + ツリー遅延生成（§4.3・**shared_ptr 寿命ルール**） | 単一 JSON からツリーを遅延生成 | ✅ 完了 |
+| **4** | `PrefabRegistry`（文字列正本・衝突検出）+ `PrefabReference`/`Spawner` + `SpawnSystem` | データ参照からの動的スポーン | ✅ 完了 |
+| **5** | Prefab エディタ（`AlignedStorage` 型消去 + drawInspectorPtr + パレット再利用） | ImGui で Prefab 作成・保存 | ✅ 完了 |
+| **6** | `prefab` 参照展開 + 循環検出 + overrides 意味論 + 「Save as Prefab」→ 旧 API 廃止 | ネスト・バリアント・運用 | ✅ 完了 |
+
+### 残課題（将来の最適化・拡張）
+- **大量スポーン性能**: `TypeInfo` に `CopyFn` 追加 → ロード時に構築済みブループリントをキャッシュ→生成時コピー（§10）。現状は毎スポーン deserialize。
+- **PrefabReference ドロップダウン**: エディタで登録 Prefab 一覧から選ぶ UI（現状は文字列 path 直接編集）。
+- **スポーン親付けの選択肢**: 現状は spawner の親へ（兄弟生成）。ワールド直置き/専用コンテナの選択肢。
+- **`onComplete` の `isInUserCallback_` 厳密化**（§4.3）。
 
 ## 10. リスク・留意点
 

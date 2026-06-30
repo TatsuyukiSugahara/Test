@@ -5,6 +5,7 @@
 #include <functional>
 #include <vector>
 #include <utility>
+#include <string_view>
 
 // このレジストリのコア（typeName / serialize / deserialize / add / has / get / requiredWith）は
 // 常時コンパイルする。リリースビルド（AQ_DEBUG_IMGUI 無効）でも JSON からコンポーネントを
@@ -31,6 +32,13 @@ namespace aq
 			// nullptr = 当該コンポーネントは未対応（Reflect 化されていない）。
 			std::function<void(EntityHandle, util::JsonValue&)>       serialize;
 			std::function<void(EntityHandle, const util::JsonValue&)> deserialize;
+
+			// --- 型消去（Prefab エディタ用・設計 §6.2/§6.3）---
+			// AlignedStorage::Get() の void* に対して Reflect を回す。Reflect 化済みコンポーネントのみ設定。
+			// 構築/破棄は AlignedStorage が TypeInfo 経由で行うため construct/destruct は持たない。
+			std::function<void(void*, util::JsonValue&)>             serializePtr;
+			std::function<void(void*, const util::JsonValue&)>       deserializePtr;
+			std::function<void(void*)>                              drawInspectorPtr;  // AQ_DEBUG_IMGUI のみ
 		};
 
 
@@ -46,6 +54,14 @@ namespace aq
 
 			// 型ハッシュで ComponentMeta を引く。見つからなければ nullptr。
 			const ComponentMeta* Find(size_t typeHash) const;
+
+			// JSON キー（typeName）で ComponentMeta を引く。見つからなければ nullptr。
+			// Prefab 生成で components のキー → メタ（deserialize 等）を解決するのに使う。
+			const ComponentMeta* Find(std::string_view typeName) const;
+
+			// JSON キー（typeName）→ TypeInfo を解決する。
+			// 見つからなければ既定の TypeInfo（GetHash() == size_t(-1)、TypeInfo() と == 比較で判定）を返す。
+			TypeInfo TypeOf(std::string_view typeName) const;
 
 			// 全登録 ComponentMeta を返す（Add Component パレット等で使用）。
 			const std::vector<std::pair<TypeInfo, ComponentMeta>>& GetAll() const { return entries_; }

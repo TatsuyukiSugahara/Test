@@ -22,6 +22,7 @@ namespace aq
 			void DebugRender()     override;
 			void RenderContent()   override;
 			const char* GetDebugLabel() const override { return "Profiler"; }
+			const char* GetDebugCategory() const override { return "Profiling"; }
 
 		private:
 			// タイムライン (横=時間 / 縦=スレッド) 表示

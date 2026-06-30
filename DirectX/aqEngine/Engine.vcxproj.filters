@@ -154,13 +154,25 @@
     <ClCompile Include="Component\HierarchicalTransformComponent.cpp">
       <Filter>Component</Filter>
     </ClCompile>
-    <ClCompile Include="Component\Prefab.cpp">
-      <Filter>Component</Filter>
-    </ClCompile>
     <ClCompile Include="ECS\Chunk.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
     <ClCompile Include="ECS\ComponentRegistry.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="ECS\Prefab.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="ECS\PrefabSerializer.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="ECS\PrefabRegistry.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="ECS\SpawnSystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="ECS\PrefabEditor.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
     <ClCompile Include="ECS\SceneHierarchySystem.cpp">
@@ -577,13 +589,28 @@
     <ClInclude Include="Component\HierarchicalTransformComponent.h">
       <Filter>Component</Filter>
     </ClInclude>
-    <ClInclude Include="Component\Prefab.h">
-      <Filter>Component</Filter>
-    </ClInclude>
     <ClInclude Include="ECS\Archetype.h">
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="ECS\ComponentRegistry.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Prefab.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\PrefabSerializer.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\PrefabRegistry.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\SpawnSystem.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\AlignedStorage.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\PrefabEditor.h">
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="ECS\SceneHierarchySystem.h">

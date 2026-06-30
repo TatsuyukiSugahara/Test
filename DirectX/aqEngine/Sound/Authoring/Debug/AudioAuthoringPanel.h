@@ -17,6 +17,7 @@ namespace aq
 			void DebugRender()     override;
 			void RenderContent()   override;
 			const char* GetDebugLabel() const override { return "Audio"; }
+			const char* GetDebugCategory() const override { return "Tools"; }
 
 		private:
 			bool show_ = false;

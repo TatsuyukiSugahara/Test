@@ -22,6 +22,12 @@ namespace aq
 
 		class EntityManager
 		{
+		public:
+			// 完全な TypeInfo 列から 1 Entity を生成して返す生成プリミティブの型。
+			// Prefab ツリー生成で「ノード → Entity」を担う。registry には依存しない
+			// （requiredWith 展開・名前解決は呼び出し側＝Prefab 層の責務）。
+			using DeferredCreateFn = std::function<Entity(std::vector<TypeInfo>)>;
+
 		private:
 			std::vector<Chunk> chunkList_;
 
@@ -121,6 +127,47 @@ namespace aq
 						}
 					}
 				});
+			}
+
+
+			/**
+			 * 複数 Entity を 1 コマンドで生成するための遅延ビルドフック（Prefab ツリー生成の土台）。
+			 * builder は FlushCommands 内（iterationMutex_ 保持・isInUserCallback_ 未設定）で呼ばれるため、
+			 * 渡される DeferredCreateFn 経由で複数 Entity を即時生成し、親子付け等の構造操作を安全に行える。
+			 *
+			 * 寿命ルール（§4.3）: builder には this 等の参照ではなく、値として安定したプラン
+			 * （shared_ptr<const PrefabData> 等）のみを捕獲させること。Flush は将来フレームで実行される。
+			 */
+			void RequestDeferredBuild(std::function<void(const DeferredCreateFn&)> builder)
+			{
+				EngineAssertMsg(!isInUserCallback_,
+					"EntityManager::RequestDeferredBuild: structural changes are forbidden inside onCreated/onAdded callback.");
+				if (isInUserCallback_) return;
+				std::lock_guard<std::mutex> lock(commandMutex_);
+				pendingCommands_.push_back({
+					[this, builder = std::move(builder)]() {
+						// FlushCommands が iterationMutex_ を保持しているため NoLock 版で生成する。
+						DeferredCreateFn create = [this](std::vector<TypeInfo> types) -> Entity {
+							return CreateEntityFromTypesNoLock(types);
+						};
+						builder(create);
+					}
+				});
+			}
+
+
+			/**
+			 * 実行時 TypeInfo 列から Entity を即時生成する（init / エディタ用・ForEach 外限定）。
+			 * iterationMutex_ をライトロックで取得するため、ForEach 中に呼ぶとデッドロックする。
+			 * dedup + 上限診断 + 全コンポーネント構築まで行う。失敗時は無効な Entity を返す。
+			 */
+			Entity CreateEntityFromTypes(std::vector<TypeInfo> types)
+			{
+				EngineAssertMsg(!isInUserCallback_,
+					"EntityManager::CreateEntityFromTypes: immediate creation is forbidden inside onCreated/onAdded callback. Use RequestCreateEntityFromTypes instead.");
+				if (isInUserCallback_) return Entity();
+				std::unique_lock<std::shared_mutex> lock(iterationMutex_);
+				return CreateEntityFromTypesNoLock(types);
 			}
 
 

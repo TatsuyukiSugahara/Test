@@ -70,9 +70,12 @@ namespace aq
 #ifdef AQ_DEBUG_IMGUI
 		void EntityContext::DebugRenderMenu()
 		{
+			// ECS 関連（System Graph・各 System / System グループ）を 1 つの "ECS" メニューへ集約する。
 			if (ImGui::BeginMenu("ECS"))
 			{
 				ImGui::MenuItem("System Graph", nullptr, &showSystemGraph_);
+				ImGui::Separator();
+				systemManager_.DebugRenderMenuAll();   // 未グループ System の項目 + グループトグル（ECS 配下に入れ子）
 				ImGui::EndMenu();
 			}
 		}

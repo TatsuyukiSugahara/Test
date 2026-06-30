@@ -28,6 +28,7 @@ namespace aq
 			void DebugRenderMenu() override;
 			void DebugRender() override;
 			const char* GetDebugLabel() const override { return "Splatmap Painter"; }
+			const char* GetDebugCategory() const override { return "Tools"; }
 
 		public:
 			BrushMode brushMode_ = BrushMode::Paint;

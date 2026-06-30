@@ -46,6 +46,7 @@ namespace aq
 			void DebugRenderMenu() override;
 			void DebugRender() override;
 			const char* GetDebugLabel() const override { return "Heightmap Painter"; }
+			const char* GetDebugCategory() const override { return "Tools"; }
 
 		public:
 			BrushMode brushMode_     = BrushMode::Raise;

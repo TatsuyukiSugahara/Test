@@ -21,6 +21,11 @@ namespace aq
 		virtual void RenderContent() {}
 		/** タブに表示するラベル文字列を返す。 */
 		virtual const char* GetDebugLabel() const { return ""; }
+		/**
+		 * メインメニューバーで属するカテゴリ名を返す（"Rendering" / "UI" / "Tools" / "Profiling" など）。
+		 * DebugUI が同名カテゴリの項目を 1 つのドロップダウンメニューへまとめる。
+		 */
+		virtual const char* GetDebugCategory() const { return "Misc"; }
 #endif
 	};
 }

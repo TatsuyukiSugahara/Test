@@ -80,15 +80,33 @@ namespace aq
 				std::vector<TypeInfo>        types,
 				std::function<void(Entity)>  onCreated = nullptr)
 			{
-#ifdef AQ_DEBUG_IMGUI
-				const TypeInfo tag = TypeInfo::Create<EntityDebugTag>();
-				bool hasTag = false;
-				for (const TypeInfo& t : types) {
-					if (t == tag) { hasTag = true; break; }
-				}
-				if (!hasTag) types.push_back(tag);
-#endif
+				InjectDebugTag(types);
 				entityManager_.RequestCreateEntityFromTypes(std::move(types), std::move(onCreated));
+			}
+
+			// 実行時 TypeInfo 列から Entity を即時生成する（init / エディタ用・ForEach 外限定）。
+			// debug ビルドでは EntityDebugTag を自動注入する。
+			Entity CreateEntityFromTypes(std::vector<TypeInfo> types)
+			{
+				InjectDebugTag(types);
+				return entityManager_.CreateEntityFromTypes(std::move(types));
+			}
+
+			// 複数 Entity を 1 コマンドで生成する遅延ビルドフック（Prefab ツリー生成の土台）。
+			// builder へ渡す生成関数は、debug ビルドで EntityDebugTag を自動注入する。
+			void RequestDeferredBuild(std::function<void(const EntityManager::DeferredCreateFn&)> builder)
+			{
+				entityManager_.RequestDeferredBuild(
+					[builder = std::move(builder)](const EntityManager::DeferredCreateFn& rawCreate)
+					{
+						EntityManager::DeferredCreateFn create =
+							[&rawCreate](std::vector<TypeInfo> types) -> Entity
+							{
+								InjectDebugTag(types);
+								return rawCreate(std::move(types));
+							};
+						builder(create);
+					});
 			}
 
 			bool IsValid(const EntityHandle& handle) const
@@ -198,16 +216,29 @@ namespace aq
 			}
 
 #ifdef AQ_DEBUG_IMGUI
-			/** メインメニューバー内に ECS メニューを追加する（BeginMainMenuBar 済み前提） */
+			/** メインメニューバー内に ECS メニュー（System Graph + 各 System / グループ）を追加する（BeginMainMenuBar 済み前提） */
 			void DebugRenderMenu();
-			/** 各 System の DebugRenderMenu をメニューバー直下で呼ぶ（BeginMainMenuBar 済み前提） */
-			void DebugRenderSystemMenus() { systemManager_.DebugRenderMenuAll(); }
 			/** 各 System のデバッグウィンドウ + 依存グラフウィンドウを描画する */
 			void DebugRender();
 #endif
 
 
 		private:
+			// debug ビルドでのみ EntityDebugTag を型列へ注入する（重複追加はしない）。
+			// typed 版 CreateEntity と同じく、実行時 TypeInfo 列からの生成でも名前付けを可能にする。
+			static void InjectDebugTag(std::vector<TypeInfo>& types)
+			{
+#ifdef AQ_DEBUG_IMGUI
+				const TypeInfo tag = TypeInfo::Create<EntityDebugTag>();
+				for (const TypeInfo& t : types) {
+					if (t == tag) return;
+				}
+				types.push_back(tag);
+#else
+				(void)types;
+#endif
+			}
+
 			static EntityContext* instance_;
 
 

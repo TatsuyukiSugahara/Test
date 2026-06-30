@@ -15,6 +15,7 @@ namespace aq
 		public:
 			void DebugRenderMenu() override;
 			void DebugRender()     override;
+			const char* GetDebugCategory() const override { return "UI"; }
 
 		private:
 			void RenderStyleList();

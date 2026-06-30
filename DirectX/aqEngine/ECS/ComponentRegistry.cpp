@@ -8,6 +8,7 @@
 #include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
 #include "Component/DecalComponent.h"
+#include "SpawnSystem.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "ImGuiFieldVisitor.h"   // drawInspector（ImGui 編集）専用。serialize/deserialize は非依存。
 #endif
@@ -20,6 +21,35 @@ namespace aq
 {
 	namespace ecs
 	{
+		namespace
+		{
+			// Reflect 化済みコンポーネント T に対し、型消去 void* 版の serialize/deserialize/drawInspector を
+			// 一括設定する（Prefab エディタ用・設計 §6.2/§6.3）。Reflect を単一の真実として共有する。
+			template <typename T>
+			void FillReflectPtrFns(ComponentMeta& meta)
+			{
+				meta.serializePtr = [](void* p, util::JsonValue& out)
+				{
+					JsonWriteVisitor visitor;
+					static_cast<T*>(p)->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserializePtr = [](void* p, const util::JsonValue& in)
+				{
+					JsonReadVisitor visitor(in);
+					static_cast<T*>(p)->Reflect(visitor);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspectorPtr = [](void* p)
+				{
+					ImGuiFieldVisitor visitor;
+					static_cast<T*>(p)->Reflect(visitor);
+				};
+#endif
+			}
+		}
+
+
 		ComponentRegistry& ComponentRegistry::Get()
 		{
 			static ComponentRegistry instance;
@@ -42,6 +72,24 @@ namespace aq
 				if (entry.first.GetHash() == typeHash) return &entry.second;
 			}
 			return nullptr;
+		}
+
+
+		const ComponentMeta* ComponentRegistry::Find(std::string_view typeName) const
+		{
+			for (const auto& entry : entries_) {
+				if (entry.second.typeName && typeName == entry.second.typeName) return &entry.second;
+			}
+			return nullptr;
+		}
+
+
+		TypeInfo ComponentRegistry::TypeOf(std::string_view typeName) const
+		{
+			for (const auto& entry : entries_) {
+				if (entry.second.typeName && typeName == entry.second.typeName) return entry.first;
+			}
+			return TypeInfo();   // GetHash() == size_t(-1) → 未解決（TypeInfo() と == で判定）
 		}
 
 
@@ -90,6 +138,7 @@ namespace aq
 					comp->Reflect(visitor);
 				};
 				meta.remove = nullptr;  // TC+HTC はペアで必須のため UI からは除去不可
+				FillReflectPtrFns<TransformComponent>(meta);
 				registry.Register(TypeInfo::Create<TransformComponent>(), std::move(meta));
 			}
 
@@ -188,6 +237,7 @@ namespace aq
 					comp->OnDeserialized();   // 読み込んだパスからメッシュをロード（副作用退避）
 				};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<StaticMeshComponent>(h); };
+				FillReflectPtrFns<StaticMeshComponent>(meta);
 				registry.Register(TypeInfo::Create<StaticMeshComponent>(), std::move(meta));
 			}
 
@@ -314,7 +364,94 @@ namespace aq
 					comp->Reflect(visitor);
 				};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<DecalComponent>(h); };
+				FillReflectPtrFns<DecalComponent>(meta);
 				registry.Register(TypeInfo::Create<DecalComponent>(), std::move(meta));
+			}
+
+			// --- PrefabReferenceComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Prefab Reference";
+				meta.typeName     = "PrefabReference";
+				meta.requiredWith = {};
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<PrefabReferenceComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<PrefabReferenceComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<PrefabReferenceComponent>(h)) ctx.AddComponent<PrefabReferenceComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<PrefabReferenceComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Reflect(visitor);
+				};
+#endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<PrefabReferenceComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<PrefabReferenceComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<PrefabReferenceComponent>(h); };
+				FillReflectPtrFns<PrefabReferenceComponent>(meta);
+				registry.Register(TypeInfo::Create<PrefabReferenceComponent>(), std::move(meta));
+			}
+
+			// --- SpawnerComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Spawner";
+				meta.typeName     = "Spawner";
+				meta.requiredWith = { TypeInfo::Create<TransformComponent>(), TypeInfo::Create<HierarchicalTransformComponent>() };
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<SpawnerComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<SpawnerComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<SpawnerComponent>(h))               ctx.AddComponent<SpawnerComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<SpawnerComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Reflect(visitor);
+				};
+#endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<SpawnerComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<SpawnerComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<SpawnerComponent>(h); };
+				FillReflectPtrFns<SpawnerComponent>(meta);
+				registry.Register(TypeInfo::Create<SpawnerComponent>(), std::move(meta));
 			}
 		}
 	}

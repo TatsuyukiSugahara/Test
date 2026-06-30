@@ -15,9 +15,10 @@
 1. ~~**音量の調停**~~ ✅ 完了。
    - バス: SoundEngine に `busDuck_`（base と独立）+ `SetBusDuck` / `ApplyBus`（effective = base × duck）。ダッキングは `SetBusVolume` でなく `SetBusDuck` を使う。
    - インスタンス: AudioDirector を唯一の音量所有者にし、`base × RTPC × fadeGate` を `ApplyInstanceVolumes(dt)` で毎フレーム合成。フェードは SoundEngine 側でなく AudioDirector の `fadeGate`(VolumeEnvelope) で所有（二重所有を解消）。
-2. **Blend コンテナ** — 複数レイヤ同時再生 + RTPC でレイヤ音量制御。
-3. **virtualization** — 実ボイス無しで再生位置だけ進める真のボイス仮想化（低レイヤ拡張が必要）。
-4. **専用オーサリングエディタ** — ImGui パネルの発展（ノードグラフ / カーブ編集 / 解決結果の可視化）。
+2. ~~**Blend コンテナ**~~ ✅ 完了。`ObjectType::Blend` + `BlendLayer{child,rtpc,curve}`。`PlayTopObject` が各レイヤを同時再生（`PlayResolved`）。レイヤ別 RTPC 音量を `ApplyInstanceVolumes` の合成に追加（base × RTPC × layerRTPC × fadeGate）。※ ネスト Blend（Switch/Random 配下）は将来。
+3. ~~**専用オーサリングエディタ（第一段）**~~ ✅ 完了。`AudioAuthoringPanel` を拡張: RTPC ライブスライダ + カーブ表示(`PlotLines`)、State/Switch の値ボタン（現在値ハイライト・自動列挙）、Objects ブラウザ（任意再生 `DebugPlayObject`）。
+   - 続き候補: ノードグラフ（コンテナツリー編集）、カーブエディタ、JSON 保存。
+4. **virtualization** — 実ボイス無しで再生位置だけ進める真のボイス仮想化（低レイヤ拡張が必要）。
 5. **Android(Oboe) バックエンド** — 共有ソフトウェアミキサ / リサンプラ / SPSC。`MFDecoder` は Windows 専用なので Android は MediaCodec 等へ差し替え。
 6. **動画連携** — `VideoPlayer`(FFmpeg/MediaCodec) → `SoundStream` へ push。A/V 同期は `SoundStream::GetPlaybackClock()`。
 7. **Ogg(stb_vorbis)** — MF で mp3/aac/wma/m4a を賄うため Windows では優先度低。

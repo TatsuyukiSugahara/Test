@@ -32,6 +32,7 @@ namespace app
 		bool  orbitActive_    = false;
 		bool  soundPaused_    = false;
 		bool  event3DOn_      = false;
+		bool  engineOn_       = false;
 		float orbitAngle_     = 0.0f;
 		float event3DAngle_   = 0.0f;
 #ifdef AQ_DEBUG_IMGUI

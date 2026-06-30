@@ -215,6 +215,14 @@ namespace app
 		if (triggered('X')) { aq::audio::SetState("Music", "Explore"); }
 		// Y: セリフ（Voice バス）再生。再生中は VoiceDuck で BGM が自動的に下がる
 		if (triggered('Y')) { aq::audio::PostEvent("Play_Voice"); }
+		// U: エンジン音（Blend: 低音ループ + RTPC 制御の高音ループ）のトグル
+		if (triggered('U')) {
+			if (!engineOn_) { aq::audio::PostEvent("Play_Engine"); engineOn_ = true; }
+			else            { aq::audio::PostEvent("Stop_Engine"); engineOn_ = false; }
+		}
+		// J / K: RTPC "EngineLoad"（Blend 高音レイヤの音量。U で鳴らしてる間に試す）
+		if (triggered('J')) { aq::audio::SetRTPC("EngineLoad", 0.0f); }
+		if (triggered('K')) { aq::audio::SetRTPC("EngineLoad", 1.0f); }
 		// GameObject 99 を周回させる（パン + ドップラーをオーサリング層で確認）
 		if (event3DOn_) {
 			const float angularSpeed = 2.0f;

@@ -65,14 +65,29 @@ namespace aq
 			NameId           attenuationId = 0;     // 3D 減衰プリセット名
 		};
 
-		// SoundObject。フェーズ2 で Random/Sequence、フェーズ3 で Switch を追加。
+		// SoundObject。フェーズ2 で Random/Sequence、3 で Switch、追加で Blend。
 		enum class ObjectType : uint8_t
 		{
 			Sound,
 			Random,
 			Sequence,
 			Switch,
-			// 将来: Blend
+			Blend,
+		};
+
+		// カーブ点（RTPC 値 → プロパティ値）。Blend レイヤ/RTPC binding で共用。
+		struct CurvePoint
+		{
+			float x = 0.0f;   // RTPC 値
+			float y = 0.0f;   // プロパティ値（volumeDb なら dB、pitch なら倍率）
+		};
+
+		// Blend のレイヤ（同時再生する子 + 任意の RTPC 音量制御）。§3.5
+		struct BlendLayer
+		{
+			NameId                  childId = 0;   // レイヤの子オブジェクト
+			NameId                  rtpcId  = 0;   // レイヤ音量を制御する RTPC（0=固定）
+			std::vector<CurvePoint> curve;         // rtpc値 → volumeDb
 		};
 
 		struct SoundObjectDef
@@ -96,6 +111,9 @@ namespace aq
 			NameId                            switchGroupId = 0;  // 参照する Switch グループ
 			NameId                            defaultValue  = 0;  // 値未設定/未一致時の既定値
 			std::unordered_map<NameId, NameId> switchMap;          // 値 → 子オブジェクト
+
+			// Blend コンテナ用
+			std::vector<BlendLayer> blendLayers;
 
 			// 非ストリーミング Sound はロード時に事前ロードしてキャッシュする。
 			sound::RefSoundClip cachedClip;
@@ -151,12 +169,6 @@ namespace aq
 			Linear,
 			Ease,   // smoothstep
 		};
-		struct CurvePoint
-		{
-			float x = 0.0f;   // RTPC 値
-			float y = 0.0f;   // プロパティ値（volumeDb なら dB、pitch なら倍率）
-		};
-
 		// State 変化時に実行するルール（§3.6 stateRules）。
 		struct StateRuleDef
 		{

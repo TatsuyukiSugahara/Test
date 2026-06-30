@@ -24,21 +24,21 @@ namespace aq
 			}
 
 			// カーブ評価（x 昇順の点列を線形/ease 補間）。
-			float EvalCurve(const RtpcBindingDef& b, float x)
+			float EvalCurve(const std::vector<CurvePoint>& curve, CurveInterp interp, float x)
 			{
-				if (b.curve.empty()) { return 0.0f; }
-				if (x <= b.curve.front().x) { return b.curve.front().y; }
-				if (x >= b.curve.back().x)  { return b.curve.back().y; }
-				for (size_t i = 1; i < b.curve.size(); ++i) {
-					if (x <= b.curve[i].x) {
-						const CurvePoint& p0 = b.curve[i - 1];
-						const CurvePoint& p1 = b.curve[i];
+				if (curve.empty()) { return 0.0f; }
+				if (x <= curve.front().x) { return curve.front().y; }
+				if (x >= curve.back().x)  { return curve.back().y; }
+				for (size_t i = 1; i < curve.size(); ++i) {
+					if (x <= curve[i].x) {
+						const CurvePoint& p0 = curve[i - 1];
+						const CurvePoint& p1 = curve[i];
 						float t = (p1.x != p0.x) ? (x - p0.x) / (p1.x - p0.x) : 0.0f;
-						if (b.interp == CurveInterp::Ease) { t = t * t * (3.0f - 2.0f * t); }
+						if (interp == CurveInterp::Ease) { t = t * t * (3.0f - 2.0f * t); }
 						return p0.y + (p1.y - p0.y) * t;
 					}
 				}
-				return b.curve.back().y;
+				return curve.back().y;
 			}
 		}
 
@@ -445,10 +445,16 @@ namespace aq
 						default: break;
 						}
 						if (!match) { continue; }
-						const float y = EvalCurve(b, GetRtpc(b.rtpcId, inst.gameObject));
+						const float y = EvalCurve(b.curve, b.interp, GetRtpc(b.rtpcId, inst.gameObject));
 						if (b.property == RtpcProperty::VolumeDb) { volMul   *= DbToLinear(y); }
 						else                                      { pitchMul *= y; }
 					}
+				}
+
+				// Blend レイヤの音量変調（RTPC → volumeDb）。
+				if (inst.layerRtpcId != 0 && !inst.layerCurve.empty()) {
+					volMul *= DbToLinear(EvalCurve(inst.layerCurve, CurveInterp::Linear,
+					                               GetRtpc(inst.layerRtpcId, inst.gameObject)));
 				}
 
 				// 合成: base × rtpc × fadeGate（音量） / base × rtpc（ピッチ）。
@@ -552,6 +558,23 @@ namespace aq
 
 		PlayingId AudioDirector::PlayTopObject(NameId topObjectId, uint64_t gameObject, const ActionDef& action)
 		{
+			// Blend: 各レイヤを同時再生（レイヤごとに RTPC 音量変調を付与）。
+			const SoundObjectDef* top = FindObject(topObjectId);
+			if (top != nullptr && top->type == ObjectType::Blend) {
+				PlayingId last = 0;
+				for (const BlendLayer& layer : top->blendLayers) {
+					const PlayingId id = PlayResolved(layer.childId, gameObject, action, layer.rtpcId, layer.curve);
+					if (id != 0) { last = id; }
+				}
+				return last;
+			}
+			return PlayResolved(topObjectId, gameObject, action, /*layerRtpcId*/ 0, {});
+		}
+
+
+		PlayingId AudioDirector::PlayResolved(NameId topObjectId, uint64_t gameObject, const ActionDef& action,
+		                                      NameId layerRtpcId, const std::vector<CurvePoint>& layerCurve)
+		{
 			sound::SoundEngine& se = sound::SoundEngine::Get();
 
 			// ツリー解決 → 葉の Sound + 累積音量/ピッチ。
@@ -601,8 +624,10 @@ namespace aq
 			inst.kindId     = kindId;
 			inst.bus        = bus;
 			inst.gameObject = gameObject;
-			inst.baseVolume = volLinear;   // RTPC/フェード適用の基準
-			inst.basePitch  = pitch;
+			inst.baseVolume  = volLinear;   // RTPC/フェード適用の基準
+			inst.basePitch   = pitch;
+			inst.layerRtpcId = layerRtpcId; // Blend レイヤの音量変調（あれば）
+			inst.layerCurve  = layerCurve;
 
 			// フェードゲート(0..1)。SoundEngine 側フェードは使わず AudioDirector が所有して調停する。
 			if (fadeSec > 0.0f) { inst.fadeGate.current = 0.0f; inst.fadeGate.FadeTo(1.0f, fadeSec, false); }
@@ -773,6 +798,91 @@ namespace aq
 				if (!n.empty()) { return n; }
 			}
 			return std::string();
+		}
+
+
+		void AudioDirector::CollectRtpc(std::vector<RtpcInfo>& out) const
+		{
+			out.clear();
+			for (const AudioBank& b : banks_) {
+				for (const auto& kv : b.GetRtpcDefs()) {
+					const RtpcDef& d = kv.second;
+					out.push_back({ d.nameId, d.minValue, d.maxValue, d.defaultValue, GetRtpc(d.nameId, 0) });
+				}
+			}
+		}
+
+
+		void AudioDirector::CollectObjects(std::vector<ObjectInfo>& out) const
+		{
+			out.clear();
+			for (const AudioBank& b : banks_) {
+				for (const auto& kv : b.GetObjects()) {
+					out.push_back({ kv.second.nameId, kv.second.type });
+				}
+			}
+		}
+
+
+		void AudioDirector::CollectStateGroups(std::vector<std::pair<NameId, std::vector<NameId>>>& out) const
+		{
+			out.clear();
+			auto addValue = [&out](NameId group, NameId value) {
+				for (auto& g : out) {
+					if (g.first == group) {
+						for (NameId v : g.second) { if (v == value) return; }
+						g.second.push_back(value);
+						return;
+					}
+				}
+				out.push_back({ group, { value } });
+			};
+			for (const AudioBank& b : banks_) {
+				for (const StateRuleDef& r : b.GetStateRules()) {
+					addValue(r.groupId, r.valueId);
+				}
+			}
+		}
+
+
+		void AudioDirector::CollectSwitchGroups(std::vector<std::pair<NameId, std::vector<NameId>>>& out) const
+		{
+			out.clear();
+			auto addValue = [&out](NameId group, NameId value) {
+				for (auto& g : out) {
+					if (g.first == group) {
+						for (NameId v : g.second) { if (v == value) return; }
+						g.second.push_back(value);
+						return;
+					}
+				}
+				out.push_back({ group, { value } });
+			};
+			for (const AudioBank& b : banks_) {
+				for (const auto& kv : b.GetObjects()) {
+					const SoundObjectDef& o = kv.second;
+					if (o.type == ObjectType::Switch) {
+						for (const auto& m : o.switchMap) { addValue(o.switchGroupId, m.first); }
+					}
+				}
+			}
+		}
+
+
+		NameId AudioDirector::GetCurrentState(NameId groupId) const
+		{
+			auto it = currentStates_.find(groupId);
+			return it != currentStates_.end() ? it->second : 0;
+		}
+
+
+		PlayingId AudioDirector::DebugPlayObject(NameId objectId)
+		{
+			ActionDef action;
+			action.type       = ActionType::Play;
+			action.targetType = TargetType::Object;
+			action.targetId   = objectId;
+			return PlayTopObject(objectId, 0, action);
 		}
 	}
 }

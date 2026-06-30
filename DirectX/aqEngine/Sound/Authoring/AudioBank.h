@@ -48,6 +48,8 @@ namespace aq
 			const std::vector<RtpcBindingDef>& GetRtpcBindings() const { return rtpcBindings_; }
 			const std::vector<StateRuleDef>&   GetStateRules()   const { return stateRules_; }
 			const std::vector<DuckingDef>&     GetDuckings()     const { return duckings_; }
+			const std::unordered_map<NameId, SoundObjectDef>& GetObjects()  const { return objects_; }
+			const std::unordered_map<NameId, RtpcDef>&        GetRtpcDefs() const { return rtpc_; }
 			const std::unordered_map<NameId, std::string>& GetNames() const { return names_; }
 			const std::string& NameOf(NameId id) const;
 

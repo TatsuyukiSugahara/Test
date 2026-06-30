@@ -7,7 +7,8 @@
     "Footstep": { "bus": "SE",  "loadPolicy": "preload", "cooldownMs": 60, "maxVoices": 4, "voiceStealing": "oldest" },
     "SE3D":     { "bus": "SE",  "loadPolicy": "preload", "spatialMode": "3d", "attenuation": "DefaultSE" },
     "BGM":      { "bus": "BGM", "loadPolicy": "stream", "fadeInMs": 1000, "fadeOutMs": 1000 },
-    "Voice":    { "bus": "Voice", "loadPolicy": "preload" }
+    "Voice":    { "bus": "Voice", "loadPolicy": "preload" },
+    "Engine":   { "bus": "SE", "loadPolicy": "preload" }
   },
   "states": {
     "Music": { "values": [ "Explore", "Combat" ], "default": "Explore", "transitionMs": 800 }
@@ -27,7 +28,8 @@
     "DefaultSE": { "model": "Inverse", "minDistance": 1.0, "maxDistance": 40.0 }
   },
   "rtpc": {
-    "Pitch3D": { "min": 0.0, "max": 1.0, "default": 0.5 }
+    "Pitch3D":    { "min": 0.0, "max": 1.0, "default": 0.5 },
+    "EngineLoad": { "min": 0.0, "max": 1.0, "default": 0.0 }
   },
   "rtpcBindings": [
     { "rtpc": "Pitch3D", "target": { "kind": "SE3D" }, "property": "pitch", "curve": [ [0.0, 0.7], [1.0, 1.6] ], "interp": "linear" }
@@ -39,6 +41,14 @@
     "BGM_Explore": { "type": "Sound", "kind": "BGM", "clip": "bgm.wav", "loop": true },
     "BGM_Combat":  { "type": "Sound", "kind": "BGM", "clip": "bgm_combat.wav", "loop": true },
     "Voice_Test":  { "type": "Sound", "kind": "Voice", "clip": "voice.wav" },
+
+    "Engine_Blend": {
+      "type": "Blend", "kind": "Engine",
+      "layers": [
+        { "child": { "type": "Sound", "clip": "seq1.wav", "loop": true } },
+        { "child": { "type": "Sound", "clip": "seq3.wav", "loop": true }, "rtpc": "EngineLoad", "curve": [ [0.0, -40.0], [1.0, 0.0] ] }
+      ]
+    },
 
     "Footstep_Random": {
       "type": "Random", "kind": "Footstep",
@@ -76,6 +86,8 @@
     "Player_Footstep":[ { "action": "Play", "target": { "object": "Footstep_Surface" } } ],
     "Arpeggio_Step":  [ { "action": "Play", "target": { "object": "Arpeggio_Seq" } } ],
     "Play_Beep3D":    [ { "action": "Play", "target": { "object": "Beep3D" } } ],
-    "Play_Voice":     [ { "action": "Play", "target": { "object": "Voice_Test" } } ]
+    "Play_Voice":     [ { "action": "Play", "target": { "object": "Voice_Test" } } ],
+    "Play_Engine":    [ { "action": "Play", "target": { "object": "Engine_Blend" } } ],
+    "Stop_Engine":    [ { "action": "Stop", "target": { "kind": "Engine" } } ]
   }
 }

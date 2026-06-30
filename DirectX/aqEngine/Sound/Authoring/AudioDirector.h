@@ -39,6 +39,8 @@ namespace aq
 				float                              baseVolume = 1.0f;  // RTPC 適用前の基準音量(linear)
 				float                              basePitch  = 1.0f;  // RTPC 適用前の基準ピッチ
 				sound::VolumeEnvelope              fadeGate;           // フェード乗数(0..1)。AudioDirector が所有
+				NameId                             layerRtpcId = 0;    // Blend レイヤの音量 RTPC（0=なし）
+				std::vector<CurvePoint>            layerCurve;         // Blend レイヤの音量カーブ
 				bool                               isStream = false;
 				bool                               is3D     = false;
 			};
@@ -117,6 +119,18 @@ namespace aq
 			std::string NameOf(NameId id) const;
 			const std::vector<AudioBank>& GetBanks() const { return banks_; }
 
+			// ── オーサリングエディタ用 ──
+			struct RtpcInfo { NameId id; float minV; float maxV; float defV; float current; };
+			struct ObjectInfo { NameId id; ObjectType type; };
+			void CollectRtpc(std::vector<RtpcInfo>& out) const;
+			void CollectObjects(std::vector<ObjectInfo>& out) const;
+			// 各グループ → 値リスト（stateRules / Switch オブジェクトから導出）。
+			void CollectStateGroups(std::vector<std::pair<NameId, std::vector<NameId>>>& out) const;
+			void CollectSwitchGroups(std::vector<std::pair<NameId, std::vector<NameId>>>& out) const;
+			NameId GetCurrentState(NameId groupId) const;   // 未設定は 0
+			// エディタからオブジェクトを直接再生する（イベント不要）。
+			PlayingId DebugPlayObject(NameId objectId);
+
 		private:
 			// Bank 横断で定義を引く（先勝ち）。
 			const KindDef*        FindKind(NameId id)        const;
@@ -149,8 +163,12 @@ namespace aq
 
 			// 1 つの Action を実行（Play/Stop）。event / stateRule 共通。
 			PlayingId ExecuteAction(const ActionDef& action, uint64_t gameObject);
-			// Play アクションを実行して PlayingId を返す（cooldown/上限で抑止時は 0）。
+			// Play アクションを実行して PlayingId を返す。Blend は各レイヤを同時再生する。
 			PlayingId PlayTopObject(NameId topObjectId, uint64_t gameObject, const ActionDef& action);
+			// 1 オブジェクト（Sound/Random/Sequence/Switch）を解決して再生する。
+			// layerRtpcId/layerCurve は Blend レイヤの音量変調（0/空ならなし）。
+			PlayingId PlayResolved(NameId objectId, uint64_t gameObject, const ActionDef& action,
+			                       NameId layerRtpcId, const std::vector<CurvePoint>& layerCurve);
 			// Stop アクションを実行（target 種別で対象を絞る）。
 			void      StopByTarget(const ActionDef& action);
 

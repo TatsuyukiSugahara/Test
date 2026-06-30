@@ -158,6 +158,30 @@ namespace aq
 					}
 				}
 			}
+			else if (type == "Blend") {
+				o.type = ObjectType::Blend;
+				const JsonValue& layers = def["layers"];
+				if (layers.IsArray()) {
+					for (size_t i = 0; i < layers.Size(); ++i) {
+						const JsonValue& L = layers[i];
+						BlendLayer layer;
+						layer.childId = ParseChild(name, static_cast<int>(i), L["child"], o.kindId, basePath);
+						if (L.Contains("rtpc")) { layer.rtpcId = Hash(L["rtpc"].AsString()); }
+						const JsonValue& curve = L["curve"];
+						if (curve.IsArray()) {
+							for (size_t ci = 0; ci < curve.Size(); ++ci) {
+								const JsonValue& pt = curve[ci];
+								if (pt.IsArray() && pt.Size() >= 2) {
+									layer.curve.push_back({ pt[size_t(0)].AsFloat(), pt[size_t(1)].AsFloat() });
+								}
+							}
+						}
+						std::sort(layer.curve.begin(), layer.curve.end(),
+						          [](const CurvePoint& a, const CurvePoint& c) { return a.x < c.x; });
+						if (layer.childId != 0) { o.blendLayers.push_back(std::move(layer)); }
+					}
+				}
+			}
 			else {
 				// 既定は Sound（type 省略 + clip あり も含む）。
 				o.type = ObjectType::Sound;

@@ -4,6 +4,9 @@
 #include "Core/IApplication.h"
 #include "Util/ThreadPool.h"
 #include "Physics/PhysicsBackend.h"
+#include "Sound/SoundEngine.h"
+#include "Sound/SoundBackend.h"
+#include "Sound/Authoring/AudioDirector.h"
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
 #elif defined(ENGINE_GRAPHICS_D3D12)
@@ -60,6 +63,16 @@ namespace aq
 		}
 		aq::util::ThreadPool::Initialize();
 
+		// サウンド: プラットフォームで選択したバックエンドを注入して初期化する（§10）。
+		aq::sound::SoundEngine::Create<aq::sound::DefaultSoundBackend>();
+		if (!aq::sound::SoundEngine::Get().Initialize()) {
+			return false;
+		}
+
+		// データ駆動オーディオ層（イベント/Bank）。SoundEngine の上に載る。
+		aq::audio::AudioDirector::Create();
+		aq::audio::AudioDirector::Get().Initialize();
+
 		if (!application_->Initialize(renderContext_)) {
 			return false;
 		}
@@ -78,6 +91,13 @@ namespace aq
 			delete application_;
 			application_ = nullptr;
 		}
+
+		// オーディオ層は SoundEngine より先に破棄する（SoundStream が SoundEngine を参照）。
+		aq::audio::AudioDirector::Get().Finalize();
+		aq::audio::AudioDirector::Release();
+
+		aq::sound::SoundEngine::Get().Finalize();
+		aq::sound::SoundEngine::Release();
 
 		aq::graphics::GraphicsDevice::Get().Finalize();
 		aq::graphics::GraphicsDevice::Release();
@@ -178,6 +198,10 @@ namespace aq
 		ToggleMainRenderTarget();
 #endif
 		application_->Update();
+		// サウンド: 終了ボイスの回収・バックエンドのポンプ（§2.1）。
+		aq::sound::SoundEngine::Get().Update(gameTimer_.GetDeltaTime());
+		// オーディオ層: イベントインスタンスの回収・クールダウン更新。
+		aq::audio::AudioDirector::Get().Update(gameTimer_.GetDeltaTime());
 		// FlushRender() はレンダースレッドがコマンドリストの実行・RT コピー・Present を
 		// 完了するまで待機する。描画に関わるすべての D3D11 コンテキスト呼び出しは
 		// レンダースレッド側に集約され、メインスレッドは Submit() 以降コンテキストに触れない。

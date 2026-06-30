@@ -101,7 +101,7 @@ namespace aq
 					if (busFade_[b].active) {
 						busFade_[b].Update(deltaTime);
 						busVolume_[b] = busFade_[b].current;
-						impl_->SetBusVolume(static_cast<SoundBusId>(b), busVolume_[b]);
+						ApplyBus(static_cast<SoundBusId>(b));
 					}
 				}
 			}
@@ -314,8 +314,22 @@ namespace aq
 		{
 			busVolume_[static_cast<size_t>(bus)] = volume;
 			busFade_[static_cast<size_t>(bus)].SetImmediate(volume);
+			ApplyBus(bus);
+		}
+
+
+		void SoundEngine::SetBusDuck(SoundBusId bus, float gain)
+		{
+			busDuck_[static_cast<size_t>(bus)] = gain;
+			ApplyBus(bus);
+		}
+
+
+		void SoundEngine::ApplyBus(SoundBusId bus)
+		{
 			if (impl_) {
-				impl_->SetBusVolume(bus, volume);
+				const size_t b = static_cast<size_t>(bus);
+				impl_->SetBusVolume(bus, busVolume_[b] * busDuck_[b]);
 			}
 		}
 

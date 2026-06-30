@@ -10,6 +10,7 @@
 #include "AudioBank.h"
 #include "Math/Vector.h"
 #include "Sound/SoundHandle.h"
+#include "Sound/VolumeEnvelope.h"
 #include "Sound/SoundStream.h"   // PlayingInstance が unique_ptr<SoundStream> を持つため完全型が必要
 
 
@@ -37,6 +38,7 @@ namespace aq
 				uint64_t                           gameObject = 0;  // 3D の位置追従元
 				float                              baseVolume = 1.0f;  // RTPC 適用前の基準音量(linear)
 				float                              basePitch  = 1.0f;  // RTPC 適用前の基準ピッチ
+				sound::VolumeEnvelope              fadeGate;           // フェード乗数(0..1)。AudioDirector が所有
 				bool                               isStream = false;
 				bool                               is3D     = false;
 			};
@@ -125,8 +127,8 @@ namespace aq
 
 			// RTPC 値取得（per-GO → グローバル → 定義の default）。
 			float GetRtpc(NameId rtpcId, uint64_t gameObject) const;
-			// RTPC バインディングを全アクティブインスタンスへ適用する（毎フレーム）。
-			void  ApplyRtpcBindings();
+			// インスタンス音量/ピッチの調停（毎フレーム）: base × rtpc × fadeGate を合成して適用。
+			void  ApplyInstanceVolumes(float deltaTime);
 
 			// コンテナ解決の結果（葉の Sound と累積した音量/ピッチ）。
 			struct ResolveResult

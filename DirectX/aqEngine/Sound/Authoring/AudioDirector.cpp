@@ -95,8 +95,8 @@ namespace aq
 				}
 			}
 
-			// RTPC バインディングを反映する。
-			ApplyRtpcBindings();
+			// インスタンス音量/ピッチの調停（base × rtpc × fadeGate）。
+			ApplyInstanceVolumes(deltaTime);
 			// 自動ダッキングを更新する。
 			UpdateDucking(deltaTime);
 		}
@@ -297,7 +297,7 @@ namespace aq
 
 			sound::SoundEngine& se = sound::SoundEngine::Get();
 			for (const auto& kv : busMinDb) {
-				se.SetBusVolume(static_cast<sound::SoundBusId>(kv.first), DbToLinear(kv.second));
+				se.SetBusDuck(static_cast<sound::SoundBusId>(kv.first), DbToLinear(kv.second));
 			}
 		}
 
@@ -417,7 +417,7 @@ namespace aq
 		}
 
 
-		void AudioDirector::ApplyRtpcBindings()
+		void AudioDirector::ApplyInstanceVolumes(float deltaTime)
 		{
 			if (!sound::SoundEngine::IsAvailable()) {
 				return;
@@ -428,11 +428,13 @@ namespace aq
 				if (inst.id == 0) {
 					continue;
 				}
+
+				// フェードゲートを進める（フェードアウト完了で停止・回収）。
+				const bool gateDone = inst.fadeGate.Update(deltaTime);
+
+				// RTPC バインディングを集計（base × Σ binding）。
 				float volMul   = 1.0f;
 				float pitchMul = 1.0f;
-				bool  hasVol    = false;
-				bool  hasPitch  = false;
-
 				for (const AudioBank& bank : banks_) {
 					for (const RtpcBindingDef& b : bank.GetRtpcBindings()) {
 						bool match = false;
@@ -443,24 +445,31 @@ namespace aq
 						default: break;
 						}
 						if (!match) { continue; }
-
 						const float y = EvalCurve(b, GetRtpc(b.rtpcId, inst.gameObject));
-						if (b.property == RtpcProperty::VolumeDb) { volMul   *= DbToLinear(y); hasVol = true; }
-						else                                      { pitchMul *= y;            hasPitch = true; }
+						if (b.property == RtpcProperty::VolumeDb) { volMul   *= DbToLinear(y); }
+						else                                      { pitchMul *= y; }
 					}
 				}
 
-				if (hasVol) {
-					const float v = inst.baseVolume * volMul;
-					if (inst.is3D)        { if (auto* s = se.Resolve(inst.sourceHandle)) { s->SetVolume(v); } }
-					else if (inst.isStream) { if (inst.stream) { inst.stream->SetVolume(v); } }
-					else                  { se.SetVolume(inst.handle, v); }
+				// 合成: base × rtpc × fadeGate（音量） / base × rtpc（ピッチ）。
+				const float volume = inst.baseVolume * volMul * inst.fadeGate.current;
+				const float pitch  = inst.basePitch * pitchMul;
+
+				if (inst.is3D) {
+					if (auto* s = se.Resolve(inst.sourceHandle)) { s->SetVolume(volume); s->SetPitch(pitch); }
 				}
-				if (hasPitch) {
-					const float p = inst.basePitch * pitchMul;
-					if (inst.is3D)        { if (auto* s = se.Resolve(inst.sourceHandle)) { s->SetPitch(p); } }
-					else if (inst.isStream) { if (inst.stream) { inst.stream->SetPitch(p); } }
-					else                  { se.SetPitch(inst.handle, p); }
+				else if (inst.isStream) {
+					if (inst.stream) { inst.stream->SetVolume(volume); inst.stream->SetPitch(pitch); }
+				}
+				else {
+					se.SetVolume(inst.handle, volume);
+					se.SetPitch(inst.handle, pitch);
+				}
+
+				// フェードアウト完了 → 実体を停止して回収する。
+				if (gateDone && inst.fadeGate.stopAtEnd) {
+					StopInstance(inst, 0.0f);
+					RecycleInstance(inst);
 				}
 			}
 		}
@@ -592,8 +601,13 @@ namespace aq
 			inst.kindId     = kindId;
 			inst.bus        = bus;
 			inst.gameObject = gameObject;
-			inst.baseVolume = volLinear;   // RTPC 適用の基準
+			inst.baseVolume = volLinear;   // RTPC/フェード適用の基準
 			inst.basePitch  = pitch;
+
+			// フェードゲート(0..1)。SoundEngine 側フェードは使わず AudioDirector が所有して調停する。
+			if (fadeSec > 0.0f) { inst.fadeGate.current = 0.0f; inst.fadeGate.FadeTo(1.0f, fadeSec, false); }
+			else                { inst.fadeGate.SetImmediate(1.0f); }
+			const float initVol = volLinear * inst.fadeGate.current;
 
 			if (want3D) {
 				const sound::SoundSourceHandle sh = se.CreateSource(leaf->cachedClip, bus);
@@ -611,8 +625,7 @@ namespace aq
 					src->SetPosition(goIt->second.position);
 					src->SetVelocity(goIt->second.velocity);
 				}
-				if (fadeSec > 0.0f) { src->FadeIn(fadeSec, volLinear); }
-				else                { src->SetVolume(volLinear); }
+				src->SetVolume(initVol);
 				src->Play(leaf->loop ? sound::LoopRegion{ 0, 1, 0 } : sound::LoopRegion{});
 				inst.is3D         = true;
 				inst.sourceHandle = sh;
@@ -624,8 +637,7 @@ namespace aq
 				}
 				if (pitch != 1.0f) { s->SetPitch(pitch); }
 				s->Play(leaf->loop ? sound::LoopRegion{ 0, 1, 0 } : sound::LoopRegion{});
-				if (fadeSec > 0.0f) { s->FadeIn(fadeSec, volLinear); }
-				else                { s->SetVolume(volLinear); }
+				s->SetVolume(initVol);
 				inst.isStream = true;
 				inst.stream   = std::move(s);
 			}
@@ -634,12 +646,12 @@ namespace aq
 					EnginePrintf("[Audio] object id=%u: clip 未ロード（事前ロード失敗?）。\n", leaf->nameId);
 					return 0;
 				}
-				const sound::SoundHandle h = se.Play(leaf->cachedClip, bus, fadeSec);
+				const sound::SoundHandle h = se.Play(leaf->cachedClip, bus, 0.0f);   // engine フェードは使わない
 				if (!h.IsValid()) {
 					return 0;
 				}
-				if (fadeSec <= 0.0f && volLinear != 1.0f) { se.SetVolume(h, volLinear); }
-				if (pitch != 1.0f)                        { se.SetPitch(h, pitch); }
+				se.SetVolume(h, initVol);
+				if (pitch != 1.0f) { se.SetPitch(h, pitch); }
 				inst.handle = h;
 			}
 
@@ -687,23 +699,23 @@ namespace aq
 				return;
 			}
 			sound::SoundEngine& se = sound::SoundEngine::Get();
+
+			// フェード停止はゲートに委譲（ApplyInstanceVolumes が 0 まで下げて停止・回収する）。
+			if (fadeSeconds > 0.0f) {
+				inst.fadeGate.FadeTo(0.0f, fadeSeconds, /*stopWhenDone*/ true);
+				return;
+			}
+
+			// 即時停止。実体の回収は呼び出し側 or Update（!IsPlaying）で行う。
 			if (inst.is3D) {
-				if (sound::SoundSource* src = se.Resolve(inst.sourceHandle)) {
-					if (fadeSeconds > 0.0f) { src->FadeOut(fadeSeconds); }
-					else                    { src->Stop(); }
-				}
+				if (sound::SoundSource* src = se.Resolve(inst.sourceHandle)) { src->Stop(); }
 			}
 			else if (inst.isStream) {
-				if (inst.stream) {
-					if (fadeSeconds > 0.0f) { inst.stream->FadeOut(fadeSeconds); }
-					else                    { inst.stream->Stop(); }
-				}
+				if (inst.stream) { inst.stream->Stop(); }
 			}
 			else {
-				if (fadeSeconds > 0.0f) { se.FadeOut(inst.handle, fadeSeconds); }
-				else                    { se.Stop(inst.handle); }
+				se.Stop(inst.handle);
 			}
-			// 実体の回収は Update（!IsPlaying）で行う。
 		}
 
 

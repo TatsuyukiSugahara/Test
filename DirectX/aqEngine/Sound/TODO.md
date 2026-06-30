@@ -12,7 +12,9 @@
 - オーサリング層: Event / Kind / Sound / Random / Sequence / Switch / 3D(`AudioEventEmitterComponent`) / RTPC / State+stateRules / 自動ダッキング、ImGui パネル `AudioAuthoringPanel`
 
 ## 続き（未実装・優先度順の目安）
-1. **音量の調停** — ダッキング/RTPC が `SetBusVolume`/`SetVolume` を毎フレーム上書きし、ユーザーの `FadeBus`/フェードと競合する。`base × duck × RTPC` を合成する調停レイヤを入れる（既存機能の正しさに直結）。
+1. ~~**音量の調停**~~ ✅ 完了。
+   - バス: SoundEngine に `busDuck_`（base と独立）+ `SetBusDuck` / `ApplyBus`（effective = base × duck）。ダッキングは `SetBusVolume` でなく `SetBusDuck` を使う。
+   - インスタンス: AudioDirector を唯一の音量所有者にし、`base × RTPC × fadeGate` を `ApplyInstanceVolumes(dt)` で毎フレーム合成。フェードは SoundEngine 側でなく AudioDirector の `fadeGate`(VolumeEnvelope) で所有（二重所有を解消）。
 2. **Blend コンテナ** — 複数レイヤ同時再生 + RTPC でレイヤ音量制御。
 3. **virtualization** — 実ボイス無しで再生位置だけ進める真のボイス仮想化（低レイヤ拡張が必要）。
 4. **専用オーサリングエディタ** — ImGui パネルの発展（ノードグラフ / カーブ編集 / 解決結果の可視化）。

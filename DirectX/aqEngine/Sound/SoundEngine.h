@@ -57,6 +57,7 @@ namespace aq
 			float          masterVolume_ = 1.0f;
 			VolumeEnvelope masterFade_;
 			float          busVolume_[static_cast<size_t>(SoundBusId::Count)] = { 1.0f, 1.0f, 1.0f, 1.0f };
+			float          busDuck_[static_cast<size_t>(SoundBusId::Count)]   = { 1.0f, 1.0f, 1.0f, 1.0f };
 			VolumeEnvelope busFade_[static_cast<size_t>(SoundBusId::Count)];
 
 		// ── メンバ関数 ──
@@ -95,6 +96,8 @@ namespace aq
 			// 音量（即時）。
 			void SetBusVolume(SoundBusId bus, float volume);
 			void SetMasterVolume(float volume);
+			// ダッキング用の duck 係数（base とは独立。effective = base × duck）。オーサリング層が使う。
+			void SetBusDuck(SoundBusId bus, float gain);
 
 			// 音量フェード（バス/マスター）。
 			void FadeBus(SoundBusId bus, float targetVolume, float seconds);
@@ -127,6 +130,9 @@ namespace aq
 
 			uint32_t    AcquireSourceSlot();
 			SourceSlot* ResolveSourceSlot(SoundSourceHandle handle);
+
+			// バスの実効音量（base × duck）をバックエンドへ反映する。
+			void ApplyBus(SoundBusId bus);
 
 		// ── Singleton ──
 		private:

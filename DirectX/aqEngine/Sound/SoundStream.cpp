@@ -24,6 +24,20 @@ namespace aq
 		}
 
 
+		SoundStream::SoundStream(SoundEngine& engine,
+		                         std::unique_ptr<ISoundVoice> voice,
+		                         const SoundFormat& format,
+		                         SoundBusId bus)
+			: engine_(engine)
+			, voice_(std::move(voice))
+			, decoder_(nullptr)   // プッシュモード
+			, format_(format)
+			, bus_(bus)
+		{
+			engine_.RegisterStream(this);
+		}
+
+
 		SoundStream::~SoundStream()
 		{
 			engine_.UnregisterStream(this);
@@ -35,16 +49,28 @@ namespace aq
 
 		void SoundStream::Play(const LoopRegion& loop)
 		{
-			if (!voice_ || !decoder_) {
+			if (!voice_) {
 				return;
 			}
 			loop_         = loop;
 			endSubmitted_ = false;
-			decoder_->Seek(0);
 
-			Pump();            // 開始前にバッファをプライムしてアンダーランを避ける
+			if (decoder_) {
+				decoder_->Seek(0);
+				Pump();        // 開始前にバッファをプライムしてアンダーランを避ける
+			}
+			// プッシュモードは外部が PushPCM で供給する（プライム不要）。
 			playing_ = true;
 			voice_->Start();
+		}
+
+
+		bool SoundStream::PushPCM(const void* data, uint32_t byteSize)
+		{
+			if (!voice_ || data == nullptr || byteSize == 0) {
+				return false;
+			}
+			return voice_->SubmitBuffer(data, byteSize, false) == SubmitResult::Accepted;
 		}
 
 

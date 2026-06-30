@@ -68,8 +68,8 @@ namespace aq
 
 			// 3D インスタンスの位置追従 + 終了したインスタンスの回収。
 			for (PlayingInstance& inst : instances_) {
-				if (inst.id == 0) {
-					continue;
+				if (inst.id == 0 || inst.isVirtual) {
+					continue;   // 仮想インスタンスは実ボイスを持たない
 				}
 				bool finished = false;
 				if (inst.is3D) {
@@ -97,6 +97,8 @@ namespace aq
 
 			// インスタンス音量/ピッチの調停（base × rtpc × fadeGate）。
 			ApplyInstanceVolumes(deltaTime);
+			// 仮想化の昇格/復帰（枠が空いたら virtual を実ボイスへ）。
+			UpdateVirtualization();
 			// 自動ダッキングを更新する。
 			UpdateDucking(deltaTime);
 		}
@@ -110,10 +112,12 @@ namespace aq
 			inst.id           = 0;
 			inst.isStream     = false;
 			inst.is3D         = false;
+			inst.isVirtual    = false;
 			inst.gameObject   = 0;
 			inst.stream.reset();
 			inst.handle       = sound::SoundHandle{};
 			inst.sourceHandle = sound::SoundSourceHandle{};
+			inst.clip.reset();
 		}
 
 
@@ -425,8 +429,8 @@ namespace aq
 			sound::SoundEngine& se = sound::SoundEngine::Get();
 
 			for (PlayingInstance& inst : instances_) {
-				if (inst.id == 0) {
-					continue;
+				if (inst.id == 0 || inst.isVirtual) {
+					continue;   // 仮想インスタンスは実ボイスが無いので音量適用しない
 				}
 
 				// フェードゲートを進める（フェードアウト完了で停止・回収）。
@@ -556,6 +560,101 @@ namespace aq
 		}
 
 
+		uint32_t AudioDirector::CountRealByKind(NameId kindId) const
+		{
+			uint32_t count = 0;
+			for (const PlayingInstance& inst : instances_) {
+				if (inst.id != 0 && !inst.isVirtual && inst.kindId == kindId) { ++count; }
+			}
+			return count;
+		}
+
+
+		AudioDirector::PlayingInstance* AudioDirector::LowestPriorityRealByKind(NameId kindId)
+		{
+			PlayingInstance* lowest = nullptr;
+			for (PlayingInstance& inst : instances_) {
+				if (inst.id == 0 || inst.isVirtual || inst.kindId != kindId) { continue; }
+				// 優先度が低い、同値なら古い(id 小)ものを選ぶ。
+				if (lowest == nullptr || inst.priority < lowest->priority
+					|| (inst.priority == lowest->priority && inst.id < lowest->id)) {
+					lowest = &inst;
+				}
+			}
+			return lowest;
+		}
+
+
+		void AudioDirector::VirtualizeInstance(PlayingInstance& inst)
+		{
+			if (inst.is3D && inst.sourceHandle.IsValid() && sound::SoundEngine::IsAvailable()) {
+				sound::SoundEngine::Get().DestroySource(inst.sourceHandle);
+			}
+			inst.sourceHandle = sound::SoundSourceHandle{};
+			inst.handle       = sound::SoundHandle{};
+			inst.stream.reset();
+			inst.isStream  = false;
+			inst.isVirtual = true;
+			// clip / loop / priority / baseVolume / basePitch / gameObject / kindId / bus は保持。
+		}
+
+
+		bool AudioDirector::DevirtualizeInstance(PlayingInstance& inst)
+		{
+			if (!sound::SoundEngine::IsAvailable() || !inst.clip) {
+				return false;
+			}
+			sound::SoundEngine& se = sound::SoundEngine::Get();
+
+			// 仮想化対象は 3D ループ。実ソースを作って復帰する。
+			const sound::SoundSourceHandle sh = se.CreateSource(inst.clip, inst.bus);
+			sound::SoundSource* src = se.Resolve(sh);
+			if (src == nullptr) {
+				return false;
+			}
+			const KindDef* k = FindKind(inst.kindId);
+			if (const AttenuationDef* at = k ? FindAttenuation(k->attenuationId) : nullptr) {
+				src->SetAttenuation(at->model);
+				src->SetDistances(at->minDistance, at->maxDistance);
+			}
+			src->SetPitch(inst.basePitch);
+			auto goIt = gameObjects_.find(inst.gameObject);
+			if (goIt != gameObjects_.end()) {
+				src->SetPosition(goIt->second.position);
+				src->SetVelocity(goIt->second.velocity);
+			}
+			src->SetVolume(inst.baseVolume);
+			src->Play(inst.loop ? sound::LoopRegion{ 0, 1, 0 } : sound::LoopRegion{});
+			inst.sourceHandle = sh;
+			inst.is3D         = true;
+			inst.isVirtual    = false;
+			inst.fadeGate.SetImmediate(1.0f);
+			return true;
+		}
+
+
+		void AudioDirector::UpdateVirtualization()
+		{
+			// 枠が空いている Kind について、最も優先度の高い仮想インスタンスを実ボイスへ復帰。
+			bool changed = true;
+			while (changed) {
+				changed = false;
+				PlayingInstance* best = nullptr;
+				for (PlayingInstance& inst : instances_) {
+					if (inst.id == 0 || !inst.isVirtual) { continue; }
+					const KindDef* k = FindKind(inst.kindId);
+					const uint32_t max = k ? k->maxVoices : 0;
+					if (max != 0 && CountRealByKind(inst.kindId) >= max) { continue; }   // 枠なし
+					if (best == nullptr || inst.priority > best->priority) { best = &inst; }
+				}
+				if (best != nullptr) {
+					if (DevirtualizeInstance(*best)) { changed = true; }
+					else { RecycleInstance(*best); changed = true; }   // 復帰失敗は破棄（無限ループ防止）
+				}
+			}
+		}
+
+
 		PlayingId AudioDirector::PlayTopObject(NameId topObjectId, uint64_t gameObject, const ActionDef& action)
 		{
 			// Blend: 各レイヤを同時再生（レイヤごとに RTPC 音量変調を付与）。
@@ -600,14 +699,6 @@ namespace aq
 				}
 			}
 
-			// ボイス制限（§8）。
-			if (k && k->maxVoices > 0 && CountActiveByKind(kindId) >= k->maxVoices) {
-				if (k->voiceStealing == VoiceStealing::None || k->voiceStealing == VoiceStealing::Reject) {
-					return 0;   // 拒否
-				}
-				StealOldestByKind(kindId);   // Oldest/Quietest/LowestPriority は暫定 Oldest
-			}
-
 			const float fadeMs    = action.fadeMs > 0.0f ? action.fadeMs : (k ? k->fadeInMs : 0.0f);
 			const float fadeSec   = fadeMs / 1000.0f;
 			const float volLinear = DbToLinear(r.volumeDb + (k ? k->volumeDb : 0.0f));
@@ -619,6 +710,28 @@ namespace aq
 			                    && gameObject != 0 && static_cast<bool>(leaf->cachedClip);
 			const bool stream = !want3D && (leaf->loop || (k && k->loadPolicy == LoadPolicy::Stream));
 
+			// ボイス制限（§8）。virtualize 対象（3D ループ）は仮想化で枠を作る。
+			const uint8_t priority   = k ? k->priority : 50;
+			const bool virtualizable = k && k->virtualize && want3D && leaf->loop;
+			bool startVirtual = false;
+			if (k && k->maxVoices > 0 && CountRealByKind(kindId) >= k->maxVoices) {
+				if (virtualizable) {
+					PlayingInstance* victim = LowestPriorityRealByKind(kindId);
+					if (victim != nullptr && priority > victim->priority) {
+						VirtualizeInstance(*victim);   // 低優先の実ボイスを仮想化して枠を空ける
+					}
+					else {
+						startVirtual = true;           // 自分を仮想で開始
+					}
+				}
+				else if (k->voiceStealing == VoiceStealing::None || k->voiceStealing == VoiceStealing::Reject) {
+					return 0;   // 拒否
+				}
+				else {
+					StealOldestByKind(kindId);   // Oldest/Quietest/LowestPriority は暫定 Oldest
+				}
+			}
+
 			PlayingInstance inst;
 			inst.objectId   = leaf->nameId;
 			inst.kindId     = kindId;
@@ -628,13 +741,22 @@ namespace aq
 			inst.basePitch   = pitch;
 			inst.layerRtpcId = layerRtpcId; // Blend レイヤの音量変調（あれば）
 			inst.layerCurve  = layerCurve;
+			inst.priority    = priority;
+			inst.clip        = leaf->cachedClip;   // 仮想化からの復帰用
+			inst.loop        = leaf->loop;
 
 			// フェードゲート(0..1)。SoundEngine 側フェードは使わず AudioDirector が所有して調停する。
 			if (fadeSec > 0.0f) { inst.fadeGate.current = 0.0f; inst.fadeGate.FadeTo(1.0f, fadeSec, false); }
 			else                { inst.fadeGate.SetImmediate(1.0f); }
 			const float initVol = volLinear * inst.fadeGate.current;
 
-			if (want3D) {
+			if (startVirtual) {
+				// 実ボイスを割り当てず仮想で開始（3D ループ）。枠が空いたら devirtualize される。
+				inst.is3D      = true;
+				inst.isVirtual = true;
+				inst.fadeGate.SetImmediate(1.0f);
+			}
+			else if (want3D) {
 				const sound::SoundSourceHandle sh = se.CreateSource(leaf->cachedClip, bus);
 				sound::SoundSource* src = se.Resolve(sh);
 				if (src == nullptr) {
@@ -725,6 +847,12 @@ namespace aq
 			}
 			sound::SoundEngine& se = sound::SoundEngine::Get();
 
+			// 仮想インスタンスは実ボイスが無いので、フェードできず即時回収する。
+			if (inst.isVirtual) {
+				RecycleInstance(inst);
+				return;
+			}
+
 			// フェード停止はゲートに委譲（ApplyInstanceVolumes が 0 まで下げて停止・回収する）。
 			if (fadeSeconds > 0.0f) {
 				inst.fadeGate.FadeTo(0.0f, fadeSeconds, /*stopWhenDone*/ true);
@@ -773,7 +901,7 @@ namespace aq
 			out.clear();
 			for (const PlayingInstance& inst : instances_) {
 				if (inst.id != 0) {
-					out.push_back({ inst.id, inst.objectId, inst.kindId, inst.bus, inst.isStream });
+					out.push_back({ inst.id, inst.objectId, inst.kindId, inst.bus, inst.isStream, inst.isVirtual });
 				}
 			}
 		}
@@ -873,6 +1001,23 @@ namespace aq
 		{
 			auto it = currentStates_.find(groupId);
 			return it != currentStates_.end() ? it->second : 0;
+		}
+
+
+		NameId AudioDirector::GetCurrentSwitch(NameId groupId) const
+		{
+			auto goIt = switchByGo_.find(0);
+			if (goIt != switchByGo_.end()) {
+				auto vIt = goIt->second.find(groupId);
+				if (vIt != goIt->second.end()) { return vIt->second; }
+			}
+			return 0;
+		}
+
+
+		const SoundObjectDef* AudioDirector::GetObjectDef(NameId objectId) const
+		{
+			return FindObject(objectId);
 		}
 
 

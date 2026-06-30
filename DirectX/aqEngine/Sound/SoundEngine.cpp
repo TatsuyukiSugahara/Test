@@ -221,6 +221,19 @@ namespace aq
 		}
 
 
+		std::unique_ptr<SoundStream> SoundEngine::OpenPushStream(const SoundFormat& format, SoundBusId bus)
+		{
+			if (impl_ == nullptr || !format.IsValid()) {
+				return nullptr;
+			}
+			std::unique_ptr<ISoundVoice> voice = impl_->CreateVoice(format, bus);
+			if (voice == nullptr) {
+				return nullptr;
+			}
+			return std::make_unique<SoundStream>(*this, std::move(voice), format, bus);
+		}
+
+
 		void SoundEngine::SetVolume(SoundHandle handle, float volume)
 		{
 			ActiveVoice* slot = ResolveActive(handle);

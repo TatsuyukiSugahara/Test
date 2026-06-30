@@ -85,6 +85,8 @@ namespace aq
 			// ストリーミング元を生成（BGM/動画）。キャッシュ非共有の実体（§5.1/§5.2）。
 			// 対応拡張子: .wav（Ogg は将来）。
 			std::unique_ptr<SoundStream> OpenStream(const char* path, SoundBusId bus = SoundBusId::BGM);
+			// プッシュ駆動ストリーム（動画音声など外部が PCM を供給。§11）。
+			std::unique_ptr<SoundStream> OpenPushStream(const SoundFormat& format, SoundBusId bus = SoundBusId::Voice);
 
 			// ハンドル操作（§2.4）。世代不一致は安全に no-op。
 			bool IsPlaying(SoundHandle handle) const;

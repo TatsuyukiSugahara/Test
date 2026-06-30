@@ -237,6 +237,8 @@ namespace aq
 					k.voiceStealing = StealingFromName(def["voiceStealing"].AsString());
 					k.spatialMode   = SpatialFromName(def["spatialMode"].AsString());
 					k.attenuationId = def.Contains("attenuation") ? Hash(def["attenuation"].AsString()) : 0;
+					k.priority      = static_cast<uint8_t>(def["priority"].AsInt(50));
+					k.virtualize    = def["virtualize"].AsBool();
 					kinds_[k.nameId] = k;
 				}
 			}

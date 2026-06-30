@@ -286,6 +286,7 @@
     <ClCompile Include="Sound\Decoder\MFDecoder.cpp" />
     <ClCompile Include="Sound\XAudio2\XAudio2SoundBackend.cpp" />
     <ClCompile Include="Sound\XAudio2\XAudio2SoundVoice.cpp" />
+    <ClCompile Include="Sound\Video\VideoPlayer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Application.h" />
@@ -516,6 +517,7 @@
     <ClInclude Include="Sound\Decoder\MFDecoder.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundBackend.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundVoice.h" />
+    <ClInclude Include="Sound\Video\VideoPlayer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

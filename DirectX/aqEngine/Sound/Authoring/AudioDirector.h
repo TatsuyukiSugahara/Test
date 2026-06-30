@@ -41,8 +41,12 @@ namespace aq
 				sound::VolumeEnvelope              fadeGate;           // フェード乗数(0..1)。AudioDirector が所有
 				NameId                             layerRtpcId = 0;    // Blend レイヤの音量 RTPC（0=なし）
 				std::vector<CurvePoint>            layerCurve;         // Blend レイヤの音量カーブ
+				sound::RefSoundClip                clip;               // 仮想化からの復帰用（3D ループ）
+				uint8_t                            priority = 50;      // 仮想化の優先度
 				bool                               isStream = false;
 				bool                               is3D     = false;
+				bool                               loop     = false;
+				bool                               isVirtual = false;  // 実ボイス無しで生存中（§8 virtualization）
 			};
 
 			// 3D 発生主体の状態（GameObject）。
@@ -113,6 +117,7 @@ namespace aq
 				NameId            kindId;
 				sound::SoundBusId bus;
 				bool              isStream;
+				bool              isVirtual;
 			};
 			void CollectDebugVoices(std::vector<DebugVoiceInfo>& out) const;
 			void GetGlobalSwitches(std::vector<std::pair<NameId, NameId>>& out) const;
@@ -128,6 +133,9 @@ namespace aq
 			void CollectStateGroups(std::vector<std::pair<NameId, std::vector<NameId>>>& out) const;
 			void CollectSwitchGroups(std::vector<std::pair<NameId, std::vector<NameId>>>& out) const;
 			NameId GetCurrentState(NameId groupId) const;   // 未設定は 0
+			NameId GetCurrentSwitch(NameId groupId) const;  // グローバル Switch 値。未設定は 0
+			// オブジェクト定義の参照（ツリー可視化用）。
+			const SoundObjectDef* GetObjectDef(NameId objectId) const;
 			// エディタからオブジェクトを直接再生する（イベント不要）。
 			PlayingId DebugPlayObject(NameId objectId);
 
@@ -179,6 +187,13 @@ namespace aq
 			// ボイス制限（§8）。
 			uint32_t CountActiveByKind(NameId kindId) const;
 			void     StealOldestByKind(NameId kindId);
+
+			// 仮想化（§8 virtualization）。3D ループ音を実ボイス無しで生かす。
+			uint32_t CountRealByKind(NameId kindId) const;
+			AudioDirector::PlayingInstance* LowestPriorityRealByKind(NameId kindId);
+			void VirtualizeInstance(PlayingInstance& inst);
+			bool DevirtualizeInstance(PlayingInstance& inst);
+			void UpdateVirtualization();
 
 			void StopInstance(PlayingInstance& inst, float fadeSeconds);
 			void RecycleInstance(PlayingInstance& inst);

@@ -5,6 +5,7 @@
 #include <memory>
 
 namespace aq { namespace audio { class AudioAuthoringPanel; } }
+namespace aq { namespace video { class VideoPlayer; } }
 
 namespace app
 {
@@ -33,6 +34,8 @@ namespace app
 		bool  soundPaused_    = false;
 		bool  event3DOn_      = false;
 		bool  engineOn_       = false;
+		bool  ambienceOn_     = false;
+		std::unique_ptr<aq::video::VideoPlayer> videoPlayer_;
 		float orbitAngle_     = 0.0f;
 		float event3DAngle_   = 0.0f;
 #ifdef AQ_DEBUG_IMGUI

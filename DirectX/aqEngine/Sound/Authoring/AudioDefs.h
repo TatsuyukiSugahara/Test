@@ -63,6 +63,8 @@ namespace aq
 			VoiceStealing    voiceStealing = VoiceStealing::Oldest;
 			SpatialMode      spatialMode   = SpatialMode::Auto;
 			NameId           attenuationId = 0;     // 3D 減衰プリセット名
+			uint8_t          priority      = 50;    // 0-100。枯渇時に残す/復帰させる優先度
+			bool             virtualize    = false; // 上限超過時に実ボイス無しで生かす（3D ループ）
 		};
 
 		// SoundObject。フェーズ2 で Random/Sequence、3 で Switch、追加で Blend。

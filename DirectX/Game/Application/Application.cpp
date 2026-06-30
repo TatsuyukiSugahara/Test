@@ -12,6 +12,7 @@
 #include "Sound/SoundSource.h"
 #include "Sound/Component/SoundSystem.h"
 #include "Sound/Authoring/Audio.h"
+#include "Sound/Video/VideoPlayer.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
 #include "Sound/Authoring/Debug/AudioAuthoringPanel.h"
@@ -116,6 +117,7 @@ namespace app
 #endif
 
 		// サウンドテストの後始末（SoundEngine 解放前に行う）。
+		videoPlayer_.reset();
 		bgmStream_.reset();
 		if (orbitSource_.IsValid() && aq::sound::SoundEngine::IsAvailable()) {
 			aq::sound::SoundEngine::Get().DestroySource(orbitSource_);
@@ -223,6 +225,48 @@ namespace app
 		// J / K: RTPC "EngineLoad"（Blend 高音レイヤの音量。U で鳴らしてる間に試す）
 		if (triggered('J')) { aq::audio::SetRTPC("EngineLoad", 0.0f); }
 		if (triggered('K')) { aq::audio::SetRTPC("EngineLoad", 1.0f); }
+		// I: 3D アンビエンス×4 を spawn/stop（Ambience3D は maxVoices=2 + virtualize）。
+		//    Audio パネルの Active Voices で 2 実 + 2 virtual(橙) が確認できる。
+		if (triggered('I')) {
+			if (!ambienceOn_) {
+				sound.GetListener().SetPosition(aq::math::Vector3(0.0f, 0.0f, 0.0f));
+				sound.GetListener().SetOrientation(aq::math::Vector3(0.0f, 0.0f, 1.0f),
+				                                   aq::math::Vector3(0.0f, 1.0f, 0.0f));
+				const float px[4] = { 5.0f, -5.0f, 0.0f, 0.0f };
+				const float pz[4] = { 0.0f, 0.0f, 5.0f, -5.0f };
+				for (int i = 0; i < 4; ++i) {
+					const uint64_t go = 101 + i;
+					aq::audio::SetGameObjectTransform(go, aq::math::Vector3(px[i], 0.0f, pz[i]),
+					    aq::math::Vector3(0.0f, 0.0f, 1.0f), aq::math::Vector3(0.0f, 1.0f, 0.0f),
+					    aq::math::Vector3(0.0f, 0.0f, 0.0f));
+					aq::audio::PostEvent("Play_Amb3D", go);
+				}
+				ambienceOn_ = true;
+			}
+			else {
+				for (int i = 0; i < 4; ++i) { aq::audio::UnregisterGameObject(101 + i); }
+				ambienceOn_ = false;
+			}
+		}
+		// O: GameObject 101 を停止（実ボイスが空き、仮想の1つが昇格するのを Audio パネルで確認）
+		if (triggered('O')) { aq::audio::UnregisterGameObject(101); }
+		// N: VideoPlayer（動画音声側）のトグル。メディアの音声トラックを MF デコード→プッシュ供給。
+		//    ここでは bgm.wav を再生（mp4 を置けば動画の音声も同経路で鳴る）。
+		if (triggered('N')) {
+			if (!videoPlayer_) {
+				videoPlayer_ = std::make_unique<aq::video::VideoPlayer>();
+				if (!videoPlayer_->Open("Assets/Sound/bgm.wav", aq::sound::SoundBusId::BGM)) {
+					videoPlayer_.reset();
+				}
+			}
+			else {
+				videoPlayer_.reset();   // 停止
+			}
+		}
+		// VideoPlayer の音声供給を毎フレーム回す。
+		if (videoPlayer_) {
+			videoPlayer_->Update(aq::Engine::GetDeltaTime());
+		}
 		// GameObject 99 を周回させる（パン + ドップラーをオーサリング層で確認）
 		if (event3DOn_) {
 			const float angularSpeed = 2.0f;

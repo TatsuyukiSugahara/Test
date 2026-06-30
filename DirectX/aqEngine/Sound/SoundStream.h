@@ -39,9 +39,15 @@ namespace aq
 
 		// ── メンバ関数 ──
 		public:
+			// デコーダ駆動（BGM/ファイル）。
 			SoundStream(SoundEngine& engine,
 			            std::unique_ptr<ISoundVoice> voice,
 			            std::unique_ptr<ISoundDecoder> decoder,
+			            SoundBusId bus);
+			// プッシュ駆動（動画音声など外部供給）。decoder を持たず PushPCM で供給する（§11）。
+			SoundStream(SoundEngine& engine,
+			            std::unique_ptr<ISoundVoice> voice,
+			            const SoundFormat& format,
 			            SoundBusId bus);
 			~SoundStream();
 
@@ -49,6 +55,11 @@ namespace aq
 			SoundStream& operator=(const SoundStream&) = delete;
 
 			SoundBusId GetBus() const { return bus_; }
+			bool IsPushMode() const { return decoder_ == nullptr; }
+
+			// プッシュ駆動: 外部（VideoPlayer 等）が PCM を供給する。
+			// 受理で true、内部キュー満杯（背圧）で false。
+			bool PushPCM(const void* data, uint32_t byteSize);
 
 			// 再生開始。loop.frameCount!=0 なら EOF で loop.startFrame へ戻ってループ（§3.3c）。
 			void Play(const LoopRegion& loop = LoopRegion{});

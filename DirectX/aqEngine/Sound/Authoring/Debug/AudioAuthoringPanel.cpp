@@ -4,6 +4,8 @@
 #include <imgui/imgui.h>
 #include <vector>
 #include <utility>
+#include <unordered_set>
+#include <string>
 #include <cstdio>
 #include <cfloat>
 #include "Sound/Authoring/AudioDirector.h"
@@ -60,6 +62,63 @@ namespace aq
 				}
 				return c.back().y;
 			}
+
+			// オブジェクトツリーを再帰描画（Random/Sequence/Switch/Blend を展開）。
+			void RenderObjectNode(AudioDirector& dir, NameId id, int& uid)
+			{
+				const SoundObjectDef* o = dir.GetObjectDef(id);
+				std::string name = dir.NameOf(id);
+				if (name.empty()) { name = "(anon)"; }
+
+				ImGui::PushID(uid++);
+				if (o == nullptr) {
+					ImGui::BulletText("%s -> missing", name.c_str());
+					ImGui::PopID();
+					return;
+				}
+
+				if (o->type == ObjectType::Sound) {
+					if (ImGui::SmallButton("Play")) { dir.DebugPlayObject(id); }
+					ImGui::SameLine();
+					ImGui::Text("%s  [Sound]  %s", name.c_str(), o->clip.c_str());
+					ImGui::PopID();
+					return;
+				}
+
+				char label[160];
+				std::snprintf(label, sizeof(label), "%s  [%s]", name.c_str(), ObjectTypeName(o->type));
+				const bool open = ImGui::TreeNode(label);
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Play")) { dir.DebugPlayObject(id); }
+				if (open) {
+					switch (o->type) {
+					case ObjectType::Random:
+					case ObjectType::Sequence:
+						for (NameId c : o->childIds) { RenderObjectNode(dir, c, uid); }
+						break;
+					case ObjectType::Switch: {
+						const NameId cur = dir.GetCurrentSwitch(o->switchGroupId);
+						for (const auto& m : o->switchMap) {
+							const bool active = (m.first == cur);
+							if (active) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.3f, 1.0f)); }
+							ImGui::Text("%s%s ->", dir.NameOf(m.first).c_str(), active ? " *" : "");
+							if (active) { ImGui::PopStyleColor(); }
+							ImGui::Indent();
+							RenderObjectNode(dir, m.second, uid);
+							ImGui::Unindent();
+						}
+						break;
+					}
+					case ObjectType::Blend:
+						for (const auto& layer : o->blendLayers) { RenderObjectNode(dir, layer.childId, uid); }
+						break;
+					default:
+						break;
+					}
+					ImGui::TreePop();
+				}
+				ImGui::PopID();
+			}
 		}
 
 
@@ -108,7 +167,10 @@ namespace aq
 						ImGui::TableNextColumn(); ImGui::TextUnformatted(dir.NameOf(v.objectId).c_str());
 						ImGui::TableNextColumn(); ImGui::TextUnformatted(dir.NameOf(v.kindId).c_str());
 						ImGui::TableNextColumn(); ImGui::TextUnformatted(BusName(v.bus));
-						ImGui::TableNextColumn(); ImGui::TextUnformatted(v.isStream ? "stream" : "one-shot");
+						ImGui::TableNextColumn();
+						if (v.isVirtual)    { ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "virtual"); }
+						else if (v.isStream) { ImGui::TextUnformatted("stream"); }
+						else                 { ImGui::TextUnformatted("one-shot"); }
 					}
 					ImGui::EndTable();
 				}
@@ -193,27 +255,25 @@ namespace aq
 				}
 			}
 
-			// ── オブジェクトブラウザ（任意再生）──
-			if (ImGui::CollapsingHeader("Objects")) {
-				std::vector<AudioDirector::ObjectInfo> objs;
-				dir.CollectObjects(objs);
-				if (ImGui::BeginTable("objects", 3,
-						ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-					ImGui::TableSetupColumn("play", ImGuiTableColumnFlags_WidthFixed, 44.0f);
-					ImGui::TableSetupColumn("name");
-					ImGui::TableSetupColumn("type", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-					ImGui::TableHeadersRow();
-					int idBase = 3000;
-					for (const auto& o : objs) {
-						ImGui::TableNextRow();
-						ImGui::TableNextColumn();
-						ImGui::PushID(idBase++);
-						if (ImGui::SmallButton("Play")) { dir.DebugPlayObject(o.id); }
-						ImGui::PopID();
-						ImGui::TableNextColumn(); ImGui::TextUnformatted(dir.NameOf(o.id).c_str());
-						ImGui::TableNextColumn(); ImGui::TextUnformatted(ObjectTypeName(o.type));
+			// ── オブジェクトツリー（コンテナ展開 + 任意再生 + Switch 解決ハイライト）──
+			if (ImGui::CollapsingHeader("Objects (tree)")) {
+				// 子として参照されている id を集め、未参照のものをルートとして描画する。
+				std::unordered_set<NameId> referenced;
+				for (const AudioBank& bank : dir.GetBanks()) {
+					for (const auto& kv : bank.GetObjects()) {
+						const SoundObjectDef& o = kv.second;
+						for (NameId c : o.childIds) { referenced.insert(c); }
+						for (const auto& m : o.switchMap) { referenced.insert(m.second); }
+						for (const auto& layer : o.blendLayers) { referenced.insert(layer.childId); }
 					}
-					ImGui::EndTable();
+				}
+				int uid = 4000;
+				for (const AudioBank& bank : dir.GetBanks()) {
+					for (const auto& kv : bank.GetObjects()) {
+						if (referenced.count(kv.first) == 0) {
+							RenderObjectNode(dir, kv.first, uid);
+						}
+					}
 				}
 			}
 

@@ -8,7 +8,8 @@
     "SE3D":     { "bus": "SE",  "loadPolicy": "preload", "spatialMode": "3d", "attenuation": "DefaultSE" },
     "BGM":      { "bus": "BGM", "loadPolicy": "stream", "fadeInMs": 1000, "fadeOutMs": 1000 },
     "Voice":    { "bus": "Voice", "loadPolicy": "preload" },
-    "Engine":   { "bus": "SE", "loadPolicy": "preload" }
+    "Engine":   { "bus": "SE", "loadPolicy": "preload" },
+    "Ambience3D": { "bus": "SE", "spatialMode": "3d", "loadPolicy": "preload", "attenuation": "DefaultSE", "maxVoices": 2, "virtualize": true, "priority": 50 }
   },
   "states": {
     "Music": { "values": [ "Explore", "Combat" ], "default": "Explore", "transitionMs": 800 }
@@ -38,6 +39,7 @@
     "Beep":      { "type": "Sound", "kind": "SE",  "clip": "beep.wav" },
     "Title_BGM": { "type": "Sound", "kind": "BGM", "clip": "bgm.wav", "loop": true },
     "Beep3D":    { "type": "Sound", "kind": "SE3D", "clip": "beep.wav", "loop": true },
+    "Amb3D":     { "type": "Sound", "kind": "Ambience3D", "clip": "beep.wav", "loop": true },
     "BGM_Explore": { "type": "Sound", "kind": "BGM", "clip": "bgm.wav", "loop": true },
     "BGM_Combat":  { "type": "Sound", "kind": "BGM", "clip": "bgm_combat.wav", "loop": true },
     "Voice_Test":  { "type": "Sound", "kind": "Voice", "clip": "voice.wav" },
@@ -88,6 +90,7 @@
     "Play_Beep3D":    [ { "action": "Play", "target": { "object": "Beep3D" } } ],
     "Play_Voice":     [ { "action": "Play", "target": { "object": "Voice_Test" } } ],
     "Play_Engine":    [ { "action": "Play", "target": { "object": "Engine_Blend" } } ],
-    "Stop_Engine":    [ { "action": "Stop", "target": { "kind": "Engine" } } ]
+    "Stop_Engine":    [ { "action": "Stop", "target": { "kind": "Engine" } } ],
+    "Play_Amb3D":     [ { "action": "Play", "target": { "object": "Amb3D" } } ]
   }
 }

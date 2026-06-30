@@ -46,6 +46,9 @@
     <Filter Include="Sound\XAudio2">
       <UniqueIdentifier>{c9f3e405-6172-4c8d-ae1f-2a3b4c5d6e7f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Sound\Video">
+      <UniqueIdentifier>{a3d72849-05b6-4ec2-d364-6f8091a2b3c4}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Sound\Component">
       <UniqueIdentifier>{d0a4f516-7283-4d9e-bf20-3b4c5d6e7f80}</UniqueIdentifier>
     </Filter>
@@ -532,6 +535,9 @@
     </ClCompile>
     <ClCompile Include="Sound\XAudio2\XAudio2SoundVoice.cpp">
       <Filter>Sound\XAudio2</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Video\VideoPlayer.cpp">
+      <Filter>Sound\Video</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1179,6 +1185,9 @@
     </ClInclude>
     <ClInclude Include="Sound\XAudio2\XAudio2SoundVoice.h">
       <Filter>Sound\XAudio2</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Video\VideoPlayer.h">
+      <Filter>Sound\Video</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

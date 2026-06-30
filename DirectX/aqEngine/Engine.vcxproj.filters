@@ -224,6 +224,9 @@
     <ClCompile Include="HID\Input.cpp">
       <Filter>HID</Filter>
     </ClCompile>
+    <ClCompile Include="HID\XInputPadBackend.cpp">
+      <Filter>HID</Filter>
+    </ClCompile>
     <ClCompile Include="Util\GameTimer.cpp">
       <Filter>Util</Filter>
     </ClCompile>
@@ -763,6 +766,15 @@
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\InputBinding.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\IPadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\PadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\XInputPadBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="Util\JobSystem.h">

@@ -1,7 +1,7 @@
 #include "aq.h"
 #include "Input.h"
 #include "Engine.h"
-#pragma comment(lib, "xinput.lib")
+#include "HID/PadBackend.h"
 
 
 namespace aq
@@ -195,46 +195,32 @@ namespace aq
 
 		// ==========================================
 		// Pad
+		// 生のデバイス取得・振動は IPadBackend(既定: XInput)に委譲し、
+		// ここでは正規化状態(PadState)に対する判定とタイマー管理のみを行う。
 		// ==========================================
-
-		// PadButton → XInput ボタンビット対応表（LT/RT はトリガー値で判定するため 0）
-		static const WORD kXInputButtonMap[] =
-		{
-			XINPUT_GAMEPAD_A,
-			XINPUT_GAMEPAD_B,
-			XINPUT_GAMEPAD_X,
-			XINPUT_GAMEPAD_Y,
-			XINPUT_GAMEPAD_LEFT_SHOULDER,
-			XINPUT_GAMEPAD_RIGHT_SHOULDER,
-			0,    // LT: bLeftTrigger  > 128 で判定
-			0,    // RT: bRightTrigger > 128 で判定
-			XINPUT_GAMEPAD_DPAD_UP,
-			XINPUT_GAMEPAD_DPAD_DOWN,
-			XINPUT_GAMEPAD_DPAD_LEFT,
-			XINPUT_GAMEPAD_DPAD_RIGHT,
-			XINPUT_GAMEPAD_START,
-			XINPUT_GAMEPAD_BACK,
-			XINPUT_GAMEPAD_LEFT_THUMB,
-			XINPUT_GAMEPAD_RIGHT_THUMB,
-		};
-
 
 		void Pad::Update(float dt)
 		{
 			old_ = now_;
-			connected_ = (XInputGetState(index_, &now_) == ERROR_SUCCESS);
-
-			if (!connected_)
+			if (backend_)
 			{
-				now_  = {};
-				old_  = {};
+				backend_->Poll(index_, now_);
+			}
+			else
+			{
+				now_ = {};
+			}
+
+			if (!now_.connected)
+			{
+				old_ = {};
 				aq::memory::Clear(holdTimers_, sizeof(holdTimers_));
 				return;
 			}
 
 			for (uint32_t i = 0; i < BTN_COUNT; ++i)
 			{
-				if (GetButtonState(now_, static_cast<PadButton>(i)))
+				if (now_.buttons[i])
 					holdTimers_[i] += dt;
 				else
 					holdTimers_[i] = 0.0f;
@@ -244,19 +230,21 @@ namespace aq
 
 		bool Pad::IsTriggered(PadButton btn) const
 		{
-			return !GetButtonState(old_, btn) && GetButtonState(now_, btn);
+			const uint32_t idx = static_cast<uint32_t>(btn);
+			return !old_.buttons[idx] && now_.buttons[idx];
 		}
 
 
 		bool Pad::IsPressed(PadButton btn) const
 		{
-			return GetButtonState(now_, btn);
+			return now_.buttons[static_cast<uint32_t>(btn)];
 		}
 
 
 		bool Pad::IsReleased(PadButton btn) const
 		{
-			return GetButtonState(old_, btn) && !GetButtonState(now_, btn);
+			const uint32_t idx = static_cast<uint32_t>(btn);
+			return old_.buttons[idx] && !now_.buttons[idx];
 		}
 
 
@@ -268,57 +256,15 @@ namespace aq
 
 		float Pad::GetAxis(PadAxis axis) const
 		{
-			if (!connected_) return 0.0f;
-			switch (axis)
-			{
-			case PadAxis::LX:       return NormalizeAxis(now_.Gamepad.sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-			case PadAxis::LY:       return NormalizeAxis(now_.Gamepad.sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-			case PadAxis::RX:       return NormalizeAxis(now_.Gamepad.sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
-			case PadAxis::RY:       return NormalizeAxis(now_.Gamepad.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
-			case PadAxis::LTrigger: return now_.Gamepad.bLeftTrigger  / 255.0f;
-			case PadAxis::RTrigger: return now_.Gamepad.bRightTrigger / 255.0f;
-			default:                return 0.0f;
-			}
-		}
-
-
-		bool Pad::GetButtonState(const XINPUT_STATE& state, PadButton btn) const
-		{
-			if (btn == PadButton::LT) return state.Gamepad.bLeftTrigger  > 128;
-			if (btn == PadButton::RT) return state.Gamepad.bRightTrigger > 128;
-
-			const uint32_t idx = static_cast<uint32_t>(btn);
-			if (idx < ArraySize(kXInputButtonMap) && kXInputButtonMap[idx] != 0)
-				return (state.Gamepad.wButtons & kXInputButtonMap[idx]) != 0;
-			return false;
-		}
-
-
-		float Pad::NormalizeAxis(SHORT value, SHORT deadZone) const
-		{
-			if (value > -deadZone && value < deadZone) return 0.0f;
-			const float fMax      = 32767.0f;
-			const float fDeadZone = static_cast<float>(deadZone);
-			const float fVal      = static_cast<float>(value);
-			float result;
-			if (value > 0)
-				result = (fVal - fDeadZone) / (fMax - fDeadZone);
-			else
-				result = (fVal + fDeadZone) / (fMax - fDeadZone);
-			// SHORT_MIN (-32768) 側でわずかに -1 を下回るため [-1, 1] にクランプ
-			return result < -1.0f ? -1.0f : (result > 1.0f ? 1.0f : result);
+			if (!now_.connected) return 0.0f;
+			return now_.axes[static_cast<uint32_t>(axis)];
 		}
 
 
 		void Pad::Vibrate(float left, float right)
 		{
-			if (!connected_) return;
-			const float l = left  < 0.0f ? 0.0f : (left  > 1.0f ? 1.0f : left);
-			const float r = right < 0.0f ? 0.0f : (right > 1.0f ? 1.0f : right);
-			XINPUT_VIBRATION vib;
-			vib.wLeftMotorSpeed  = static_cast<WORD>(l * 65535.0f);
-			vib.wRightMotorSpeed = static_cast<WORD>(r * 65535.0f);
-			XInputSetState(index_, &vib);
+			if (!now_.connected || !backend_) return;
+			backend_->SetVibration(index_, left, right);
 		}
 
 
@@ -332,8 +278,14 @@ namespace aq
 		InputManager::InputManager()
 			: lastTime_(Clock::now())
 		{
+			// パッドバックエンドはプラットフォームで選択(既定: XInput)。
+			// DirectInput の Setup 成否に依らず動くよう、ここで生成しておく。
+			padBackend_ = std::make_unique<DefaultPadBackend>();
 			for (uint32_t i = 0; i < MAX_PAD_COUNT; ++i)
+			{
 				pads_[i].SetIndex(i);
+				pads_[i].SetBackend(padBackend_.get());
+			}
 		}
 
 

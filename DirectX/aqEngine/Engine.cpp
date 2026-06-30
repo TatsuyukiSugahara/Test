@@ -108,6 +108,12 @@ namespace aq
 	}
 
 
+	const char* Engine::GetContentRoot() const
+	{
+		return platform_ ? platform_->GetContentRoot() : nullptr;
+	}
+
+
 	void Engine::RunGame()
 	{
 		// メッセージ/イベントのポンプはプラットフォーム層に委譲する。

@@ -69,6 +69,10 @@ namespace aq
 
 		inline aq::util::GameTimer& GetTimer() { return gameTimer_; }
 
+		// アセット読み込みの基点パス。Win32 は nullptr(=Resource 側の従来探索に委ねる)、
+		// UWP はパッケージ install フォルダを返す。platform_ 未設定時も nullptr。
+		const char* GetContentRoot() const;
+
 		// static ラッパー (Engine::Get() を省略して呼べる)
 		static float GetDeltaTime() { return Get().gameTimer_.GetDeltaTime(); }
 		static float GetTotalTime() { return Get().gameTimer_.GetTotalTime(); }

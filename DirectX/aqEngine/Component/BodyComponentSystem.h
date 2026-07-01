@@ -51,6 +51,11 @@ namespace aq
 				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
 			}
 #endif
+
+			// 永続フィールドなし（プログラム生成のボックス）。
+			// Prefab の構成要素として追加・生成できるよう空の Reflect を提供する。
+			template <typename V>
+			void Reflect(V&) {}
 		};
 
 		class StaticMeshComponent : public aq::ecs::IComponent
@@ -230,6 +235,23 @@ namespace aq
 				}
 			}
 #endif
+
+			// 永続フィールドの列挙（JSON 保存/読込）。常時コンパイル。StaticMesh と同方針。
+			// パスは raw メンバを直接列挙し、ロード副作用は OnDeserialized へ退避する。
+			template <typename V>
+			void Reflect(V& visitor)
+			{
+				visitor.FieldPath("model",   modelPath_,   "Model Path");
+				visitor.FieldPath("texture", texturePath_, "Texture Path");
+			}
+
+			// deserialize 後に呼ぶ。読み込んだパスからメッシュのロードを発火する。
+			void OnDeserialized()
+			{
+				if (!modelPath_.empty())
+					SetModelPath(modelPath_.c_str(),
+					             texturePath_.empty() ? nullptr : texturePath_.c_str());
+			}
 		};
 
 

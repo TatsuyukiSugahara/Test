@@ -8,6 +8,8 @@
 > - **Medium**: `PrefabId` は **JSON 上は path/GUID 文字列が正本**、uint64 はランタイムキャッシュキーのみ。衝突検出＋診断。
 > - **Low**: requiredWith 展開後の **dedup と MAX_COMPONENT_SIZE 超過の診断エラー化**を Phase 1 に明記。
 
+> 📖 **使い方（作成・生成・Component から Prefab を参照する方法）は末尾の [§11 使い方](#11-使い方usage--クイックスタート) を参照。**
+
 ## 1. 目的と背景
 
 [../Component/Prefab.h](../Component/Prefab.h) の `Prefab` はコード版スポナー（構成がコンパイル時固定・初期値ラムダ・保存/読込/参照なし）。
@@ -378,16 +380,27 @@ public:
 > - スポーンの親付けは設計例どおり `htc->parentHandle`（spawner の親＝兄弟として生成）。弾のようにワールド直置きしたい場合の選択肢（無親 / 専用コンテナ）は要追加。
 > - 大量スポーンの CopyFn ブループリント最適化（§10）は未着手（現状は毎スポーン deserialize）。
 
-### 8.2 コンポーネント例：PrefabReference / Spawner
+### 8.2 コンポーネント例：Spawner（Prefab 参照は自作コンポーネントが直接持つ）
+
+> **専用の PrefabReferenceComponent は設けない（2026-07-01 決定・削除済み）**。
+> 「Prefab を参照する」= `prefabPath`（文字列）を正本に持ち、実行時に
+> `PrefabRegistry::Resolve(path) → Find(id) → Prefab::Instantiate` で解決するだけ。
+> これは**任意の自作コンポーネント**が同じ手順で行えるため、参照専用コンポーネントは不要。
+> `PrefabId`（uint64）は Registry 内部のキャッシュキーで、**利用側が直接値を知る必要はない**
+> （常に path 文字列 → `Resolve` で取得する）。`SpawnerComponent` はその参照＋間欠生成の一例。
 
 ```cpp
-struct PrefabReferenceComponent : IComponent
+// 任意の自作コンポーネントで Prefab を参照する最小パターン:
+struct MyComponent : IComponent
 {
-    ecsComponent(...);
+    ecsComponent(aq::ecs::MyComponent);
     std::string prefabPath;            // ★正本（serialize される）。例 "Assets/Prefabs/Sword.prefab.json"
-    PrefabId    resolved;              // ランタイム解決結果（serialize しない）
+    PrefabId    resolved;              // ランタイム解決結果のキャッシュ（serialize しない）
     template <typename V> void Reflect(V& v) { v.FieldPath("prefab", prefabPath, "Prefab"); }
 };
+// 使う側（System 等）:
+//   if (!resolved.IsValid()) resolved = PrefabRegistry::Get().Resolve(prefabPath);
+//   if (auto data = PrefabRegistry::Get().Find(resolved)) Prefab(data).Instantiate(parent);
 
 struct SpawnerComponent : IComponent
 {
@@ -455,3 +468,117 @@ void SpawnSystem::Update()
 - **型安全性**: コンパイル時 static_assert → `requiredWith` 実行時検証 + 診断ログ。
 - **PrefabId 復元性**: 保存は文字列正本のみ。uint64 は実行時キャッシュキー、Registry で衝突検出。
 - **レジストリ常時コンパイル化**: コア部の `#ifdef` 切り出し。
+
+
+---
+
+# 11. 使い方（Usage / クイックスタート）
+
+Prefab = **JSON（`.prefab.json`）で定義したエンティティツリーの設計図**。作って、ランタイムで生成する。
+
+## 11.1 Prefab を作る
+
+### (A) ImGui エディタで作る（推奨）
+デバッグメニュー **Tools > Prefab Editor** を開く（全シーンで利用可）。
+1. ノードを選び「+ Add Component」で構成を組む（Reflect 対応コンポーネントのみ選択可）
+2. 「+ Add Child」で子ノードを足してツリーを作る
+3. フィールドを編集し、パス欄に `.prefab.json` を入れて **Save**
+4. 「Spawn Preview」で現在の編集ツリーをその場に遅延生成して確認できる
+
+### (B) `.prefab.json` を手書きする
+```json
+{
+  "name": "Enemy",
+  "components": {
+    "Transform":    { "position": [0,0,0], "rotation": [0,0,0,1], "scale": [1,1,1] },
+    "SkeletalMesh": { "model": "Assets/models/enemy.tkm", "texture": "Assets/models/enemy.png" }
+  },
+  "children": [
+    {
+      "name": "Weapon",
+      "prefab": "Sword.prefab.json",                 // ネスト参照（baseDir からの相対）
+      "overrides": {
+        "components": { "Transform": { "position": [0,1,0] } }
+      }
+    }
+  ]
+}
+```
+- コメントは `//` 行のみ可（`/* */`・末尾カンマ不可）。
+- コンポーネントのキー = 各 `ComponentMeta::typeName`、フィールドキー = `Reflect` の persistKey（下表）。
+
+| コンポーネント | JSON キー | 主なフィールド（persistKey） |
+|---|---|---|
+| Transform | `Transform` | `position` `[x,y,z]` / `rotation` `[x,y,z,w]` / `scale` `[x,y,z]` |
+| Static Mesh | `StaticMesh` | `model` / `texture`（パス文字列） |
+| Skeletal Mesh | `SkeletalMesh` | `model` / `texture` |
+| Decal | `Decal` | `texture` / `size` / `color` / `opacity` / `angleFadeMin` |
+| Spawner | `Spawner` | `prefab` / `interval` / `maxCount` |
+
+## 11.2 Prefab を生成する（コードから）
+
+```cpp
+#include "ECS/PrefabSerializer.h"
+#include "ECS/PrefabRegistry.h"
+
+// --- 方法1: ファイルから直接ロードして生成 ---
+aq::ecs::Prefab prefab = aq::ecs::PrefabSerializer::Load("Assets/Prefabs/Enemy.prefab.json");
+prefab.Instantiate();                          // 遅延生成（次の ECS Update で実体化）
+
+// --- 方法2: Registry 経由（同じ Prefab を何度も生成する場合はこちら） ---
+auto& reg = aq::ecs::PrefabRegistry::Get();
+aq::ecs::PrefabId id = reg.Resolve("Assets/Prefabs/Enemy.prefab.json");   // path→ID（内部で Load+キャッシュ）
+if (auto data = reg.Find(id))
+    aq::ecs::Prefab(data).Instantiate(parentHandle);
+```
+
+- **既定は遅延生成**：`Instantiate()` はコマンドを積むだけで、実体化は次の `EntityContext::Update()`（FlushCommands）。
+  System の `Update`（ForEach）内から呼んでも安全。
+- **生成完了で何かしたい**：`Instantiate(parent, [](Entity root){ /* 生成直後 */ })`。
+- **その場で Entity ハンドルが欲しい**（初期化・エディタ用、ForEach 外限定）：
+  `Entity e = prefab.InstantiateImmediate(parent);`
+
+## 11.3 Component に Prefab の ID（参照）を持たせて使う
+
+**専用の参照コンポーネントは無い。** 自作コンポーネントが `prefabPath`（文字列＝正本）を持ち、
+実行時に Registry で解決するだけ。`PrefabId`（uint64）は Registry 内部のキャッシュキーなので
+**利用側が値を直接知る必要はない**（常に path → `Resolve`）。
+
+```cpp
+// 1) 参照を持つコンポーネント
+struct MyComponent : aq::ecs::IComponent
+{
+    ecsComponent(aq::ecs::MyComponent);
+    std::string     prefabPath;   // ★正本（serialize される）。例 "Assets/Prefabs/Sword.prefab.json"
+    aq::ecs::PrefabId resolved;   // 解決結果のキャッシュ（serialize しない）
+
+    template <typename V>
+    void Reflect(V& v) { v.FieldPath("prefab", prefabPath, "Prefab"); }   // エディタ/JSON で path 編集
+};
+
+// 2) 使う側（System の Update 内など）
+if (!comp->resolved.IsValid() && !comp->prefabPath.empty())
+    comp->resolved = aq::ecs::PrefabRegistry::Get().Resolve(comp->prefabPath);   // 初回だけ解決
+if (auto data = aq::ecs::PrefabRegistry::Get().Find(comp->resolved))
+    aq::ecs::Prefab(data).Instantiate(parentHandle);                             // 遅延生成
+```
+
+- エディタ/シリアライズに載せるには、この `MyComponent` を `ComponentRegistry::RegisterCoreComponents()` に
+  他コンポーネント同様に登録し、`FillReflectPtrFns<MyComponent>(meta)` を呼ぶ（`typeName` と serialize/deserialize が付く）。
+- **既成の実例**：`SpawnerComponent`（`prefabPath` + `interval` で間欠スポーン）と `SpawnSystem`
+  （[SpawnSystem.cpp](SpawnSystem.cpp)）。`SpawnSystem` は `AddSystem` 済みなので、エンティティに
+  `Spawner` コンポーネントを付けて `prefab` に path を入れるだけで自動スポーンが動く。
+
+### ファイルを介さない動的 Prefab
+コードで組んだ Prefab を ID 参照したいときは Registry に文字列キーで登録する：
+```cpp
+aq::ecs::Prefab p = aq::ecs::PrefabSerializer::FromJson(jsonValue);   // JsonValue から組む
+aq::ecs::PrefabId id = aq::ecs::PrefabRegistry::Get().Register("mem://bullet", p);
+// 以降は Resolve("mem://bullet") で取得できる
+```
+
+## 11.4 注意点
+- `Instantiate` は同期的に Entity を返さない（遅延）。ハンドルが要るなら `InstantiateImmediate`（ForEach 外）か `onComplete`。
+- Prefab の寿命：`Instantiate` は内部の `shared_ptr<const PrefabData>` を値捕獲するので、一時 Prefab や
+  Registry の `Clear()`／リロード後でも安全（use-after-free しない）。
+- 保存されるのは path 文字列。`PrefabId`(uint64) は保存しない（アセット移動・ハッシュ変更で壊れるため）。

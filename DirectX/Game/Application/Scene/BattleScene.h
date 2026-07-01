@@ -4,7 +4,6 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "Terrain/HeightmapPainter.h"
 #include "Terrain/SplatmapPainter.h"
-#include "ECS/PrefabEditor.h"
 #endif
 
 namespace app
@@ -30,7 +29,6 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 			aq::terrain::HeightmapPainter painter_;
 			aq::terrain::SplatmapPainter splatmapPainter_;
-			aq::ecs::PrefabEditorPanel   prefabEditor_;
 #endif
 		};
 	}

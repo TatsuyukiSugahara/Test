@@ -4,6 +4,7 @@
 #include "Sound/SoundTypes.h"
 #include "Sound/SoundHandle.h"
 #include "Sound/SoundFwd.h"
+#include <string>
 
 
 namespace aq
@@ -20,6 +21,7 @@ namespace aq
 
 			// ── 設定（生成前に指定）──
 			RefSoundClip     clip;                                  // 事前ロード済みクリップ
+			std::string      clipPath;                              // ★正本（serialize される）。OnDeserialized で clip をロード
 			SoundBusId       bus           = SoundBusId::SE;
 			AttenuationModel attenuation   = AttenuationModel::Inverse;
 			float            minDistance   = 1.0f;
@@ -55,6 +57,30 @@ namespace aq
 				visitor.Field("loop", loop);
 			}
 #endif
+
+			// 永続フィールド（JSON 保存/読込）。常時コンパイル。
+			// bus/attenuation は enum を int で保存（temp+apply）。clip のロードは OnDeserialized へ退避。
+			template <typename V>
+			void Reflect(V& visitor)
+			{
+				visitor.FieldPath("clip", clipPath, "Clip");
+				int busI = static_cast<int>(bus);
+				visitor.Field("bus", busI, "Bus");
+				bus = static_cast<SoundBusId>(busI);
+				int attnI = static_cast<int>(attenuation);
+				visitor.Field("attenuation", attnI, "Attenuation");
+				attenuation = static_cast<AttenuationModel>(attnI);
+				visitor.Field("minDistance",   minDistance,   "Min Distance");
+				visitor.Field("maxDistance",   maxDistance,   "Max Distance");
+				visitor.Field("dopplerFactor", dopplerFactor, "Doppler");
+				visitor.Field("pitch",         pitch,         "Pitch");
+				visitor.Field("volume",        volume,        "Volume");
+				visitor.Field("loop",          loop,          "Loop");
+				visitor.Field("autoPlay",      autoPlay,      "Auto Play");
+			}
+
+			// deserialize 後に呼ぶ。clipPath からクリップをロードする（.cpp で実装）。
+			void OnDeserialized();
 
 		private:
 			// handle の所有を other から奪い、other を無効化する（dtor の二重破棄を防ぐ）。

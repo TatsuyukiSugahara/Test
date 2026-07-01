@@ -40,38 +40,69 @@ namespace aq
 
 			// --- Entity 操作 ---
 
+			// TransformComponent + HierarchicalTransformComponent は全 Entity の必須基底として
+			// 自動付与する（両方省略時）。両方明示するのも可。片方だけの指定は禁止（ペア）。
+			// debug ビルドでは EntityDebugTag も自動付与する。
 			template <typename... Args>
 			Entity CreateEntity()
 			{
-				static_assert(
-					!(std::is_same_v<TransformComponent, Args> || ...) ||
-					 (std::is_same_v<HierarchicalTransformComponent, Args> || ...),
-					"TransformComponent を含む Entity は HierarchicalTransformComponent も必須です");
+				constexpr bool hasTC  = (std::is_same_v<TransformComponent, Args> || ...);
+				constexpr bool hasHTC = (std::is_same_v<HierarchicalTransformComponent, Args> || ...);
+				static_assert(hasTC == hasHTC,
+					"TransformComponent と HierarchicalTransformComponent はペアで指定するか、両方省略してください（両方省略時は自動付与）");
+				if constexpr (hasTC)
+				{
 #ifdef AQ_DEBUG_IMGUI
-				if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
-					return entityManager_.CreateEntity<Args...>();
-				else
-					return entityManager_.CreateEntity<Args..., EntityDebugTag>();
+					if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
+						return entityManager_.CreateEntity<Args...>();
+					else
+						return entityManager_.CreateEntity<Args..., EntityDebugTag>();
 #else
-				return entityManager_.CreateEntity<Args...>();
+					return entityManager_.CreateEntity<Args...>();
 #endif
+				}
+				else
+				{
+#ifdef AQ_DEBUG_IMGUI
+					if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
+						return entityManager_.CreateEntity<Args..., TransformComponent, HierarchicalTransformComponent>();
+					else
+						return entityManager_.CreateEntity<Args..., TransformComponent, HierarchicalTransformComponent, EntityDebugTag>();
+#else
+					return entityManager_.CreateEntity<Args..., TransformComponent, HierarchicalTransformComponent>();
+#endif
+				}
 			}
 
 			template <typename... Args>
 			void RequestCreateEntity(std::function<void(Entity)> onCreated = nullptr)
 			{
-				static_assert(
-					!(std::is_same_v<TransformComponent, Args> || ...) ||
-					 (std::is_same_v<HierarchicalTransformComponent, Args> || ...),
-					"TransformComponent を含む Entity は HierarchicalTransformComponent も必須です");
+				constexpr bool hasTC  = (std::is_same_v<TransformComponent, Args> || ...);
+				constexpr bool hasHTC = (std::is_same_v<HierarchicalTransformComponent, Args> || ...);
+				static_assert(hasTC == hasHTC,
+					"TransformComponent と HierarchicalTransformComponent はペアで指定するか、両方省略してください（両方省略時は自動付与）");
+				if constexpr (hasTC)
+				{
 #ifdef AQ_DEBUG_IMGUI
-				if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
-					entityManager_.RequestCreateEntity<Args...>(std::move(onCreated));
-				else
-					entityManager_.RequestCreateEntity<Args..., EntityDebugTag>(std::move(onCreated));
+					if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
+						entityManager_.RequestCreateEntity<Args...>(std::move(onCreated));
+					else
+						entityManager_.RequestCreateEntity<Args..., EntityDebugTag>(std::move(onCreated));
 #else
-				entityManager_.RequestCreateEntity<Args...>(std::move(onCreated));
+					entityManager_.RequestCreateEntity<Args...>(std::move(onCreated));
 #endif
+				}
+				else
+				{
+#ifdef AQ_DEBUG_IMGUI
+					if constexpr ((std::is_same_v<Args, EntityDebugTag> || ...))
+						entityManager_.RequestCreateEntity<Args..., TransformComponent, HierarchicalTransformComponent>(std::move(onCreated));
+					else
+						entityManager_.RequestCreateEntity<Args..., TransformComponent, HierarchicalTransformComponent, EntityDebugTag>(std::move(onCreated));
+#else
+					entityManager_.RequestCreateEntity<Args..., TransformComponent, HierarchicalTransformComponent>(std::move(onCreated));
+#endif
+				}
 			}
 
 			// 実行時 TypeInfo 列から Entity を遅延生成する（Prefab 生成の核心 primitive）。

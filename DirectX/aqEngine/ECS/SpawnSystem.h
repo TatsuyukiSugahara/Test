@@ -7,24 +7,12 @@ namespace aq
 {
 	namespace ecs
 	{
-		// Prefab を参照として保持するコンポーネント（設計 §8.2）。
-		// 正本は prefabPath（文字列）。resolved はランタイム解決結果でシリアライズしない。
-		struct PrefabReferenceComponent : public IComponent
-		{
-			ecsComponent(aq::ecs::PrefabReferenceComponent);
-
-			std::string prefabPath;        // 正本（serialize される）
-			PrefabId    resolved;          // ランタイム解決結果（serialize しない）
-
-			template <typename V>
-			void Reflect(V& visitor)
-			{
-				visitor.FieldPath("prefab", prefabPath, "Prefab");
-			}
-		};
-
-
 		// 一定間隔で参照 Prefab をスポーンするコンポーネント（設計 §8.2）。
+		//
+		// Prefab の参照は「prefabPath（文字列）を正本に持ち、実行時に
+		// PrefabRegistry::Resolve(path)→Find(id)→Prefab::Instantiate で解決する」だけ。
+		// 専用の参照コンポーネントは設けない — 任意の自作コンポーネントが同じ手順で
+		// Prefab を参照できる（SpawnerComponent はその一例）。
 		struct SpawnerComponent : public IComponent
 		{
 			ecsComponent(aq::ecs::SpawnerComponent);

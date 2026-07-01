@@ -25,6 +25,11 @@ namespace aq
 				visitor.ReadOnly("prev position", previousPosition);
 			}
 #endif
+
+			// 永続フィールドなし（リスナーのマーカー。位置は Transform 由来）。
+			// Prefab の構成要素として追加できるよう空 Reflect を提供する。
+			template <typename V>
+			void Reflect(V&) {}
 		};
 	}
 }

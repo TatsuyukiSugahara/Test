@@ -8,6 +8,9 @@
 #include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
 #include "Component/DecalComponent.h"
+#include "Component/AnimationComponentSystem.h"
+#include "Sound/Component/AudioSourceComponent.h"
+#include "Sound/Component/AudioListenerComponent.h"
 #include "SpawnSystem.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "ImGuiFieldVisitor.h"   // drawInspector（ImGui 編集）専用。serialize/deserialize は非依存。
@@ -173,6 +176,7 @@ namespace aq
 			{
 				ComponentMeta meta;
 				meta.displayName  = "Box Static Mesh";
+				meta.typeName     = "BoxStaticMesh";
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<BoxStaticMeshComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<BoxStaticMeshComponent>(h); };
@@ -192,7 +196,18 @@ namespace aq
 					comp->Inspect(visitor);
 				};
 #endif
+				// 永続フィールドは無いが、Prefab の構成要素として追加・生成できるよう登録する（Reflect は空）。
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<BoxStaticMeshComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle, const util::JsonValue&) {};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<BoxStaticMeshComponent>(h); };
+				FillReflectPtrFns<BoxStaticMeshComponent>(meta);
 				registry.Register(TypeInfo::Create<BoxStaticMeshComponent>(), std::move(meta));
 			}
 
@@ -245,6 +260,7 @@ namespace aq
 			{
 				ComponentMeta meta;
 				meta.displayName  = "Skeletal Mesh";
+				meta.typeName     = "SkeletalMesh";
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<SkeletalMeshComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<SkeletalMeshComponent>(h); };
@@ -264,15 +280,32 @@ namespace aq
 					comp->Inspect(visitor);
 				};
 #endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<SkeletalMeshComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<SkeletalMeshComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+					comp->OnDeserialized();   // 読み込んだパスからメッシュをロード（副作用退避）
+				};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<SkeletalMeshComponent>(h); };
+				FillReflectPtrFns<SkeletalMeshComponent>(meta);
 				registry.Register(TypeInfo::Create<SkeletalMeshComponent>(), std::move(meta));
 			}
 
 			// --- TerrainComponent ---
-			// 注: Inspect が ImGui 直呼び（HeightScale 等）を含むため Reflect 化は未対応（serialize なし）。
 			{
 				ComponentMeta meta;
 				meta.displayName  = "Terrain";
+				meta.typeName     = "Terrain";
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<TerrainComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<TerrainComponent>(h); };
@@ -292,15 +325,32 @@ namespace aq
 					comp->Inspect(visitor);
 				};
 #endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<TerrainComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<TerrainComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+					comp->OnDeserialized();   // 読み込んだパス/パラメータで地形を再構築
+				};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<TerrainComponent>(h); };
+				FillReflectPtrFns<TerrainComponent>(meta);
 				registry.Register(TypeInfo::Create<TerrainComponent>(), std::move(meta));
 			}
 
 			// --- OceanComponent ---
-			// 注: Inspect が ImGui 直呼びのため Reflect 化は未対応（serialize なし）。
 			{
 				ComponentMeta meta;
 				meta.displayName  = "Ocean";
+				meta.typeName     = "Ocean";
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<OceanComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<OceanComponent>(h); };
@@ -320,7 +370,24 @@ namespace aq
 					comp->Inspect(visitor);
 				};
 #endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<OceanComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<OceanComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+					comp->OnDeserialized();   // 読み込んだ params で海を再構築
+				};
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<OceanComponent>(h); };
+				FillReflectPtrFns<OceanComponent>(meta);
 				registry.Register(TypeInfo::Create<OceanComponent>(), std::move(meta));
 			}
 
@@ -368,48 +435,6 @@ namespace aq
 				registry.Register(TypeInfo::Create<DecalComponent>(), std::move(meta));
 			}
 
-			// --- PrefabReferenceComponent ---
-			{
-				ComponentMeta meta;
-				meta.displayName  = "Prefab Reference";
-				meta.typeName     = "PrefabReference";
-				meta.requiredWith = {};
-				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<PrefabReferenceComponent>(h) != nullptr; };
-				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<PrefabReferenceComponent>(h); };
-				meta.add  = [](EntityHandle h)
-				{
-					auto& ctx = EntityContext::Get();
-					if (!ctx.GetComponent<PrefabReferenceComponent>(h)) ctx.AddComponent<PrefabReferenceComponent>(h);
-				};
-#ifdef AQ_DEBUG_IMGUI
-				meta.drawInspector = [](EntityHandle h)
-				{
-					auto* comp = EntityContext::Get().GetComponent<PrefabReferenceComponent>(h);
-					if (!comp) return;
-					ImGuiFieldVisitor visitor;
-					comp->Reflect(visitor);
-				};
-#endif
-				meta.serialize = [](EntityHandle h, util::JsonValue& out)
-				{
-					auto* comp = EntityContext::Get().GetComponent<PrefabReferenceComponent>(h);
-					if (!comp) return;
-					JsonWriteVisitor visitor;
-					comp->Reflect(visitor);
-					out = std::move(visitor.obj);
-				};
-				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
-				{
-					auto* comp = EntityContext::Get().GetComponent<PrefabReferenceComponent>(h);
-					if (!comp) return;
-					JsonReadVisitor visitor(in);
-					comp->Reflect(visitor);
-				};
-				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<PrefabReferenceComponent>(h); };
-				FillReflectPtrFns<PrefabReferenceComponent>(meta);
-				registry.Register(TypeInfo::Create<PrefabReferenceComponent>(), std::move(meta));
-			}
-
 			// --- SpawnerComponent ---
 			{
 				ComponentMeta meta;
@@ -452,6 +477,118 @@ namespace aq
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<SpawnerComponent>(h); };
 				FillReflectPtrFns<SpawnerComponent>(meta);
 				registry.Register(TypeInfo::Create<SpawnerComponent>(), std::move(meta));
+			}
+
+			// --- AnimationComponent（複数クリップ = collection。専用シリアライズ）---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Animation";
+				meta.typeName     = "Animation";
+				meta.requiredWith = { TypeInfo::Create<SkeletalMeshComponent>() };
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<AnimationComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<AnimationComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<SkeletalMeshComponent>(h))          ctx.AddComponent<SkeletalMeshComponent>(h);
+					if (!ctx.GetComponent<AnimationComponent>(h))             ctx.AddComponent<AnimationComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspector    = [](EntityHandle h) { auto* c = EntityContext::Get().GetComponent<AnimationComponent>(h); if (c) c->DrawInspectorImGui(); };
+				meta.drawInspectorPtr = [](void* p)        { static_cast<AnimationComponent*>(p)->DrawInspectorImGui(); };
+#endif
+				// collection のため Reflect ビジターではなく専用の SerializeTo/DeserializeFrom を使う。
+				meta.serialize      = [](EntityHandle h, util::JsonValue& out)       { auto* c = EntityContext::Get().GetComponent<AnimationComponent>(h); if (c) c->SerializeTo(out); };
+				meta.deserialize    = [](EntityHandle h, const util::JsonValue& in)  { auto* c = EntityContext::Get().GetComponent<AnimationComponent>(h); if (c) c->DeserializeFrom(in); };
+				meta.serializePtr   = [](void* p, util::JsonValue& out)              { static_cast<AnimationComponent*>(p)->SerializeTo(out); };
+				meta.deserializePtr = [](void* p, const util::JsonValue& in)         { static_cast<AnimationComponent*>(p)->DeserializeFrom(in); };
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<AnimationComponent>(h); };
+				registry.Register(TypeInfo::Create<AnimationComponent>(), std::move(meta));
+			}
+
+			// --- AudioSourceComponent（3D 発音体）---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Audio Source";
+				meta.typeName     = "AudioSource";
+				meta.requiredWith = { TypeInfo::Create<TransformComponent>(), TypeInfo::Create<HierarchicalTransformComponent>() };
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<sound::AudioSourceComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<sound::AudioSourceComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<sound::AudioSourceComponent>(h))    ctx.AddComponent<sound::AudioSourceComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<sound::AudioSourceComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Reflect(visitor);
+				};
+#endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<sound::AudioSourceComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<sound::AudioSourceComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+					comp->OnDeserialized();   // clipPath からクリップをロード
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<sound::AudioSourceComponent>(h); };
+				FillReflectPtrFns<sound::AudioSourceComponent>(meta);
+				registry.Register(TypeInfo::Create<sound::AudioSourceComponent>(), std::move(meta));
+			}
+
+			// --- AudioListenerComponent（リスナーマーカー・永続データなし）---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Audio Listener";
+				meta.typeName     = "AudioListener";
+				meta.requiredWith = { TypeInfo::Create<TransformComponent>(), TypeInfo::Create<HierarchicalTransformComponent>() };
+				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<sound::AudioListenerComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<sound::AudioListenerComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<sound::AudioListenerComponent>(h))  ctx.AddComponent<sound::AudioListenerComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<sound::AudioListenerComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Reflect(visitor);
+				};
+#endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<sound::AudioListenerComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle, const util::JsonValue&) {};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<sound::AudioListenerComponent>(h); };
+				FillReflectPtrFns<sound::AudioListenerComponent>(meta);
+				registry.Register(TypeInfo::Create<sound::AudioListenerComponent>(), std::move(meta));
 			}
 		}
 	}

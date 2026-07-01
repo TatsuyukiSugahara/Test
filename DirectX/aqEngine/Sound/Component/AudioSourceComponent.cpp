@@ -1,12 +1,21 @@
 #include "aq.h"
 #include "AudioSourceComponent.h"
 #include "Sound/SoundEngine.h"
+#include "Sound/SoundClip.h"
+#include "Resource/Resource.h"
 
 
 namespace aq
 {
 	namespace sound
 	{
+		void AudioSourceComponent::OnDeserialized()
+		{
+			if (!clipPath.empty())
+				clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(clipPath.c_str());
+		}
+
+
 		AudioSourceComponent::AudioSourceComponent(AudioSourceComponent&& other) noexcept
 		{
 			MoveFrom(std::move(other));

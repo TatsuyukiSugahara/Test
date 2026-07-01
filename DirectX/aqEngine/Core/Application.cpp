@@ -264,6 +264,10 @@ namespace aq
 			profilerDebugPanel_ = std::make_unique<aq::profile::ProfilerDebugPanel>();
 			aq::DebugUI::Get().Register(profilerDebugPanel_.get());
 
+			// Prefab エディタパネル（全シーン共通・アプリ寿命）
+			prefabEditorPanel_ = std::make_unique<aq::ecs::PrefabEditorPanel>();
+			aq::DebugUI::Get().Register(prefabEditorPanel_.get());
+
 			// Hi-Z 可視化タブ
 			if (hiZRenderer_)
 			{

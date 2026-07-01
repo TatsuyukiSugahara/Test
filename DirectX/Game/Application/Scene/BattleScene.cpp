@@ -78,7 +78,6 @@ namespace app
 			splatmapPainter_.Attach(terrainComp->GetChunk(), aq::math::Vector3(-50.0f, 0.0f, -50.0f));
 			aq::DebugUI::Get().Register(&painter_);
 			aq::DebugUI::Get().Register(&splatmapPainter_);
-			aq::DebugUI::Get().Register(&prefabEditor_);
 #endif
 
 			// world(0,0) = terrain local(50,50) (XZオフセット -50 適用後)
@@ -475,7 +474,6 @@ namespace app
 		void BattleScene::Finalize()
 		{
 #ifdef AQ_DEBUG_IMGUI
-			aq::DebugUI::Get().Unregister(&prefabEditor_);
 			aq::DebugUI::Get().Unregister(&splatmapPainter_);
 			aq::DebugUI::Get().Unregister(&painter_);
 			splatmapPainter_.Detach();

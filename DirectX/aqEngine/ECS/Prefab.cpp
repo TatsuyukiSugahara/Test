@@ -33,6 +33,20 @@ namespace aq
 					types.push_back(t);
 				}
 
+				// 1.5) TransformComponent + HierarchicalTransformComponent は全 Prefab の必須基底。
+				//      Transform を必ず含める（HTC は下の requiredWith 展開で自動追加される）。
+				{
+					const TypeInfo tc = registry.TypeOf("Transform");
+					if (tc != TypeInfo())
+					{
+						bool present = false;
+						for (const TypeInfo& t : types) {
+							if (t == tc) { present = true; break; }
+						}
+						if (!present) types.push_back(tc);
+					}
+				}
+
 				// 2) requiredWith の推移展開（固定点まで）。
 				bool changed = true;
 				while (changed)

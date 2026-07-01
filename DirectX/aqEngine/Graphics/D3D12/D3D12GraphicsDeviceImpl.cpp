@@ -240,8 +240,15 @@ namespace aq
 			desc.SampleDesc.Count = 1;
 
 			IDXGISwapChain1* swapChain1 = nullptr;
+#if defined(AQ_PLATFORM_UWP)
+			// UWP(Xbox 道A): HWND ではなく CoreWindow(IUnknown*)に対して生成する。
+			// NativeWindowHandle.handle には CoreWindow の IUnknown* が入っている。
+			hr = factory->CreateSwapChainForCoreWindow(commandQueue_, static_cast<IUnknown*>(hwnd),
+			                                           &desc, nullptr, &swapChain1);
+#else
 			hr = factory->CreateSwapChainForHwnd(commandQueue_, static_cast<HWND>(hwnd),
 			                                     &desc, nullptr, nullptr, &swapChain1);
+#endif
 			if (FAILED(hr))
 			{
 				EngineAssertMsg(false, "D3D12 スワップチェーン作成失敗");

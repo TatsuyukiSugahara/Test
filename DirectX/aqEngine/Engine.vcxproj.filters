@@ -191,6 +191,9 @@
     <ClCompile Include="Platform\PlatformWin32.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
+    <ClCompile Include="Platform\PlatformUWP.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Memory\MemoryManager.cpp">
       <Filter>Memory</Filter>
     </ClCompile>
@@ -663,6 +666,9 @@
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="Platform\PlatformWin32.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\PlatformUWP.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="aq.h" />

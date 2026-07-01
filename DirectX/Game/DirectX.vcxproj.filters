@@ -21,6 +21,9 @@
     <ClCompile Include="Application\Main.cpp">
       <Filter>Application</Filter>
     </ClCompile>
+    <ClCompile Include="Application\UWPMain.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
     <ClCompile Include="Application\Application.cpp">
       <Filter>Application</Filter>
     </ClCompile>

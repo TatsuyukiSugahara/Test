@@ -6,6 +6,7 @@
 //    将来                  : GameInput / Windows.Gaming.Input(Phase 4)
 // ============================================================
 
+#if !defined(AQ_PLATFORM_UWP)
 #include "HID/XInputPadBackend.h"
 
 namespace aq
@@ -17,3 +18,7 @@ namespace aq
 		using DefaultPadBackend = XInputPadBackend;
 	}
 }
+#else
+// UWP(Xbox): パッドバックエンド未実装(Phase 4 GameInput 予定)。
+// DefaultPadBackend は定義しない。InputManager 側は backend_ 未設定(no-op)で動く。
+#endif

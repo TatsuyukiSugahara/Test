@@ -14,15 +14,18 @@ namespace aq
 
 		KeyBoard::~KeyBoard()
 		{
+#if !defined(AQ_PLATFORM_UWP)
 			if (device_)
 			{
 				device_->Unacquire();
 				device_->Release();
 				device_ = nullptr;
 			}
+#endif
 		}
 
 
+#if !defined(AQ_PLATFORM_UWP)
 		HRESULT KeyBoard::Initialize(LPDIRECTINPUT8 input)
 		{
 			if (FAILED(input->CreateDevice(GUID_SysKeyboard, &device_, nullptr)))
@@ -34,12 +37,14 @@ namespace aq
 			device_->Acquire();
 			return S_OK;
 		}
+#endif
 
 
 		void KeyBoard::Update(float dt)
 		{
 			aq::memory::Copy(old_, now_, sizeof(old_));
 
+#if !defined(AQ_PLATFORM_UWP)
 			HRESULT hr = device_->GetDeviceState(sizeof(now_), &now_);
 			if (FAILED(hr))
 			{
@@ -47,6 +52,7 @@ namespace aq
 				if (FAILED(device_->GetDeviceState(sizeof(now_), &now_)))
 					aq::memory::Clear(now_, sizeof(now_));
 			}
+#endif
 
 			for (uint32_t i = 0; i < KEY_COUNT; ++i)
 			{
@@ -90,15 +96,18 @@ namespace aq
 
 		Mouse::~Mouse()
 		{
+#if !defined(AQ_PLATFORM_UWP)
 			if (device_)
 			{
 				device_->Unacquire();
 				device_->Release();
 				device_ = nullptr;
 			}
+#endif
 		}
 
 
+#if !defined(AQ_PLATFORM_UWP)
 		HRESULT Mouse::Initialize(LPDIRECTINPUT8 input)
 		{
 			if (FAILED(input->CreateDevice(GUID_SysMouse, &device_, nullptr)))
@@ -121,11 +130,14 @@ namespace aq
 			device_->Acquire();
 			return S_OK;
 		}
+#endif
 
 
 		void Mouse::Update(float dt)
 		{
 			old_ = now_;
+
+#if !defined(AQ_PLATFORM_UWP)
 			aq::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
 
 			HRESULT hr = device_->GetDeviceState(sizeof(DIMOUSESTATE2), &now_);
@@ -135,6 +147,9 @@ namespace aq
 				if (FAILED(device_->GetDeviceState(sizeof(DIMOUSESTATE2), &now_)))
 					aq::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
 			}
+#else
+			now_ = {};   // UWP: 入力なし(Phase 4 で GameInput)
+#endif
 
 			for (uint32_t i = 0; i < 3; ++i)
 			{
@@ -186,10 +201,14 @@ namespace aq
 
 		math::Vector2 Mouse::GetCursorPos() const
 		{
+#if !defined(AQ_PLATFORM_UWP)
 			POINT pos;
 			::GetCursorPos(&pos);
 			ScreenToClient(aq::Engine::Get().GetHWND(), &pos);
 			return math::Vector2(static_cast<float>(pos.x), static_cast<float>(pos.y));
+#else
+			return math::Vector2(0.0f, 0.0f);
+#endif
 		}
 
 
@@ -280,12 +299,18 @@ namespace aq
 		{
 			// パッドバックエンドはプラットフォームで選択(既定: XInput)。
 			// DirectInput の Setup 成否に依らず動くよう、ここで生成しておく。
-			padBackend_ = std::make_unique<DefaultPadBackend>();
+			// UWP は当面バックエンドなし(backend_ null → Pad は no-op。Phase 4 で GameInput)。
 			for (uint32_t i = 0; i < MAX_PAD_COUNT; ++i)
 			{
 				pads_[i].SetIndex(i);
+			}
+#if !defined(AQ_PLATFORM_UWP)
+			padBackend_ = std::make_unique<DefaultPadBackend>();
+			for (uint32_t i = 0; i < MAX_PAD_COUNT; ++i)
+			{
 				pads_[i].SetBackend(padBackend_.get());
 			}
+#endif
 		}
 
 
@@ -294,16 +319,19 @@ namespace aq
 			// デバイスを先に解放してから DirectInput オブジェクトを解放する
 			keyBoard_.reset();
 			mouse_.reset();
+#if !defined(AQ_PLATFORM_UWP)
 			if (input_)
 			{
 				input_->Release();
 				input_ = nullptr;
 			}
+#endif
 		}
 
 
 		HRESULT InputManager::Setup()
 		{
+#if !defined(AQ_PLATFORM_UWP)
 			if (FAILED(DirectInput8Create(
 				GetModuleHandle(nullptr), DIRECTINPUT_VERSION,
 				IID_IDirectInput8, reinterpret_cast<VOID**>(&input_), nullptr)))
@@ -314,7 +342,12 @@ namespace aq
 
 			mouse_ = std::make_unique<Mouse>();
 			if (FAILED(mouse_->Initialize(input_))) return S_FALSE;
-
+#else
+			// UWP: DirectInput 不使用。KB/Mouse は no-op スタブとして生成しておく
+			// (wrapper が非 null 前提で参照するため)。実入力は Phase 4 の GameInput。
+			keyBoard_ = std::make_unique<KeyBoard>();
+			mouse_    = std::make_unique<Mouse>();
+#endif
 			return S_OK;
 		}
 

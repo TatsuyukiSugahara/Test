@@ -118,6 +118,7 @@
     <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)ThirdParty\BulletPhysics\lib\Debug;$(LibraryPath)</LibraryPath>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <DebuggerFlavor>AppHostLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
@@ -128,6 +129,7 @@
     <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)ThirdParty\BulletPhysics\lib\Release;$(LibraryPath)</LibraryPath>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <DebuggerFlavor>AppHostLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

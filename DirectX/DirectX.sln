@@ -33,6 +33,8 @@ Global
 		Release|ARM64 = Release|ARM64
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
+		DebugXbox|x64 = DebugXbox|x64
+		ReleaseXbox|x64 = ReleaseXbox|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{D74D377F-F66D-4FE6-B957-12AC3B2D00ED}.Debug|ARM64.ActiveCfg = Debug|x64
@@ -143,6 +145,30 @@ Global
 		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}.Release|x64.Build.0 = Release|x64
 		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}.Release|x86.ActiveCfg = Release|Win32
 		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}.Release|x86.Build.0 = Release|Win32
+		{D74D377F-F66D-4FE6-B957-12AC3B2D00ED}.DebugXbox|x64.ActiveCfg = DebugXbox|x64
+		{D74D377F-F66D-4FE6-B957-12AC3B2D00ED}.DebugXbox|x64.Build.0 = DebugXbox|x64
+		{D74D377F-F66D-4FE6-B957-12AC3B2D00ED}.ReleaseXbox|x64.ActiveCfg = ReleaseXbox|x64
+		{D74D377F-F66D-4FE6-B957-12AC3B2D00ED}.ReleaseXbox|x64.Build.0 = ReleaseXbox|x64
+		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}.DebugXbox|x64.ActiveCfg = DebugXbox|x64
+		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}.DebugXbox|x64.Build.0 = DebugXbox|x64
+		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}.ReleaseXbox|x64.ActiveCfg = ReleaseXbox|x64
+		{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}.ReleaseXbox|x64.Build.0 = ReleaseXbox|x64
+		{D801A1D8-1CAF-CE40-89B8-55D48072BA71}.DebugXbox|x64.ActiveCfg = DebugXbox|x64
+		{D801A1D8-1CAF-CE40-89B8-55D48072BA71}.DebugXbox|x64.Build.0 = DebugXbox|x64
+		{D801A1D8-1CAF-CE40-89B8-55D48072BA71}.ReleaseXbox|x64.ActiveCfg = ReleaseXbox|x64
+		{D801A1D8-1CAF-CE40-89B8-55D48072BA71}.ReleaseXbox|x64.Build.0 = ReleaseXbox|x64
+		{9FFCFA50-2C7A-BA4E-9B94-0C0B485C5CB5}.DebugXbox|x64.ActiveCfg = DebugXbox|x64
+		{9FFCFA50-2C7A-BA4E-9B94-0C0B485C5CB5}.DebugXbox|x64.Build.0 = DebugXbox|x64
+		{9FFCFA50-2C7A-BA4E-9B94-0C0B485C5CB5}.ReleaseXbox|x64.ActiveCfg = ReleaseXbox|x64
+		{9FFCFA50-2C7A-BA4E-9B94-0C0B485C5CB5}.ReleaseXbox|x64.Build.0 = ReleaseXbox|x64
+		{7DEE0732-F52F-6846-9E26-CAB27AA098F5}.DebugXbox|x64.ActiveCfg = DebugXbox|x64
+		{7DEE0732-F52F-6846-9E26-CAB27AA098F5}.DebugXbox|x64.Build.0 = DebugXbox|x64
+		{7DEE0732-F52F-6846-9E26-CAB27AA098F5}.ReleaseXbox|x64.ActiveCfg = ReleaseXbox|x64
+		{7DEE0732-F52F-6846-9E26-CAB27AA098F5}.ReleaseXbox|x64.Build.0 = ReleaseXbox|x64
+		{EDAFA9B5-E723-4C02-9FE8-998CD822A808}.DebugXbox|x64.ActiveCfg = DebugXbox|x64
+		{EDAFA9B5-E723-4C02-9FE8-998CD822A808}.DebugXbox|x64.Build.0 = DebugXbox|x64
+		{EDAFA9B5-E723-4C02-9FE8-998CD822A808}.ReleaseXbox|x64.ActiveCfg = ReleaseXbox|x64
+		{EDAFA9B5-E723-4C02-9FE8-998CD822A808}.ReleaseXbox|x64.Build.0 = ReleaseXbox|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

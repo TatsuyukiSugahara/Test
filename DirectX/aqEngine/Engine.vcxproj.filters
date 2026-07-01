@@ -563,6 +563,18 @@
     <ClCompile Include="Sound\Video\VideoPlayer.cpp">
       <Filter>Sound\Video</Filter>
     </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanRenderContextImpl.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanBuffers.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanShader.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanVMAImpl.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanPipelineLayout.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanPipelineCache.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanRenderTarget.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanResources.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanDepthMap.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanImGui.cpp" />
+    <ClCompile Include="..\ThirdParty\spirv_reflect\spirv_reflect.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Application.h">
@@ -1252,5 +1264,19 @@
     <ClInclude Include="Sound\Video\VideoPlayer.h">
       <Filter>Sound\Video</Filter>
     </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanCommon.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanRenderContextImpl.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanBuffers.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanShader.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanPipelineLayout.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanPipelineCache.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanRenderTarget.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanResources.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanDepthMap.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanImGui.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

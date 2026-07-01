@@ -6,6 +6,9 @@
 #include "D3D11Shader.h"
 #include "D3D11DepthMap.h"
 #include "Graphics/GraphicsDevice.h"
+#if defined(AQ_PLATFORM_UWP)
+#include <dxgi1_2.h>   // IDXGIFactory2 / CreateSwapChainForCoreWindow / DXGI_SWAP_CHAIN_DESC1
+#endif
 
 
 namespace aq
@@ -32,10 +35,17 @@ namespace aq
 
 		bool D3D11GraphicsDeviceImpl::Initialize(NativeWindowHandle window, uint32_t width, uint32_t height)
 		{
+#if defined(AQ_PLATFORM_UWP)
+			// UWP(Xbox 道A): CoreWindow に対して flip model スワップチェーンを生成する。
+			if (!CreateDeviceAndSwapChainUWP(static_cast<::IUnknown*>(window.handle), width, height)) {
+				return false;
+			}
+#else
 			HWND hwnd = static_cast<HWND>(window.handle);
 			if (!CreateDeviceAndSwapChain(hwnd, width, height)) {
 				return false;
 			}
+#endif
 			if (!CreateMainRenderTargets(width, height)) {
 				return false;
 			}
@@ -193,6 +203,79 @@ namespace aq
 			}
 			return SUCCEEDED(hr);
 		}
+
+
+#if defined(AQ_PLATFORM_UWP)
+		bool D3D11GraphicsDeviceImpl::CreateDeviceAndSwapChainUWP(::IUnknown* coreWindow, uint32_t width, uint32_t height)
+		{
+			// UWP は HWND を使えないため、デバイスを単体生成 → DXGIFactory2 経由で
+			// CoreWindow 用スワップチェーン(flip model)を作る。
+			uint32_t createDeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifdef _DEBUG
+			createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+			D3D_FEATURE_LEVEL featureLevels[] = {
+				D3D_FEATURE_LEVEL_11_1,
+				D3D_FEATURE_LEVEL_11_0,
+				D3D_FEATURE_LEVEL_10_1,
+				D3D_FEATURE_LEVEL_10_0,
+			};
+
+			// 1) デバイス生成(スワップチェーンなし)。Debug レイヤ不在時はフラグを外して再試行。
+			driverType_ = D3D_DRIVER_TYPE_HARDWARE;
+			HRESULT hr = D3D11CreateDevice(
+				nullptr, driverType_, nullptr, createDeviceFlags,
+				featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+				&device_, &featureLevel_, &deviceContext_);
+			if (FAILED(hr) && (createDeviceFlags & D3D11_CREATE_DEVICE_DEBUG)) {
+				createDeviceFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
+				hr = D3D11CreateDevice(
+					nullptr, driverType_, nullptr, createDeviceFlags,
+					featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+					&device_, &featureLevel_, &deviceContext_);
+			}
+			if (FAILED(hr)) {
+				EngineAssertMsg(false, "D3D11 デバイス生成失敗 (UWP)");
+				return false;
+			}
+
+			// 2) 生成したデバイスから DXGIFactory2 を辿る。
+			IDXGIDevice1* dxgiDevice = nullptr;
+			hr = device_->QueryInterface(__uuidof(IDXGIDevice1), reinterpret_cast<void**>(&dxgiDevice));
+			if (FAILED(hr)) { return false; }
+			IDXGIAdapter* adapter = nullptr;
+			hr = dxgiDevice->GetAdapter(&adapter);
+			if (FAILED(hr)) { dxgiDevice->Release(); return false; }
+			IDXGIFactory2* factory = nullptr;
+			hr = adapter->GetParent(__uuidof(IDXGIFactory2), reinterpret_cast<void**>(&factory));
+			adapter->Release();
+			dxgiDevice->Release();
+			if (FAILED(hr)) { return false; }
+
+			// 3) CoreWindow 用スワップチェーン(flip model は BufferCount>=2 が必須)。
+			DXGI_SWAP_CHAIN_DESC1 desc = {};
+			desc.Width       = width;
+			desc.Height      = height;
+			desc.Format      = DXGI_FORMAT_R8G8B8A8_UNORM;
+			desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			desc.BufferCount = 2;
+			desc.SampleDesc.Count = 1;
+			desc.SwapEffect  = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+			desc.Scaling     = DXGI_SCALING_STRETCH;
+
+			IDXGISwapChain1* swapChain1 = nullptr;
+			hr = factory->CreateSwapChainForCoreWindow(device_, coreWindow, &desc, nullptr, &swapChain1);
+			factory->Release();
+			if (FAILED(hr)) {
+				EngineAssertMsg(false, "D3D11 CreateSwapChainForCoreWindow 失敗");
+				return false;
+			}
+
+			// IDXGISwapChain1 は IDXGISwapChain を継承しているためそのまま格納できる。
+			swapChain_ = swapChain1;
+			return true;
+		}
+#endif
 
 
 		void D3D11GraphicsDeviceImpl::SetupDefaultRenderState(RenderContext& context)

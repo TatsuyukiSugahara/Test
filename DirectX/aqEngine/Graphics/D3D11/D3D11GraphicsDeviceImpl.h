@@ -54,6 +54,9 @@ namespace aq
 
 		private:
 			bool CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height); // HWND は D3D11 内部のみ
+#if defined(AQ_PLATFORM_UWP)
+			bool CreateDeviceAndSwapChainUWP(::IUnknown* coreWindow, uint32_t width, uint32_t height);
+#endif
 			bool CreateMainRenderTargets(uint32_t width, uint32_t height);
 
 		private:

@@ -77,6 +77,9 @@ namespace
 
 int __stdcall wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
+	// CoreApplication は MTA からのアクセスが必要(未初期化だと hresult_wrong_thread)。
+	// winrt::init_apartment() は既定で multi_threaded(MTA)。
+	winrt::init_apartment();
 	CoreApplication::Run(make<App>());
 	return 0;
 }

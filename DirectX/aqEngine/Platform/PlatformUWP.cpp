@@ -4,6 +4,7 @@
 #include <windows.h>   // WideCharToMultiByte(UWP でも利用可)
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.ApplicationModel.h>
+#include <winrt/Windows.Storage.h>   // StorageFolder::Path() の consume 定義に必要
 #include <winrt/Windows.Graphics.Display.h>
 
 using namespace winrt;

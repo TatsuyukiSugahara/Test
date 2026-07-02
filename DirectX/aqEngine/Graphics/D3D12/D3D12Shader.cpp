@@ -55,9 +55,15 @@ namespace aq
 
 				const std::filesystem::path root(FindProjectRoot());
 				std::filesystem::path candidate;
+#if defined(AQ_PLATFORM_UWP)
+				// UWP: root=パッケージ install。アセットは install/Assets/... に同梱するため
+				// "Game/" プレフィクスは付けず、パスをそのまま基点に連結する。
+				candidate = root / path;
+#else
 				if (path.rfind("Assets/", 0) == 0)        candidate = root / "Game" / path;
 				else if (path.rfind("Game/Assets/", 0) == 0) candidate = root / path;
 				else                                       candidate = root / path;
+#endif
 
 				std::error_code ec;
 				if (std::filesystem::exists(candidate, ec)) return candidate.generic_string();

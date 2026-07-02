@@ -271,6 +271,11 @@ namespace aq
 				}
 
 				const std::filesystem::path root(FindProjectRoot());
+#if defined(AQ_PLATFORM_UWP)
+				// UWP: root=パッケージ install。アセットは install/Assets/... に同梱するため
+				// "Game/" プレフィクスは付けずパスをそのまま連結する。
+				PushUniquePath(paths, (root / path).generic_string());
+#else
 				if (path.rfind("Assets/", 0) == 0) {
 					PushUniquePath(paths, (root / "Game" / path).generic_string());
 				}
@@ -280,6 +285,7 @@ namespace aq
 				else {
 					PushUniquePath(paths, (root / path).generic_string());
 				}
+#endif
 				return paths;
 			}
 

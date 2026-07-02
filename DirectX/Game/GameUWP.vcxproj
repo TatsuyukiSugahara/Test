@@ -161,6 +161,13 @@
     <Image Include="Assets\Square44x44Logo.png" />
     <Image Include="Assets\SplashScreen.png" />
   </ItemGroup>
+  <!-- ゲームアセットを appx に同梱(install/Assets/... に配置され、UWP のパス解決と一致)。
+       ロゴ PNG は上の Image 項目と重複しないよう除外。 -->
+  <ItemGroup>
+    <None Include="Assets\**\*.*" Exclude="Assets\StoreLogo.png;Assets\Square150x150Logo.png;Assets\Square44x44Logo.png;Assets\SplashScreen.png">
+      <DeploymentContent>true</DeploymentContent>
+    </None>
+  </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>

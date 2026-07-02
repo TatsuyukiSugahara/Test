@@ -5,13 +5,17 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  IgnorableNamespaces="uap mp rescap">
 
   <Identity
     Name="com.example.aqEngineGame"
     Publisher="CN=aqEngine"
     Version="0.1.0.0" />
+
+  <!-- VS2019 世代の UWP パッケージ化が要求するレガシー要素(APPX1673 対策) -->
+  <mp:PhoneIdentity PhoneProductId="b7e2b9a1-4c3d-4e5f-8a6b-9c0d1e2f3a4b" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
 
   <Properties>
     <DisplayName>aqEngine Game</DisplayName>

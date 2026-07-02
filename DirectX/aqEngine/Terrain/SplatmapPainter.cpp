@@ -453,6 +453,7 @@ namespace aq
 				}
 			}
 
+#if !defined(AQ_PLATFORM_UWP)
 			DirectX::Image img = {};
 			img.width = w;
 			img.height = h;
@@ -465,6 +466,9 @@ namespace aq
 			mbstowcs_s(nullptr, wpath, path, 511);
 			DirectX::SaveToWICFile(img, DirectX::WIC_FLAGS_NONE,
 			                       DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
+#else
+			(void)pixels; (void)path;   // UWP: DirectXTex 未リンク(保存無効)
+#endif
 		}
 
 		void SplatmapPainter::DebugRenderMenu()

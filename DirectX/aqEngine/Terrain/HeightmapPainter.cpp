@@ -381,6 +381,7 @@ namespace aq
 		{
 			if (!chunk_ || previewPixels_.empty()) return;
 
+#if !defined(AQ_PLATFORM_UWP)
 			DirectX::Image img  = {};
 			img.width           = previewW_;
 			img.height          = previewH_;
@@ -393,6 +394,9 @@ namespace aq
 			mbstowcs_s(nullptr, wpath, path, 511);
 			DirectX::SaveToWICFile(img, DirectX::WIC_FLAGS_NONE,
 			                       DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
+#else
+			(void)path;   // UWP: DirectXTex 未リンク(保存無効)
+#endif
 		}
 
 		// -----------------------------------------------------------------------

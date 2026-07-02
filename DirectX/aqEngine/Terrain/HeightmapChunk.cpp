@@ -39,6 +39,10 @@ namespace aq
 			                      std::vector<float>& outHeights,
 			                      uint32_t& outW, uint32_t& outH)
 			{
+#if defined(AQ_PLATFORM_UWP)
+				(void)path; (void)outHeights; (void)outW; (void)outH;
+				return false;   // UWP: DirectXTex 未リンク(画像ロード無効)
+#else
 				if (!path || !path[0]) return false;
 
 				wchar_t wpath[512] = {};
@@ -84,12 +88,17 @@ namespace aq
 					}
 				}
 				return true;
+#endif // !AQ_PLATFORM_UWP
 			}
 
 			bool LoadSplatValues(const char* path,
 			                     std::vector<math::Vector4>& outSplat,
 			                     uint32_t& outW, uint32_t& outH)
 			{
+#if defined(AQ_PLATFORM_UWP)
+				(void)path; (void)outSplat; (void)outW; (void)outH;
+				return false;   // UWP: DirectXTex 未リンク(画像ロード無効)
+#else
 				if (!path || !path[0]) return false;
 
 				wchar_t wpath[512] = {};
@@ -135,6 +144,7 @@ namespace aq
 					}
 				}
 				return true;
+#endif // !AQ_PLATFORM_UWP
 			}
 
 

@@ -907,6 +907,10 @@ namespace aq
 
 		bool TextureLoader::Loading()
 		{
+#if defined(AQ_PLATFORM_UWP)
+			// UWP: DirectXTex 未リンク(/MD 版が無い)。テクスチャ読込は当面無効。
+			return false;
+#else
 			wchar_t filePath[256];
 			size_t ret;
 			mbstowcs_s(&ret, filePath, requestPath_.c_str(), ArraySize(filePath));
@@ -990,6 +994,7 @@ namespace aq
 			}
 
 			return true;
+#endif // !AQ_PLATFORM_UWP
 		}
 
 

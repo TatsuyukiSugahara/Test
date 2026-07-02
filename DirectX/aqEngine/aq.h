@@ -60,10 +60,15 @@
 #include <dinput.h>
 
 
+// DirectXTex の prebuilt lib は静的CRT(/MT)。UWP は /MD 必須で衝突する上、
+// UWP 用の /MD ビルドが無いため、UWP では lib をリンクしない(呼び出し側もガード)。
+// テクスチャ/地形画像の読み込みは UWP で当面 no-op(将来 /MD 版 DirectXTex で復活)。
+#if !defined(AQ_PLATFORM_UWP)
 #if _DEBUG
 	#pragma comment(lib, "DirectXTex/x64/Debug/DirectXTex.lib")
 #else
 	#pragma comment(lib, "DirectXTex/x64/Release/DirectXTex.lib")
+#endif
 #endif
 #pragma warning(push)
 #pragma warning(disable:4065)

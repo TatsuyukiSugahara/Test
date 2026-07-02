@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D12
 // ImGui 専用バックエンド。AQ_IMGUI 未定義(Xbox 構成など)では空 TU にする。
 #ifdef AQ_IMGUI
 #include "D3D12Common.h"
@@ -479,3 +480,5 @@ float4 PSMain(PS_INPUT input) : SV_Target
 	}
 }
 #endif // AQ_IMGUI
+
+#endif // ENGINE_GRAPHICS_D3D12

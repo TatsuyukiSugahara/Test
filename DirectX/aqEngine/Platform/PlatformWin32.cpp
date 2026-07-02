@@ -10,6 +10,10 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #endif
 
 
+// 起動診断ログ (UWP 専用)。Win32 では no-op。
+namespace aq { void StartupLog(const char*) {} }
+
+
 namespace aq
 {
 	namespace platform

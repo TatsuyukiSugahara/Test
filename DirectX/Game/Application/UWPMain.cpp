@@ -42,30 +42,70 @@ namespace
 
 		void Run()
 		{
-			CoreWindow window = CoreWindow::GetForCurrentThread();
-			window.Activate();
-
-			platform_ = std::make_unique<aq::platform::PlatformUWP>(window);
-
-			aq::Engine::Create();
-			aq::Engine& engine = aq::Engine::Get();
-			engine.CreateApplication<app::Application>();
-
-			aq::InitializeParameter ip;
-			ip.platform = platform_.get();
-
-			uint32_t w = 0, h = 0;
-			platform_->GetPixelSize(w, h);
-			ip.screenWidth  = static_cast<int32_t>(w);
-			ip.screenHeight = static_cast<int32_t>(h);
-			ip.renderWidth  = static_cast<int32_t>(w);
-			ip.renderHeight = static_cast<int32_t>(h);
-
-			if (engine.Initialize(ip))
+			aq::StartupLog("=== Run begin ===");
+			try
 			{
-				engine.RunGame();   // while (platform_->PumpEvents()) Update();
+				CoreWindow window = CoreWindow::GetForCurrentThread();
+				window.Activate();
+				aq::StartupLog("window activated");
+
+				platform_ = std::make_unique<aq::platform::PlatformUWP>(window);
+				aq::StartupLog("platform created");
+
+				aq::Engine::Create();
+				aq::Engine& engine = aq::Engine::Get();
+				engine.CreateApplication<app::Application>();
+				aq::StartupLog("engine + application created");
+
+				aq::InitializeParameter ip;
+				ip.platform = platform_.get();
+
+				uint32_t w = 0, h = 0;
+				platform_->GetPixelSize(w, h);
+				{
+					char buf[128];
+					sprintf_s(buf, "pixel size = %u x %u", w, h);
+					aq::StartupLog(buf);
+				}
+				ip.screenWidth  = static_cast<int32_t>(w);
+				ip.screenHeight = static_cast<int32_t>(h);
+				ip.renderWidth  = static_cast<int32_t>(w);
+				ip.renderHeight = static_cast<int32_t>(h);
+
+				aq::StartupLog("engine.Initialize() begin");
+				if (engine.Initialize(ip))
+				{
+					aq::StartupLog("engine.Initialize() done -> RunGame()");
+					engine.RunGame();   // while (platform_->PumpEvents()) Update();
+					aq::StartupLog("RunGame() returned");
+				}
+				else
+				{
+					aq::StartupLog("engine.Initialize() returned FALSE");
+				}
+				engine.Finalize();
+				aq::StartupLog("=== Run end ===");
 			}
-			engine.Finalize();
+			catch (winrt::hresult_error const& e)
+			{
+				char buf[256];
+				sprintf_s(buf, "!! hresult_error 0x%08X: %ls",
+				          static_cast<unsigned>(e.code()), e.message().c_str());
+				aq::StartupLog(buf);
+				throw;
+			}
+			catch (std::exception const& e)
+			{
+				char buf[256];
+				sprintf_s(buf, "!! std::exception: %s", e.what());
+				aq::StartupLog(buf);
+				throw;
+			}
+			catch (...)
+			{
+				aq::StartupLog("!! unknown exception");
+				throw;
+			}
 		}
 
 		void Uninitialize()

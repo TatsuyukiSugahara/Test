@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!-- UWP(Xbox 道A)用パッケージマニフェスト。DebugXbox/ReleaseXbox でのみ使用。
      Identity/Publisher は Partner Center 登録に合わせて後で書き換える。
      Assets のロゴ PNG は Game\Assets\ に配置が必要(未配置だとパッケージ生成で失敗)。 -->
@@ -11,7 +11,7 @@
 
   <Identity
     Name="com.example.aqEngineGame"
-    Publisher="CN=aqEngine"
+    Publisher="CN=t-sugahara"
     Version="0.1.0.0" />
 
   <!-- VS2019 世代の UWP パッケージ化が要求するレガシー要素(APPX1673 対策) -->

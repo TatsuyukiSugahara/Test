@@ -24,6 +24,7 @@
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
+#include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Occlusion/Debug/CullingDebugPanel.h"
 #endif
@@ -161,11 +162,18 @@ namespace aq
 
 		if (!OnInitialize()) return false;
 
-		// GPU 駆動クラスタ(トライアングル)カリング: compute シェーダをロード
-		aq::rendering::GpuClusterCuller::Get().Initialize();
+		// GPU 駆動クラスタ(トライアングル)カリング: compute シェーダをロード。
+		// compute 非対応(FL10 の Xbox One UWP 等)では初期化せず、カリングも無効化する。
+		if (!aq::graphics::IsComputeSupported())
+		{
+			aq::rendering::SetClusterCullEnabled(false);
+		}
 
 		// Hi-Z (オクリュージョン基盤): ディファードが有効なときのみ。
 		// G-Buffer の worldPos から深度ピラミッドを構築する。
+		if (aq::graphics::IsComputeSupported())
+		{
+		aq::rendering::GpuClusterCuller::Get().Initialize();
 		if (auto* dr = dynamic_cast<rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer()))
 		{
 			hiZRenderer_ = std::make_unique<rendering::HiZRenderer>();
@@ -188,6 +196,7 @@ namespace aq
 				hiZRenderer_.reset();
 			}
 		}
+		}  // if (aq::graphics::IsComputeSupported())
 
 #ifdef AQ_DEBUG_IMGUI
 		// OnInitialize() でゲーム側が Shadow/Bloom 等のレンダラを設定した後にパネルを生成する

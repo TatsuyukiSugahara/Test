@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D12
 #include "D3D12Common.h"
 #include "D3D12GraphicsDeviceImpl.h"
 #include "D3D12RenderContextImpl.h"
@@ -75,18 +76,23 @@ namespace aq
 
 		bool D3D12GraphicsDeviceImpl::Initialize(NativeWindowHandle window, uint32_t width, uint32_t height)
 		{
-			if (!CreateDeviceAndQueues()) return false;
-			if (!CreateSwapChain(window.handle, width, height)) return false;
-			if (!CreateBackBuffers()) return false;
-			if (!CreateRtvDsvHeaps()) return false;
-			if (!CreateSRVHeaps()) return false;
-			if (!CreateMainRenderTargets(width, height)) return false;
+			aq::StartupLog("  [D3D12] Initialize begin");
+			if (!CreateDeviceAndQueues()) { aq::StartupLog("  [D3D12] CreateDeviceAndQueues FAILED"); return false; }
+			aq::StartupLog("  [D3D12] device + queues ok");
+			if (!CreateSwapChain(window.handle, width, height)) { aq::StartupLog("  [D3D12] CreateSwapChain FAILED"); return false; }
+			aq::StartupLog("  [D3D12] swapchain ok");
+			if (!CreateBackBuffers()) { aq::StartupLog("  [D3D12] CreateBackBuffers FAILED"); return false; }
+			if (!CreateRtvDsvHeaps()) { aq::StartupLog("  [D3D12] CreateRtvDsvHeaps FAILED"); return false; }
+			if (!CreateSRVHeaps()) { aq::StartupLog("  [D3D12] CreateSRVHeaps FAILED"); return false; }
+			if (!CreateMainRenderTargets(width, height)) { aq::StartupLog("  [D3D12] CreateMainRenderTargets FAILED"); return false; }
+			aq::StartupLog("  [D3D12] heaps + main RTs ok");
 
 			// ルートシグネチャ (グラフィクス + コンピュート) + PSO キャッシュ
 			rootSignature_ = std::make_unique<D3D12RootSignature>();
-			if (!rootSignature_->Create(device_)) return false;
-			if (!rootSignature_->CreateCompute(device_)) return false;
+			if (!rootSignature_->Create(device_)) { aq::StartupLog("  [D3D12] RootSignature::Create FAILED"); return false; }
+			if (!rootSignature_->CreateCompute(device_)) { aq::StartupLog("  [D3D12] RootSignature::CreateCompute FAILED"); return false; }
 			psoCache_ = std::make_unique<D3D12PipelineStateCache>();
+			aq::StartupLog("  [D3D12] root signature + pso cache ok");
 
 			// DRAW_INDEXED 用 command signature (ExecuteIndirect・GPU 駆動クラスタカリング)
 			{
@@ -151,26 +157,82 @@ namespace aq
 #ifdef _DEBUG
 			// デバッグレイヤを有効化 (失敗しても続行)
 			{
+				aq::StartupLog("    [dev] (debug) D3D12GetDebugInterface");
 				ID3D12Debug* debug = nullptr;
 				if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
 				{
 					debug->EnableDebugLayer();
 					debug->Release();
+					aq::StartupLog("    [dev] (debug) debug layer enabled");
+				}
+				else
+				{
+					aq::StartupLog("    [dev] (debug) debug interface NOT available (skip)");
 				}
 			}
 #endif
-			HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device_));
+			// 既定アダプタ(nullptr)指定は一部環境(Xbox One UWP 等)で DXGI_ERROR_UNSUPPORTED を返す。
+			// DXGI ファクトリからアダプタを明示列挙し、複数のフィーチャーレベルで生成を試みる。
+			HRESULT hr = E_FAIL;
+			{
+				aq::StartupLog("    [dev] enumerate adapters for D3D12CreateDevice");
+				IDXGIFactory4* devFactory = nullptr;
+				HRESULT fhr = CreateDXGIFactory2(0, IID_PPV_ARGS(&devFactory));
+				if (FAILED(fhr))
+				{
+					char b[80]; sprintf_s(b, "    [dev] CreateDXGIFactory2 hr=0x%08X (fallback nullptr adapter)", static_cast<unsigned>(fhr));
+					aq::StartupLog(b);
+					hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device_));
+				}
+				else
+				{
+					static const D3D_FEATURE_LEVEL levels[] = {
+						D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0,
+						D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+					};
+					IDXGIAdapter1* adapter = nullptr;
+					for (UINT i = 0; devFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+					{
+						DXGI_ADAPTER_DESC1 ad = {};
+						adapter->GetDesc1(&ad);
+						{
+							char nm[200];
+							sprintf_s(nm, "    [dev] adapter %u: flags=0x%X vram=%lluMB desc=%ls",
+							          i, ad.Flags,
+							          static_cast<unsigned long long>(ad.DedicatedVideoMemory >> 20),
+							          ad.Description);
+							aq::StartupLog(nm);
+						}
+						for (D3D_FEATURE_LEVEL fl : levels)
+						{
+							HRESULT h2 = D3D12CreateDevice(adapter, fl, IID_PPV_ARGS(&device_));
+							char rl[96];
+							sprintf_s(rl, "    [dev]   FL 0x%X -> hr=0x%08X", static_cast<unsigned>(fl), static_cast<unsigned>(h2));
+							aq::StartupLog(rl);
+							if (SUCCEEDED(h2)) { hr = h2; break; }
+						}
+						adapter->Release();
+						adapter = nullptr;
+						if (SUCCEEDED(hr)) break;
+					}
+					devFactory->Release();
+				}
+			}
 			if (FAILED(hr))
 			{
+				char b[80]; sprintf_s(b, "    [dev] D3D12CreateDevice FAILED hr=0x%08X", static_cast<unsigned>(hr));
+				aq::StartupLog(b);
 				EngineAssertMsg(false, "D3D12 デバイス作成失敗");
 				return false;
 			}
+			aq::StartupLog("    [dev] device created");
 
 #ifdef _DEBUG
 			// デバッグレイヤの無害な警告を抑制する。
 			// 最適化クリア値を nullptr で生成しているため CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE が
 			// 毎フレーム大量に出る。これは性能のみの警告でクリア結果は正しいため除外する。
 			{
+				aq::StartupLog("    [dev] (debug) query InfoQueue");
 				ID3D12InfoQueue* infoQueue = nullptr;
 				if (SUCCEEDED(device_->QueryInterface(IID_PPV_ARGS(&infoQueue))))
 				{
@@ -188,11 +250,13 @@ namespace aq
 #endif
 
 			// コマンドキュー (DIRECT)
+			aq::StartupLog("    [dev] CreateCommandQueue");
 			D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 			queueDesc.Type  = D3D12_COMMAND_LIST_TYPE_DIRECT;
 			queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 			hr = device_->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue_));
-			if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コマンドキュー作成失敗"); return false; }
+			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [dev] CreateCommandQueue FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); EngineAssertMsg(false, "D3D12 コマンドキュー作成失敗"); return false; }
+			aq::StartupLog("    [dev] command queue ok");
 
 			// コマンドアロケータ (frames-in-flight 分) + コマンドリスト 1 本。
 			// コマンドリストは Submit 後すぐ Reset できるが、アロケータは GPU 実行完了まで Reset 不可。
@@ -204,17 +268,20 @@ namespace aq
 				if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コマンドアロケータ作成失敗"); return false; }
 			}
 
+			aq::StartupLog("    [dev] command allocators ok");
 			hr = device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc_[0], nullptr,
 			                                IID_PPV_ARGS(&commandList_));
-			if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 コマンドリスト作成失敗"); return false; }
+			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [dev] CreateCommandList FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); EngineAssertMsg(false, "D3D12 コマンドリスト作成失敗"); return false; }
 			commandList_->Close();  // 記録は Present 時に Reset してから行う
+			aq::StartupLog("    [dev] command list ok");
 
 			// フェンス + イベント
 			hr = device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_));
-			if (FAILED(hr)) { EngineAssertMsg(false, "D3D12 フェンス作成失敗"); return false; }
+			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [dev] CreateFence FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); EngineAssertMsg(false, "D3D12 フェンス作成失敗"); return false; }
 			fenceValue_ = 0;
 			fenceEvent_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 			if (!fenceEvent_) { EngineAssertMsg(false, "D3D12 フェンスイベント作成失敗"); return false; }
+			aq::StartupLog("    [dev] fence + event ok");
 
 			return true;
 		}
@@ -228,7 +295,17 @@ namespace aq
 			flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 			HRESULT hr = CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory));
-			if (FAILED(hr)) { EngineAssertMsg(false, "DXGI ファクトリ作成失敗"); return false; }
+#ifdef _DEBUG
+			// DXGI_CREATE_FACTORY_DEBUG は DXGI デバッグレイヤ (Graphics Tools オプション機能)
+			// が導入された環境でしか成功しない。実機 Xbox Dev Mode 等の未導入環境では
+			// DXGI_ERROR_SDK_COMPONENT_MISSING で失敗するため、デバッグフラグ無しで作り直す。
+			if (FAILED(hr) && (flags & DXGI_CREATE_FACTORY_DEBUG))
+			{
+				hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+			}
+#endif
+			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [swap] CreateDXGIFactory2 FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); EngineAssertMsg(false, "DXGI ファクトリ作成失敗"); return false; }
+			aq::StartupLog("    [swap] DXGI factory ok");
 
 			DXGI_SWAP_CHAIN_DESC1 desc = {};
 			desc.BufferCount      = RENDER_TARGET_COUNT;
@@ -243,6 +320,7 @@ namespace aq
 #if defined(AQ_PLATFORM_UWP)
 			// UWP(Xbox 道A): HWND ではなく CoreWindow(IUnknown*)に対して生成する。
 			// NativeWindowHandle.handle には CoreWindow の IUnknown* が入っている。
+			aq::StartupLog("    [swap] CreateSwapChainForCoreWindow");
 			hr = factory->CreateSwapChainForCoreWindow(commandQueue_, static_cast<IUnknown*>(hwnd),
 			                                           &desc, nullptr, &swapChain1);
 #else
@@ -251,10 +329,12 @@ namespace aq
 #endif
 			if (FAILED(hr))
 			{
+				char b[80]; sprintf_s(b, "    [swap] CreateSwapChain FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b);
 				EngineAssertMsg(false, "D3D12 スワップチェーン作成失敗");
 				factory->Release();
 				return false;
 			}
+			aq::StartupLog("    [swap] swapchain created");
 
 			hr = swapChain1->QueryInterface(IID_PPV_ARGS(&swapChain_));
 			swapChain1->Release();
@@ -1041,3 +1121,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D12

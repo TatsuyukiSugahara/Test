@@ -202,6 +202,10 @@ namespace aq
 
 			DXGI_SAMPLE_DESC sampleDesc = { multiSampleDesc.count, multiSampleDesc.quality };
 
+			// テクスチャ UAV は FL 11_0 以上でのみ対応。FL 10_x(Xbox One UWP 等)では
+			// UAV バインドを外す(付けると CreateTexture2D が失敗する)。
+			const bool supportsTypedUAV = (device->GetFeatureLevel() >= D3D_FEATURE_LEVEL_11_0);
+
 			D3D11_TEXTURE2D_DESC textureDesc = {};
 			textureDesc.Width      = width;
 			textureDesc.Height     = height;
@@ -210,22 +214,23 @@ namespace aq
 			textureDesc.Format     = ToD3D11Format(colorFormat);
 			textureDesc.SampleDesc = sampleDesc;
 			textureDesc.Usage      = D3D11_USAGE_DEFAULT;
-			textureDesc.BindFlags  = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+			textureDesc.BindFlags  = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			if (supportsTypedUAV) textureDesc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
 
 			HRESULT hr;
 			if (renderTarget == nullptr) {
 				hr = device->CreateTexture2D(&textureDesc, nullptr, &renderTarget_);
-				if (FAILED(hr)) { EngineAssert(false); return false; }
+				if (FAILED(hr)) { aq::StartupLog("    [D3D11] RenderTarget CreateTexture2D FAILED"); EngineAssert(false); return false; }
 			} else {
 				renderTarget_ = renderTarget;
 				renderTarget_->AddRef();
 			}
 
 			hr = device->CreateRenderTargetView(renderTarget_, nullptr, &renderTargetView_);
-			if (FAILED(hr)) { EngineAssert(false); return false; }
+			if (FAILED(hr)) { aq::StartupLog("    [D3D11] CreateRenderTargetView FAILED"); EngineAssert(false); return false; }
 
 			renderTargetSRV_.Create(renderTarget_);
-			renderTargetUAV_.Create(renderTarget_);
+			if (supportsTypedUAV) renderTargetUAV_.Create(renderTarget_);
 
 			if (depthStencilFormat != PixelFormat::Unknown) {
 				textureDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;

@@ -113,5 +113,29 @@ namespace aq
 			if (outHeight == 0) outHeight = 720;
 		}
 	}
+
+
+	// 起動診断ログ。LocalState\startup.log に追記する(Device Portal から取得可能)。
+	void StartupLog(const char* msg)
+	{
+		static std::mutex mtx;
+		std::lock_guard<std::mutex> lk(mtx);
+		static std::string path;
+		if (path.empty())
+		{
+			try
+			{
+				const auto p = winrt::Windows::Storage::ApplicationData::Current().LocalFolder().Path();
+				path = winrt::to_string(p) + "\\startup.log";
+			}
+			catch (...) { return; }
+		}
+		FILE* fp = nullptr;
+		if (fopen_s(&fp, path.c_str(), "a") == 0 && fp)
+		{
+			fprintf(fp, "%s\n", msg ? msg : "");
+			fclose(fp);
+		}
+	}
 }
 #endif // AQ_PLATFORM_UWP

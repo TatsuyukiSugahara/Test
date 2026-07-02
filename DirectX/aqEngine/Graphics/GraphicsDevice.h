@@ -13,6 +13,10 @@ namespace aq
 		class RenderContext;
 		class IRenderTarget;
 
+		// コンピュート/UAV/GPU 駆動機能が使えるか (D3D11 FL<11 の Xbox One UWP 等では false)。
+		void SetComputeSupported(bool supported);
+		bool IsComputeSupported();
+
 		/**
 		 * Graphics Device Abstraction (Bridge Pattern)
 		 *

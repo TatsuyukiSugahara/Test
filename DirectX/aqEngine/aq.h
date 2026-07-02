@@ -9,7 +9,14 @@
 //#define ENGINE_GRAPHICS_VULKAN
 
 #if !defined(ENGINE_GRAPHICS_D3D11) && !defined(ENGINE_GRAPHICS_D3D12) && !defined(ENGINE_GRAPHICS_VULKAN)
+#if defined(AQ_PLATFORM_UWP)
+// Xbox One の UWP アプリはハードウェア GPU (SraKmd) が D3D12 を全フィーチャーレベルで
+// 非対応 (DXGI_ERROR_UNSUPPORTED)。成功するのは WARP ソフトウェアのみで実用にならない。
+// UWP(Xbox 道A)ではハードウェア描画可能な D3D11 を既定バックエンドにする。
+#define ENGINE_GRAPHICS_D3D11
+#else
 #define ENGINE_GRAPHICS_D3D12
+#endif
 #endif
 
 #if (defined(ENGINE_GRAPHICS_D3D11) + defined(ENGINE_GRAPHICS_D3D12) + defined(ENGINE_GRAPHICS_VULKAN)) > 1
@@ -109,6 +116,11 @@
 #include "Util/ThreadPool.h"
 
 #include "Utility.h"
+
+// 起動診断用の簡易ログ。UWP(Xbox 実機)では通常デバッガを接続できないため、
+// パッケージの LocalState/startup.log に追記する。Win32 では no-op。
+// (Device Portal の File explorer から読み出して初期化の到達点を特定する)
+namespace aq { void StartupLog(const char* msg); }
 
 #include "Engine.h"
 #include "ECS/ECS.h"

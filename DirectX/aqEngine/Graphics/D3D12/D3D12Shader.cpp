@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "D3D12Common.h"
 #include "D3D12Shader.h"
+#include "Engine.h"   // aq::Engine::GetContentRoot()
 #include <d3dcompiler.h>
 #include <filesystem>
 
@@ -18,6 +19,13 @@ namespace aq
 			{
 				static std::string cached;
 				if (!cached.empty()) return cached;
+
+				// UWP 等でプラットフォームがコンテンツ基点(パッケージ install フォルダ)を
+				// 返す場合はそれを採用し、ソースツリーの上方探索は行わない。
+				if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
+					cached = contentRoot;
+					return cached;
+				}
 
 				std::error_code ec;
 				std::filesystem::path dir = std::filesystem::current_path(ec);

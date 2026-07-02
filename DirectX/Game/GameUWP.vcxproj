@@ -161,11 +161,19 @@
     <Image Include="Assets\Square44x44Logo.png" />
     <Image Include="Assets\SplashScreen.png" />
   </ItemGroup>
-  <!-- ゲームアセットを appx に同梱(install/Assets/... に配置され、UWP のパス解決と一致)。
-       ロゴ PNG は上の Image 項目と重複しないよう除外。 -->
+  <!-- ゲームアセットを appx に同梱。ソースツリー相対構造を再現するため install/Game/Assets/... に置く
+       (Link で Game\ プレフィクス)。これで "Assets/..." の解決も、シェーダ内の
+       ../../../aqEngine/Graphics/... 相対 include も、デスクトップと同じく成立する。
+       ロゴ PNG は上の Image 項目(install/Assets/ 直下)と重複しないよう除外。 -->
   <ItemGroup>
     <None Include="Assets\**\*.*" Exclude="Assets\StoreLogo.png;Assets\Square150x150Logo.png;Assets\Square44x44Logo.png;Assets\SplashScreen.png">
       <DeploymentContent>true</DeploymentContent>
+      <Link>Game\%(Identity)</Link>
+    </None>
+    <!-- シェーダが #include する engine 共有ヘッダを install/aqEngine/Graphics/ に同梱 -->
+    <None Include="..\aqEngine\Graphics\MaterialDef.h">
+      <DeploymentContent>true</DeploymentContent>
+      <Link>aqEngine\Graphics\MaterialDef.h</Link>
     </None>
   </ItemGroup>
   <ItemGroup>

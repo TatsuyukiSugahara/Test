@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props')" />
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -13,8 +14,16 @@
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="DebugXbox|x64">
+      <Configuration>DebugXbox</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseXbox|x64">
+      <Configuration>ReleaseXbox</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
@@ -24,7 +33,6 @@
     <ProjectGuid>{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}</ProjectGuid>
     <RootNamespace>aqEngine</RootNamespace>
     <ProjectName>aqEngine</ProjectName>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -46,10 +54,23 @@
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugXbox|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseXbox|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -67,7 +88,13 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='DebugXbox|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='ReleaseXbox|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -75,7 +102,15 @@
     <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugXbox|x64'">
+    <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseXbox|x64'">
     <IncludePath>$(SolutionDir)ThirdParty\BulletPhysics\src;$(IncludePath)</IncludePath>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
@@ -114,6 +149,21 @@
       <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DebugXbox|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_PLATFORM_UWP;WINAPI_FAMILY=WINAPI_FAMILY_APP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>false</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -122,6 +172,23 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseXbox|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_PLATFORM_UWP;WINAPI_FAMILY=WINAPI_FAMILY_APP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>false</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -156,6 +223,7 @@
     <ClCompile Include="ECS\System.cpp" />
     <ClCompile Include="Engine.cpp" />
     <ClCompile Include="Platform\PlatformWin32.cpp" />
+    <ClCompile Include="Platform\PlatformUWP.cpp" />
     <ClCompile Include="Memory\MemoryManager.cpp" />
     <ClCompile Include="Memory\MemoryTracker.cpp" />
     <ClCompile Include="Memory\GlobalNew.cpp" />
@@ -172,6 +240,7 @@
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
     <ClCompile Include="HID\XInputPadBackend.cpp" />
+    <ClCompile Include="HID\WinRTGamepadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\JobSystem.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
@@ -329,6 +398,7 @@
     <ClInclude Include="Engine.h" />
     <ClInclude Include="Platform\IPlatform.h" />
     <ClInclude Include="Platform\PlatformBudget.h" />
+    <ClInclude Include="Platform\PlatformUWP.h" />
     <ClInclude Include="Platform\PlatformWin32.h" />
     <ClInclude Include="aq.h" />
     <ClInclude Include="Graphics\AnimationClip.h" />
@@ -389,6 +459,7 @@
     <ClInclude Include="HID\InputBinding.h" />
     <ClInclude Include="HID\PadBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />
+    <ClInclude Include="HID\WinRTGamepadBackend.h" />
     <ClInclude Include="Util\JobSystem.h" />
     <ClInclude Include="Math\Bounds.h" />
     <ClInclude Include="Math\Matrix.h" />
@@ -539,10 +610,23 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets')" />
+    <Import Project="..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets" Condition="Exists('..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets')" />
   </ImportGroup>
   <ItemGroup>
     <ProjectReference Include="..\ThirdParty\imgui\imgui.vcxproj">
       <Project>{EDAFA9B5-E723-4C02-9FE8-998CD822A808}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>このプロジェクトは、このコンピューター上にない NuGet パッケージを参照しています。それらのパッケージをダウンロードするには、[NuGet パッケージの復元] を使用します。詳細については、http://go.microsoft.com/fwlink/?LinkID=322105 を参照してください。見つからないファイルは {0} です。</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+    <Error Condition="!Exists('..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets'))" />
+  </Target>
 </Project>

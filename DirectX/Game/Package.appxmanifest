@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- UWP(Xbox 道A)用パッケージマニフェスト。DebugXbox/ReleaseXbox でのみ使用。
+     Identity/Publisher は Partner Center 登録に合わせて後で書き換える。
+     Assets のロゴ PNG は Game\Assets\ に配置が必要(未配置だとパッケージ生成で失敗)。 -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap mp rescap">
+
+  <Identity
+    Name="com.example.aqEngineGame"
+    Publisher="CN=t-sugahara"
+    Version="0.1.0.0" />
+
+  <!-- VS2019 世代の UWP パッケージ化が要求するレガシー要素(APPX1673 対策) -->
+  <mp:PhoneIdentity PhoneProductId="b7e2b9a1-4c3d-4e5f-8a6b-9c0d1e2f3a4b" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
+
+  <Properties>
+    <DisplayName>aqEngine Game</DisplayName>
+    <PublisherDisplayName>aqEngine</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="aqEngine Game"
+        Description="aqEngine UWP build"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+  </Capabilities>
+</Package>

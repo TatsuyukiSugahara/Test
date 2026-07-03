@@ -13,6 +13,10 @@ namespace aq
 		class RenderContext;
 		class IRenderTarget;
 
+		// コンピュート/UAV/GPU 駆動機能が使えるか (D3D11 FL<11 の Xbox One UWP 等では false)。
+		void SetComputeSupported(bool supported);
+		bool IsComputeSupported();
+
 		/**
 		 * Graphics Device Abstraction (Bridge Pattern)
 		 *
@@ -39,6 +43,10 @@ namespace aq
 		public:
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height);
 			void Finalize();
+
+			// PLM(UWP)サスペンド/レジューム。GPU アイドル化・メモリ解放を実装へ委譲。
+			void OnSuspend();
+			void OnResume();
 
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);

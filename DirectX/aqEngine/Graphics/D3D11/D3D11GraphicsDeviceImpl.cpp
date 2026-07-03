@@ -6,6 +6,56 @@
 #include "D3D11Shader.h"
 #include "D3D11DepthMap.h"
 #include "Graphics/GraphicsDevice.h"
+#if defined(AQ_PLATFORM_UWP)
+#include <dxgi1_2.h>   // IDXGIFactory2 / CreateSwapChainForCoreWindow / DXGI_SWAP_CHAIN_DESC1
+#include <dxgi1_6.h>   // IDXGIFactory4 / IDXGIAdapter1 (D3D12 probe 用)
+#include <d3d12.h>     // D3D12 サポート probe 用(バックエンドは D3D11 のまま)
+#pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "dxgi.lib")
+
+namespace {
+	// 【診断】このデバイス(Xbox の App/Game 種別など)で D3D12 がハードウェアで通るかを調べる。
+	// バックエンドは切り替えず、D3D12CreateDevice を各アダプタ/各 FL で試すだけ。
+	// ppDevice=nullptr で「作らずに対応可否だけ」チェック(対応時 S_FALSE、非対応で失敗)。
+	void ProbeD3D12Support()
+	{
+		aq::StartupLog("  [probe] === D3D12 hardware support ===");
+		IDXGIFactory4* factory = nullptr;
+		if (FAILED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))) || !factory) {
+			aq::StartupLog("  [probe] CreateDXGIFactory2 failed");
+			return;
+		}
+		static const D3D_FEATURE_LEVEL levels[] = {
+			D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0,
+			D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+		};
+		IDXGIAdapter1* adapter = nullptr;
+		for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+			DXGI_ADAPTER_DESC1 ad = {};
+			adapter->GetDesc1(&ad);
+			{
+				char nm[220];
+				sprintf_s(nm, "  [probe] adapter %u: flags=0x%X vram=%lluMB desc=%ls",
+				          i, ad.Flags,
+				          static_cast<unsigned long long>(ad.DedicatedVideoMemory >> 20),
+				          ad.Description);
+				aq::StartupLog(nm);
+			}
+			for (D3D_FEATURE_LEVEL fl : levels) {
+				HRESULT h = D3D12CreateDevice(adapter, fl, __uuidof(ID3D12Device), nullptr);
+				char rl[96];
+				sprintf_s(rl, "  [probe]   D3D12 FL 0x%X -> hr=0x%08X%s",
+				          static_cast<unsigned>(fl), static_cast<unsigned>(h),
+				          SUCCEEDED(h) ? "  <== OK" : "");
+				aq::StartupLog(rl);
+			}
+			adapter->Release();
+			adapter = nullptr;
+		}
+		factory->Release();
+	}
+}
+#endif
 
 
 namespace aq
@@ -32,13 +82,37 @@ namespace aq
 
 		bool D3D11GraphicsDeviceImpl::Initialize(NativeWindowHandle window, uint32_t width, uint32_t height)
 		{
+#if defined(AQ_PLATFORM_UWP)
+			// UWP(Xbox 道A): CoreWindow に対して flip model スワップチェーンを生成する。
+			aq::StartupLog("  [D3D11] Initialize (UWP) begin");
+			if (!CreateDeviceAndSwapChainUWP(static_cast<::IUnknown*>(window.handle), width, height)) {
+				aq::StartupLog("  [D3D11] CreateDeviceAndSwapChainUWP FAILED");
+				return false;
+			}
+			aq::StartupLog("  [D3D11] device + swapchain (UWP) ok");
+#else
 			HWND hwnd = static_cast<HWND>(window.handle);
 			if (!CreateDeviceAndSwapChain(hwnd, width, height)) {
 				return false;
 			}
+#endif
+			// FL11 未満(Xbox One UWP の FL10_1 等)は compute/UAV/GPU 駆動機能が使えないので、
+			// Bloom/HiZ/GPU カリング/海などを無効化するフラグを立てる。
+			aq::graphics::SetComputeSupported(featureLevel_ >= D3D_FEATURE_LEVEL_11_0);
+			{
+				char b[80]; sprintf_s(b, "  [D3D11] compute supported=%d (FL=0x%X)",
+				          static_cast<int>(featureLevel_ >= D3D_FEATURE_LEVEL_11_0), static_cast<unsigned>(featureLevel_));
+				aq::StartupLog(b);
+			}
+#if defined(AQ_PLATFORM_UWP)
+			// 【診断】Xbox の種別(App/Game)等で D3D12 がハードウェアで通るか調べる(バックエンドは D3D11 のまま)。
+			ProbeD3D12Support();
+#endif
 			if (!CreateMainRenderTargets(width, height)) {
+				aq::StartupLog("  [D3D11] CreateMainRenderTargets FAILED");
 				return false;
 			}
+			aq::StartupLog("  [D3D11] main RTs ok");
 			return true;
 		}
 
@@ -65,6 +139,36 @@ namespace aq
 				device_->Release();
 				device_ = nullptr;
 			}
+		}
+
+
+		void D3D11GraphicsDeviceImpl::OnSuspend()
+		{
+			// PLM: サスペンド前にコンテキストをクリア&フラッシュ。
+			if (deviceContext_)
+			{
+				deviceContext_->ClearState();
+				deviceContext_->Flush();
+			}
+#if defined(AQ_PLATFORM_UWP)
+			// IDXGIDevice3::Trim() で D3D11 ドライバの未使用メモリを解放(UWP サスペンド要件。
+			// 呼ばないと復帰後に描画が壊れることがある)。
+			if (device_)
+			{
+				IDXGIDevice3* dxgiDevice = nullptr;
+				if (SUCCEEDED(device_->QueryInterface(__uuidof(IDXGIDevice3),
+				                                      reinterpret_cast<void**>(&dxgiDevice))) && dxgiDevice)
+				{
+					dxgiDevice->Trim();
+					dxgiDevice->Release();
+				}
+			}
+#endif
+		}
+
+
+		void D3D11GraphicsDeviceImpl::OnResume()
+		{
 		}
 
 
@@ -147,6 +251,9 @@ namespace aq
 		}
 
 
+#if !defined(AQ_PLATFORM_UWP)
+		// Win32 専用: D3D11CreateDeviceAndSwapChain は HWND スワップチェーンモデル用で
+		// UWP では利用不可。UWP は下の CreateDeviceAndSwapChainUWP を使う。
 		bool D3D11GraphicsDeviceImpl::CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height)
 		{
 			uint32_t createDeviceFlags = 0;
@@ -193,6 +300,90 @@ namespace aq
 			}
 			return SUCCEEDED(hr);
 		}
+#endif // !AQ_PLATFORM_UWP
+
+
+#if defined(AQ_PLATFORM_UWP)
+		bool D3D11GraphicsDeviceImpl::CreateDeviceAndSwapChainUWP(::IUnknown* coreWindow, uint32_t width, uint32_t height)
+		{
+			// UWP は HWND を使えないため、デバイスを単体生成 → DXGIFactory2 経由で
+			// CoreWindow 用スワップチェーン(flip model)を作る。
+			uint32_t createDeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifdef _DEBUG
+			createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+			D3D_FEATURE_LEVEL featureLevels[] = {
+				D3D_FEATURE_LEVEL_11_1,
+				D3D_FEATURE_LEVEL_11_0,
+				D3D_FEATURE_LEVEL_10_1,
+				D3D_FEATURE_LEVEL_10_0,
+			};
+
+			// 1) デバイス生成(スワップチェーンなし)。Debug レイヤ不在時はフラグを外して再試行。
+			aq::StartupLog("    [D3D11] D3D11CreateDevice (HARDWARE)");
+			driverType_ = D3D_DRIVER_TYPE_HARDWARE;
+			HRESULT hr = D3D11CreateDevice(
+				nullptr, driverType_, nullptr, createDeviceFlags,
+				featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+				&device_, &featureLevel_, &deviceContext_);
+			if (FAILED(hr) && (createDeviceFlags & D3D11_CREATE_DEVICE_DEBUG)) {
+				char b[96]; sprintf_s(b, "    [D3D11] with DEBUG flag hr=0x%08X, retry without", static_cast<unsigned>(hr)); aq::StartupLog(b);
+				createDeviceFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
+				hr = D3D11CreateDevice(
+					nullptr, driverType_, nullptr, createDeviceFlags,
+					featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+					&device_, &featureLevel_, &deviceContext_);
+			}
+			if (FAILED(hr)) {
+				char b[96]; sprintf_s(b, "    [D3D11] D3D11CreateDevice FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b);
+				EngineAssertMsg(false, "D3D11 デバイス生成失敗 (UWP)");
+				return false;
+			}
+			{
+				char b[64]; sprintf_s(b, "    [D3D11] device ok (FL=0x%X)", static_cast<unsigned>(featureLevel_)); aq::StartupLog(b);
+			}
+
+			// 2) 生成したデバイスから DXGIFactory2 を辿る。
+			IDXGIDevice1* dxgiDevice = nullptr;
+			hr = device_->QueryInterface(__uuidof(IDXGIDevice1), reinterpret_cast<void**>(&dxgiDevice));
+			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [D3D11] QI IDXGIDevice1 FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); return false; }
+			IDXGIAdapter* adapter = nullptr;
+			hr = dxgiDevice->GetAdapter(&adapter);
+			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [D3D11] GetAdapter FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); dxgiDevice->Release(); return false; }
+			IDXGIFactory2* factory = nullptr;
+			hr = adapter->GetParent(__uuidof(IDXGIFactory2), reinterpret_cast<void**>(&factory));
+			adapter->Release();
+			dxgiDevice->Release();
+			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [D3D11] GetParent IDXGIFactory2 FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); return false; }
+			aq::StartupLog("    [D3D11] DXGI factory2 ok");
+
+			// 3) CoreWindow 用スワップチェーン(flip model は BufferCount>=2 が必須)。
+			DXGI_SWAP_CHAIN_DESC1 desc = {};
+			desc.Width       = width;
+			desc.Height      = height;
+			desc.Format      = DXGI_FORMAT_R8G8B8A8_UNORM;
+			desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			desc.BufferCount = 2;
+			desc.SampleDesc.Count = 1;
+			desc.SwapEffect  = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+			desc.Scaling     = DXGI_SCALING_STRETCH;
+
+			aq::StartupLog("    [D3D11] CreateSwapChainForCoreWindow");
+			IDXGISwapChain1* swapChain1 = nullptr;
+			hr = factory->CreateSwapChainForCoreWindow(device_, coreWindow, &desc, nullptr, &swapChain1);
+			factory->Release();
+			if (FAILED(hr)) {
+				char b[96]; sprintf_s(b, "    [D3D11] CreateSwapChainForCoreWindow FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b);
+				EngineAssertMsg(false, "D3D11 CreateSwapChainForCoreWindow 失敗");
+				return false;
+			}
+			aq::StartupLog("    [D3D11] swapchain (CoreWindow) ok");
+
+			// IDXGISwapChain1 は IDXGISwapChain を継承しているためそのまま格納できる。
+			swapChain_ = swapChain1;
+			return true;
+		}
+#endif
 
 
 		void D3D11GraphicsDeviceImpl::SetupDefaultRenderState(RenderContext& context)
@@ -282,12 +473,18 @@ namespace aq
 		bool D3D11GraphicsDeviceImpl::CreateMainRenderTargets(uint32_t width, uint32_t height)
 		{
 			SampleDesc sampleDesc;
+			// メイン RT は通常 HDR (R16G16B16A16_FLOAT)。PBR ライティングの 1.0 超をクランプせず保持し、
+			// ポストプロセス(Bloom 合成)でトーンマップして LDR バックバッファへ出力する。
+			// ただし compute 非対応(FL10 の Xbox One UWP 等)では Bloom トーンマップが使えず、
+			// HDR RT を LDR バックバッファへ直接コピー(CopyResource)するとフォーマット不一致になる。
+			// そのため LDR (R8G8B8A8_UNORM) にして直接コピー可能にする(HDR 値はクランプ)。
+			const PixelFormat mainRTFormat = aq::graphics::IsComputeSupported()
+				? PixelFormat::R16G16B16A16_Float
+				: PixelFormat::R8G8B8A8_Unorm;
 			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i) {
-				// メイン RT は HDR (R16G16B16A16_FLOAT)。PBR ライティングの 1.0 超の値をクランプせず保持し、
-				// ポストプロセス(Bloom 合成)でトーンマップして LDR バックバッファへ出力する。
 				bool ret = mainRenderTargets_[i].Create(
 					width, height, 1,
-					PixelFormat::R16G16B16A16_Float,
+					mainRTFormat,
 					PixelFormat::D24_Unorm_S8_Uint,
 					sampleDesc
 				);

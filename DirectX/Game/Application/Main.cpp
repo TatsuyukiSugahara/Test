@@ -1,4 +1,7 @@
 #include "stdafx.h"
+// Win32 デスクトップのエントリ。UWP(Xbox 道A)では UWPMain.cpp が担うため、
+// この TU は空になる(同一プロジェクトに 2 つのエントリを共存させないため)。
+#if !defined(AQ_PLATFORM_UWP)
 #include "Application.h"
 #include "Platform/PlatformWin32.h"
 
@@ -28,3 +31,4 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 	return 0;
 }
+#endif // !AQ_PLATFORM_UWP

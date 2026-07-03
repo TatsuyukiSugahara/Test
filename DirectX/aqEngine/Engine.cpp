@@ -55,11 +55,15 @@ namespace aq
 		aq::physics::PhysicsWorld::InstallAllocatorHook();
 
 		if (!InitializeWindow(initializeParameter)) {
+			aq::StartupLog("  [engine] InitializeWindow FAILED");
 			return false;
 		}
+		aq::StartupLog("  [engine] window ok");
 		if (!InitializeGraphicsAPI(initializeParameter)) {
+			aq::StartupLog("  [engine] InitializeGraphicsAPI FAILED");
 			return false;
 		}
+		aq::StartupLog("  [engine] graphics API ok");
 		// ThreadPool のワーカ数はリソース予算で決める。
 		// Win32 は 0(論理コア数)、Xbox(UWP)は 4コア占有+2コア共有に合わせて 6 固定。
 		aq::util::ThreadPool::Initialize(aq::platform::GetResourceBudget().threadPoolWorkerCount);
@@ -67,16 +71,21 @@ namespace aq
 		// サウンド: プラットフォームで選択したバックエンドを注入して初期化する（§10）。
 		aq::sound::SoundEngine::Create<aq::sound::DefaultSoundBackend>();
 		if (!aq::sound::SoundEngine::Get().Initialize()) {
+			aq::StartupLog("  [engine] SoundEngine::Initialize FAILED");
 			return false;
 		}
+		aq::StartupLog("  [engine] sound ok");
 
 		// データ駆動オーディオ層（イベント/Bank）。SoundEngine の上に載る。
 		aq::audio::AudioDirector::Create();
 		aq::audio::AudioDirector::Get().Initialize();
+		aq::StartupLog("  [engine] audio director ok");
 
 		if (!application_->Initialize(renderContext_)) {
+			aq::StartupLog("  [engine] application_->Initialize FAILED");
 			return false;
 		}
+		aq::StartupLog("  [engine] application ok");
 		application_->Register();
 
 		gameTimer_.Initialize();

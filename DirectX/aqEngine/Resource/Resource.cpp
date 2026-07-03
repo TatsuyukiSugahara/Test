@@ -270,6 +270,7 @@ namespace aq
 					return paths;
 				}
 
+				// UWP でもパッケージ内にソースツリー相対構造を再現するため、デスクトップと同じ規則で解決。
 				const std::filesystem::path root(FindProjectRoot());
 				if (path.rfind("Assets/", 0) == 0) {
 					PushUniquePath(paths, (root / "Game" / path).generic_string());

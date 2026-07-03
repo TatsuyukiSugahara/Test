@@ -199,7 +199,17 @@ namespace aq
 			std::string openedPath;
 			if (!ReadFile(filePath, shaderBuffer, fileSize, openedPath)) return false;
 
-			static const char* shaderModelNames[] = { "vs_5_0", "ps_5_0", "cs_5_0" };
+			// シェーダモデルをデバイスの機能レベルに合わせる。SM5.0 は FL11_0 必須のため、
+			// FL10_1(Xbox One UWP 等)では SM4.1、FL10_0 では SM4.0 でコンパイルする。
+			// FL10 では SM5.0 専用機能を使うシェーダはコンパイル失敗する(非致命・nullptr 返し)。
+			ID3D11Device* d3dDevice = D3D11GraphicsDeviceImpl::GetStaticDevice();
+			const D3D_FEATURE_LEVEL fl = d3dDevice ? d3dDevice->GetFeatureLevel() : D3D_FEATURE_LEVEL_11_0;
+			const char* verSuffix = (fl >= D3D_FEATURE_LEVEL_11_0) ? "5_0"
+			                      : (fl >= D3D_FEATURE_LEVEL_10_1) ? "4_1"
+			                      : "4_0";
+			static const char* shaderPrefix[] = { "vs_", "ps_", "cs_" };
+			char shaderModel[16] = {};
+			sprintf_s(shaderModel, "%s%s", shaderPrefix[static_cast<uint32_t>(shaderType_)], verSuffix);
 
 			ID3DBlob* errorBlob = nullptr;
 			char currentDirectory[MAX_PATH] = {};
@@ -208,7 +218,7 @@ namespace aq
 			HRESULT hr = D3DCompile(
 				shaderBuffer, fileSize, nullptr, nullptr,
 				((ID3DInclude*)(UINT_PTR)1), entryFuncName,
-				shaderModelNames[static_cast<uint32_t>(shaderType_)],
+				shaderModel,
 				dwordShaderFlags, 0, &blob_, &errorBlob);
 			SetCurrentDirectoryA(currentDirectory);
 
@@ -220,31 +230,34 @@ namespace aq
 					OutputDebugStringA(text);
 					errorBlob->Release();
 				}
+				{
+					char b[220]; sprintf_s(b, "[shader] COMPILE FAIL %s (%s @%s)", filePath ? filePath : "", entryFuncName ? entryFuncName : "", shaderModel);
+					aq::StartupLog(b);
+				}
 				EngineAssertMsg(false, "シェーダーコンパイルエラー");
 				return false;
 			}
 
-			ID3D11Device* d3dDevice = D3D11GraphicsDeviceImpl::GetStaticDevice();
 			switch (shaderType_)
 			{
 				case ShaderType::VS:
 				{
 					hr = d3dDevice->CreateVertexShader(blob_->GetBufferPointer(), blob_->GetBufferSize(), nullptr, (ID3D11VertexShader**)&shader_);
-					if (FAILED(hr)) return false;
+					if (FAILED(hr)) { char b[220]; sprintf_s(b, "[shader] CreateVS FAIL %s hr=0x%08X", filePath?filePath:"", static_cast<unsigned>(hr)); aq::StartupLog(b); return false; }
 					hr = CreateInputLayoutDescFromVertexShaderSignature(blob_, d3dDevice, &inputLayout_);
-					if (FAILED(hr)) return false;
+					if (FAILED(hr)) { char b[220]; sprintf_s(b, "[shader] InputLayout FAIL %s hr=0x%08X", filePath?filePath:"", static_cast<unsigned>(hr)); aq::StartupLog(b); return false; }
 					break;
 				}
 				case ShaderType::PS:
 				{
 					hr = d3dDevice->CreatePixelShader(blob_->GetBufferPointer(), blob_->GetBufferSize(), nullptr, (ID3D11PixelShader**)&shader_);
-					if (FAILED(hr)) return false;
+					if (FAILED(hr)) { char b[220]; sprintf_s(b, "[shader] CreatePS FAIL %s hr=0x%08X", filePath?filePath:"", static_cast<unsigned>(hr)); aq::StartupLog(b); return false; }
 					break;
 				}
 				case ShaderType::CS:
 				{
 					hr = d3dDevice->CreateComputeShader(blob_->GetBufferPointer(), blob_->GetBufferSize(), nullptr, (ID3D11ComputeShader**)&shader_);
-					if (FAILED(hr)) return false;
+					if (FAILED(hr)) { char b[220]; sprintf_s(b, "[shader] CreateCS FAIL %s hr=0x%08X", filePath?filePath:"", static_cast<unsigned>(hr)); aq::StartupLog(b); return false; }
 					break;
 				}
 			}

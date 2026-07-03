@@ -47,3 +47,26 @@ vk_debug.log
 
 # Vulkan SDK installer (~300MB, GitHub 100MB 上限超のため除外。bat が自動DL)
 Tools/SetupVulkan/*.exe
+
+# ============================================================
+# UWP / Xbox(道A)ビルド生成物 / Build artifacts
+# ============================================================
+
+# appx / msix パッケージ出力(アプリ パッケージの作成)
+DirectX/AppPackages/
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.appxsym
+*.appxupload
+
+# CppWinRT / MSBuild が生成する projection 等
+Generated Files/
+
+# NuGet 復元パッケージ(directxtex_uwp / CppWinRT など。復元で再取得される)
+DirectX/packages/
+
+# パッケージ署名用のテスト証明書(秘密鍵はコミットしない)
+*.pfx
+*.cer

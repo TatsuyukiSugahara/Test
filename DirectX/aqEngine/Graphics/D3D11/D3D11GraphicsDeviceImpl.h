@@ -23,6 +23,8 @@ namespace aq
 
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) override;
 			void Finalize() override;
+			void OnSuspend() override;   // PLM: ClearState + Flush + IDXGIDevice3::Trim
+			void OnResume()  override;
 			void SetupRenderContext(RenderContext& outContext) override;
 			uint32_t GetMainRenderTargetCount() const override { return MAIN_RT_COUNT; }
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;
@@ -54,6 +56,9 @@ namespace aq
 
 		private:
 			bool CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height); // HWND は D3D11 内部のみ
+#if defined(AQ_PLATFORM_UWP)
+			bool CreateDeviceAndSwapChainUWP(::IUnknown* coreWindow, uint32_t width, uint32_t height);
+#endif
 			bool CreateMainRenderTargets(uint32_t width, uint32_t height);
 
 		private:

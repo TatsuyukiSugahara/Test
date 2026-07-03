@@ -36,6 +36,14 @@ namespace aq
 			virtual void Finalize() = 0;
 
 			/**
+			 * PLM(UWP)サスペンド/レジューム。
+			 * OnSuspend: GPU をアイドルにし、可能なら未使用メモリを解放する
+			 *            (復帰後の描画破壊/TDR を防ぐ)。既定 no-op。
+			 */
+			virtual void OnSuspend() {}
+			virtual void OnResume()  {}
+
+			/**
 			 * RenderContext に API 依存のコンテキストを渡す。
 			 * D3D11 なら ID3D11DeviceContext*、D3D12 なら CommandList など。
 			 */

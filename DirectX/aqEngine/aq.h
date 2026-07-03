@@ -9,6 +9,10 @@
 //#define ENGINE_GRAPHICS_VULKAN
 
 #if !defined(ENGINE_GRAPHICS_D3D11) && !defined(ENGINE_GRAPHICS_D3D12) && !defined(ENGINE_GRAPHICS_VULKAN)
+// 既定は D3D12。Xbox の UWP(道A)も、Dev Home の「ゲーム」種別なら実 GPU で D3D12 が
+// FL12_0 まで通る(「アプリ」種別は D3D12 が WARP のみで非実用)。
+// 「アプリ」種別/FL10 機向けの D3D11 + FL10 フォールバックは、ENGINE_GRAPHICS_D3D11 を
+// 明示定義すれば選べる(IsComputeSupported 経由で Bloom/海/コンピュート等を落とす)。
 #define ENGINE_GRAPHICS_D3D12
 #endif
 
@@ -60,6 +64,17 @@
 #include <dinput.h>
 
 
+// DirectXTex:
+//  - デスクトップ: ThirdParty の prebuilt lib(静的CRT /MT)+ ヘッダを使う。
+//  - UWP(Xbox): /MD 必須で prebuilt(/MT)と衝突するため、NuGet パッケージ
+//    "directxtex_uwp" が提供する /MD ビルド(ヘッダ + lib)を使う。lib は NuGet の
+//    .targets が自動リンクするので pragma comment(lib) は不要。ヘッダは <DirectXTex.h>。
+#if defined(AQ_PLATFORM_UWP)
+#pragma warning(push)
+#pragma warning(disable:4065)
+#include <DirectXTex.h>            // NuGet: directxtex_uwp (/MD, WINAPI_FAMILY_APP)
+#pragma warning(pop)
+#else
 #if _DEBUG
 	#pragma comment(lib, "DirectXTex/x64/Debug/DirectXTex.lib")
 #else
@@ -69,6 +84,7 @@
 #pragma warning(disable:4065)
 #include <DirectXTex\DirectXTex.h>
 #pragma warning(pop)
+#endif
 
 #include <vector>
 #include <array>
@@ -104,6 +120,11 @@
 #include "Util/ThreadPool.h"
 
 #include "Utility.h"
+
+// 起動診断用の簡易ログ。UWP(Xbox 実機)では通常デバッガを接続できないため、
+// パッケージの LocalState/startup.log に追記する。Win32 では no-op。
+// (Device Portal の File explorer から読み出して初期化の到達点を特定する)
+namespace aq { void StartupLog(const char* msg); }
 
 #include "Engine.h"
 #include "ECS/ECS.h"

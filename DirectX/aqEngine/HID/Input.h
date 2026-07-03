@@ -1,7 +1,11 @@
 ﻿#pragma once
+// DirectInput / XInput はデスクトップ専用。UWP(Xbox 道A)では使えないため、
+// キーボード/マウスは当面 no-op(入力は Phase 4 の GameInput で対応)。
+#if !defined(AQ_PLATFORM_UWP)
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 #include <Xinput.h>
+#endif
 #include <memory>
 #include <chrono>
 #include "Math/Vector.h"
@@ -15,6 +19,7 @@ namespace aq
 		// Keyboard
 		// ==========================================
 
+#if !defined(AQ_PLATFORM_UWP)
 		enum class KeyBoardType : uint32_t
 		{
 			Left  = DIK_LEFT,
@@ -31,6 +36,15 @@ namespace aq
 			Enter  = DIK_RETURN,
 			Escape = DIK_ESCAPE,
 		};
+#else
+		// UWP: DIK_ が無いため中立値。now_[256] のインデックスとして安全なら値は任意。
+		enum class KeyBoardType : uint32_t
+		{
+			Left, Right, Up, Down,
+			W, A, S, D,
+			Space, Enter, Escape,
+		};
+#endif
 
 
 		class KeyBoard
@@ -39,7 +53,9 @@ namespace aq
 			KeyBoard()  = default;
 			~KeyBoard();
 
+#if !defined(AQ_PLATFORM_UWP)
 			HRESULT Initialize(LPDIRECTINPUT8 input);
+#endif
 			void    Update(float dt);
 
 			bool IsTriggered(KeyBoardType key) const;
@@ -50,7 +66,9 @@ namespace aq
 		private:
 			static constexpr uint32_t KEY_COUNT = 256;
 
+#if !defined(AQ_PLATFORM_UWP)
 			LPDIRECTINPUTDEVICE8 device_ = nullptr;
+#endif
 			uint8_t              now_[KEY_COUNT]{};
 			uint8_t              old_[KEY_COUNT]{};
 			float                holdTimers_[KEY_COUNT]{};
@@ -72,13 +90,27 @@ namespace aq
 		};
 
 
+#if defined(AQ_PLATFORM_UWP)
+		// UWP: DIMOUSESTATE2 が無いため、既存の判定コードが参照するフィールドだけ持つ
+		// 中立状態(全ゼロ=入力なし)。フィールド名は DIMOUSESTATE2 に合わせる。
+		struct MouseStateNeutral
+		{
+			long    lX = 0;
+			long    lY = 0;
+			long    lZ = 0;
+			uint8_t rgbButtons[8]{};
+		};
+#endif
+
 		class Mouse
 		{
 		public:
 			Mouse()  = default;
 			~Mouse();
 
+#if !defined(AQ_PLATFORM_UWP)
 			HRESULT Initialize(LPDIRECTINPUT8 input);
+#endif
 			void    Update(float dt);
 
 			bool          IsTriggered(MouseButton btn) const;
@@ -89,9 +121,14 @@ namespace aq
 			math::Vector2 GetCursorPos() const;
 
 		private:
+#if !defined(AQ_PLATFORM_UWP)
 			LPDIRECTINPUTDEVICE8 device_ = nullptr;
 			DIMOUSESTATE2        now_{};
 			DIMOUSESTATE2        old_{};
+#else
+			MouseStateNeutral    now_{};
+			MouseStateNeutral    old_{};
+#endif
 			float                holdTimers_[3]{};
 		};
 
@@ -168,7 +205,9 @@ namespace aq
 			static void          Finalize()   { if (sInstance_) { delete sInstance_; sInstance_ = nullptr; } }
 
 		private:
+#if !defined(AQ_PLATFORM_UWP)
 			LPDIRECTINPUT8               input_ = nullptr;
+#endif
 			std::unique_ptr<KeyBoard>    keyBoard_;
 			std::unique_ptr<Mouse>       mouse_;
 			std::unique_ptr<IPadBackend> padBackend_;

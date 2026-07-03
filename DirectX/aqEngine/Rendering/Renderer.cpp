@@ -42,7 +42,9 @@ namespace aq
 
 		RenderTargetHandle Renderer::GetDisplayRTHandle(RenderTargetHandle sceneRT) const
 		{
-			if (postProcessRenderer_) {
+			// compute 非対応(FL10 の Xbox One UWP 等)ではポストプロセス(Bloom)が動かないので、
+			// シーン RT を直接表示する。
+			if (postProcessRenderer_ && graphics::IsComputeSupported()) {
 				return postProcessRenderer_->GetFinalRT();
 			}
 			return sceneRT;
@@ -63,7 +65,7 @@ namespace aq
 			// Pass 1.5: GPU 駆動クラスタ(トライアングル)カリング (compute フェーズ)。
 			// 有効時、各アイテムの可視クラスタを compact し間接引数を構築する。
 			// build 時に useGpuCull を確定し、描画コマンドと整合させる (1フレームの toggle ズレ防止)。
-			if (IsClusterCullEnabled() && GpuClusterCuller::Get().IsReady())
+			if (graphics::IsComputeSupported() && IsClusterCullEnabled() && GpuClusterCuller::Get().IsReady())
 			{
 				// 小メッシュは dispatch/間接描画の固定コストが削減効果を上回るため閾値でスキップ。
 				const uint32_t minClusters = GetClusterCullMinClusters();
@@ -117,12 +119,15 @@ namespace aq
 			}
 
 			// Pass 4: 海パス（フォワードパスの後、ポストプロセスの前）
-			for (const OceanRenderItem& item : frame.oceanItems) {
-				outList.Enqueue<OceanDrawCommand>(item, frame.camera);
+			// 海は FFT コンピュートに依存するため compute 非対応(FL10)では描画しない。
+			if (graphics::IsComputeSupported()) {
+				for (const OceanRenderItem& item : frame.oceanItems) {
+					outList.Enqueue<OceanDrawCommand>(item, frame.camera);
+				}
 			}
 
-			// Pass 5: ポストプロセス
-			if (postProcessRenderer_ && applyPostProcess) {
+			// Pass 5: ポストプロセス (compute 非対応では Bloom が動かないのでスキップ)
+			if (postProcessRenderer_ && applyPostProcess && graphics::IsComputeSupported()) {
 				postProcessRenderer_->BuildPostProcessCommandList(
 					outList, rtHandle,
 					static_cast<uint32_t>(viewportW),

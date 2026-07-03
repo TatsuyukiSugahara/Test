@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Game(DirectX.vcxproj / デスクトップ)と GameUWP.vcxproj が共有するソース一覧。
+     ファイルを追加/削除するときは、このファイル 1 箇所だけを編集すれば両方に反映される。
+     (相対パスは import する .vcxproj のディレクトリ基準。両プロジェクトとも Game/ にあるため成立する) -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="Application\stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Platform)'=='x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Platform)'=='x64'">stdafx.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <ClCompile Include="Application\Actor\StateMachine.cpp" />
+    <ClCompile Include="Application\Application.cpp" />
+    <ClCompile Include="Application\TestScreen.cpp" />
+    <ClCompile Include="Application\GameInput.cpp" />
+    <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
+    <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp" />
+    <ClCompile Include="Application\ECS\CameraSteeringComponentSystem.cpp" />
+    <ClCompile Include="Application\Main.cpp" />
+    <ClCompile Include="Application\UWPMain.cpp" />
+    <ClCompile Include="Application\Scene\BattleScene.cpp" />
+    <ClCompile Include="Application\Scene\Scene.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Application\Actor\StateMachine.h" />
+    <ClInclude Include="Application\Application.h" />
+    <ClInclude Include="Application\TestScreen.h" />
+    <ClInclude Include="Application\GameAction.h" />
+    <ClInclude Include="Application\GameInput.h" />
+    <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
+    <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h" />
+    <ClInclude Include="Application\ECS\CameraSteeringComponentSystem.h" />
+    <ClInclude Include="Application\Scene\BattleScene.h" />
+    <ClInclude Include="Application\Scene\Scene.h" />
+    <ClInclude Include="Application\stdafx.h" />
+    <ClInclude Include="Application\Utility.h" />
+  </ItemGroup>
+</Project>

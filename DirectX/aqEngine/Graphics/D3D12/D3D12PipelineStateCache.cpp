@@ -1,4 +1,5 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D12
 #include "D3D12Common.h"
 #include "D3D12PipelineStateCache.h"
 #include "D3D12Shader.h"
@@ -201,3 +202,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D12

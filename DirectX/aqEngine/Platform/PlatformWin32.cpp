@@ -1,10 +1,17 @@
 #include "aq.h"
+// Win32 専用実装。UWP(Xbox)構成ではデスクトップ API(CreateWindow 等)が使えないため
+// 本体をガードして空 TU にする(PlatformUWP.cpp が代替)。
+#if !defined(AQ_PLATFORM_UWP)
 #include "Platform/PlatformWin32.h"
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
 // header 内で #if 0 されているため、使用する .cpp で前方宣言が必要
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
+
+
+// 起動診断ログ (UWP 専用)。Win32 では no-op。
+namespace aq { void StartupLog(const char*) {} }
 
 
 namespace aq
@@ -108,3 +115,4 @@ namespace aq
 		}
 	}
 }
+#endif // !AQ_PLATFORM_UWP

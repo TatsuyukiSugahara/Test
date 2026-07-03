@@ -1,6 +1,8 @@
 #include "aq.h"
+#ifdef ENGINE_GRAPHICS_D3D12
 #include "D3D12Common.h"
 #include "D3D12Shader.h"
+#include "Engine.h"   // aq::Engine::GetContentRoot()
 #include <d3dcompiler.h>
 #include <filesystem>
 
@@ -18,6 +20,13 @@ namespace aq
 			{
 				static std::string cached;
 				if (!cached.empty()) return cached;
+
+				// UWP 等でプラットフォームがコンテンツ基点(パッケージ install フォルダ)を
+				// 返す場合はそれを採用し、ソースツリーの上方探索は行わない。
+				if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
+					cached = contentRoot;
+					return cached;
+				}
 
 				std::error_code ec;
 				std::filesystem::path dir = std::filesystem::current_path(ec);
@@ -45,6 +54,8 @@ namespace aq
 
 				if (std::filesystem::path(path).is_absolute()) return path;
 
+				// UWP でもパッケージ内にソースツリー相対構造(Game/Assets/... と aqEngine/Graphics/...)
+				// を再現して同梱するため、デスクトップと同じ "Game/" プレフィクス規則で解決する。
 				const std::filesystem::path root(FindProjectRoot());
 				std::filesystem::path candidate;
 				if (path.rfind("Assets/", 0) == 0)        candidate = root / "Game" / path;
@@ -202,3 +213,5 @@ namespace aq
 		}
 	}
 }
+
+#endif // ENGINE_GRAPHICS_D3D12

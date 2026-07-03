@@ -141,7 +141,12 @@ namespace app
 		}
 
 		// GetAsyncKeyState の最下位ビット = 前回呼び出し以降に押されたか（簡易エッジ検出）。
+		// UWP(Xbox) では GetAsyncKeyState が使えないため、デバッグ入力は当面無効（Phase 4 の GameInput 後に対応）。
+#if defined(AQ_PLATFORM_UWP)
+		auto triggered = [](int) { return false; };
+#else
 		auto triggered = [](int vk) { return (GetAsyncKeyState(vk) & 1) != 0; };
+#endif
 
 		// P: 2D ワンショット再生
 		if (triggered('P') && testClip_ && testClip_->IsCompleted()) {

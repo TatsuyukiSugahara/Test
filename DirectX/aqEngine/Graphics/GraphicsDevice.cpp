@@ -11,6 +11,14 @@ namespace aq
 		GraphicsDevice* GraphicsDevice::instance_ = nullptr;
 
 
+		// コンピュートシェーダ/UAV/GPU 駆動機能が使えるか。既定は対応(PC/D3D12/FL11 の D3D11)。
+		// D3D11 バックエンドがフィーチャーレベル 11 未満(Xbox One UWP の FL10_1 等)を検出したとき
+		// false に設定され、Bloom/HiZ/GPU カリング/海など compute 前提のパスを無効化する。
+		namespace { bool g_computeSupported = true; }
+		void SetComputeSupported(bool supported) { g_computeSupported = supported; }
+		bool IsComputeSupported()               { return g_computeSupported; }
+
+
 		GraphicsDevice::GraphicsDevice(std::unique_ptr<IGraphicsDeviceImpl> impl)
 			: impl_(std::move(impl))
 		{
@@ -32,6 +40,10 @@ namespace aq
 		{
 			impl_->Finalize();
 		}
+
+
+		void GraphicsDevice::OnSuspend() { if (impl_) impl_->OnSuspend(); }
+		void GraphicsDevice::OnResume()  { if (impl_) impl_->OnResume();  }
 
 
 		void GraphicsDevice::SetupRenderContext(RenderContext& outContext)

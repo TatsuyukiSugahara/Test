@@ -87,11 +87,11 @@ inline bool __cdecl IsPalettized(DXGI_FORMAT fmt) noexcept
 {
     switch (fmt)
     {
-    //case DXGI_FORMAT_AI44:
-    //case DXGI_FORMAT_IA44:
-    //case DXGI_FORMAT_P8:
-    //case DXGI_FORMAT_A8P8:
-    //    return true;
+    case DXGI_FORMAT_AI44:
+    case DXGI_FORMAT_IA44:
+    case DXGI_FORMAT_P8:
+    case DXGI_FORMAT_A8P8:
+        return true;
 
     default:
         return false;

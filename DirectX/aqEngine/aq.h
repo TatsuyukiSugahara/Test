@@ -65,24 +65,20 @@
 
 
 // DirectXTex:
-//  - デスクトップ: ThirdParty の prebuilt lib(静的CRT /MT)+ ヘッダを使う。
-//  - UWP(Xbox): /MD 必須で prebuilt(/MT)と衝突するため、NuGet パッケージ
-//    "directxtex_uwp" が提供する /MD ビルド(ヘッダ + lib)を使う。lib は NuGet の
-//    .targets が自動リンクするので pragma comment(lib) は不要。ヘッダは <DirectXTex.h>。
+//  - デスクトップ: ThirdParty/DirectXTex のソースを aqEngine に同梱ビルドする
+//    (Engine.vcxproj の Debug/Release 構成でコンパイル)。各構成の CRT に自動一致するため
+//    prebuilt lib は不要・pragma comment(lib) も不要(シンボルは aqEngine.lib に含まれる)。
+//  - UWP(Xbox): /MD 必須のため NuGet パッケージ "directxtex_uwp" を使う。
+//    lib は NuGet の .targets が自動リンク。ヘッダは <DirectXTex.h>。
 #if defined(AQ_PLATFORM_UWP)
 #pragma warning(push)
 #pragma warning(disable:4065)
 #include <DirectXTex.h>            // NuGet: directxtex_uwp (/MD, WINAPI_FAMILY_APP)
 #pragma warning(pop)
 #else
-#if _DEBUG
-	#pragma comment(lib, "DirectXTex/x64/Debug/DirectXTex.lib")
-#else
-	#pragma comment(lib, "DirectXTex/x64/Release/DirectXTex.lib")
-#endif
 #pragma warning(push)
 #pragma warning(disable:4065)
-#include <DirectXTex\DirectXTex.h>
+#include <DirectXTex\DirectXTex.h> // ソースは ThirdParty/DirectXTex を Engine に同梱ビルド
 #pragma warning(pop)
 #endif
 

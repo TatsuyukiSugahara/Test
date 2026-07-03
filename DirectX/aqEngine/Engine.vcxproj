@@ -362,6 +362,28 @@
     <ClCompile Include="Sound\XAudio2\XAudio2SoundVoice.cpp" />
     <ClCompile Include="Sound\Video\VideoPlayer.cpp" />
   </ItemGroup>
+  <!-- DirectXTex: デスクトップ(Debug/Release)のみ aqEngine に同梱ビルドする。
+       UWP/Xbox 構成は NuGet(directxtex_uwp)を使うため除外し重複シンボルを避ける。
+       第三者ソースのため PCH(aq.h)は使用しない。 -->
+  <ItemGroup Condition="'$(Configuration)'=='Debug' Or '$(Configuration)'=='Release'">
+    <ClCompile Include="..\ThirdParty\DirectXTex\BC.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\BC4BC5.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\BC6HBC7.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexCompress.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexConvert.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexDDS.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexFlipRotate.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexHDR.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexImage.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexMipmaps.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexMisc.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexNormalMaps.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexPMAlpha.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexResize.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexTGA.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexUtil.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexWIC.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+  </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Application.h" />
     <ClInclude Include="Core\IApplication.h" />

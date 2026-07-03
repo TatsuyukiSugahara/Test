@@ -3,6 +3,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "IDebugRenderable.h"
 #include <imgui/imgui.h>
+#include "Util/Profiler.h"
 #include <algorithm>
 #include <cstring>
 #include <iterator>
@@ -92,7 +93,10 @@ namespace aq
 	void DebugUI::DebugRenderAll()
 	{
 		for (auto* item : items_)
+		{
+			AQ_PROFILE_SCOPE(item->GetDebugLabel());
 			item->DebugRender();
+		}
 	}
 }
 #endif

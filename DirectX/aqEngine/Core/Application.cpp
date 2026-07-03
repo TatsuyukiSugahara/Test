@@ -478,9 +478,9 @@ namespace aq
 					OnDebugRenderMenu();
 					ImGui::EndMainMenuBar();
 				}
-				aq::ecs::EntityContext::Get().DebugRender();
+				{ AQ_PROFILE_SCOPE("ECS::DebugRender"); aq::ecs::EntityContext::Get().DebugRender(); }
 				aq::DebugUI::Get().DebugRenderAll();
-				OnDebugRender();
+				{ AQ_PROFILE_SCOPE("OnDebugRender"); OnDebugRender(); }
 			}
 #endif
 

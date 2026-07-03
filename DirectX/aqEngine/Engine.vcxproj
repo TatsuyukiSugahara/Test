@@ -272,6 +272,9 @@
     <ClCompile Include="..\ThirdParty\spirv_reflect\spirv_reflect.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\ThirdParty\ufbx\ufbx.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Graphics\D3D12\D3D12Shader.cpp" />
     <ClCompile Include="Graphics\D3D11\D3D11Resources.cpp" />
     <ClCompile Include="Graphics\D3D11\D3D11DepthMap.cpp" />

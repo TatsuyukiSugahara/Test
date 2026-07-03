@@ -8,6 +8,7 @@
 #include <DirectXMath.h>
 #include <cmath>
 #include <filesystem>
+#include "ufbx/ufbx.h"
 
 
 namespace aq
@@ -20,6 +21,10 @@ namespace aq
 			bool LoadTkmMeshFile(const std::string& filePath, MeshData& outMesh);
 			bool LoadTkmSkeletalMeshFile(const std::string& filePath, SkeletalMeshData& outMesh);
 			bool LoadTkaAnimationFile(const std::string& filePath, AnimationClipData& outClip);
+			bool LoadFbxStaticMesh(const std::string& filePath, MeshData& outMesh);
+			bool LoadFbxSkeletalMesh(const std::string& filePath, SkeletalMeshData& outMesh);
+			bool LoadFbxAnimation(const std::string& filePath, const std::string& clipSelector, AnimationClipData& outClip);
+			const ufbx_matrix& FbxImportBasis();
 		}
 
 		/*******************************************/
@@ -119,6 +124,9 @@ namespace aq
 			if (extension == ".tkm") {
 				return LoadTkmMeshFile(requestPath_, *meshData);
 			}
+			if (extension == ".fbx") {
+				return LoadFbxStaticMesh(requestPath_, *meshData);
+			}
 
 			return false;
 		}
@@ -182,6 +190,9 @@ namespace aq
 			if (extension == ".tkm") {
 				return LoadTkmSkeletalMeshFile(requestPath_, *meshData);
 			}
+			if (extension == ".fbx") {
+				return LoadFbxSkeletalMesh(requestPath_, *meshData);
+			}
 			return false;
 		}
 
@@ -194,9 +205,22 @@ namespace aq
 			AnimationClipData* clipData = static_cast<AnimationClipData*>(resource_->data_);
 			if (!clipData) return false;
 
-			const std::string extension = GetLowerExtension(requestPath_);
+			// 複数クリップ選択子: "path.fbx#index" または "path.fbx#clipName"。
+			// '#' 以降をクリップ指定として切り出し、実ファイルパスは '#' より前とする。
+			std::string path = requestPath_;
+			std::string clipSelector;
+			const size_t hashPos = path.find('#');
+			if (hashPos != std::string::npos) {
+				clipSelector = path.substr(hashPos + 1);
+				path = path.substr(0, hashPos);
+			}
+
+			const std::string extension = GetLowerExtension(path);
 			if (extension == ".tka") {
-				return LoadTkaAnimationFile(requestPath_, *clipData);
+				return LoadTkaAnimationFile(path, *clipData);
+			}
+			if (extension == ".fbx") {
+				return LoadFbxAnimation(path, clipSelector, *clipData);
 			}
 			return false;
 		}
@@ -566,6 +590,534 @@ namespace aq
 						vertex.normal.Set(0.0f, 1.0f, 0.0f);
 					}
 				}
+			}
+
+			// FBX ファイル名 (パス区切りを含みうる) から純粋なファイル名部分を取り出す
+			std::string FbxBaseName(const ufbx_string& s)
+			{
+				std::string name(s.data ? s.data : "", s.length);
+				const size_t slash = name.find_last_of("/\\");
+				return slash == std::string::npos ? name : name.substr(slash + 1);
+			}
+
+			// ufbx テクスチャを実在するファイルパスへ解決する。拡張子は元のまま保持し
+			// (TextureLoader は .dds=DDS / それ以外=WIC(.png/.jpg 等) で読める)、
+			// 候補を実在チェックして最初に見つかったものを返す:
+			//   1. ufbx が解決した絶対パス filename
+			//   2. FBX と同ディレクトリ + 相対パス(サブフォルダ保持)
+			//   3. FBX と同ディレクトリ + ファイル名のみ (参照パスと実配置がずれる典型に対応)
+			// resolvedFbxPath は ufbx_load_file が成功した実パス(絶対/CWD相対解決済)。
+			std::string FbxResolveTexturePath(const std::string& resolvedFbxPath, const ufbx_texture* tex)
+			{
+				if (!tex) return std::string();
+
+				std::vector<std::string> candidates;
+				if (tex->filename.length > 0) {
+					candidates.emplace_back(tex->filename.data, tex->filename.length);
+				}
+				if (tex->relative_filename.length > 0) {
+					std::string rel(tex->relative_filename.data, tex->relative_filename.length);
+					std::replace(rel.begin(), rel.end(), '\\', '/');
+					candidates.push_back(ResolveSiblingPath(resolvedFbxPath, rel));
+					const size_t slash = rel.find_last_of('/');
+					candidates.push_back(ResolveSiblingPath(
+						resolvedFbxPath, slash == std::string::npos ? rel : rel.substr(slash + 1)));
+				}
+
+				for (const std::string& c : candidates) {
+					std::error_code ec;
+					if (std::filesystem::exists(c, ec) && !ec) {
+						return c;
+					}
+				}
+				return candidates.empty() ? std::string() : candidates.back();
+			}
+
+			// マテリアルのアルベド(拡散/ベースカラー)テクスチャを解決する。
+			std::string FbxAlbedoTexturePath(const std::string& resolvedFbxPath, const ufbx_material* mat)
+			{
+				if (!mat) return std::string();
+				const ufbx_texture* tex = mat->fbx.diffuse_color.texture;
+				if (!tex) tex = mat->pbr.base_color.texture;
+				return FbxResolveTexturePath(resolvedFbxPath, tex);
+			}
+
+			// FBX を静的メッシュとして読み込む (スキニングなし)。
+			// ufbx で左手系 Y-up・メートル単位へ正規化し、三角形スープとして展開する。
+			bool LoadFbxStaticMesh(const std::string& filePath, MeshData& outMesh)
+			{
+				ufbx_load_opts opts = {};
+				opts.target_axes            = ufbx_axes_left_handed_y_up; // DirectX 左手 Y-up (FBXの宣言軸から変換)
+				// 単位変換は使わない (手元FBXは単位メタデータが不整合で約1/100に潰れるため)
+				opts.generate_missing_normals = true;
+
+				ufbx_scene* scene = nullptr;
+				ufbx_error  error = {};
+				std::string resolvedFbxPath = filePath;
+				for (const std::string& candidate : BuildResourcePathCandidates(filePath)) {
+					scene = ufbx_load_file(candidate.c_str(), &opts, &error);
+					if (scene) { resolvedFbxPath = candidate; break; }
+				}
+				if (!scene) {
+					return false;
+				}
+
+				outMesh.vertics.clear();
+				outMesh.indices.clear();
+				outMesh.material = {};
+
+				std::vector<uint32_t> triIndices;
+
+				for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
+					const ufbx_node* node = scene->nodes.data[ni];
+					if (node->is_root || node->mesh == nullptr) {
+						continue;
+					}
+					const ufbx_mesh* mesh = node->mesh;
+
+					const ufbx_matrix basis = FbxImportBasis();
+					const ufbx_matrix geomToWorld = ufbx_matrix_mul(&basis, &node->geometry_to_world);
+					const ufbx_matrix normalMatrix = ufbx_matrix_for_normals(&geomToWorld);
+					// 左手系変換で geometry_to_world が鏡映(det<0)になると三角形の巻き順が
+					// 反転し、バックフェースカリングで表裏が逆になる(裏から顔が透ける)。
+					// det<0 のときは三角形内の頂点順を反転して巻き順を戻す。
+					const bool flipWinding = ufbx_matrix_determinant(&geomToWorld) < 0.0;
+
+					triIndices.resize(mesh->max_face_triangles * 3);
+
+					if (outMesh.material.albedo.empty() && mesh->materials.count > 0) {
+						outMesh.material.albedo = FbxAlbedoTexturePath(resolvedFbxPath, mesh->materials.data[0]);
+					}
+
+					for (size_t fi = 0; fi < mesh->faces.count; ++fi) {
+						const ufbx_face face = mesh->faces.data[fi];
+						const uint32_t numTris = ufbx_triangulate_face(
+							triIndices.data(), triIndices.size(), mesh, face);
+
+						for (uint32_t ti = 0; ti < numTris * 3; ++ti) {
+							const uint32_t k  = ti % 3u;
+							const uint32_t ix = flipWinding
+								? triIndices[(ti - k) + (2u - k)] : triIndices[ti];
+
+							aq::graphics::VertexData dst = {};
+
+							const ufbx_vec3 p  = ufbx_get_vertex_vec3(&mesh->vertex_position, ix);
+							const ufbx_vec3 wp = ufbx_transform_position(&geomToWorld, p);
+							dst.position.Set(
+								static_cast<float>(wp.x),
+								static_cast<float>(wp.y),
+								static_cast<float>(wp.z));
+
+							if (mesh->vertex_normal.exists) {
+								const ufbx_vec3 n  = ufbx_get_vertex_vec3(&mesh->vertex_normal, ix);
+								const ufbx_vec3 wn = ufbx_transform_direction(&normalMatrix, n);
+								dst.normal.Set(
+									static_cast<float>(wn.x),
+									static_cast<float>(wn.y),
+									static_cast<float>(wn.z));
+								dst.normal.TryNormalize();
+							}
+
+							if (mesh->vertex_uv.exists) {
+								const ufbx_vec2 uv = ufbx_get_vertex_vec2(&mesh->vertex_uv, ix);
+								// FBX の UV 原点は左下。DirectX は左上なので V を反転する。
+								dst.uv.Set(static_cast<float>(uv.x), 1.0f - static_cast<float>(uv.y));
+							}
+
+							dst.tangent = { 1.0f, 0.0f, 0.0f, 1.0f };
+
+							outMesh.indices.push_back(static_cast<uint32_t>(outMesh.vertics.size()));
+							outMesh.vertics.push_back(dst);
+						}
+					}
+				}
+
+				ufbx_free_scene(scene);
+
+				if (outMesh.vertics.empty() || outMesh.indices.empty()) {
+					return false;
+				}
+				return true;
+			}
+
+			// FBX 取込み基準回転 (座標系補正)。
+			// 手元アセット群は FBX の宣言軸(up=+Y)と実ジオメトリの向きがずれており、
+			// そのままだと寝る/顔が下を向く。取込み時に一定回転を掛けて立て直す。
+			// ★ここを変えると全FBXの取込み向きが変わる (エンティティ変換はゲーム操作用に不干渉)。
+			//   単位(無回転)にするには rotation を {0,0,0,1} にする。
+			// 頂点(geometry_to_world)とボーン(node_to_world; bind/anim)の両方へ前段で一貫適用
+			// するため、スキニングは保たれる (回転は det=+1 なのでワインディング判定にも不干渉)。
+			const ufbx_matrix& FbxImportBasis()
+			{
+				static const ufbx_matrix kBasis = []() {
+					ufbx_transform t = ufbx_identity_transform;
+					// 取込み向きの補正回転をクォータニオン(x,y,z,w)で指定する。
+					// 既定は無補正(単位)。アセットが寝る/顔が下を向く場合は下記から選ぶ:
+					//   X軸 +90°: x= 0.70710678f, w= 0.70710678f
+					//   X軸 -90°: x=-0.70710678f, w= 0.70710678f
+					//   Y軸 180°: y= 1.0f,          w= 0.0f
+					//   Z軸 +90°: z= 0.70710678f, w= 0.70710678f
+					// 例) X軸 -90°:
+					//   t.rotation.x = -0.70710678f; t.rotation.w = 0.70710678f;
+					t.rotation.x = 0.0f;
+					t.rotation.y = 0.0f;
+					t.rotation.z = 0.0f;
+					t.rotation.w = 1.0f; // 無補正
+					return ufbx_transform_to_matrix(&t);
+				}();
+				return kBasis;
+			}
+
+			// ufbx 行列(列ベクトル 4x3)→ エンジン行列(行ベクトル 4x4)。
+			// ufbx の各列基底をエンジンの各行へ写す (TKS ローダーと同じ転置規約)。
+			aq::math::Matrix4x4 FbxToEngineMatrix(const ufbx_matrix& m)
+			{
+				return aq::math::Matrix4x4(
+					static_cast<float>(m.m00), static_cast<float>(m.m10), static_cast<float>(m.m20), 0.0f,
+					static_cast<float>(m.m01), static_cast<float>(m.m11), static_cast<float>(m.m21), 0.0f,
+					static_cast<float>(m.m02), static_cast<float>(m.m12), static_cast<float>(m.m22), 0.0f,
+					static_cast<float>(m.m03), static_cast<float>(m.m13), static_cast<float>(m.m23), 1.0f);
+			}
+
+			// スキンクラスタが参照するボーンノードを、シーンのノード走査順という
+			// 決定的な順序で収集する。スケルタルメッシュ側とアニメ側の両ローダーが
+			// 同じ順序を使うことで、ボーンインデックスが一致する (両者は別リソース)。
+			void CollectFbxBoneNodes(const ufbx_scene* scene, std::vector<ufbx_node*>& outBoneNodes)
+			{
+				outBoneNodes.clear();
+				std::unordered_map<const ufbx_node*, bool> isBone;
+				for (size_t mi = 0; mi < scene->meshes.count; ++mi) {
+					const ufbx_mesh* mesh = scene->meshes.data[mi];
+					for (size_t di = 0; di < mesh->skin_deformers.count; ++di) {
+						const ufbx_skin_deformer* skin = mesh->skin_deformers.data[di];
+						for (size_t ci = 0; ci < skin->clusters.count; ++ci) {
+							const ufbx_skin_cluster* c = skin->clusters.data[ci];
+							if (c->bone_node) isBone[c->bone_node] = true;
+						}
+					}
+				}
+				for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
+					ufbx_node* node = scene->nodes.data[ni];
+					if (isBone.find(node) != isBone.end()) {
+						outBoneNodes.push_back(node);
+					}
+				}
+			}
+
+			// 各ボーンの親ボーンインデックス(なければ -1)を求める。ノード階層を上に辿り、
+			// 最初に見つかったボーンを親とする(非ボーン中間ノードは飛ばす)。
+			// scene->nodes は親→子順なので parents[i] < i が保証される(トポロジカル順)。
+			std::vector<int32_t> ComputeFbxBoneParents(const std::vector<ufbx_node*>& boneNodes)
+			{
+				std::unordered_map<const ufbx_node*, int32_t> idxOf;
+				for (int32_t i = 0; i < static_cast<int32_t>(boneNodes.size()); ++i) {
+					idxOf[boneNodes[i]] = i;
+				}
+				std::vector<int32_t> parents(boneNodes.size(), -1);
+				for (int32_t i = 0; i < static_cast<int32_t>(boneNodes.size()); ++i) {
+					const ufbx_node* p = boneNodes[i]->parent;
+					while (p) {
+						const auto it = idxOf.find(p);
+						if (it != idxOf.end()) { parents[i] = it->second; break; }
+						p = p->parent;
+					}
+				}
+				return parents;
+			}
+
+			// FBX をスケルタルメッシュとして読み込む。
+			// 設計: 頂点を ufbx ワールド空間へ焼き (geometry_to_world = target_axes の
+			// 軸変換込み)、逆バインドを world→bone(bind)=invert(bone_to_world) とする。
+			// ボーンは実階層 (parentIndex=親ボーン) を持たせ、アニメ側は各フレームの
+			// 親ボーン相対ローカル変換を焼き込む。CalcBoneMatrices が local を累積して
+			// world を再構築し、skin = invert(bone_to_world_bind) * bone_to_world_current
+			// で解ける。★親相対にする理由: 左手系変換で bone_to_world は det=-1(鏡映)に
+			//   なり、world をそのまま TRS 分解すると鏡映が負スケールに入りフレーム間補間で
+			//   退化・歪む。親相対 local = invert(parent_world)*child_world は det=+1(真の
+			//   回転)となり鏡映が相殺され、補間がクリーンになる。
+			// 単位変換(target_unit_meters)は使わない: 手元FBXは単位メタデータが不整合で
+			// 適用すると約1/100に潰れるため、ジオメトリ素の数値スケールを保つ。
+			bool LoadFbxSkeletalMesh(const std::string& filePath, SkeletalMeshData& outMesh)
+			{
+				ufbx_load_opts opts = {};
+				opts.target_axes              = ufbx_axes_left_handed_y_up; // DirectX 左手 Y-up (FBXの宣言軸から変換)
+				opts.generate_missing_normals = true;
+
+				ufbx_scene* scene = nullptr;
+				ufbx_error  error = {};
+				std::string resolvedFbxPath = filePath;
+				for (const std::string& candidate : BuildResourcePathCandidates(filePath)) {
+					scene = ufbx_load_file(candidate.c_str(), &opts, &error);
+					if (scene) { resolvedFbxPath = candidate; break; }
+				}
+				if (!scene) {
+					return false;
+				}
+
+				std::vector<ufbx_node*> boneNodes;
+				CollectFbxBoneNodes(scene, boneNodes);
+				if (boneNodes.empty()) {
+					ufbx_free_scene(scene);
+					return false;
+				}
+
+				std::unordered_map<const ufbx_node*, uint32_t> boneIndexOf;
+				for (uint32_t i = 0; i < boneNodes.size(); ++i) {
+					boneIndexOf[boneNodes[i]] = i;
+				}
+				const std::vector<int32_t> boneParents = ComputeFbxBoneParents(boneNodes);
+				const ufbx_matrix basis = FbxImportBasis(); // 取込み基準回転
+
+				outMesh.vertices.clear();
+				outMesh.indices.clear();
+				outMesh.bones.clear();
+				outMesh.material = {};
+
+				outMesh.bones.resize(boneNodes.size());
+				for (uint32_t i = 0; i < boneNodes.size(); ++i) {
+					const ufbx_matrix boneToWorld = ufbx_matrix_mul(&basis, &boneNodes[i]->node_to_world);
+					const ufbx_matrix worldToBone = ufbx_matrix_invert(&boneToWorld);
+					outMesh.bones[i].name = std::string(
+						boneNodes[i]->name.data ? boneNodes[i]->name.data : "", boneNodes[i]->name.length);
+					outMesh.bones[i].parentIndex     = boneParents[i];
+					outMesh.bones[i].inverseBindPose = FbxToEngineMatrix(worldToBone);
+				}
+
+				std::vector<uint32_t> triIndices;
+
+				for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
+					const ufbx_node* node = scene->nodes.data[ni];
+					if (node->is_root || node->mesh == nullptr) {
+						continue;
+					}
+					const ufbx_mesh* mesh = node->mesh;
+					if (mesh->skin_deformers.count == 0) {
+						continue;
+					}
+					const ufbx_skin_deformer* skin = mesh->skin_deformers.data[0];
+
+					const ufbx_matrix geomToWorld  = ufbx_matrix_mul(&basis, &node->geometry_to_world);
+					const ufbx_matrix normalMatrix = ufbx_matrix_for_normals(&geomToWorld);
+					// 鏡映(det<0)で反転する巻き順を戻す (静的ローダーと同じ理由)。
+					const bool flipWinding = ufbx_matrix_determinant(&geomToWorld) < 0.0;
+					triIndices.resize(mesh->max_face_triangles * 3);
+
+					if (outMesh.material.albedo.empty() && mesh->materials.count > 0) {
+						outMesh.material.albedo = FbxAlbedoTexturePath(resolvedFbxPath, mesh->materials.data[0]);
+					}
+
+					for (size_t fi = 0; fi < mesh->faces.count; ++fi) {
+						const ufbx_face face = mesh->faces.data[fi];
+						const uint32_t numTris = ufbx_triangulate_face(
+							triIndices.data(), triIndices.size(), mesh, face);
+
+						for (uint32_t ti = 0; ti < numTris * 3; ++ti) {
+							const uint32_t k  = ti % 3u;
+							const uint32_t ix = flipWinding
+								? triIndices[(ti - k) + (2u - k)] : triIndices[ti];
+							const uint32_t vi = mesh->vertex_position.indices.data[ix]; // メッシュ頂点index
+
+							aq::graphics::SkinnedVertexData dst = {};
+
+							// ワールド(bind)空間へ焼き込む (逆バインドが world→bone のため)
+							const ufbx_vec3 p  = ufbx_get_vertex_vec3(&mesh->vertex_position, ix);
+							const ufbx_vec3 wp = ufbx_transform_position(&geomToWorld, p);
+							dst.position.Set(
+								static_cast<float>(wp.x), static_cast<float>(wp.y), static_cast<float>(wp.z));
+
+							if (mesh->vertex_normal.exists) {
+								const ufbx_vec3 n  = ufbx_get_vertex_vec3(&mesh->vertex_normal, ix);
+								const ufbx_vec3 wn = ufbx_transform_direction(&normalMatrix, n);
+								dst.normal.Set(
+									static_cast<float>(wn.x), static_cast<float>(wn.y), static_cast<float>(wn.z));
+								dst.normal.TryNormalize();
+							}
+
+							if (mesh->vertex_uv.exists) {
+								const ufbx_vec2 uv = ufbx_get_vertex_vec2(&mesh->vertex_uv, ix);
+								dst.uv.Set(static_cast<float>(uv.x), 1.0f - static_cast<float>(uv.y));
+							}
+
+							dst.tangent = { 1.0f, 0.0f, 0.0f, 1.0f };
+
+							// スキンウェイト: 影響度降順の先頭4本を取り、正規化する
+							float    w[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+							uint32_t b[4] = { 0u, 0u, 0u, 0u };
+							if (vi < skin->vertices.count) {
+								const ufbx_skin_vertex sv = skin->vertices.data[vi];
+								const uint32_t take = sv.num_weights < 4u ? sv.num_weights : 4u;
+								for (uint32_t k = 0; k < take; ++k) {
+									const ufbx_skin_weight sw = skin->weights.data[sv.weight_begin + k];
+									const ufbx_skin_cluster* c = skin->clusters.data[sw.cluster_index];
+									if (c->bone_node) {
+										const auto it = boneIndexOf.find(c->bone_node);
+										if (it != boneIndexOf.end()) {
+											b[k] = it->second;
+											w[k] = static_cast<float>(sw.weight);
+										}
+									}
+								}
+							}
+							const float sum = w[0] + w[1] + w[2] + w[3];
+							if (sum > 1e-6f) {
+								w[0] /= sum; w[1] /= sum; w[2] /= sum; w[3] /= sum;
+							} else {
+								w[0] = 1.0f; // フォールバック: 先頭ボーンに束縛
+							}
+							dst.boneWeights.Set(w[0], w[1], w[2], w[3]);
+							dst.boneIndices[0] = b[0];
+							dst.boneIndices[1] = b[1];
+							dst.boneIndices[2] = b[2];
+							dst.boneIndices[3] = b[3];
+
+							outMesh.indices.push_back(static_cast<uint32_t>(outMesh.vertices.size()));
+							outMesh.vertices.push_back(dst);
+						}
+					}
+				}
+
+				ufbx_free_scene(scene);
+
+				if (outMesh.vertices.empty() || outMesh.indices.empty() || outMesh.bones.empty()) {
+					return false;
+				}
+				return true;
+			}
+
+			// FBX アニメーションを読み込む。clipSelector で対象アニメスタックを選ぶ:
+			//   空       → 先頭スタック(index 0)
+			//   数字     → そのインデックスのスタック
+			//   それ以外 → その名前のスタック (見つからなければ先頭)
+			// 選んだスタックを 30fps でサンプリングし、各ボーンの「親ボーン相対ローカル変換」
+			// を TRS へ分解してキーフレーム化する。
+			// local = invert(parent_bone_to_world) * bone_to_world (親が無い根は world のまま)。
+			// CalcBoneMatrices が local を親から累積して world を再構築し、逆バインドと合わせ
+			// skin = invert(B2W_bind) * B2W_current で解ける。★親相対にするのは、左手系変換で
+			//   生じる鏡映(det=-1)を親子間で相殺し、非根ボーンの TRS を真の回転(補間安全)に
+			//   するため (world 直接だと鏡映が負スケールに入り補間で歪む)。
+			// 単位変換は使わない (スケルタル側と同じ理由)。
+			bool LoadFbxAnimation(const std::string& filePath, const std::string& clipSelector, AnimationClipData& outClip)
+			{
+				ufbx_load_opts opts = {};
+				opts.target_axes = ufbx_axes_left_handed_y_up; // 同上
+
+				ufbx_scene* scene = nullptr;
+				ufbx_error  error = {};
+				for (const std::string& candidate : BuildResourcePathCandidates(filePath)) {
+					scene = ufbx_load_file(candidate.c_str(), &opts, &error);
+					if (scene) break;
+				}
+				if (!scene) {
+					return false;
+				}
+				if (scene->anim_stacks.count == 0) {
+					ufbx_free_scene(scene);
+					return false;
+				}
+
+				std::vector<ufbx_node*> boneNodes;
+				CollectFbxBoneNodes(scene, boneNodes);
+				if (boneNodes.empty()) {
+					ufbx_free_scene(scene);
+					return false;
+				}
+				const std::vector<int32_t> boneParents = ComputeFbxBoneParents(boneNodes);
+				const ufbx_matrix basis = FbxImportBasis(); // 取込み基準回転 (スケルタル側と一致)
+
+				// clipSelector からアニメスタックを選択する
+				size_t stackIndex = 0;
+				if (!clipSelector.empty()) {
+					const bool allDigits = clipSelector.find_first_not_of("0123456789") == std::string::npos;
+					if (allDigits) {
+						const size_t idx = static_cast<size_t>(std::stoul(clipSelector));
+						if (idx < scene->anim_stacks.count) stackIndex = idx;
+					} else {
+						for (size_t i = 0; i < scene->anim_stacks.count; ++i) {
+							const ufbx_string& n = scene->anim_stacks.data[i]->name;
+							if (std::string(n.data ? n.data : "", n.length) == clipSelector) {
+								stackIndex = i;
+								break;
+							}
+						}
+					}
+				}
+				const ufbx_anim_stack* stack = scene->anim_stacks.data[stackIndex];
+				const double t0  = stack->time_begin;
+				const double t1  = stack->time_end;
+				constexpr double kFps = 30.0;
+				double dur = t1 - t0;
+				if (dur < 0.0) dur = 0.0;
+				uint32_t numFrames = static_cast<uint32_t>(std::floor(dur * kFps + 0.5)) + 1u;
+				if (numFrames < 1u) numFrames = 1u;
+
+				const uint32_t numBones = static_cast<uint32_t>(boneNodes.size());
+				outClip.boneCount = numBones;
+				outClip.duration  = static_cast<float>(dur);
+				outClip.boneKeyframes.assign(numBones, {});
+
+				for (uint32_t f = 0; f < numFrames; ++f) {
+					const double time = t0 + static_cast<double>(f) / kFps;
+					ufbx_evaluate_opts eopts = {};
+					ufbx_error everr = {};
+					ufbx_scene* evScene = ufbx_evaluate_scene(scene, stack->anim, time, &eopts, &everr);
+					if (!evScene) {
+						continue;
+					}
+
+					for (uint32_t bi = 0; bi < numBones; ++bi) {
+						const ufbx_node* src = boneNodes[bi];
+						const ufbx_node* evNode = (src->typed_id < evScene->nodes.count)
+							? evScene->nodes.data[src->typed_id] : nullptr;
+						const ufbx_matrix rawChild = evNode ? evNode->node_to_world : src->node_to_world;
+						// 取込み基準回転を前段で掛ける (根はこれを保持し、非根では親子で相殺)
+						const ufbx_matrix childWorld = ufbx_matrix_mul(&basis, &rawChild);
+
+						// 親ボーン相対ローカル = invert(parent_world) * child_world (鏡映相殺)
+						ufbx_matrix local = childWorld;
+						if (boneParents[bi] >= 0) {
+							const ufbx_node* parentSrc = boneNodes[boneParents[bi]];
+							const ufbx_node* evParent = (parentSrc->typed_id < evScene->nodes.count)
+								? evScene->nodes.data[parentSrc->typed_id] : nullptr;
+							if (evParent) {
+								const ufbx_matrix parentWorld = ufbx_matrix_mul(&basis, &evParent->node_to_world);
+								const ufbx_matrix invParent = ufbx_matrix_invert(&parentWorld);
+								local = ufbx_matrix_mul(&invParent, &childWorld);
+							}
+						}
+						const ufbx_transform tr = ufbx_matrix_to_transform(&local);
+
+						aq::res::AnimationKeyframe kf;
+						kf.time = static_cast<float>(static_cast<double>(f) / kFps);
+						kf.translation.Set(
+							static_cast<float>(tr.translation.x),
+							static_cast<float>(tr.translation.y),
+							static_cast<float>(tr.translation.z));
+						kf.scale.Set(
+							static_cast<float>(tr.scale.x),
+							static_cast<float>(tr.scale.y),
+							static_cast<float>(tr.scale.z));
+						kf.rotation.Set(
+							static_cast<float>(tr.rotation.x),
+							static_cast<float>(tr.rotation.y),
+							static_cast<float>(tr.rotation.z),
+							static_cast<float>(tr.rotation.w));
+
+						// 連続性: 直前フレームと同半球へクォータニオンを揃える
+						if (!outClip.boneKeyframes[bi].empty()) {
+							const auto& pr = outClip.boneKeyframes[bi].back().rotation;
+							const float d = pr.x * kf.rotation.x + pr.y * kf.rotation.y
+								+ pr.z * kf.rotation.z + pr.w * kf.rotation.w;
+							if (d < 0.0f) {
+								kf.rotation.Set(-kf.rotation.x, -kf.rotation.y, -kf.rotation.z, -kf.rotation.w);
+							}
+						}
+						outClip.boneKeyframes[bi].push_back(kf);
+					}
+					ufbx_free_scene(evScene);
+				}
+
+				ufbx_free_scene(scene);
+				return true;
 			}
 
 			bool LoadTkmMeshFile(const std::string& filePath, MeshData& outMesh)

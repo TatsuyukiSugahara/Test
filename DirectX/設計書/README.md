@@ -1,6 +1,6 @@
 # aqEngine 機能別設計書(レビュー用)
 
-> 対象コミット: `144ae8a` / 最終更新: 2026-07-03
+> 対象コミット: `8f16111` / 最終更新: 2026-07-03
 
 ハイブリッドゲームエンジン(DirectX 11 / DirectX 12 / Vulkan / Xbox / UWP 対応)の機能別設計書。
 各ファイルが何をしているかをレビューできる粒度でまとめている。
@@ -46,5 +46,5 @@
 - [x] `ComponentArray.h`: `begin_()` / `eng()` の綴り(→ `begin()` / `end()`。挙動影響なし)→ タスクB-1で対応済み(`144ae8a`)
 - [x] `MAX_COMPONENT_SIZE` は実態が「個数」(→ `MAX_COMPONENT_COUNT` へ改名)→ タスクB-2で対応済み(`144ae8a`)
 - [ ] `ThreadPool` / `JobSystem` の併存(→ ThreadPool に一本化、JobSystem 凍結中)
-- [ ] リソース管理に unload / 世代機構が無く、共有キャッシュはアプリ寿命まで解放されない(シーン切替でメモリ解放不可)。→ [07 §3](07_リソース管理設計.md)
+- [x] リソース管理の unload / 未使用解放 API を追加(`8f16111`)。`UnloadUnused()` / `Unload<T>()` でシーン切替時にメモリ解放可。世代カウンタは shared_ptr 所有のため不採用。→ [07 §3](07_リソース管理設計.md)
 - [ ] `PlatformBudget` の `memoryBudgetBytes` / `maxSingleFileBytes` がロード時に未チェック(観測目標のみ)。→ [07 §6](07_リソース管理設計.md)

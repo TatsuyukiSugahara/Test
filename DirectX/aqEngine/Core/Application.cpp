@@ -347,7 +347,7 @@ namespace aq
 			aq::hid::InputManager::Get().SuppressMouse(io.WantCaptureMouse);
 		}
 #endif
-		aq::hid::InputManager::Get().Update();
+		{ AQ_PROFILE_SCOPE("Input::Update"); aq::hid::InputManager::Get().Update(); }
 		{
 			AQ_PROFILE_SCOPE("EntityContext::Update");
 			aq::ecs::EntityContext::Get().Update();
@@ -356,7 +356,7 @@ namespace aq
 			AQ_PROFILE_SCOPE("ResourceManager::Update");
 			aq::res::ResourceManager::Get().Update();
 		}
-		OnUpdate();
+		{ AQ_PROFILE_SCOPE("OnUpdate"); OnUpdate(); }
 		{
 			AQ_PROFILE_SCOPE("UI::Update");
 			auto& ui = aq::ui::UIContext::Get();
@@ -364,7 +364,7 @@ namespace aq
 			ui.Screens().Update(aq::Engine::GetDeltaTime());
 			ui.GetBatchRenderer().CollectRenderItems(ui.Screens());
 		}
-		aq::CameraManager::Get().UpdateAll();
+		{ AQ_PROFILE_SCOPE("Camera::UpdateAll"); aq::CameraManager::Get().UpdateAll(); }
 		Render();
 	}
 
@@ -462,7 +462,7 @@ namespace aq
 				ImGui::End();
 			}
 
-			OnImGuiRender();
+			{ AQ_PROFILE_SCOPE("OnImGuiRender"); OnImGuiRender(); }
 
 #ifdef AQ_DEBUG_IMGUI
 			if (ImGui::GetIO().MouseClicked[2])
@@ -470,6 +470,7 @@ namespace aq
 
 			if (showDebugUI_)
 			{
+				AQ_PROFILE_SCOPE("DebugUI");
 				if (ImGui::BeginMainMenuBar())
 				{
 					aq::ecs::EntityContext::Get().DebugRenderMenu();
@@ -483,12 +484,11 @@ namespace aq
 			}
 #endif
 
-			ImGui::Render();
-			imguiDrawData = ImGui::GetDrawData();
+			{ AQ_PROFILE_SCOPE("ImGui::Render"); ImGui::Render(); imguiDrawData = ImGui::GetDrawData(); }
 		}
 #endif
 
-		OnPreRender();
+		{ AQ_PROFILE_SCOPE("OnPreRender"); OnPreRender(); }
 
 		auto mainCmdList = std::make_unique<aq::rendering::RenderCommandList>();
 		mainCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(Engine::Get().GetMainRenderTargetHandle());
@@ -511,7 +511,7 @@ namespace aq
 			mainCmdList->Enqueue<aq::rendering::ImGuiRenderCommand>(imguiDrawData);
 #endif
 		const auto sceneRT = Engine::Get().GetMainRenderTargetHandle();
-		renderThread_.Submit(std::move(mainCmdList), renderer_.GetDisplayRTHandle(sceneRT),
+		AQ_PROFILE_SCOPE("Submit"); renderThread_.Submit(std::move(mainCmdList), renderer_.GetDisplayRTHandle(sceneRT),
 		                    mainFrame.lighting, mainFrame.shadow);
 	}
 }

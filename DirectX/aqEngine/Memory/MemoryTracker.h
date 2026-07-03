@@ -12,6 +12,9 @@ namespace aq
 		void TrackAllocation  (void* ptr, size_t size) noexcept;
 		void UntrackAllocation(void* ptr)              noexcept;
 
+		// 現在トラッキング中(未解放)のヒープ確保バイト数の総和。メモリ予算の観測に使う。
+		size_t GetTrackedBytes() noexcept;
+
 		// プログラム終了時のリーク出力 (OutputDebugStringA)
 		void ReportLeaks() noexcept;
 

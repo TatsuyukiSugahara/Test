@@ -45,5 +45,13 @@ namespace aq
 			};
 #endif
 		}
+
+		// 単一ファイルのバイト数が予算(maxSingleFileBytes)内か。0(無制限)なら常に true。
+		// Win32 は 0 のため常に true = チェック無効。UWP(2GB)でのみ実効。
+		constexpr bool IsWithinSingleFileBudget(size_t fileBytes)
+		{
+			constexpr size_t maxBytes = GetResourceBudget().maxSingleFileBytes;
+			return maxBytes == 0 || fileBytes <= maxBytes;
+		}
 	}
 }

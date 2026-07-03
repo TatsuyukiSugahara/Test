@@ -49,6 +49,11 @@ namespace aq
 			// メモリ予算の設計目標(バイト)。0 = 上限なし。デバッグ表示等に用いる。
 			size_t GetMemoryBudgetBytes() const noexcept { return memoryBudgetBytes_; }
 
+			// 現在トラッキング中のヒープ確保バイト数(_DEBUG のみ実数。Release は 0)。
+			size_t GetTrackedBytes() const noexcept;
+			// メモリ予算(設計目標)を超過しているか。予算 0 または実数不明(Release)なら false。
+			bool   IsOverMemoryBudget() const noexcept;
+
 			// フレーム終端で呼び出す。OSへの解放は行わず、オフセットを先頭に戻すだけ。
 			void ResetStackAllocator() noexcept { stackAllocator_->Reset(); }
 

@@ -2,6 +2,7 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Resource.h"
 #include "Engine.h"
+#include "Platform/PlatformBudget.h"
 #include <cctype>
 #include <cstdio>
 #include <DirectXMath.h>
@@ -22,6 +23,21 @@ namespace aq
 		}
 
 		/*******************************************/
+
+
+		// ファイルサイズをプラットフォーム予算と照合する。超過はログして false(ロード拒否)。
+		bool CheckFileBudget(size_t fileBytes, const char* path)
+		{
+			if (platform::IsWithinSingleFileBudget(fileBytes)) {
+				return true;
+			}
+			char msg[300];
+			snprintf(msg, sizeof(msg),
+				"  [resource] rejected (exceeds maxSingleFileBytes): %s (%llu bytes)",
+				path ? path : "?", static_cast<unsigned long long>(fileBytes));
+			aq::StartupLog(msg);
+			return false;
+		}
 
 
 		void ResourceLoaderBase::StartAsync()
@@ -131,6 +147,10 @@ namespace aq
 
 			fseek(fp, 0, SEEK_END);
 			const long fileSize = ftell(fp);
+			if (fileSize > 0 && !CheckFileBudget(static_cast<size_t>(fileSize), requestPath_.c_str())) {
+				fclose(fp);
+				return false;
+			}
 			fseek(fp, 0, SEEK_SET);
 
 			uint8_t* binHead = new uint8_t[fileSize];
@@ -296,6 +316,15 @@ namespace aq
 				*fp = nullptr;
 				for (const std::string& path : BuildResourcePathCandidates(filePath)) {
 					if (fopen_s(fp, path.c_str(), "rb") == 0 && *fp) {
+					// 予算照合: サイズ取得 → 照合 → 先頭へ巻き戻し。超過なら拒否。
+					std::fseek(*fp, 0, SEEK_END);
+					const long budgetSize = std::ftell(*fp);
+					std::fseek(*fp, 0, SEEK_SET);
+					if (budgetSize > 0 && !CheckFileBudget(static_cast<size_t>(budgetSize), path.c_str())) {
+						std::fclose(*fp);
+						*fp = nullptr;
+						return false;
+					}
 						if (openedPath) {
 							*openedPath = path;
 						}
@@ -543,6 +572,16 @@ namespace aq
 			{
 				FILE* fp = nullptr;
 				fopen_s(&fp, filePath.c_str(), "rb");
+				// 予算照合(超過なら拒否)。
+				if (fp) {
+					std::fseek(fp, 0, SEEK_END);
+					const long budgetSize = std::ftell(fp);
+					std::fseek(fp, 0, SEEK_SET);
+					if (budgetSize > 0 && !CheckFileBudget(static_cast<size_t>(budgetSize), filePath.c_str())) {
+						std::fclose(fp);
+						return false;
+					}
+				}
 				if (!fp) {
 					return false;
 				}
@@ -908,6 +947,15 @@ namespace aq
 
 		bool TextureLoader::Loading()
 		{
+			// 予算照合(best-effort): パスが解決できればファイルサイズを照合。
+			{
+				std::error_code budgetEc;
+				const auto budgetSize = std::filesystem::file_size(requestPath_, budgetEc);
+				if (!budgetEc && !CheckFileBudget(static_cast<size_t>(budgetSize), requestPath_.c_str())) {
+					return false;
+				}
+			}
+
 			wchar_t filePath[256];
 			size_t ret;
 			mbstowcs_s(&ret, filePath, requestPath_.c_str(), ArraySize(filePath));

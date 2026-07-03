@@ -43,6 +43,22 @@ namespace aq
 
 		// IAllocator.h で宣言された関数の実装。
 		// MemoryManager 未初期化時 (main 実行前の静的初期化など) はフォールバックの HeapAllocator を返す。
+		size_t MemoryManager::GetTrackedBytes() const noexcept
+		{
+#ifdef _DEBUG
+			return memory::GetTrackedBytes();
+#else
+			return 0;
+#endif
+		}
+
+		bool MemoryManager::IsOverMemoryBudget() const noexcept
+		{
+			const size_t tracked = GetTrackedBytes();
+			return memoryBudgetBytes_ != 0 && tracked > memoryBudgetBytes_;
+		}
+
+
 		IAllocator& GetDefaultAllocator() noexcept
 		{
 			if (MemoryManager::IsInitialized()) {

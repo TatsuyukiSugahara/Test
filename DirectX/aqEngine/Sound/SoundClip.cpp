@@ -2,6 +2,8 @@
 #include "SoundClip.h"
 #include "Decoder/WavDecoder.h"
 #include "Decoder/MFDecoder.h"
+#include "Resource/Resource.h"
+#include <filesystem>
 #include <algorithm>
 #include <string>
 
@@ -26,6 +28,15 @@ namespace aq
 			SoundClipData* dst = static_cast<SoundClip*>(resource_.get())->GetMutable();
 			if (dst == nullptr) {
 				return false;
+			}
+
+			// 予算照合(best-effort)。
+			{
+				std::error_code budgetEc;
+				const auto budgetSize = std::filesystem::file_size(requestPath_, budgetEc);
+				if (!budgetEc && !aq::res::CheckFileBudget(static_cast<size_t>(budgetSize), requestPath_.c_str())) {
+					return false;
+				}
 			}
 
 			std::string lower = requestPath_;

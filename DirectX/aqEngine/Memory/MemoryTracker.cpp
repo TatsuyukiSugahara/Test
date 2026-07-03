@@ -3,6 +3,7 @@
 
 #include "MemoryTracker.h"
 #include <cstdio>
+#include <atomic>
 #include <windows.h>
 
 
@@ -29,6 +30,9 @@ namespace aq
 
 		// 再帰防止フラグ: TrackingData の map 操作が内部で new を呼ぶ際の無限再帰を防ぐ
 		thread_local bool g_inTracking = false;
+
+		// メモリ予算の観測用: 現在未解放のヒープ確保バイト数の総和。
+		std::atomic<size_t> g_liveBytes{ 0 };
 
 
 		struct TrackingData
@@ -66,6 +70,7 @@ namespace aq
 				auto& data = GetData();
 				std::lock_guard<std::mutex> lock(data.mutex);
 				data.map[ptr] = AllocationInfo{ size, src.file, src.line, src.func };
+				g_liveBytes.fetch_add(size, std::memory_order_relaxed);
 			}
 			g_inTracking = false;
 		}
@@ -81,9 +86,19 @@ namespace aq
 			{
 				auto& data = GetData();
 				std::lock_guard<std::mutex> lock(data.mutex);
-				data.map.erase(ptr);
+				auto it = data.map.find(ptr);
+				if (it != data.map.end()) {
+					g_liveBytes.fetch_sub(it->second.size, std::memory_order_relaxed);
+					data.map.erase(it);
+				}
 			}
 			g_inTracking = false;
+		}
+
+
+		size_t GetTrackedBytes() noexcept
+		{
+			return g_liveBytes.load(std::memory_order_relaxed);
 		}
 
 

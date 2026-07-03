@@ -35,6 +35,15 @@ public:\
 	static int32_t ID() { return aq::util::ComputeCrc32(#name); }
 
 
+		/**
+		 * ファイルサイズをプラットフォーム予算(PlatformBudget)と照合する。
+		 * maxSingleFileBytes 超過なら診断ログを出して false を返す(ロード拒否)。予算内なら true。
+		 * ローダーの Loading()(ワーカースレッド)からファイルサイズ確定後に呼ぶ。path は診断用。
+		 * Win32 は maxSingleFileBytes==0(無制限)のため常に true。
+		 */
+		bool CheckFileBudget(size_t fileBytes, const char* path);
+
+
 
 
 		/**

@@ -50,6 +50,17 @@ Dev Mode の UWP は割り当てが厳格。**「Game」として分類しない
 - **大アセットは 2GB/ファイル制限**に注意。単一の巨大パックを作らず分割する。
 - **CPU 4+2 コア**:`ThreadPool` のワーカ数を Xbox ビルドで 4〜6 に固定(`std::thread::hardware_concurrency()` 任せにしない)。
 
+### Feature Level(FL 値の一元管理)
+
+他の設計書はここを参照し、本文中では条件表記(例: 「FL11_0 未満」)を使うこと。出典は `RenderConfig.h`(`aq.h` から include)冒頭コメント。
+
+| 分類 | グラフィックス API と Feature Level | 状況 |
+|---|---|---|
+| **App(標準アプリ)分類** | D3D12 は WARP のみ(実 GPU 不可・非実用)。実用は **D3D11 + FL10_0** フォールバック経路(`ENGINE_GRAPHICS_D3D11` を明示定義、`IsComputeSupported()==false` で Bloom/海/コンピュートを落とす)。 | FL10_0 |
+| **Game 分類** | 実 GPU で **D3D12 が FL12_0 まで**通る(既定 `ENGINE_GRAPHICS_D3D12`)。 | 実機フル描画到達済み(コミット `453b4c7`) |
+
+「FL11_0 未満」= App 分類の FL10_0 経路を指す。compute/UAV/間接描画/リードバックは FL11_0 以上でのみ有効。
+
 ---
 
 ## 2. 現状評価:どこまで流用できるか

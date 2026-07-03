@@ -23,7 +23,13 @@ namespace app
 	GameInput::GameInput()
 	{
 		SetupMaps();
+#if defined(AQ_PLATFORM_UWP)
+		// Xbox(UWP)はキーボードが無いのでゲームパッドマップを既定にする
+		// (左スティック=移動 / 右スティック=カメラ / D-Pad=移動)。
+		UseGamepadMap();
+#else
 		UseKeyboardMap();
+#endif
 	}
 
 

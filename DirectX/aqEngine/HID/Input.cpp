@@ -297,20 +297,17 @@ namespace aq
 		InputManager::InputManager()
 			: lastTime_(Clock::now())
 		{
-			// パッドバックエンドはプラットフォームで選択(既定: XInput)。
+			// パッドバックエンドはプラットフォームで選択(Win32=XInput / UWP=Windows.Gaming.Input)。
 			// DirectInput の Setup 成否に依らず動くよう、ここで生成しておく。
-			// UWP は当面バックエンドなし(backend_ null → Pad は no-op。Phase 4 で GameInput)。
 			for (uint32_t i = 0; i < MAX_PAD_COUNT; ++i)
 			{
 				pads_[i].SetIndex(i);
 			}
-#if !defined(AQ_PLATFORM_UWP)
 			padBackend_ = std::make_unique<DefaultPadBackend>();
 			for (uint32_t i = 0; i < MAX_PAD_COUNT; ++i)
 			{
 				pads_[i].SetBackend(padBackend_.get());
 			}
-#endif
 		}
 
 

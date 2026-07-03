@@ -6,6 +6,8 @@
 #include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.Storage.h>   // StorageFolder::Path() の consume 定義に必要
 #include <winrt/Windows.Graphics.Display.h>
+#include <winrt/Windows.System.h>    // MemoryManager(アプリメモリ上限/使用量)
+#include <thread>                    // hardware_concurrency
 
 using namespace winrt;
 using namespace winrt::Windows::UI::Core;
@@ -18,6 +20,32 @@ namespace aq
 	{
 		namespace
 		{
+			// 起動時の実機リソースプロファイル(CPU コア数 / アプリメモリ上限)をログに出す。
+			// Xbox の App/Game 種別で割当が変わるため、PlatformBudget 調整の実測に使う。
+			void LogSystemInfo()
+			{
+				SYSTEM_INFO si = {};
+				::GetNativeSystemInfo(&si);
+				char b[200];
+				sprintf_s(b, "  [sysinfo] CPU: dwNumberOfProcessors=%u, hardware_concurrency=%u",
+				          si.dwNumberOfProcessors, std::thread::hardware_concurrency());
+				aq::StartupLog(b);
+				try
+				{
+					const uint64_t limit = winrt::Windows::System::MemoryManager::AppMemoryUsageLimit();
+					const uint64_t used  = winrt::Windows::System::MemoryManager::AppMemoryUsage();
+					sprintf_s(b, "  [sysinfo] AppMemory: limit=%lluMB, usage=%lluMB",
+					          static_cast<unsigned long long>(limit >> 20),
+					          static_cast<unsigned long long>(used >> 20));
+					aq::StartupLog(b);
+				}
+				catch (...)
+				{
+					aq::StartupLog("  [sysinfo] MemoryManager query failed");
+				}
+			}
+
+
 			std::string ToUtf8(std::wstring_view text)
 			{
 				if (text.empty()) return std::string();
@@ -42,6 +70,8 @@ namespace aq
 				{
 					exitRequested_ = true;
 				});
+
+			LogSystemInfo();
 		}
 
 

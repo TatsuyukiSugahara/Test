@@ -240,6 +240,7 @@
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
     <ClCompile Include="HID\XInputPadBackend.cpp" />
+    <ClCompile Include="HID\WinRTGamepadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\JobSystem.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
@@ -458,6 +459,7 @@
     <ClInclude Include="HID\InputBinding.h" />
     <ClInclude Include="HID\PadBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />
+    <ClInclude Include="HID\WinRTGamepadBackend.h" />
     <ClInclude Include="Util\JobSystem.h" />
     <ClInclude Include="Math\Bounds.h" />
     <ClInclude Include="Math\Matrix.h" />
@@ -609,6 +611,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets')" />
+    <Import Project="..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets" Condition="Exists('..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets')" />
   </ImportGroup>
   <ItemGroup>
     <ProjectReference Include="..\ThirdParty\imgui\imgui.vcxproj">
@@ -624,5 +627,6 @@
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props'))" />
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+    <Error Condition="!Exists('..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\directxtex_uwp.2026.5.8.1\build\native\directxtex_uwp.targets'))" />
   </Target>
 </Project>

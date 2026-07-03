@@ -9,14 +9,11 @@
 //#define ENGINE_GRAPHICS_VULKAN
 
 #if !defined(ENGINE_GRAPHICS_D3D11) && !defined(ENGINE_GRAPHICS_D3D12) && !defined(ENGINE_GRAPHICS_VULKAN)
-#if defined(AQ_PLATFORM_UWP)
-// Xbox One の UWP アプリはハードウェア GPU (SraKmd) が D3D12 を全フィーチャーレベルで
-// 非対応 (DXGI_ERROR_UNSUPPORTED)。成功するのは WARP ソフトウェアのみで実用にならない。
-// UWP(Xbox 道A)ではハードウェア描画可能な D3D11 を既定バックエンドにする。
-#define ENGINE_GRAPHICS_D3D11
-#else
+// 既定は D3D12。Xbox の UWP(道A)も、Dev Home の「ゲーム」種別なら実 GPU で D3D12 が
+// FL12_0 まで通る(「アプリ」種別は D3D12 が WARP のみで非実用)。
+// 「アプリ」種別/FL10 機向けの D3D11 + FL10 フォールバックは、ENGINE_GRAPHICS_D3D11 を
+// 明示定義すれば選べる(IsComputeSupported 経由で Bloom/海/コンピュート等を落とす)。
 #define ENGINE_GRAPHICS_D3D12
-#endif
 #endif
 
 #if (defined(ENGINE_GRAPHICS_D3D11) + defined(ENGINE_GRAPHICS_D3D12) + defined(ENGINE_GRAPHICS_VULKAN)) > 1
@@ -67,20 +64,27 @@
 #include <dinput.h>
 
 
-// DirectXTex の prebuilt lib は静的CRT(/MT)。UWP は /MD 必須で衝突する上、
-// UWP 用の /MD ビルドが無いため、UWP では lib をリンクしない(呼び出し側もガード)。
-// テクスチャ/地形画像の読み込みは UWP で当面 no-op(将来 /MD 版 DirectXTex で復活)。
-#if !defined(AQ_PLATFORM_UWP)
+// DirectXTex:
+//  - デスクトップ: ThirdParty の prebuilt lib(静的CRT /MT)+ ヘッダを使う。
+//  - UWP(Xbox): /MD 必須で prebuilt(/MT)と衝突するため、NuGet パッケージ
+//    "directxtex_uwp" が提供する /MD ビルド(ヘッダ + lib)を使う。lib は NuGet の
+//    .targets が自動リンクするので pragma comment(lib) は不要。ヘッダは <DirectXTex.h>。
+#if defined(AQ_PLATFORM_UWP)
+#pragma warning(push)
+#pragma warning(disable:4065)
+#include <DirectXTex.h>            // NuGet: directxtex_uwp (/MD, WINAPI_FAMILY_APP)
+#pragma warning(pop)
+#else
 #if _DEBUG
 	#pragma comment(lib, "DirectXTex/x64/Debug/DirectXTex.lib")
 #else
 	#pragma comment(lib, "DirectXTex/x64/Release/DirectXTex.lib")
 #endif
-#endif
 #pragma warning(push)
 #pragma warning(disable:4065)
 #include <DirectXTex\DirectXTex.h>
 #pragma warning(pop)
+#endif
 
 #include <vector>
 #include <array>

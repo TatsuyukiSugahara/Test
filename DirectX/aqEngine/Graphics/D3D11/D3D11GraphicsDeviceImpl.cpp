@@ -8,6 +8,53 @@
 #include "Graphics/GraphicsDevice.h"
 #if defined(AQ_PLATFORM_UWP)
 #include <dxgi1_2.h>   // IDXGIFactory2 / CreateSwapChainForCoreWindow / DXGI_SWAP_CHAIN_DESC1
+#include <dxgi1_6.h>   // IDXGIFactory4 / IDXGIAdapter1 (D3D12 probe 用)
+#include <d3d12.h>     // D3D12 サポート probe 用(バックエンドは D3D11 のまま)
+#pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "dxgi.lib")
+
+namespace {
+	// 【診断】このデバイス(Xbox の App/Game 種別など)で D3D12 がハードウェアで通るかを調べる。
+	// バックエンドは切り替えず、D3D12CreateDevice を各アダプタ/各 FL で試すだけ。
+	// ppDevice=nullptr で「作らずに対応可否だけ」チェック(対応時 S_FALSE、非対応で失敗)。
+	void ProbeD3D12Support()
+	{
+		aq::StartupLog("  [probe] === D3D12 hardware support ===");
+		IDXGIFactory4* factory = nullptr;
+		if (FAILED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))) || !factory) {
+			aq::StartupLog("  [probe] CreateDXGIFactory2 failed");
+			return;
+		}
+		static const D3D_FEATURE_LEVEL levels[] = {
+			D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0,
+			D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+		};
+		IDXGIAdapter1* adapter = nullptr;
+		for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+			DXGI_ADAPTER_DESC1 ad = {};
+			adapter->GetDesc1(&ad);
+			{
+				char nm[220];
+				sprintf_s(nm, "  [probe] adapter %u: flags=0x%X vram=%lluMB desc=%ls",
+				          i, ad.Flags,
+				          static_cast<unsigned long long>(ad.DedicatedVideoMemory >> 20),
+				          ad.Description);
+				aq::StartupLog(nm);
+			}
+			for (D3D_FEATURE_LEVEL fl : levels) {
+				HRESULT h = D3D12CreateDevice(adapter, fl, __uuidof(ID3D12Device), nullptr);
+				char rl[96];
+				sprintf_s(rl, "  [probe]   D3D12 FL 0x%X -> hr=0x%08X%s",
+				          static_cast<unsigned>(fl), static_cast<unsigned>(h),
+				          SUCCEEDED(h) ? "  <== OK" : "");
+				aq::StartupLog(rl);
+			}
+			adapter->Release();
+			adapter = nullptr;
+		}
+		factory->Release();
+	}
+}
 #endif
 
 
@@ -57,6 +104,10 @@ namespace aq
 				          static_cast<int>(featureLevel_ >= D3D_FEATURE_LEVEL_11_0), static_cast<unsigned>(featureLevel_));
 				aq::StartupLog(b);
 			}
+#if defined(AQ_PLATFORM_UWP)
+			// 【診断】Xbox の種別(App/Game)等で D3D12 がハードウェアで通るか調べる(バックエンドは D3D11 のまま)。
+			ProbeD3D12Support();
+#endif
 			if (!CreateMainRenderTargets(width, height)) {
 				aq::StartupLog("  [D3D11] CreateMainRenderTargets FAILED");
 				return false;

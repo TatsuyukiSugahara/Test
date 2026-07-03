@@ -142,6 +142,36 @@ namespace aq
 		}
 
 
+		void D3D11GraphicsDeviceImpl::OnSuspend()
+		{
+			// PLM: サスペンド前にコンテキストをクリア&フラッシュ。
+			if (deviceContext_)
+			{
+				deviceContext_->ClearState();
+				deviceContext_->Flush();
+			}
+#if defined(AQ_PLATFORM_UWP)
+			// IDXGIDevice3::Trim() で D3D11 ドライバの未使用メモリを解放(UWP サスペンド要件。
+			// 呼ばないと復帰後に描画が壊れることがある)。
+			if (device_)
+			{
+				IDXGIDevice3* dxgiDevice = nullptr;
+				if (SUCCEEDED(device_->QueryInterface(__uuidof(IDXGIDevice3),
+				                                      reinterpret_cast<void**>(&dxgiDevice))) && dxgiDevice)
+				{
+					dxgiDevice->Trim();
+					dxgiDevice->Release();
+				}
+			}
+#endif
+		}
+
+
+		void D3D11GraphicsDeviceImpl::OnResume()
+		{
+		}
+
+
 		void D3D11GraphicsDeviceImpl::SetupRenderContext(RenderContext& outContext)
 		{
 			outContext.SetImpl(std::make_unique<D3D11RenderContextImpl>(deviceContext_));

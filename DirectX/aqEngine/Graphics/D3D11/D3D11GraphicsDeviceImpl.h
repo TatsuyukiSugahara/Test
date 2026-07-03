@@ -23,6 +23,8 @@ namespace aq
 
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) override;
 			void Finalize() override;
+			void OnSuspend() override;   // PLM: ClearState + Flush + IDXGIDevice3::Trim
+			void OnResume()  override;
 			void SetupRenderContext(RenderContext& outContext) override;
 			uint32_t GetMainRenderTargetCount() const override { return MAIN_RT_COUNT; }
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;

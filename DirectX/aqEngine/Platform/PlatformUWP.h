@@ -20,6 +20,8 @@ namespace aq
 		private:
 			winrt::Windows::UI::Core::CoreWindow window_;
 			winrt::event_token                   closedToken_{};
+			winrt::event_token                   suspendingToken_{};   // PLM
+			winrt::event_token                   resumingToken_{};
 			std::string                          contentRoot_;
 			bool                                 exitRequested_ = false;
 

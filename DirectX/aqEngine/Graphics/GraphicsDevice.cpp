@@ -42,6 +42,10 @@ namespace aq
 		}
 
 
+		void GraphicsDevice::OnSuspend() { if (impl_) impl_->OnSuspend(); }
+		void GraphicsDevice::OnResume()  { if (impl_) impl_->OnResume();  }
+
+
 		void GraphicsDevice::SetupRenderContext(RenderContext& outContext)
 		{
 			impl_->SetupRenderContext(outContext);

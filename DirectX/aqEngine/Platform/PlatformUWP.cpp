@@ -7,11 +7,14 @@
 #include <winrt/Windows.Storage.h>   // StorageFolder::Path() の consume 定義に必要
 #include <winrt/Windows.Graphics.Display.h>
 #include <winrt/Windows.System.h>    // MemoryManager(アプリメモリ上限/使用量)
+#include <winrt/Windows.ApplicationModel.Core.h>  // CoreApplication(Suspending/Resuming)
 #include <thread>                    // hardware_concurrency
+#include "Graphics/GraphicsDevice.h" // PLM: サスペンド時に GPU をアイドル化/Trim
 
 using namespace winrt;
 using namespace winrt::Windows::UI::Core;
 using namespace winrt::Windows::ApplicationModel;
+using namespace winrt::Windows::ApplicationModel::Core;
 using namespace winrt::Windows::Graphics::Display;
 
 namespace aq
@@ -71,6 +74,24 @@ namespace aq
 					exitRequested_ = true;
 				});
 
+			// PLM: サスペンド/レジューム。サスペンド前に GPU をアイドル化し、
+			// D3D11 なら IDXGIDevice3::Trim() で未使用メモリを解放する(復帰後の描画破壊防止)。
+			// Suspending は deferral を取得して処理完了まで OS の中断を待たせる。
+			suspendingToken_ = CoreApplication::Suspending(
+				[this](winrt::Windows::Foundation::IInspectable const&,
+				       winrt::Windows::ApplicationModel::SuspendingEventArgs const& e)
+				{
+					auto deferral = e.SuspendingOperation().GetDeferral();
+					OnSuspend();
+					deferral.Complete();
+				});
+			resumingToken_ = CoreApplication::Resuming(
+				[this](winrt::Windows::Foundation::IInspectable const&,
+				       winrt::Windows::Foundation::IInspectable const&)
+				{
+					OnResume();
+				});
+
 			LogSystemInfo();
 		}
 
@@ -81,6 +102,8 @@ namespace aq
 			{
 				window_.Closed(closedToken_);
 			}
+			CoreApplication::Suspending(suspendingToken_);
+			CoreApplication::Resuming(resumingToken_);
 		}
 
 
@@ -103,12 +126,17 @@ namespace aq
 
 		void PlatformUWP::OnSuspend()
 		{
-			// PLM: suspend 中は 128MB 以下に収める必要がある(Phase 4 で GPU/大バッファ解放)。
+			aq::StartupLog("  [PLM] OnSuspend (GPU idle / trim)");
+			// GPU をアイドル化し、可能なら未使用 GPU メモリを解放する。
+			// (D3D12=WaitForGPU / D3D11=ClearState+Flush+IDXGIDevice3::Trim)
+			aq::graphics::GraphicsDevice::Get().OnSuspend();
 		}
 
 
 		void PlatformUWP::OnResume()
 		{
+			aq::StartupLog("  [PLM] OnResume");
+			aq::graphics::GraphicsDevice::Get().OnResume();
 		}
 
 

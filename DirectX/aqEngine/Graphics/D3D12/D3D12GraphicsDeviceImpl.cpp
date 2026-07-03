@@ -152,6 +152,19 @@ namespace aq
 		}
 
 
+		void D3D12GraphicsDeviceImpl::OnSuspend()
+		{
+			// PLM: サスペンド前に実行中の GPU コマンドを完了させアイドルにする。
+			// (D3D12 には IDXGIDevice3::Trim 相当が無いため、確実な GPU アイドル化を行う)
+			if (commandQueue_ && fence_) WaitForGPU();
+		}
+
+
+		void D3D12GraphicsDeviceImpl::OnResume()
+		{
+		}
+
+
 		bool D3D12GraphicsDeviceImpl::CreateDeviceAndQueues()
 		{
 #ifdef _DEBUG

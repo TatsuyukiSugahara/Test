@@ -44,6 +44,10 @@ namespace aq
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height);
 			void Finalize();
 
+			// PLM(UWP)サスペンド/レジューム。GPU アイドル化・メモリ解放を実装へ委譲。
+			void OnSuspend();
+			void OnResume();
+
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);
 

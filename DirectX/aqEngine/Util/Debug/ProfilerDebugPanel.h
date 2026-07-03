@@ -49,7 +49,6 @@ namespace aq
 			size_t memBudget_ = 0;
 			size_t memCount_  = 0;
 			bool   memOver_   = false;
-			int    memRefreshCountdown_ = 0;  // 内訳集計の間引き用カウンタ
 #ifdef _DEBUG
 			std::vector<memory::MemoryUsageEntry> memUsage_;
 #endif

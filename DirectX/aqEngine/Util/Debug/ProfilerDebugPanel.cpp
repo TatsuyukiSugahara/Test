@@ -43,7 +43,8 @@ namespace aq
 					memOver_   = mm.IsOverMemoryBudget();
 				}
 #ifdef _DEBUG
-				memCount_ = memory::GetTrackedCount();  // 軽量(件数のみ)。内訳集計は RenderMemory で間引く。
+				memory::CaptureUsageBySource(memUsage_);
+				memCount_ = memory::GetTrackedCount();
 #endif
 			}
 
@@ -401,10 +402,6 @@ namespace aq
 			}
 
 #ifdef _DEBUG
-			bool memRefresh = ImGui::Button("内訳を更新");
-			if (!paused_ && --memRefreshCountdown_ <= 0) { memRefresh = true; memRefreshCountdown_ = 15; }
-			if (memRefresh) memory::CaptureUsageBySource(memUsage_);
-			ImGui::SameLine();
 			ImGui::Text("未解放: %zu 件 / %zu サイト  (ソース情報なし = engineNewWith 未使用分)",
 			            memCount_, memUsage_.size());
 

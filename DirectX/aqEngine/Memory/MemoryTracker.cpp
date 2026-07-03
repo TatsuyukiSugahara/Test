@@ -102,6 +102,52 @@ namespace aq
 		}
 
 
+		size_t GetTrackedCount() noexcept
+		{
+			auto& data = GetData();
+			std::lock_guard<std::mutex> lock(data.mutex);
+			return data.map.size();
+		}
+
+
+		void CaptureUsageBySource(std::vector<MemoryUsageEntry>& out) noexcept
+		{
+			out.clear();
+			// 集計中の一時確保が map / lock へ再入しないようガードする。
+			const bool prev = g_inTracking;
+			g_inTracking = true;
+			{
+				auto& data = GetData();
+				std::lock_guard<std::mutex> lock(data.mutex);
+
+				// (file,line,func) をキーに集計(file/func はサイト固有の安定ポインタ)。
+				struct Key { const char* file; int line; const char* func;
+					bool operator==(const Key& o) const { return file == o.file && line == o.line && func == o.func; } };
+				struct KeyHash { size_t operator()(const Key& k) const {
+					size_t h = std::hash<const void*>()(k.file);
+					h ^= std::hash<int>()(k.line) + 0x9e3779b9u + (h << 6) + (h >> 2);
+					h ^= std::hash<const void*>()(k.func) + 0x9e3779b9u + (h << 6) + (h >> 2);
+					return h; } };
+				std::unordered_map<Key, size_t, KeyHash> agg;
+				agg.reserve(data.map.size());
+
+				for (const auto& [ptr, info] : data.map) {
+					(void)ptr;
+					const Key key{ info.file, info.line, info.func };
+					auto it = agg.find(key);
+					if (it == agg.end()) {
+						agg.emplace(key, out.size());
+						out.push_back(MemoryUsageEntry{ info.file, info.func, info.line, info.size, 1 });
+					} else {
+						out[it->second].bytes += info.size;
+						out[it->second].count += 1;
+					}
+				}
+			}
+			g_inTracking = prev;
+		}
+
+
 		void ReportLeaks() noexcept
 		{
 			auto& data = GetData();

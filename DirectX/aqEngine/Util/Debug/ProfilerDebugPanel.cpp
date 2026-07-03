@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <imgui/imgui.h>
 #include "RenderConfig.h"
+#include "Memory/MemoryManager.h"
 
 
 namespace aq
@@ -34,6 +35,17 @@ namespace aq
 			{
 				Profiler::Get().CaptureSnapshot(snapshot_);
 				snapshotFrameMs_ = Profiler::Get().FrameMs();
+				// メモリ観測も同時に凍結する。
+				if (memory::MemoryManager::IsInitialized()) {
+					auto& mm   = memory::MemoryManager::Get();
+					memBytes_  = mm.GetTrackedBytes();
+					memBudget_ = mm.GetMemoryBudgetBytes();
+					memOver_   = mm.IsOverMemoryBudget();
+				}
+#ifdef _DEBUG
+				memory::CaptureUsageBySource(memUsage_);
+				memCount_ = memory::GetTrackedCount();
+#endif
 			}
 
 			if (ImGui::Button(paused_ ? "Resume" : "Stop"))
@@ -89,6 +101,16 @@ namespace aq
 			const double maxMs = (mainMs > renderMs) ? mainMs : renderMs;
 			ImGui::Text("Main CPU: %.2f ms   Render CPU: %.2f ms   (sum %.2f / max %.2f)",
 			            mainMs, renderMs, sumMs, maxMs);
+			{
+				const double memMb = static_cast<double>(memBytes_) / (1024.0 * 1024.0);
+				if (memBudget_ > 0) {
+					const double bMb = static_cast<double>(memBudget_) / (1024.0 * 1024.0);
+					ImGui::TextColored(memOver_ ? ImVec4(1.0f, 0.4f, 0.4f, 1.0f) : ImVec4(0.7f, 0.9f, 1.0f, 1.0f),
+					                   "Memory: %.1f / %.1f MB", memMb, bMb);
+				} else {
+					ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Memory: %.1f MB", memMb);
+				}
+			}
 			// 重複の目安: Frame が sum に近い→直列的、max に近い→重複できている。
 			if (frameMs > 0.0 && sumMs > 0.0)
 			{
@@ -103,6 +125,10 @@ namespace aq
 
 			// メイン表示: タイムライン (横=時間 / 縦=スレッド)
 			RenderTimeline();
+
+			ImGui::Separator();
+
+			RenderMemory();
 
 			ImGui::Separator();
 
@@ -350,6 +376,80 @@ namespace aq
 			}
 
 			ImGui::EndChild();
+		}
+
+
+		void ProfilerDebugPanel::RenderMemory()
+		{
+			if (!ImGui::CollapsingHeader("メモリ", ImGuiTreeNodeFlags_DefaultOpen))
+				return;
+
+			const double mb       = static_cast<double>(memBytes_)  / (1024.0 * 1024.0);
+			const double budgetMb = static_cast<double>(memBudget_) / (1024.0 * 1024.0);
+
+			if (memBudget_ > 0) {
+				const float frac = static_cast<float>(static_cast<double>(memBytes_) / static_cast<double>(memBudget_));
+				char overlay[64];
+				snprintf(overlay, sizeof(overlay), "%.1f / %.1f MB (%.0f%%)", mb, budgetMb, frac * 100.0f);
+				const ImVec4 col = memOver_ ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f) : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
+				ImGui::PushStyleColor(ImGuiCol_PlotHistogram, col);
+				ImGui::ProgressBar(frac > 1.0f ? 1.0f : frac, ImVec2(-1.0f, 0.0f), overlay);
+				ImGui::PopStyleColor();
+				if (memOver_)
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "予算超過!");
+			} else {
+				ImGui::Text("使用中: %.1f MB  (予算: 無制限)", mb);
+			}
+
+#ifdef _DEBUG
+			ImGui::Text("未解放: %zu 件 / %zu サイト  (ソース情報なし = engineNewWith 未使用分)",
+			            memCount_, memUsage_.size());
+
+			// bytes 降順に並べて表示 (トップ N)
+			std::vector<const memory::MemoryUsageEntry*> rows;
+			rows.reserve(memUsage_.size());
+			for (const memory::MemoryUsageEntry& e : memUsage_)
+				rows.push_back(&e);
+			std::sort(rows.begin(), rows.end(),
+				[](const memory::MemoryUsageEntry* a, const memory::MemoryUsageEntry* b) { return a->bytes > b->bytes; });
+
+			const ImGuiTableFlags flags =
+				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
+				ImGuiTableFlags_ScrollY       | ImGuiTableFlags_Resizable |
+				ImGuiTableFlags_SizingStretchProp;
+
+			if (ImGui::BeginTable("##mem_by_source", 3, flags, ImVec2(0.0f, 220.0f))) {
+				ImGui::TableSetupColumn("確保サイト", ImGuiTableColumnFlags_WidthStretch, 0.65f);
+				ImGui::TableSetupColumn("サイズ",     ImGuiTableColumnFlags_WidthStretch, 0.20f);
+				ImGui::TableSetupColumn("件数",       ImGuiTableColumnFlags_WidthStretch, 0.15f);
+				ImGui::TableHeadersRow();
+
+				const size_t maxRows = 40;
+				size_t shown = 0;
+				for (const memory::MemoryUsageEntry* e : rows) {
+					if (shown++ >= maxRows) break;
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+					if (e->file) {
+						const char* base = e->file;
+						for (const char* pp = e->file; *pp; ++pp)
+							if (*pp == '/' || *pp == '\\') base = pp + 1;
+						ImGui::Text("%s:%d (%s)", base, e->line, e->func ? e->func : "");
+					} else {
+						ImGui::TextDisabled("(ソース情報なし)");
+					}
+					ImGui::TableNextColumn();
+					const double eMb = static_cast<double>(e->bytes) / (1024.0 * 1024.0);
+					if (eMb >= 1.0) ImGui::Text("%.2f MB", eMb);
+					else            ImGui::Text("%.1f KB", static_cast<double>(e->bytes) / 1024.0);
+					ImGui::TableNextColumn();
+					ImGui::Text("%zu", e->count);
+				}
+				ImGui::EndTable();
+			}
+#else
+			ImGui::TextDisabled("内訳は Debug ビルドのみ (MemoryTracker は _DEBUG 限定)");
+#endif
 		}
 
 

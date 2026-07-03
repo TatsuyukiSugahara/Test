@@ -1,4 +1,6 @@
 ﻿#pragma once
+// 凍結中: 新規使用禁止。新規の並列処理は ThreadPool を使うこと。
+// 経緯は 設計書/05_マルチスレッド設計.md §1 を参照。
 #include <cstdint>
 #include <thread>
 #include <vector>

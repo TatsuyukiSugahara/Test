@@ -421,9 +421,9 @@ namespace aq
 				DedupTypes(types);
 
 				// MAX 超過は無言で切り捨てず診断エラーにする（AddType は上限超過を無視するため）
-				EngineAssertMsg(types.size() <= MAX_COMPONENT_SIZE,
-					"CreateEntityFromTypes: component count exceeds MAX_COMPONENT_SIZE");
-				if (types.size() > MAX_COMPONENT_SIZE) return Entity();
+				EngineAssertMsg(types.size() <= MAX_COMPONENT_COUNT,
+					"CreateEntityFromTypes: component count exceeds MAX_COMPONENT_COUNT");
+				if (types.size() > MAX_COMPONENT_COUNT) return Entity();
 
 				Archetype archetype;
 				for (const TypeInfo& t : types) {

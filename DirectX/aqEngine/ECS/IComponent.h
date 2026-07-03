@@ -15,7 +15,7 @@ namespace aq
 
 
 		/** 最大コンポーネント数 */
-		constexpr uint32_t MAX_COMPONENT_SIZE = 16;
+		constexpr uint32_t MAX_COMPONENT_COUNT = 16;
 
 
 		template <class T>

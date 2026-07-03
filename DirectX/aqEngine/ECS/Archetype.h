@@ -13,7 +13,7 @@ namespace aq
 		class Archetype
 		{
 		private:
-			TypeInfo typeList_[MAX_COMPONENT_SIZE];
+			TypeInfo typeList_[MAX_COMPONENT_COUNT];
 			/** 特別に初期化 */
 			size_t archetypeMemorySize_ = 0;
 			size_t archetypeSize_ = 0;
@@ -96,7 +96,7 @@ namespace aq
 			 */
 			constexpr Archetype& AddType(const TypeInfo& newType)
 			{
-				if (archetypeSize_ >= MAX_COMPONENT_SIZE) return *this;
+				if (archetypeSize_ >= MAX_COMPONENT_COUNT) return *this;
 				size_t insertIndex = archetypeSize_;
 				for (size_t i = 0; i < archetypeSize_; ++i) {
 					if (typeList_[i].GetHash() > newType.GetHash()) {
@@ -246,8 +246,8 @@ namespace aq
 			template <typename ...Args>
 			static constexpr Archetype Create()
 			{
-				static_assert(sizeof...(Args) <= MAX_COMPONENT_SIZE,
-					"Archetype: コンポーネント数が MAX_COMPONENT_SIZE(16) を超えています");
+				static_assert(sizeof...(Args) <= MAX_COMPONENT_COUNT,
+					"Archetype: コンポーネント数が MAX_COMPONENT_COUNT(16) を超えています");
 				Archetype result;
 				result.CreateImpl<Args...>();
 
@@ -281,7 +281,7 @@ namespace aq
 			template <typename Head, typename ...Tails>
 			constexpr void CreateImpl()
 			{
-				if (archetypeSize_ >= MAX_COMPONENT_SIZE) return;
+				if (archetypeSize_ >= MAX_COMPONENT_COUNT) return;
 				typeList_[archetypeSize_] = TypeInfo::Create<Head>();
 				++archetypeSize_;
 				if constexpr (sizeof...(Tails) != 0) {

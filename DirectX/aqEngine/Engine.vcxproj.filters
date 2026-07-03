@@ -248,9 +248,6 @@
     <ClCompile Include="Util\GameTimer.cpp">
       <Filter>Util</Filter>
     </ClCompile>
-    <ClCompile Include="Util\JobSystem.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
     <ClCompile Include="Util\Profiler.cpp">
       <Filter>Util</Filter>
     </ClCompile>
@@ -830,9 +827,6 @@
     </ClInclude>
     <ClInclude Include="HID\WinRTGamepadBackend.h">
       <Filter>HID</Filter>
-    </ClInclude>
-    <ClInclude Include="Util\JobSystem.h">
-      <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Math\Bounds.h">
       <Filter>Math</Filter>

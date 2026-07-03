@@ -242,7 +242,6 @@
     <ClCompile Include="HID\XInputPadBackend.cpp" />
     <ClCompile Include="HID\WinRTGamepadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
-    <ClCompile Include="Util\JobSystem.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
     <ClCompile Include="Util\Debug\ProfilerDebugPanel.cpp" />
     <ClCompile Include="Util\ThreadPool.cpp" />
@@ -460,7 +459,6 @@
     <ClInclude Include="HID\PadBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />
     <ClInclude Include="HID\WinRTGamepadBackend.h" />
-    <ClInclude Include="Util\JobSystem.h" />
     <ClInclude Include="Math\Bounds.h" />
     <ClInclude Include="Math\Matrix.h" />
     <ClInclude Include="Math\Utility.h" />

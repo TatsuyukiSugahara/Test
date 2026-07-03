@@ -680,6 +680,12 @@ public:\
 		public:
 			ResourceBankBase() {};
 			virtual ~ResourceBankBase() {};
+
+			/**
+			 * bank だけが参照している未使用リソース (use_count()==1) を解放し、解放数を返す。
+			 * シーン切替時などに ResourceManager::UnloadUnused() 経由で呼ばれる。
+			 */
+			virtual size_t EvictUnused() { return 0; }
 		};
 
 		template <typename Resource>
@@ -732,6 +738,37 @@ public:\
 				resourceMap_.insert(ResourcePair(path, refResource));
 				return std::make_pair(refResource, true);
 			}
+
+			/**
+			 * bank だけが参照している未使用リソースを解放する。解放数を返す。
+			 * ロード中はローダが resource_ を保持するため use_count>=2 で残り、誤解放しない。
+			 * 呼び出し側が shared_ptr を保持しているリソースも use_count>=2 で残る。
+			 */
+			size_t EvictUnused() override
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				size_t removed = 0;
+				for (auto it = resourceMap_.begin(); it != resourceMap_.end(); ) {
+					if (!it->second || it->second.use_count() == 1) {
+						it = resourceMap_.erase(it);
+						++removed;
+					} else {
+						++it;
+					}
+				}
+				return removed;
+			}
+
+			/**
+			 * 指定パスをキャッシュから外す。除去できたら true。
+			 * 既存の shared_ptr 保持者があっても寿命は shared_ptr が管理するため安全
+			 * (bank が参照を手放すだけで、以後のロードは再取得になる)。
+			 */
+			bool UnloadOne(const std::string& path)
+			{
+				std::lock_guard<std::mutex> lock(mutex_);
+				return resourceMap_.erase(path) > 0;
+			}
 		};
 
 
@@ -746,6 +783,10 @@ public:\
 		 * Load<T>() は即座に shared_ptr を返す。実際のロードは ThreadPool 上で非同期実行される。
 		 * メインスレッドは resource->IsCompleted() が true になるまで待ってから使用する。
 		 * Update() を毎フレーム呼ぶことで完了済みローダーが破棄される。
+		 *
+		 * リソースはキャッシュ (bank) が shared_ptr で保持し続けるが、Unload<T>(path) /
+		 * UnloadUnused() でキャッシュから外してメモリを解放できる (シーン切替時など)。
+		 * 呼び出し側が保持している shared_ptr の寿命は影響を受けない。
 		 */
 		class ResourceManager
 		{
@@ -820,6 +861,38 @@ public:\
 			{
 				const std::string key = graphics::BuildShaderResourceKey(filePath, entryFuncName, shaderType);
 				return Load<ShaderResource>(key.c_str());
+			}
+
+
+			/**
+			 * 指定パスのリソースをキャッシュ (bank) から外す。除去できたら true。
+			 * 呼び出し側が shared_ptr を保持していてもクラッシュしない (寿命は shared_ptr が管理)。
+			 * bank が参照を手放すだけで、以後同じパスを Load すると再ロードされる。
+			 */
+			template <typename Resource>
+			bool Unload(const char* path)
+			{
+				auto* bank = FindBank<Resource, TResourceBank<Resource>>();
+				if (bank == nullptr) {
+					return false;
+				}
+				return bank->UnloadOne(NormalizeResourcePath(path));
+			}
+
+			/**
+			 * どこからも使われていない (bank だけが参照している) リソースを全型から解放する。
+			 * 解放したリソース数を返す。シーン切替の直後など、参照が切れた後に呼ぶ。
+			 * ロード中・利用中のリソースは use_count>=2 のため解放されない (安全)。
+			 */
+			size_t UnloadUnused()
+			{
+				size_t removed = 0;
+				for (auto& bank : bankMap_) {
+					if (bank.second != nullptr) {
+						removed += bank.second->EvictUnused();
+					}
+				}
+				return removed;
 			}
 
 

@@ -219,6 +219,8 @@
     <ClCompile Include="Level\LevelSerializer.cpp" />
     <ClCompile Include="Level\LevelRegistry.cpp" />
     <ClCompile Include="Level\LevelManager.cpp" />
+    <ClCompile Include="Level\LevelStreamSystem.cpp" />
+    <ClCompile Include="Level\LevelComponentRegistry.cpp" />
     <ClCompile Include="ECS\PrefabEditor.cpp" />
     <ClCompile Include="ECS\SceneHierarchySystem.cpp" />
     <ClCompile Include="ECS\EntityContext.cpp" />
@@ -409,6 +411,8 @@
     <ClInclude Include="Level\LevelSerializer.h" />
     <ClInclude Include="Level\LevelRegistry.h" />
     <ClInclude Include="Level\LevelManager.h" />
+    <ClInclude Include="Level\LevelStreamSystem.h" />
+    <ClInclude Include="Level\LevelComponentRegistry.h" />
     <ClInclude Include="ECS\AlignedStorage.h" />
     <ClInclude Include="ECS\PrefabEditor.h" />
     <ClInclude Include="ECS\SceneHierarchySystem.h" />

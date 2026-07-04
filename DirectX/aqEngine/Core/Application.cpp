@@ -43,6 +43,8 @@
 #endif
 #endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
+#include "Level/LevelComponentRegistry.h"
+#include "Level/LevelStreamSystem.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "DebugUI.h"
 #include "Ocean/Debug/OceanDebugPanel.h"
@@ -81,6 +83,7 @@ namespace aq
 #endif
 		// レジストリは JSON シリアライズ/デシリアライズに使うため、ビルド構成を問わず登録する。
 		aq::ecs::ComponentRegistry::RegisterCoreComponents();
+		aq::level::RegisterLevelComponents();   // Level 層のコンポーネント（LevelStream 等）を登録
 
 #ifdef AQ_IMGUI
 		{
@@ -387,6 +390,7 @@ namespace aq
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::AnimationSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::SpawnSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<aq::level::LevelStreamSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::RenderSystem>();
 
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::HierarcicalTransformSystem>();

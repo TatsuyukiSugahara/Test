@@ -229,7 +229,18 @@ public:
 >   `BattleScene::Finalize()` で `UnloadAll()`… [BattleScene.cpp](../../Game/Application/Scene/BattleScene.cpp)。
 >   ※ 旧 `app::SceneManager`/`IScene` は温存したまま Level を併存させた段階（§12 の破棄は実運用が Level に移ってから）。
 >
-> **未完（L5 残）**: 実機起動での確認（Hierarchy に `LevelRoot`/`Marker` が出る・Unload で消える）は未（要アプリ実行）。
+> **L5 実機確認済み**: 起動時に `Main.level.json` の `LevelRoot`/`Marker` が生成されることを確認。
+
+> **実装状況（L6 完了・ビルド検証）**: コンポーネント駆動の動的ストリームを実装。ソリューション Debug|x64 ビルド成功。
+> - `LevelStreamComponent`（`levelPath` 正本 + `loaded` ランタイム + `loadWhenActive`・`Reflect`）… [LevelComponents.h](LevelComponents.h)。
+> - `LevelStreamSystem`（`loadWhenActive` の状態に応じ `Load`/`Unload`。Load/Unload は内部で別 Foreach を回すため、
+>   走査で対象 Entity を収集してから Foreach 外で実行＝ネスト走査回避）… [LevelStreamSystem.h](LevelStreamSystem.h) / [.cpp](LevelStreamSystem.cpp)。
+> - `RegisterLevelComponents()`（ECS→Level 逆依存を避け Level 層から登録。SpawnerComponent と同じ typeName/serialize/deserialize/Inspector。
+>   型消去エディタ対応=FillReflectPtrFns は L7）… [LevelComponentRegistry.h](LevelComponentRegistry.h) / [.cpp](LevelComponentRegistry.cpp)。
+> - 配線: `Application::Initialize` で `RegisterLevelComponents()`、`Application::Register` で `AddSystem<LevelStreamSystem>()`
+>   … [Core/Application.cpp](../Core/Application.cpp)。
+>
+> **未完（L6 残）**: 実機での動的ストリーム確認（`loadWhenActive` トグルで Load/Unload される）は未。距離ベースの自動トリガーは World Partition（§10）。
 
 ## 7. Load / Unload フロー
 
@@ -381,9 +392,9 @@ class WorldStreamingSystem : public ecs::SystemBase { public: void Update() over
 | **L2** | `LevelData`/`SubLevelRef`/`LevelSerializer`/`LevelRegistry`/`LevelManager::Load`（entities のみ） | 単一 `.level.json` からフォレスト生成 | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L3** | `Unload`（LevelId 走査破棄）+ generation stale 化 | Load→Unload で該当 Entity のみ消える | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
-| **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | ✅ 実装済み（ビルド検証・実機起動確認は未） |
-| **L6** | `LevelStreamComponent`/`LevelStreamSystem` | コンポーネント駆動の動的ストリーム | 未 |
-| **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 | 未 |
+| **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | ✅ 実装済み（実機起動確認済み） |
+| **L6** | `LevelStreamComponent`/`LevelStreamSystem` | コンポーネント駆動の動的ストリーム | ✅ 実装済み（ビルド検証） |
+| **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 | 未（§14 設計メモあり） |
 
 ### World Partition
 | Phase | 内容 | 検証 |
@@ -413,3 +424,56 @@ class WorldStreamingSystem : public ecs::SystemBase { public: void Update() over
    - 数百 m 級 → `float` のまま最短実装。
    - 数 km〜数十 km → `double` 化 / World Origin Rebasing を設計初期から織り込む。
 2. ゲーム状態層（旧 SceneManager 置換）の最終形（名称・API）。L5 着手時に確定。
+
+---
+
+## 14. L7 Level エディタ 設計メモ（未着手・別環境での継続用）
+
+> Level を組み立てる ImGui エディタの設計方針。**Prefab エディタ（[../ECS/PrefabEditor.h](../ECS/PrefabEditor.h)
+> `PrefabEditorPanel`）を最大限流用する**。現状 Level 側（entities[]/subLevels[]）は手書き JSON なので、これを GUI 化する。
+
+### 14.1 位置づけ / 再利用
+- Level = 「Prefab ノードのフォレスト + subLevels」。よって **1 エンティティの編集は Prefab エディタと同一 UX**。
+- 既存 `PrefabEditorPanel` の資産:
+  - `PrefabEditNode`（name + 型消去 `AlignedStorage` components + children）… ノード編集の実体。
+  - `DrawTree` / `DrawInspector`（`drawInspectorPtr(void*)` パレット）/ `NodeToJson` / `JsonToNode` … 木編集と JSON 往復。
+- **推奨リファクタ**: `PrefabEditorPanel` のノード編集部（ツリー描画・インスペクタ・NodeToJson/JsonToNode）を
+  再利用可能なヘルパ（例 `PrefabTreeEditWidget`）へ切り出し、Prefab/Level 両エディタで共有する。
+  （切り出さない場合は Level エディタ側で同等ロジックを複製することになる＝二重管理。要リファクタ）
+- **前提タスク**: `LevelStreamComponent` を **`FillReflectPtrFns` 対応**にする（L6 では未対応）。
+  型消去エディタ（`drawInspectorPtr`/`serializePtr`/`deserializePtr`）を [../ECS/ComponentRegistry.cpp](../ECS/ComponentRegistry.cpp)
+  の `FillReflectPtrFns<T>` 相当で Level 側にも設定しないと、エディタのコンポーネントパレットに出ない。
+
+### 14.2 LevelEditorPanel（新規・`aqEngine/Level/LevelEditor.{h,cpp}` 想定）
+```cpp
+// #ifdef AQ_DEBUG_IMGUI。IDebugRenderable, カテゴリ "Tools"。
+class LevelEditorPanel : public IDebugRenderable
+{
+    // 編集モデル（.level.json に対応）
+    std::string                                   name_;
+    std::vector<std::unique_ptr<PrefabEditNode>>  entities_;   // 各要素 = 1 トップレベル entity ツリー
+    struct SubLevelEdit { std::string path; bool loadOnStart = true; };
+    std::vector<SubLevelEdit>                     subLevels_;
+    char                                          pathBuf_[260] = "Assets/Levels/New.level.json";
+    // 画面: [Entities ツリー(複数 root) | Inspector] + [SubLevels リスト(path + loadOnStart チェック)] + ツールバー
+};
+```
+- **entities**: Prefab エディタのツリー UI をそのまま複数 root で回す。各 root に「Add Entity」。
+  各エンティティは (a) インライン編集、または (b) `.prefab.json` 参照（`"prefab": path`）を選べると良い。
+- **subLevels**: `path` テキスト + `loadOnStart` チェックボックスの行リスト（Add/Remove）。
+- **Save**: `{ name, entities:[NodeToJson...], subLevels:[{level:path, loadOnStart}] }` を `.level.json` へ書き出し。
+- **Load**: `.level.json` を parse → `name_` / `JsonToNode` で entities_ / subLevels_ を復元。
+- **Load in World（プレビュー）**: `LevelManager::Get().Load(pathBuf_)` で実際にワールドへロード、
+  `UnloadAll()`（または当該 LevelId の `Unload`）でクリア。
+- 登録: `BattleScene`（または将来のゲーム状態層）で `DebugUI::Register(&levelEditorPanel_)`。
+
+### 14.3 段階（L7 サブフェーズ）
+| | 内容 |
+|---|---|
+| L7a | `PrefabEditorPanel` のノード編集部を共有ウィジェットへ切り出し（挙動不変リファクタ） |
+| L7b | `LevelEditorPanel` 骨組み（entities ツリー + Inspector + Save/Load・subLevels なし） |
+| L7c | subLevels 行 UI + `.level.json` 往復 + Load in World プレビュー |
+| L7d | entity の `.prefab.json` 参照モード + `LevelStreamComponent` の FillReflectPtrFns 対応 |
+
+> 実装再開時の入口: まず L7a のリファクタ（`PrefabEditorPanel` 内 `DrawTree`/`DrawInspector`/`NodeToJson`/`JsonToNode` の共有化）。
+> ここが済めば Level エディタは「複数 root + subLevels 行 + Save/Load」を足すだけになる。

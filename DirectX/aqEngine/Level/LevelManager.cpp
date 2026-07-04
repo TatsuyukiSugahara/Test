@@ -2,8 +2,10 @@
 #include "Level/LevelManager.h"
 #include "Level/LevelRegistry.h"
 #include "Level/LevelComponents.h"
+#include "ECS/ECS.h"            // ecs::Foreach
 #include "ECS/EntityContext.h"
 #include "ECS/Prefab.h"
+#include <algorithm>
 
 
 namespace aq
@@ -92,6 +94,94 @@ namespace aq
 			const LevelId id = AllocateSlot(LevelRegistry::Normalize(pathOrId), data, parent);
 			InstantiateEntities(data, id);
 			return id;
+		}
+
+
+		LevelId LevelManager::MakeId(uint32_t index) const
+		{
+			LevelId id;
+			id.index      = index;
+			id.generation = slots_[index].generation;
+			return id;
+		}
+
+
+		void LevelManager::CollectSubtree(LevelId id, std::vector<LevelId>& out) const
+		{
+			if (!IsLoaded(id)) return;
+			out.push_back(id);
+			for (const uint32_t childIndex : slots_[id.index].children)
+			{
+				if (childIndex < slots_.size() && slots_[childIndex].loaded)
+					CollectSubtree(MakeId(childIndex), out);
+			}
+		}
+
+
+		void LevelManager::FreeSlot(LevelId id)
+		{
+			if (id.index >= slots_.size()) return;
+			LevelSlot& slot = slots_[id.index];
+			if (!slot.loaded || slot.generation != id.generation) return;
+
+			slot.loaded = false;
+			slot.data.reset();
+			slot.path.clear();
+			slot.children.clear();
+			slot.parent = LevelId();
+			++slot.generation;                       // stale 化（再利用時に旧 LevelId を弾く）
+			freeList_.push_back(id.index);
+		}
+
+
+		void LevelManager::DetachFromParent(LevelId id)
+		{
+			if (id.index >= slots_.size()) return;
+			const LevelId parent = slots_[id.index].parent;
+			if (!parent.IsValid() || parent.index >= slots_.size()) return;
+			if (slots_[parent.index].generation != parent.generation) return;
+
+			auto& kids = slots_[parent.index].children;
+			kids.erase(std::remove(kids.begin(), kids.end(), id.index), kids.end());
+		}
+
+
+		void LevelManager::Unload(LevelId id)
+		{
+			if (!IsLoaded(id)) return;
+
+			// 対象 + 全子孫の LevelId を先に集める（この後 slot を stale 化するため）。
+			std::vector<LevelId> targets;
+			CollectSubtree(id, targets);
+
+			// 集合に含まれる levelId の Entity を遅延破棄する。
+			// member->levelId の値はこの Foreach 内で読むので、後で slot を stale 化しても判定は正しい。
+			ecs::Foreach<LevelMemberComponent>(
+				[&targets](const ecs::Entity& entity, LevelMemberComponent* member)
+				{
+					for (const LevelId& t : targets)
+					{
+						if (member->levelId == t) { entity.Destroy(); break; }
+					}
+				});
+
+			// Level ツリーから切り離し、slot を解放する（親から先に外してから全 slot を free）。
+			DetachFromParent(id);
+			for (const LevelId& t : targets) FreeSlot(t);
+		}
+
+
+		void LevelManager::UnloadAll()
+		{
+			// root（親を持たない）ロード済み Level を集めてから Unload する
+			//（Unload 中に slots_/freeList_ を変更するため、収集と実行を分ける）。
+			std::vector<LevelId> roots;
+			for (uint32_t i = 0; i < static_cast<uint32_t>(slots_.size()); ++i)
+			{
+				const LevelSlot& slot = slots_[i];
+				if (slot.loaded && !slot.parent.IsValid()) roots.push_back(MakeId(i));
+			}
+			for (const LevelId& r : roots) Unload(r);
 		}
 
 

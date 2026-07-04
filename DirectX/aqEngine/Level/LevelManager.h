@@ -1,0 +1,62 @@
+#pragma once
+#include "Level/LevelId.h"
+#include "Level/LevelData.h"
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+
+namespace aq
+{
+	namespace level
+	{
+		// ロード済み Level のツリーを所有し、Load/Unload の実体を担うシングルトン。
+		// entities は単一グローバル EntityContext のワールドへ生成し、各 Entity に LevelMemberComponent
+		// を付与して所属を記録する（設計 §1・§7）。
+		class LevelManager
+		{
+		// ── 内部型 ──
+		private:
+			struct LevelSlot
+			{
+				std::string                      path;
+				std::shared_ptr<const LevelData> data;
+				LevelId                          parent;
+				std::vector<uint32_t>            children;      // 子 Level の slot index（Unload カスケード用）
+				uint32_t                         generation = 0;
+				bool                             loaded     = false;
+			};
+
+		// ── メンバ変数 ──
+		private:
+			std::vector<LevelSlot> slots_;
+			std::vector<uint32_t>  freeList_;                   // 再利用可能な slot index
+
+		// ── メンバ関数 ──
+		public:
+			static LevelManager& Get();
+
+			// pathOrId の Level をロードする（entities を遅延生成）。parent が有効なら Level ツリーの子にする。
+			// 実体生成は次の FlushCommands。成功時はロード済み LevelId、失敗時は無効な LevelId を返す。
+			// ※ L2: entities のみ。subLevels の再帰ロードは L4。
+			LevelId Load(std::string_view pathOrId, LevelId parent = LevelId());
+
+			// LevelId が現在ロード済みか（generation 一致を含む）。
+			bool IsLoaded(LevelId id) const;
+
+			// path から現在ロード済みの LevelId を引く。未ロードなら無効な LevelId。
+			LevelId Find(std::string_view pathOrId) const;
+
+		private:
+			LevelManager() = default;
+
+			// 空き slot を確保して LevelId を採番する。parent が有効ならその children に登録する。
+			LevelId AllocateSlot(std::string path, std::shared_ptr<const LevelData> data, LevelId parent);
+
+			// data->entities のフォレストを 1 コマンドで遅延生成し、各 Entity へ levelId を差す。
+			void InstantiateEntities(const std::shared_ptr<const LevelData>& data, LevelId levelId);
+		};
+	}
+}

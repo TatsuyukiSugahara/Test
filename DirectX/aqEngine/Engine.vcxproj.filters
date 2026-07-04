@@ -175,6 +175,15 @@
     <ClCompile Include="ECS\SpawnSystem.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
+    <ClCompile Include="Level\LevelSerializer.cpp">
+      <Filter>Level</Filter>
+    </ClCompile>
+    <ClCompile Include="Level\LevelRegistry.cpp">
+      <Filter>Level</Filter>
+    </ClCompile>
+    <ClCompile Include="Level\LevelManager.cpp">
+      <Filter>Level</Filter>
+    </ClCompile>
     <ClCompile Include="ECS\PrefabEditor.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
@@ -629,6 +638,18 @@
       <Filter>Level</Filter>
     </ClInclude>
     <ClInclude Include="Level\LevelComponents.h">
+      <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelData.h">
+      <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelSerializer.h">
+      <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelRegistry.h">
+      <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelManager.h">
       <Filter>Level</Filter>
     </ClInclude>
     <ClInclude Include="ECS\AlignedStorage.h">

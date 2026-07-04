@@ -216,6 +216,9 @@
     <ClCompile Include="ECS\PrefabSerializer.cpp" />
     <ClCompile Include="ECS\PrefabRegistry.cpp" />
     <ClCompile Include="ECS\SpawnSystem.cpp" />
+    <ClCompile Include="Level\LevelSerializer.cpp" />
+    <ClCompile Include="Level\LevelRegistry.cpp" />
+    <ClCompile Include="Level\LevelManager.cpp" />
     <ClCompile Include="ECS\PrefabEditor.cpp" />
     <ClCompile Include="ECS\SceneHierarchySystem.cpp" />
     <ClCompile Include="ECS\EntityContext.cpp" />
@@ -402,6 +405,10 @@
     <ClInclude Include="ECS\SpawnSystem.h" />
     <ClInclude Include="Level\LevelId.h" />
     <ClInclude Include="Level\LevelComponents.h" />
+    <ClInclude Include="Level\LevelData.h" />
+    <ClInclude Include="Level\LevelSerializer.h" />
+    <ClInclude Include="Level\LevelRegistry.h" />
+    <ClInclude Include="Level\LevelManager.h" />
     <ClInclude Include="ECS\AlignedStorage.h" />
     <ClInclude Include="ECS\PrefabEditor.h" />
     <ClInclude Include="ECS\SceneHierarchySystem.h" />

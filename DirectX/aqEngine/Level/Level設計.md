@@ -196,6 +196,18 @@ public:
 };
 ```
 
+> **実装状況（L2 完了・ビルド検証）**: 単一 `.level.json` の entities を遅延生成する経路を実装。Debug|x64 ビルド成功。
+> - `LevelData` / `SubLevelRef` … [LevelData.h](LevelData.h)。entities は `ecs::PrefabNodeData` フォレスト。
+> - `LevelSerializer`（`.level.json` → `LevelData`）… [LevelSerializer.h](LevelSerializer.h) / [.cpp](LevelSerializer.cpp)：
+>   entity ノードは `ecs::PrefabSerializer::FromJson` に委譲（"prefab" 参照展開・overrides・循環検出を再利用）。
+>   subLevels は保持のみ（再帰ロードは L4）。
+> - `LevelRegistry`（正規化パス → `LevelData` キャッシュ + `Register`）… [LevelRegistry.h](LevelRegistry.h) / [.cpp](LevelRegistry.cpp)。
+> - `LevelManager`（LevelId slot 採番・freelist・親子 children・`Load`/`IsLoaded`/`Find`）… [LevelManager.h](LevelManager.h) / [.cpp](LevelManager.cpp)：
+>   `Load` は `RequestDeferredBuild` 内で「`LevelMemberComponent` 型を注入する create」+「`levelId` を差す onEachCreated」で
+>   各 entity に `ecs::InstantiatePrefabTree` を呼ぶ（L1 の再利用口）。shared_ptr と LevelId を値捕獲。
+>
+> **未完（L2 残）**: ランタイム自己テスト（実機 or シーンで `.level.json` をロードし LevelId 付与・親子構造を assert）は未。Unload は L3。
+
 ## 7. Load / Unload フロー
 
 ### Load（遅延・LevelId stamping）
@@ -343,7 +355,7 @@ class WorldStreamingSystem : public ecs::SystemBase { public: void Update() over
 | Phase | 内容 | 検証 | 状況 |
 |---|---|---|---|
 | **L1** | `LevelId` / `LevelMemberComponent` / Prefab 生成に `onEachCreated` フック追加 | 手動生成 Entity に LevelId が差さる | ✅ 実装済み |
-| **L2** | `LevelData`/`SubLevelRef`/`LevelSerializer`/`LevelRegistry`/`LevelManager::Load`（entities のみ） | 単一 `.level.json` からフォレスト生成 | 未 |
+| **L2** | `LevelData`/`SubLevelRef`/`LevelSerializer`/`LevelRegistry`/`LevelManager::Load`（entities のみ） | 単一 `.level.json` からフォレスト生成 | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L3** | `Unload`（LevelId 走査破棄）+ generation stale 化 | Load→Unload で該当 Entity のみ消える | 未 |
 | **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード | 未 |
 | **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | 未 |

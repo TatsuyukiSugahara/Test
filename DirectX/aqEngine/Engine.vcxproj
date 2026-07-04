@@ -400,6 +400,8 @@
     <ClInclude Include="ECS\PrefabSerializer.h" />
     <ClInclude Include="ECS\PrefabRegistry.h" />
     <ClInclude Include="ECS\SpawnSystem.h" />
+    <ClInclude Include="Level\LevelId.h" />
+    <ClInclude Include="Level\LevelComponents.h" />
     <ClInclude Include="ECS\AlignedStorage.h" />
     <ClInclude Include="ECS\PrefabEditor.h" />
     <ClInclude Include="ECS\SceneHierarchySystem.h" />

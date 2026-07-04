@@ -150,6 +150,16 @@ namespace aq
 }
 ```
 
+> **実装状況（L1 完了）**: 基盤型と Prefab 側フックを実装し Debug|x64 ビルド成功。
+> - `LevelId`（世代付きハンドル）… [LevelId.h](LevelId.h)。
+> - `LevelMemberComponent`（タグ・serialize なし）… [LevelComponents.h](LevelComponents.h)。
+> - Prefab 木構築の再利用口を追加 … [../ECS/Prefab.h](../ECS/Prefab.h) / [../ECS/Prefab.cpp](../ECS/Prefab.cpp)：
+>   低レベル API `InstantiatePrefabTree(root, parent, create, onEachCreated)` を公開し、
+>   `InstantiateNode` に `onEachCreated`（各ノード生成・deserialize 直後に発火）を追加。
+>   `Prefab::Instantiate` / `InstantiateImmediate` は `onEachCreated=nullptr` で呼ぶ薄いラッパに変更（挙動不変）。
+>   → L2 の Level ロードは「`LevelMemberComponent` 型を注入する `create`」+「`levelId` を差す `onEachCreated`」で
+>   `InstantiatePrefabTree` を呼ぶだけでよい。
+
 ## 6. LevelRegistry / LevelManager
 
 ```cpp
@@ -330,15 +340,15 @@ class WorldStreamingSystem : public ecs::SystemBase { public: void Update() over
 ## 11. 段階導入プラン
 
 ### Level 本体
-| Phase | 内容 | 検証 |
-|---|---|---|
-| **L1** | `LevelId` / `LevelMemberComponent` / Prefab 生成に `onEachCreated` フック追加 | 手動生成 Entity に LevelId が差さる |
-| **L2** | `LevelData`/`SubLevelRef`/`LevelSerializer`/`LevelRegistry`/`LevelManager::Load`（entities のみ） | 単一 `.level.json` からフォレスト生成 |
-| **L3** | `Unload`（LevelId 走査破棄）+ generation stale 化 | Load→Unload で該当 Entity のみ消える |
-| **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード |
-| **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 |
-| **L6** | `LevelStreamComponent`/`LevelStreamSystem` | コンポーネント駆動の動的ストリーム |
-| **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 |
+| Phase | 内容 | 検証 | 状況 |
+|---|---|---|---|
+| **L1** | `LevelId` / `LevelMemberComponent` / Prefab 生成に `onEachCreated` フック追加 | 手動生成 Entity に LevelId が差さる | ✅ 実装済み |
+| **L2** | `LevelData`/`SubLevelRef`/`LevelSerializer`/`LevelRegistry`/`LevelManager::Load`（entities のみ） | 単一 `.level.json` からフォレスト生成 | 未 |
+| **L3** | `Unload`（LevelId 走査破棄）+ generation stale 化 | Load→Unload で該当 Entity のみ消える | 未 |
+| **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード | 未 |
+| **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | 未 |
+| **L6** | `LevelStreamComponent`/`LevelStreamSystem` | コンポーネント駆動の動的ストリーム | 未 |
+| **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 | 未 |
 
 ### World Partition
 | Phase | 内容 | 検証 |

@@ -74,9 +74,10 @@ namespace aq
 			// create はノードの完全な TypeInfo 列から Entity を作る生成プリミティブ
 			// （遅延=NoLock / 即時=ロック版 の両方に対応）。失敗時は無効な Entity を返す。
 			Entity InstantiateNode(
-				const PrefabNodeData&                node,
-				EntityHandle                         parent,
-				const EntityManager::DeferredCreateFn& create)
+				const PrefabNodeData&                                     node,
+				EntityHandle                                              parent,
+				const EntityManager::DeferredCreateFn&                    create,
+				const std::function<void(Entity, const PrefabNodeData&)>& onEachCreated)
 			{
 				Entity entity = create(CollectTypes(node.components));
 				if (!entity.IsValid()) return entity;
@@ -100,15 +101,28 @@ namespace aq
 				}
 #endif
 
+				// 生成・deserialize 完了直後のフック（Level 層が levelId を差す等）。
+				if (onEachCreated) onEachCreated(entity, node);
+
 				if (parent.IsValid()) {
 					ctx.SetParent(self, parent);
 				}
 
 				for (const PrefabNodeData& child : node.children) {
-					InstantiateNode(child, self, create);
+					InstantiateNode(child, self, create, onEachCreated);
 				}
 				return entity;
 			}
+		}
+
+
+		Entity InstantiatePrefabTree(
+			const PrefabNodeData&                                     root,
+			EntityHandle                                              parent,
+			const std::function<Entity(std::vector<TypeInfo>)>&       create,
+			const std::function<void(Entity, const PrefabNodeData&)>& onEachCreated)
+		{
+			return InstantiateNode(root, parent, create, onEachCreated);
 		}
 
 
@@ -123,7 +137,7 @@ namespace aq
 				[data, parent, onComplete = std::move(onComplete)]
 				(const EntityManager::DeferredCreateFn& create)
 				{
-					Entity root = InstantiateNode(data->root, parent, create);
+					Entity root = InstantiateNode(data->root, parent, create, nullptr);
 					if (onComplete && root.IsValid()) onComplete(root);
 				});
 		}
@@ -138,7 +152,7 @@ namespace aq
 				{
 					return EntityContext::Get().CreateEntityFromTypes(std::move(types));
 				};
-			return InstantiateNode(data_->root, parent, create);
+			return InstantiateNode(data_->root, parent, create, nullptr);
 		}
 	}
 }

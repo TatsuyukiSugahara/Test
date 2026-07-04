@@ -10,6 +10,9 @@
     <Filter Include="ECS">
       <UniqueIdentifier>{d90cc128-47d8-4d9f-8ac5-59ba19967b65}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Level">
+      <UniqueIdentifier>{b1e7c2a4-9d3f-4a6b-8c2e-3f5a7d9e1c04}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Graphics">
       <UniqueIdentifier>{d9b46fa0-fb3c-4aaa-949d-35794da9d000}</UniqueIdentifier>
     </Filter>
@@ -621,6 +624,12 @@
     </ClInclude>
     <ClInclude Include="ECS\SpawnSystem.h">
       <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelId.h">
+      <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelComponents.h">
+      <Filter>Level</Filter>
     </ClInclude>
     <ClInclude Include="ECS\AlignedStorage.h">
       <Filter>ECS</Filter>

@@ -222,6 +222,15 @@ public:
 > - 循環サブLevel 参照（A→B→A）は `loadStack_`（正規化パス）で検出しエラーログ + 中止（無限ロード防止）。
 > - Unload カスケードは L3 実装済みのため、親を Unload すれば loadOnStart サブも一括破棄される。
 
+> **実装状況（L5 完了・ビルド検証）**: 起動 Level 指定 + ゲーム状態層への配線。ソリューション（Engine+Game）Debug|x64 ビルド成功。
+> - `LevelManager::SetStartupLevel` / `LoadStartup`（`startupPath_` 保持 → `Load`）… [LevelManager.h](LevelManager.h) / [.cpp](LevelManager.cpp)。
+> - サンプル起動 Level（Transform のみ・依存アセットなし）… `Game/Assets/Levels/Main.level.json`。
+> - 配線: `BattleScene::Initialize()` 冒頭で `SetStartupLevel`→`LoadStartup`（`IsLoaded` を assert）、
+>   `BattleScene::Finalize()` で `UnloadAll()`… [BattleScene.cpp](../../Game/Application/Scene/BattleScene.cpp)。
+>   ※ 旧 `app::SceneManager`/`IScene` は温存したまま Level を併存させた段階（§12 の破棄は実運用が Level に移ってから）。
+>
+> **未完（L5 残）**: 実機起動での確認（Hierarchy に `LevelRoot`/`Marker` が出る・Unload で消える）は未（要アプリ実行）。
+
 ## 7. Load / Unload フロー
 
 ### Load（遅延・LevelId stamping）
@@ -372,7 +381,7 @@ class WorldStreamingSystem : public ecs::SystemBase { public: void Update() over
 | **L2** | `LevelData`/`SubLevelRef`/`LevelSerializer`/`LevelRegistry`/`LevelManager::Load`（entities のみ） | 単一 `.level.json` からフォレスト生成 | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L3** | `Unload`（LevelId 走査破棄）+ generation stale 化 | Load→Unload で該当 Entity のみ消える | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
-| **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | 未 |
+| **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | ✅ 実装済み（ビルド検証・実機起動確認は未） |
 | **L6** | `LevelStreamComponent`/`LevelStreamSystem` | コンポーネント駆動の動的ストリーム | 未 |
 | **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 | 未 |
 

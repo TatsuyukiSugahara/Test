@@ -82,6 +82,23 @@ namespace aq
 		}
 
 
+		void LevelManager::SetStartupLevel(std::string_view pathOrId)
+		{
+			startupPath_ = LevelRegistry::Normalize(pathOrId);
+		}
+
+
+		LevelId LevelManager::LoadStartup()
+		{
+			if (startupPath_.empty())
+			{
+				EngineAssertMsg(false, "LevelManager::LoadStartup: startup level is not set");
+				return LevelId();
+			}
+			return Load(startupPath_);
+		}
+
+
 		LevelId LevelManager::Load(std::string_view pathOrId, LevelId parent)
 		{
 			const std::string key = LevelRegistry::Normalize(pathOrId);

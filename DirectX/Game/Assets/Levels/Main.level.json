@@ -1,0 +1,15 @@
+// 起動 Level（Phase L5 の配線サンプル）。
+// entities は Prefab フォレスト（インライン components / children）。
+// 依存アセットを避けるため Transform のみ（position はローカル座標）。
+{
+	"name": "Main",
+	"entities": [
+		{
+			"name": "LevelRoot",
+			"components": { "Transform": { "position": [0, 0, 0] } },
+			"children": [
+				{ "name": "Marker", "components": { "Transform": { "position": [0, 1, 0] } } }
+			]
+		}
+	]
+}

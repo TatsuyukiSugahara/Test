@@ -13,6 +13,7 @@
 #include "ECS/PrefabSerializer.h"
 #include "ECS/PrefabRegistry.h"
 #include "ECS/SpawnSystem.h"
+#include "Level/LevelManager.h"
 #include "ECS/JsonFieldVisitor.h"
 #include "Component/AnimationComponentSystem.h"
 #include "ECS/ActorComponentSystem.h"
@@ -40,6 +41,16 @@ namespace app
 
 		void BattleScene::Initialize()
 		{
+			// ----- Level 起動ロード (Phase L5) -----
+			// データ駆動の起動 Level を読み込む。entities は遅延生成（次の FlushCommands で実体化）。
+			{
+				auto& levelManager = aq::level::LevelManager::Get();
+				levelManager.SetStartupLevel("Assets/Levels/Main.level.json");
+				const aq::level::LevelId startup = levelManager.LoadStartup();
+				EngineAssertMsg(levelManager.IsLoaded(startup),
+					"BattleScene: startup level failed to load");
+			}
+
 			// 地形エンティティ生成
 			// メッシュは local(0,0,0)~(terrainSize,h,terrainSize) で生成されるため
 			// TransformComponent の localPosition を (-half,0,-half) にしてキャラ原点を中心にする
@@ -473,6 +484,9 @@ namespace app
 
 		void BattleScene::Finalize()
 		{
+			// Level をアンロード（配下 Entity を遅延破棄）。
+			aq::level::LevelManager::Get().UnloadAll();
+
 #ifdef AQ_DEBUG_IMGUI
 			aq::DebugUI::Get().Unregister(&splatmapPainter_);
 			aq::DebugUI::Get().Unregister(&painter_);

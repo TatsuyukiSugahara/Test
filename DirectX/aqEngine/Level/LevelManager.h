@@ -34,10 +34,17 @@ namespace aq
 			std::vector<LevelSlot>   slots_;
 			std::vector<uint32_t>    freeList_;                 // 再利用可能な slot index
 			std::vector<std::string> loadStack_;                // 再帰ロード中の正規化パス（循環サブLevel 検出）
+			std::string              startupPath_;              // 起動時に読む Level（SetStartupLevel で設定）
 
 		// ── メンバ関数 ──
 		public:
 			static LevelManager& Get();
+
+			// プログラムから起動時に読み込む Level を指定する（正規化して保持するだけ・ロードはしない）。
+			void SetStartupLevel(std::string_view pathOrId);
+
+			// SetStartupLevel で指定した Level をロードする。未指定なら無効な LevelId を返す。
+			LevelId LoadStartup();
 
 			// pathOrId の Level をロードする（entities を遅延生成）。parent が有効なら Level ツリーの子にする。
 			// 実体生成は次の FlushCommands。成功時はロード済み LevelId、失敗時は無効な LevelId を返す。

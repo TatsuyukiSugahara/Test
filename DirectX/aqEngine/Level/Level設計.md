@@ -215,6 +215,13 @@ public:
 > - `UnloadAll()`: root（親なし）ロード済み Level を収集してから各 `Unload`（Unload 中の slots_ 変更に耐えるため収集/実行分離）。
 > - サブLevel の再帰ロードは L4 だが、Unload のカスケード（children 走査）は L3 で実装済み（L4 で children が埋まれば自動でカスケード）。
 
+> **実装状況（L4 完了・ビルド検証）**: サブLevel の再帰ロードを実装。Debug|x64 ビルド成功。
+> - `LevelManager::Load` 末尾で `data->subLevels` のうち `loadOnStart==true` を親=このLevel で再帰 `Load`
+>   （`false` は休眠＝後から手動/自動ストリーム）… [LevelManager.cpp](LevelManager.cpp)。
+> - サブLevel パスは `LevelSerializer` で親 `.level.json` の baseDir 基準に `JoinPath` 解決済み（再帰ロードで直接使える）。
+> - 循環サブLevel 参照（A→B→A）は `loadStack_`（正規化パス）で検出しエラーログ + 中止（無限ロード防止）。
+> - Unload カスケードは L3 実装済みのため、親を Unload すれば loadOnStart サブも一括破棄される。
+
 ## 7. Load / Unload フロー
 
 ### Load（遅延・LevelId stamping）
@@ -364,7 +371,7 @@ class WorldStreamingSystem : public ecs::SystemBase { public: void Update() over
 | **L1** | `LevelId` / `LevelMemberComponent` / Prefab 生成に `onEachCreated` フック追加 | 手動生成 Entity に LevelId が差さる | ✅ 実装済み |
 | **L2** | `LevelData`/`SubLevelRef`/`LevelSerializer`/`LevelRegistry`/`LevelManager::Load`（entities のみ） | 単一 `.level.json` からフォレスト生成 | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L3** | `Unload`（LevelId 走査破棄）+ generation stale 化 | Load→Unload で該当 Entity のみ消える | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
-| **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード | 未 |
+| **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | 未 |
 | **L6** | `LevelStreamComponent`/`LevelStreamSystem` | コンポーネント駆動の動的ストリーム | 未 |
 | **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 | 未 |

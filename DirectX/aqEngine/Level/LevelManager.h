@@ -31,8 +31,9 @@ namespace aq
 
 		// ── メンバ変数 ──
 		private:
-			std::vector<LevelSlot> slots_;
-			std::vector<uint32_t>  freeList_;                   // 再利用可能な slot index
+			std::vector<LevelSlot>   slots_;
+			std::vector<uint32_t>    freeList_;                 // 再利用可能な slot index
+			std::vector<std::string> loadStack_;                // 再帰ロード中の正規化パス（循環サブLevel 検出）
 
 		// ── メンバ関数 ──
 		public:

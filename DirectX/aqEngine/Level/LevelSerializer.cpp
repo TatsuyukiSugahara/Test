@@ -22,6 +22,15 @@ namespace aq
 				return (pos == std::string::npos) ? std::string() : path.substr(0, pos);
 			}
 
+			// dir 基準で rel を結合・正規化する。rel が絶対（先頭 '/' or 'X:'）なら rel をそのまま使う。
+			std::string JoinPath(const std::string& dir, const std::string& rel)
+			{
+				const std::string r = NormalizePath(rel);
+				const bool absolute = (!r.empty() && r[0] == '/') || (r.size() >= 2 && r[1] == ':');
+				if (absolute || dir.empty()) return r;
+				return NormalizePath(dir + "/" + r);
+			}
+
 			// パース済み Level ルート JSON → LevelData。
 			// entities の各要素は ecs::PrefabSerializer::FromJson で 1 ツリーに解決する
 			// （"prefab" 参照・overrides・循環検出をそのまま再利用）。
@@ -54,7 +63,8 @@ namespace aq
 					{
 						if (!sub.IsObject() || !sub.Contains("level")) continue;
 						SubLevelRef ref;
-						ref.path        = sub["level"].AsString();
+						// サブLevel パスは親 .level.json のディレクトリ基準で解決しておく（再帰ロードで直接使える）。
+						ref.path        = JoinPath(baseDir, sub["level"].AsString());
 						ref.loadOnStart = sub.Contains("loadOnStart") ? sub["loadOnStart"].AsBool(true) : true;
 						data->subLevels.push_back(std::move(ref));
 					}

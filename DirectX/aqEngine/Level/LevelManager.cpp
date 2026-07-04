@@ -84,15 +84,37 @@ namespace aq
 
 		LevelId LevelManager::Load(std::string_view pathOrId, LevelId parent)
 		{
-			std::shared_ptr<const LevelData> data = LevelRegistry::Get().Load(pathOrId);
+			const std::string key = LevelRegistry::Normalize(pathOrId);
+
+			// 循環サブLevel 参照の検出（A→B→A など）。無限ロードを防ぐ。
+			for (const std::string& s : loadStack_)
+			{
+				if (s == key)
+				{
+					EnginePrintf("[Level] circular subLevel reference detected: %s\n", key.c_str());
+					return LevelId();
+				}
+			}
+
+			std::shared_ptr<const LevelData> data = LevelRegistry::Get().Load(key);
 			if (!data)
 			{
 				EngineAssertMsg(false, "LevelManager::Load: failed to resolve level data");
 				return LevelId();
 			}
 
-			const LevelId id = AllocateSlot(LevelRegistry::Normalize(pathOrId), data, parent);
+			const LevelId id = AllocateSlot(key, data, parent);
 			InstantiateEntities(data, id);
+
+			// loadOnStart のサブLevel を再帰ロードする（親=このLevel。children は AllocateSlot が登録し、
+			// Unload は L3 のカスケードで一括破棄される）。false のサブは休眠（後から手動/自動ストリーム）。
+			loadStack_.push_back(key);
+			for (const SubLevelRef& sub : data->subLevels)
+			{
+				if (sub.loadOnStart) Load(sub.path, id);
+			}
+			loadStack_.pop_back();
+
 			return id;
 		}
 

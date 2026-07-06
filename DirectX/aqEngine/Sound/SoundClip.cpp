@@ -4,8 +4,6 @@
 #include "Decoder/MFDecoder.h"
 #include "Resource/Resource.h"
 #include <filesystem>
-#include <algorithm>
-#include <string>
 
 
 namespace aq

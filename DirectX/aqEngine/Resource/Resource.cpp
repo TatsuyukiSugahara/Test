@@ -5,7 +5,6 @@
 #include "Platform/PlatformBudget.h"
 #include <cctype>
 #include <cstdio>
-#include <DirectXMath.h>
 #include <cmath>
 #include <filesystem>
 

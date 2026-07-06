@@ -2,7 +2,6 @@
 #include "HiZReadbackCommand.h"
 #include "HiZRenderer.h"
 #include "Graphics/GraphicsDevice.h"
-#include <vector>
 
 
 namespace aq

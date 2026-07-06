@@ -4,7 +4,6 @@
 #include "Level/LevelManager.h"
 #include "ECS/ECS.h"            // ecs::Foreach
 #include "ECS/EntityContext.h"
-#include <vector>
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #endif

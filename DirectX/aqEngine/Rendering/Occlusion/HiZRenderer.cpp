@@ -7,10 +7,8 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/IShader.h"
-#include <algorithm>
 #include <cmath>
 #include <cfloat>
-#include <DirectXMath.h>
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Occlusion/Debug/HiZDebugPanel.h"
 #endif

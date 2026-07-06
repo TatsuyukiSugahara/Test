@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "Meshlet.h"
 #include "GraphicsDevice.h"
-#include <algorithm>
 #include <cmath>
 #include <cfloat>
 

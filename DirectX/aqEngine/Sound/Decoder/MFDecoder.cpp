@@ -7,7 +7,6 @@
 #include <propvarutil.h>
 #include <objbase.h>
 #include <wrl/client.h>
-#include <cstring>
 
 #pragma comment(lib, "mfplat.lib")
 #pragma comment(lib, "mfreadwrite.lib")

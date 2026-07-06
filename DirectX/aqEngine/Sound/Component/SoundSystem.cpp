@@ -10,7 +10,6 @@
 #include "Sound/SoundClip.h"
 #include "Sound/Authoring/Audio.h"
 #include "Sound/Authoring/AudioDirector.h"
-#include <DirectXMath.h>
 
 
 namespace aq

@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "Mixer3D.h"
 #include <cmath>
-#include <algorithm>
 
 
 namespace aq

@@ -4,8 +4,6 @@
 #include "Graphics/RenderContext.h"
 #include "Graphics/Meshlet.h"
 #include "Math/Bounds.h"
-#include <atomic>
-#include <vector>
 
 
 namespace aq

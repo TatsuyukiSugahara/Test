@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "ThreadPool.h"
 #include "Profiler.h"
-#include <string>
 
 
 namespace aq

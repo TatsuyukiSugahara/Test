@@ -6,7 +6,6 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/Lighting.h"
 #include <cmath>
-#include <algorithm>
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Shadow/Debug/ShadowDebugPanel.h"
 #endif

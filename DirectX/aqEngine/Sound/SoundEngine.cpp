@@ -4,8 +4,6 @@
 #include "SoundStream.h"
 #include "Decoder/WavStreamDecoder.h"
 #include "Decoder/MFDecoder.h"
-#include <algorithm>
-#include <string>
 
 
 namespace aq

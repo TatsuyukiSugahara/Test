@@ -119,37 +119,45 @@ namespace aq
 			const uint32_t clusterCount = (usable + trisPerCluster - 1) / trisPerCluster;
 			outClusters.reserve(clusterCount);
 
+			// クラスタ内の k 番目 (ソート後順序) の三角形の面法線を計算する。
+			// 縮退三角形なら false。std::vector<XMVECTOR> に法線を貯めると 16byte アラインが
+			// 必要な要素を std::vector に持つことになり環境によって不安定なため、保持せず 2 パスで再計算する。
+			const auto faceNormal = [&](uint32_t k, DirectX::XMVECTOR& outN) -> bool
+			{
+				const uint32_t t  = order[k].tri;
+				const math::Vector3& p0 = positions[indices[3u * t + 0]];
+				const math::Vector3& p1 = positions[indices[3u * t + 1]];
+				const math::Vector3& p2 = positions[indices[3u * t + 2]];
+				const DirectX::XMVECTOR e1 = DirectX::XMVectorSubtract(p1, p0);
+				const DirectX::XMVECTOR e2 = DirectX::XMVectorSubtract(p2, p0);
+				const DirectX::XMVECTOR n  = DirectX::XMVector3Cross(e1, e2);
+				if (DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(n)) <= 1e-12f) return false;
+				outN = DirectX::XMVector3Normalize(n);
+				return true;
+			};
+
 			for (uint32_t c = 0; c < clusterCount; ++c)
 			{
 				const uint32_t k0 = c * trisPerCluster;
 				const uint32_t k1 = (k0 + trisPerCluster < usable) ? (k0 + trisPerCluster) : usable;
 
+				// パス1: AABB + 平均法線 (有効な面法線数もカウント)
 				math::AABBBuilder bounds;
-				DirectX::XMVECTOR normalSum = DirectX::XMVectorZero();
-				std::vector<DirectX::XMVECTOR> faceNormals;
-				faceNormals.reserve(k1 - k0);
+				DirectX::XMVECTOR normalSum        = DirectX::XMVectorZero();
+				uint32_t          validNormalCount = 0;
 
 				for (uint32_t k = k0; k < k1; ++k)
 				{
 					const uint32_t t  = order[k].tri;
-					const uint32_t i0 = indices[3u * t + 0];
-					const uint32_t i1 = indices[3u * t + 1];
-					const uint32_t i2 = indices[3u * t + 2];
-					const math::Vector3& p0 = positions[i0];
-					const math::Vector3& p1 = positions[i1];
-					const math::Vector3& p2 = positions[i2];
-					bounds.Add(p0);
-					bounds.Add(p1);
-					bounds.Add(p2);
+					bounds.Add(positions[indices[3u * t + 0]]);
+					bounds.Add(positions[indices[3u * t + 1]]);
+					bounds.Add(positions[indices[3u * t + 2]]);
 
-					const DirectX::XMVECTOR e1 = DirectX::XMVectorSubtract(p1, p0);
-					const DirectX::XMVECTOR e2 = DirectX::XMVectorSubtract(p2, p0);
-					DirectX::XMVECTOR n = DirectX::XMVector3Cross(e1, e2);
-					if (DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(n)) > 1e-12f)
+					DirectX::XMVECTOR n;
+					if (faceNormal(k, n))
 					{
-						n = DirectX::XMVector3Normalize(n);
-						faceNormals.push_back(n);
 						normalSum = DirectX::XMVectorAdd(normalSum, n);
+						++validNormalCount;
 					}
 				}
 
@@ -162,15 +170,18 @@ namespace aq
 				cluster.triOffset = k0;          // ソート後順序での先頭 (描画適用時に再順序 IB と対応)
 				cluster.triCount  = k1 - k0;
 
-				if (!faceNormals.empty() &&
+				if (validNormalCount > 0 &&
 				    DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(normalSum)) > 1e-12f)
 				{
 					const DirectX::XMVECTOR axis = DirectX::XMVector3Normalize(normalSum);
 					DirectX::XMStoreFloat3(&cluster.coneAxis.vector, axis);
 
+					// パス2: 錐の開き角 (最小 dot)。面法線を再計算して求める。
 					float mindp = 1.0f;
-					for (const DirectX::XMVECTOR& n : faceNormals)
+					for (uint32_t k = k0; k < k1; ++k)
 					{
+						DirectX::XMVECTOR n;
+						if (!faceNormal(k, n)) continue;
 						const float dp = DirectX::XMVectorGetX(DirectX::XMVector3Dot(n, axis));
 						if (dp < mindp) mindp = dp;
 					}

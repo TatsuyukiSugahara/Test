@@ -1,0 +1,21 @@
+{
+    "name": "LoadingRoot",
+    "components": {
+        "transform": { "active": true, "sizeDelta": [1920, 1080] },
+        "canvas": { "resolution": [1920, 1080] }
+    },
+    "children": [
+        {
+            "name": "LoadingText",
+            "components": {
+                "transform": { "position": [960, 540, 0], "sizeDelta": [1000, 120] },
+                "text": {
+                    "content": "Now Loading",
+                    "textStylePath": "Assets/Styles/Default.textstyle.json",
+                    "alignH": "Center",
+                    "alignV": "Middle"
+                }
+            }
+        }
+    ]
+}

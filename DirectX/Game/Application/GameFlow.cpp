@@ -1,0 +1,264 @@
+#include "stdafx.h"
+#include "GameFlow.h"
+#include "GameInput.h"
+#include "GameAction.h"
+#include "Actor/StateMachine.h"
+
+#include "Component/TerrainComponent.h"
+#include "Component/TransformComponentSystem.h"
+#include "Component/HierarchicalTransformComponent.h"
+#include "Component/BodyComponentSystem.h"
+#include "Component/AnimationComponentSystem.h"
+#include "ECS/ActorComponentSystem.h"
+#include "ECS/ActorSteeringComponentSystem.h"
+#include "ECS/CameraSteeringComponentSystem.h"
+#include "ECS/EntityContext.h"
+#include "Graphics/Camera.h"
+#include "Graphics/LightManager.h"
+#include "Terrain/HeightmapChunk.h"
+#include "Level/LevelManager.h"
+#include "UI/UIContext.h"
+#include "UI/UIObject.h"
+#include "UI/Component/UITextComponent.h"
+#include "Engine.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "ECS/EntityDebugTag.h"
+#endif
+#include <string>
+
+namespace app
+{
+	namespace
+	{
+		// タイトルで押す非同期ロード対象。ECS の効果(大量エンティティ)確認用の箱 1000 個 Level。
+		static const char* STARTUP_LEVEL       = "Assets/Levels/Playground.level.json";
+		static constexpr uint32_t LOAD_PER_FRAME = 20;    // 1 フレームあたり生成数(ローディングを見せるため小さめ)
+		static constexpr float    MIN_LOADING_SEC = 1.0f; // ローディング表示の最低時間(演出用)
+	}
+
+
+	// ── ローディング画面(ドット増減) ────────────────────────────────────────────
+
+	void LoadingScreen::OnEnter()
+	{
+		dotTimer_ = 0.0f;
+		dotCount_ = 0;
+		dotDir_   = 1;
+	}
+
+
+	void LoadingScreen::OnUpdate(const float dt)
+	{
+		// 0.3 秒ごとにドット数を 0..3 で往復させる。
+		dotTimer_ += dt;
+		if (dotTimer_ >= 0.3f) {
+			dotTimer_ = 0.0f;
+			dotCount_ += dotDir_;
+			if (dotCount_ >= 3)      { dotCount_ = 3; dotDir_ = -1; }
+			else if (dotCount_ <= 0) { dotCount_ = 0; dotDir_ =  1; }
+		}
+
+		if (auto* obj = Resolve(FindHandle("LoadingText"))) {
+			if (auto* text = obj->GetComponent<aq::ui::UITextComponent>()) {
+				std::string s = "Now Loading";
+				for (int i = 0; i < dotCount_; ++i) s += ".";
+				text->content = s;
+			}
+		}
+	}
+
+
+	// ── GameFlow ─────────────────────────────────────────────────────────────
+
+	GameFlow* GameFlow::instance_ = nullptr;
+
+
+	void GameFlow::Create()
+	{
+		if (!instance_) instance_ = new GameFlow();
+	}
+
+
+	void GameFlow::Release()
+	{
+		if (instance_) { delete instance_; instance_ = nullptr; }
+	}
+
+
+	void GameFlow::Initialize()
+	{
+		auto& screens = aq::ui::UIContext::Get().Screens();
+		screens.Register<TitleScreen>("Title",     "Assets/UI/Title.screen.json");
+		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
+		screens.Push("Title");
+		state_ = State::Title;
+	}
+
+
+	void GameFlow::Update(const float dt)
+	{
+		switch (state_)
+		{
+			case State::Title:
+			{
+				// 決定(Space / パッド A)で世界を生成し、箱 Level を非同期ロードしてローディングへ。
+				if (GameInput::Get().IsTriggered(GameAction::Confirm))
+				{
+					SetupWorld();
+					loadHandle_ = aq::level::LevelManager::Get().LoadAsync(STARTUP_LEVEL, aq::level::LevelId(), LOAD_PER_FRAME);
+					loadTimer_  = 0.0f;
+					aq::ui::UIContext::Get().Screens().Replace("Loading");
+					state_ = State::Loading;
+				}
+				break;
+			}
+			case State::Loading:
+			{
+				// 非同期ロード完了 + 最低表示時間経過でプレイへ。
+				loadTimer_ += dt;
+				if (loadHandle_.IsDone() && loadTimer_ >= MIN_LOADING_SEC)
+				{
+					aq::ui::UIContext::Get().Screens().Pop();   // ローディングを閉じる
+					state_ = State::Playing;
+				}
+				break;
+			}
+			case State::Playing:
+			{
+				break;
+			}
+		}
+	}
+
+
+	aq::math::Vector3 GameFlow::GetFocusPosition() const
+	{
+		auto& ctx = aq::ecs::EntityContext::Get();
+		if (ctx.IsValid(playerHandle_))
+		{
+			if (auto* htc = ctx.GetComponent<aq::ecs::HierarchicalTransformComponent>(playerHandle_))
+				return htc->transform.position;
+		}
+		return aq::math::Vector3(0.0f, 0.0f, 0.0f);
+	}
+
+
+	// 旧 BattleScene::Initialize の 3D 世界セットアップ(地形/カメラ/ライト/プレイヤー/ステアリング)を移設。
+	// Prefab/ECS の検証テスト・海・デカール・地形ペインタは削除。箱は非同期 Level で別途生成する。
+	void GameFlow::SetupWorld()
+	{
+		auto& ctx = aq::ecs::EntityContext::Get();
+
+		// 地形
+		aq::ecs::TerrainComponent* terrainComp = nullptr;
+		{
+			aq::terrain::HeightmapChunk::Desc desc;
+			desc.heightmapPath = "Assets/Terrain/heightmap.png";
+			desc.splatmapPath  = "Assets/Terrain/splatmap.png";
+			desc.layerPaths[0] = "Assets/Terrain/grass.DDS";
+			desc.layerPaths[1] = "Assets/Terrain/snow.DDS";
+			desc.layerPaths[2] = "Assets/Terrain/rock.DDS";
+			desc.resolution    = 128;
+			desc.heightScale   = 10.0f;
+			desc.terrainSize   = 100.0f;
+			desc.layerTiling   = 20.0f;
+
+			auto entity = ctx.CreateEntity<
+				aq::ecs::TransformComponent, aq::ecs::HierarchicalTransformComponent, aq::ecs::TerrainComponent>();
+			auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+			tc->position.Set(-50.0f, 0.0f, -50.0f);
+			tc->scale.Set(1.0f);
+			terrainComp = entity.GetComponent<aq::ecs::TerrainComponent>();
+			terrainComp->SetDesc(desc);
+			terrainComp->GetChunk()->SetReceiveShadow(true);
+#ifdef AQ_DEBUG_IMGUI
+			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Terrain");
+#endif
+		}
+
+		// world(0,0) = terrain local(50,50)(XZ オフセット -50 適用後)
+		const float spawnY = terrainComp->GetChunk()->GetHeight(50.0f, 50.0f);
+
+		// メインカメラ(位置/注視点は CameraSteeringSystem が管理) + オフスクリーンカメラ + ライト
+		aq::Camera* const mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);
+		mainCamera->SetNear(0.01f);
+		mainCamera->SetViewportSize(
+			static_cast<float>(aq::Engine::Get().GetRenderWidth()),
+			static_cast<float>(aq::Engine::Get().GetRenderHeight()));
+
+		aq::Camera* offscreenCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);
+		offscreenCamera->SetPosition(aq::math::Vector3(0.0f, spawnY + 5.0f, -15.0f));
+		offscreenCamera->SetTarget(aq::math::Vector3(0.0f, spawnY, 5.0f));
+		offscreenCamera->SetNear(0.01f);
+
+		aq::graphics::LightManager::Get().SetDirectionalColor(aq::math::Vector3(1.0f, 0.6f, 0.6f));
+
+		// プレイヤー(スケルタルメッシュ + Idle アニメ + ステートマシン)
+		aq::ecs::EntityHandle targetHandle;
+		{
+			auto entity = ctx.CreateEntity<
+				aq::ecs::TransformComponent,
+				aq::ecs::HierarchicalTransformComponent,
+				aq::ecs::SkeletalMeshComponent,
+				aq::ecs::AnimationComponent,
+				app::ecs::StateMachineComponent>();
+
+			targetHandle  = entity.GetHandle();
+			playerHandle_ = targetHandle;
+
+			auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+			tc->position.Set(0.0f, spawnY, 0.0f);
+			tc->scale.Set(1.0f);
+
+			auto* skelComp = entity.GetComponent<aq::ecs::SkeletalMeshComponent>();
+			skelComp->SetShaderType(aq::graphics::SkeletalMesh::ShaderType::SkeletalPBRLit);
+			skelComp->SetModelPath("Assets/unityChan.tkm");
+			skelComp->GetSkeletalMesh()->SetCastShadow(true);
+			skelComp->GetSkeletalMesh()->SetReceiveShadow(true);
+			skelComp->GetSkeletalMesh()->SetReceivesDecal(false);
+
+			auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
+			animComp->AddAnimation(aqHash32("idle"), "Assets/animData/idle.tka");
+			animComp->Play(aqHash32("idle"), true);
+
+			auto* sm = entity.GetComponent<app::ecs::StateMachineComponent>();
+			sm->GetStateMachine()->AddState<app::actor::IdleState>(aqHash32("Idle"));
+			sm->GetStateMachine()->AddState<app::actor::MoveState>(aqHash32("Move"));
+			sm->GetStateMachine()->RequestStateID(aqHash32("Idle"));
+			sm->GetStateMachine()->SetTargetHandle(targetHandle);
+#ifdef AQ_DEBUG_IMGUI
+			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Player");
+#endif
+		}
+
+		// キャラクターステアリング(入力 → 移動)
+		{
+			auto entity = ctx.CreateEntity<app::ecs::CharacterSteeringComponent>();
+			entity.GetComponent<app::ecs::CharacterSteeringComponent>()->SetTarget(targetHandle);
+#ifdef AQ_DEBUG_IMGUI
+			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CharacterSteering");
+#endif
+		}
+
+		// カメラステアリング(プレイヤー追従 TPS)
+		{
+			auto entity = ctx.CreateEntity<app::ecs::CameraSteeringComponent>();
+			auto* cam = entity.GetComponent<app::ecs::CameraSteeringComponent>();
+			cam->TrackEntity(targetHandle, aq::math::Vector3(0.0f, 1.5f, 0.0f));
+			cam->SetManualView(0.0f, 20.0f, 10.0f);
+			cam->cameraType = aq::CameraType::Main;
+#ifdef AQ_DEBUG_IMGUI
+			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CameraTracking");
+#endif
+		}
+
+		// カメラエフェクト(シェイク等の加算)
+		{
+			auto entity = ctx.CreateEntity<app::ecs::CameraEffectComponent>();
+			entity.GetComponent<app::ecs::CameraEffectComponent>()->cameraType = aq::CameraType::Main;
+#ifdef AQ_DEBUG_IMGUI
+			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CameraEffect");
+#endif
+		}
+	}
+}

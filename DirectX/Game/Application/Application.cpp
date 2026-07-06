@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "Application.h"
-#include "TestScreen.h"
-#include "Scene/Scene.h"
+#include "GameFlow.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
@@ -36,16 +35,11 @@ namespace app
 			->SetViewportSize(kOffscreenRTWidth, kOffscreenRTHeight);
 
 		GameInput::Initialize();
-		app::SceneManager::Create();
 
-		// --- UI アニメーションテスト ---
-		// TestScreen.json に定義された FadeIn + SlideLoop クリップを自動再生する。
-		// デバッグメニュー UI > Animation Editor で実行中アニメーションを確認・編集できる。
-		{
-			auto& screens = aq::ui::UIContext::Get().Screens();
-			screens.Register<app::TestScreen>("TestUI", "Assets/UI/TestScreen.json");
-			screens.Push("TestUI");
-		}
+		// タイトル/ローディング/プレイのゲームフロー(旧 Scene を置換)。UI 画面(タイトル/ローディング)を登録し
+		// タイトルを表示する。決定入力で箱 Level を非同期ロードし、完了後にプレイへ遷移する。
+		app::GameFlow::Create();
+		app::GameFlow::Get().Initialize();
 
 		// Shadow renderer
 		{
@@ -123,7 +117,7 @@ namespace app
 			aq::sound::SoundEngine::Get().DestroySource(orbitSource_);
 		}
 
-		app::SceneManager::Release();
+		app::GameFlow::Release();
 		GameInput::Finalize();
 	}
 
@@ -328,17 +322,13 @@ namespace app
 	{
 		UpdateSoundTest();
 
-		app::SceneManager::Get().Update();
+		app::GameFlow::Get().Update(aq::Engine::GetDeltaTime());
 
 		if (renderer_.GetShadowRenderer())
 		{
-			auto* scene = app::SceneManager::Get().GetCurrentScene();
-			if (scene)
-			{
-				auto pos = scene->GetFocusPosition();
-				pos.y += 2.0f;
-				renderer_.GetShadowRenderer()->SetSceneCenter(pos);
-			}
+			auto pos = app::GameFlow::Get().GetFocusPosition();
+			pos.y += 2.0f;
+			renderer_.GetShadowRenderer()->SetSceneCenter(pos);
 		}
 	}
 

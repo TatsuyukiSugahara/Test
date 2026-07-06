@@ -70,39 +70,69 @@ namespace app
 		};
 
 
-		// ローディング中。OnEnter で世界生成 + 非同期ロード開始。
-		// ※ 重い同期セットアップ(地形/スケルタルメッシュ読込)を「黒いローディング画面が出た後」に行うことで、
-		//   タイトルのまま固まって見えるのを防ぐ(前フレームでローディング画面が表示済みになる)。
+		// ローディング中。世界生成 + 非同期 Level ロードをフェーズに分けて進める。
+		// ※ SetupWorld(地形/スケルタルメッシュ読込)は 1 フレームで完了する重い同期処理でヒッチする。
+		//   これを OnEnter で即実行すると、その長フレーム中は UI が回らず "Now Loading" のドット
+		//   アニメが進まない(=開始が遅れて見える)。そこで先にローディング画面を数フレーム描画・
+		//   アニメさせてから(WarmUp)、重い処理を後続フレームに分けて回す。箱 1000 個は LoadAsync
+		//   が LOAD_PER_FRAME ずつ分割生成する。
 		class LoadingState : public IGameState
 		{
 		public:
-			void OnEnter(GameFlow& flow) override
+			void OnEnter(GameFlow& /*flow*/) override
 			{
-				flow.SetupWorld();
-				flow.SetLoadHandle(
-					aq::level::LevelManager::Get().LoadAsync(STARTUP_LEVEL, aq::level::LevelId(), LOAD_PER_FRAME));
-				timer_ = 0.0f;
+				phase_        = Phase::WarmUp;
+				warmupFrames_ = 0;
+				timer_        = 0.0f;
 			}
 
 			void OnUpdate(GameFlow& flow, const float dt) override
 			{
 				timer_ += dt;
 
-				// 完了条件: Level 生成完了 + 最低表示時間 + (フォント準備完了 or 安全上限)。
-				// フォントを待つのは "Now Loading" テキストを確実に一度は表示させるため
-				// (アトラス 4096² は読み込みが重く、待たないと文字が出ないまま終わることがある)。
-				const bool ready = flow.LoadHandle().IsDone()
-				                && timer_ >= MIN_LOADING_SEC
-				                && (IsUIFontReady() || timer_ >= FONT_WAIT_MAX);
-				if (ready)
+				switch (phase_)
 				{
-					aq::ui::UIContext::Get().Screens().Pop();   // ローディングを閉じる
-					flow.ChangeState(std::make_unique<PlayingState>());
+				case Phase::WarmUp:
+					// ローディング画面を数フレーム描画・アニメさせてから重い同期処理へ。
+					if (++warmupFrames_ >= WARMUP_FRAME_COUNT) { phase_ = Phase::SetupWorld; }
+					break;
+
+				case Phase::SetupWorld:
+					// 地形/カメラ/ライト/プレイヤー生成(重い同期。ここだけ 1 フレーム分ヒッチ)。
+					flow.SetupWorld();
+					phase_ = Phase::StartStream;
+					break;
+
+				case Phase::StartStream:
+					// 箱 1000 個の非同期 Level ロード開始(以降 Tick が分割生成)。
+					flow.SetLoadHandle(
+						aq::level::LevelManager::Get().LoadAsync(STARTUP_LEVEL, aq::level::LevelId(), LOAD_PER_FRAME));
+					phase_ = Phase::Streaming;
+					break;
+
+				case Phase::Streaming:
+				{
+					// 完了条件: Level 生成完了 + 最低表示時間 + (フォント準備完了 or 安全上限)。
+					const bool ready = flow.LoadHandle().IsDone()
+					                && timer_ >= MIN_LOADING_SEC
+					                && (IsUIFontReady() || timer_ >= FONT_WAIT_MAX);
+					if (ready)
+					{
+						aq::ui::UIContext::Get().Screens().Pop();   // ローディングを閉じる
+						flow.ChangeState(std::make_unique<PlayingState>());
+					}
+					break;
+				}
 				}
 			}
 
 		private:
-			float timer_ = 0.0f;
+			enum class Phase { WarmUp, SetupWorld, StartStream, Streaming };
+			static constexpr int WARMUP_FRAME_COUNT = 2;   // 重い処理前にローディング画面を見せるフレーム数
+
+			Phase phase_        = Phase::WarmUp;
+			int   warmupFrames_ = 0;
+			float timer_        = 0.0f;
 		};
 
 

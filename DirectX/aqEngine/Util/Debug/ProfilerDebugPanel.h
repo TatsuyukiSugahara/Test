@@ -28,6 +28,8 @@ namespace aq
 			const char* GetDebugCategory() const override { return "Profiling"; }
 
 		private:
+			// CPU タブ: フレーム時間 / スレッド別 CPU / タイムライン / 詳細ツリー
+			void RenderCpuTab();
 			// タイムライン (横=時間 / 縦=スレッド) 表示
 			void RenderTimeline();
 			// 折りたたみ詳細 (ツリー) 表示
@@ -35,8 +37,8 @@ namespace aq
 			void RenderNode(const ThreadFrame& frame,
 			                const std::vector<std::vector<int>>& children,
 			                int index, double threadTotalMs);
-			// メモリ観測 (使用量 + 予算 + サイト別内訳) 表示
-			void RenderMemory();
+			// Memory タブ: 使用量 + 予算 + サイト別内訳。重いソース別集計はこのタブ表示中のみ行う。
+			void RenderMemoryTab();
 
 			std::vector<ThreadFrame> snapshot_;
 			double                   snapshotFrameMs_ = 0.0;  // snapshot_ と同時に凍結する 1F 時間

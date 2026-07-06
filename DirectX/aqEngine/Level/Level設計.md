@@ -599,7 +599,7 @@ LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId paren
 | | 内容 |
 |---|---|
 | R1 | ✅ **D1**: `LevelManager::ReloadAll`（`PrefabRegistry`/`LevelRegistry` を Clear → ファイル由来 root を Unload→Load）。Level エディタに "Reload Refs" ボタン |
-| R2 | 未: エディタ override 編集 UI（参照先を解決表示 → 差分を `overrides` に保持 → `{prefab,overrides}` 保存） |
+| R2 | ✅（v1）エディタ override 編集 UI。参照ノードの `components` を **override（deep-merge/追加）** として編集、`removedComponents` で削除指定。`{ prefab, overrides:{ components, removedComponents } }` で往復（[../ECS/PrefabEditNodeOps.cpp](../ECS/PrefabEditNodeOps.cpp)）。／ 未: 参照先の**ベース構成を解決表示**、**フィールド単位の差分**（現状は「コンポーネント丸ごと override」）、**子（children）override** |
 | R3 | ✅ **D2**: `LevelManager::Tick`/`PollFileChanges`（0.5 秒間引きで root Level ファイルの mtime を確認→変更で reload）。エディタに "Auto" トグル（`SetAutoReload`）。`LevelStreamSystem::Update` から `Tick` |
 | R4 | 未: **D3**: OS ファイル監視（`ReadDirectoryChangesW`）での自動 reload |
 | R5（大）| 未: ライブ instance への差分パッチ（作り直さずランタイム状態保持）※要否は別途判断 |
@@ -612,4 +612,10 @@ LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId paren
 >   「プレハブファイルだけを編集」した場合の自動検知は未（プレハブ依存の追跡が要る＝D2+）。当面は **D1 の手動 Reload で対応**。
 >   reload の実体は**Unload→Load の作り直し**なのでランタイム状態は保持されない（ライブパッチ R5 は別途）。
 >
-> **残**: R2（override 編集 UI・ランタイムの overrides 意味論は §7.3 実装済み）、R4（OS 監視）、R5（ライブパッチ）。
+> **追加実装（R2 v1・ビルド検証）**: 参照ノードの Inspector に override 編集を追加。
+> - `PrefabEditNode` に `removedComponents`（[../ECS/PrefabEditor.h](../ECS/PrefabEditor.h)）。参照ノードでは `components` を **override** として扱い、
+>   `+ Add Component` で override/追加、`+ Remove Component` で `removedComponents` を編集。保存は `{ prefab, overrides:{ components, removedComponents } }`。
+> - ランタイムは `PrefabSerializer::ResolveNode/ApplyPatch`（§7.3）がそのまま適用（deep-merge / 追加 / 削除）。Prefab エディタ内のネスト参照でも同じ UI が使える。
+> - **未（R2.5）**: 参照先のベース構成を解決表示、**フィールド単位の差分**（現状は該当コンポーネントを丸ごと override）、children override。
+>
+> **残**: R2.5（フィールド差分・ベース表示・子 override）、R4（OS 監視 D3）、R5（ライブパッチ）、プレハブ単独編集の自動検知（D2+）。

@@ -20,6 +20,7 @@
 #include "UI/UIContext.h"
 #include "UI/UIObject.h"
 #include "UI/Component/UITextComponent.h"
+#include "Resource/Resource.h"   // 事前ロード用(ResourceManager / GPUResource)
 #include "Engine.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "ECS/EntityDebugTag.h"
@@ -147,6 +148,11 @@ namespace app
 		screens.Register<TitleScreen>("Title",     "Assets/UI/Title.screen.json");
 		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
 		screens.Push("Title");
+
+		// UI 画像テクスチャを起動時にプリロードしておく。UI 画像は未ロード中はバインドがスキップされ
+		// 表示が数フレーム遅れるため、事前にキャッシュして決定時に即座に黒背景を出せるようにする。
+		aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Terrain/rock.png");
+		aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
 
 		current_ = std::make_unique<TitleState>();
 		current_->OnEnter(*this);

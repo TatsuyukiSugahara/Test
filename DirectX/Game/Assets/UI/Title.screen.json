@@ -6,23 +6,109 @@
     },
     "children": [
         {
-            "name": "TitleImage",
+            "name": "Washi",
             "components": {
-                "transform": { "position": [0, -120, 0], "sizeDelta": [512, 512] },
-                "image": { "texture": "Assets/Character/Character.png", "color": [1, 1, 1, 1] }
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.9255, 0.9059, 0.8588, 1.0] }
             }
         },
         {
-            "name": "TitleText",
+            "name": "Vignette",
             "components": {
-                "transform": { "position": [0, 300, 0], "sizeDelta": [1000, 80] },
+                "transform": { "position": [0, 400, 0], "sizeDelta": [1920, 280] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.0, 0.0, 0.0, 0.06] }
+            }
+        },
+        {
+            "name": "Eyebrow",
+            "components": {
+                "transform": { "position": [0, -430, 0], "sizeDelta": [1400, 60] },
                 "text": {
-                    "content": "Press A / Space to Start",
-                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "content": "T H E   L A S T   B L A D E",
+                    "textStylePath": "Assets/Styles/SumiLabel.textstyle.json",
+                    "fontSize": 30,
                     "alignH": "Center",
                     "alignV": "Middle",
-                    "color": [1, 1, 1, 1]
+                    "color": [0.4784, 0.4471, 0.3882, 0.02]
                 }
+            }
+        },
+        {
+            "name": "Kanji",
+            "components": {
+                "transform": { "position": [0, -20, 0], "sizeDelta": [1000, 560], "scale": [1.35, 1.35] },
+                "text": {
+                    "content": "残刃",
+                    "textStylePath": "Assets/Styles/Sumi.textstyle.json",
+                    "fontSize": 400,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.1294, 0.1216, 0.1059, 0.02]
+                }
+            }
+        },
+        {
+            "name": "SealOuter",
+            "components": {
+                "transform": { "position": [500, -300, 0], "sizeDelta": [150, 150], "scale": [0.4, 0.4], "rotation": -4 },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.6902, 0.3137, 0.2353, 0.02] }
+            }
+        },
+        {
+            "name": "SealInner",
+            "components": {
+                "transform": { "position": [500, -300, 0], "sizeDelta": [132, 132], "scale": [0.4, 0.4], "rotation": -4 },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.9255, 0.9059, 0.8588, 0.02] }
+            }
+        },
+        {
+            "name": "SealChar",
+            "components": {
+                "transform": { "position": [500, -300, 0], "sizeDelta": [140, 140], "scale": [0.4, 0.4], "rotation": -4 },
+                "text": {
+                    "content": "侍",
+                    "textStylePath": "Assets/Styles/Sumi.textstyle.json",
+                    "fontSize": 88,
+                    "scale": 0.4,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.6902, 0.3137, 0.2353, 0.02]
+                }
+            }
+        },
+        {
+            "name": "Romaji",
+            "components": {
+                "transform": { "position": [0, 357, 0], "sizeDelta": [1000, 80] },
+                "text": {
+                    "content": "Z  A  N  J  I  N",
+                    "textStylePath": "Assets/Styles/SumiLabel.textstyle.json",
+                    "fontSize": 40,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.2314, 0.2078, 0.1725, 0.02]
+                }
+            }
+        },
+        {
+            "name": "Press",
+            "components": {
+                "transform": { "position": [0, 445, 0], "sizeDelta": [1000, 50] },
+                "text": {
+                    "content": "P R E S S   A N Y   B U T T O N",
+                    "textStylePath": "Assets/Styles/SumiLabel.textstyle.json",
+                    "fontSize": 24,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.3529, 0.3255, 0.2784, 0.02]
+                }
+            }
+        },
+        {
+            "name": "Flash",
+            "components": {
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [1.0, 1.0, 1.0, 0.0] }
             }
         }
     ]

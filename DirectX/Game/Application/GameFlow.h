@@ -29,10 +29,40 @@ namespace app
 
 
 	/**
-	 * タイトル画面。画像 + "Press A" テキストは JSON。決定入力の判定は TitleState が行う。
+	 * タイトル画面 (案A「墨」)。和紙の地に筆文字「残刃」がにじんで登場し、朱の落款「侍」、
+	 * 下部に点滅する PRESS ANY BUTTON。レイアウトは Title.screen.json、入退場アニメは本クラスの
+	 * OnUpdate が時間駆動する。決定入力の判定は TitleState 側で行い、押下時に RequestStart() で
+	 * フラッシュ演出を開始、IsStartFlashDone() が真になったら遷移する。
 	 */
 	class TitleScreen : public aq::ui::UIScreen
 	{
+	// ── メンバ変数 ──
+	private:
+		/** 時間・状態 */
+		float elapsed_      = 0.0f;   // OnEnter からの経過秒
+		bool  startPressed_ = false;  // 決定入力後のフラッシュ開始フラグ
+		float flashTime_    = 0.0f;   // フラッシュ開始からの経過秒
+
+		/** アニメ対象 UIObject (名前解決は OnEnter で一度だけ行いキャッシュ) */
+		aq::ui::UIObject* eyebrow_   = nullptr;
+		aq::ui::UIObject* kanji_     = nullptr;
+		aq::ui::UIObject* sealOuter_ = nullptr;
+		aq::ui::UIObject* sealInner_ = nullptr;
+		aq::ui::UIObject* sealChar_  = nullptr;
+		aq::ui::UIObject* romaji_    = nullptr;
+		aq::ui::UIObject* press_     = nullptr;
+		aq::ui::UIObject* flash_     = nullptr;
+
+	// ── メンバ関数 ──
+	public:
+		void OnEnter()          override;
+		void OnUpdate(float dt) override;
+
+		/** 決定入力時に TitleState から呼ぶ。白フラッシュ演出を開始する。 */
+		void RequestStart();
+
+		/** フラッシュが十分進み、次画面へ遷移してよいか。 */
+		bool IsStartFlashDone() const;
 	};
 
 

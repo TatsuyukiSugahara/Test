@@ -14,6 +14,8 @@
 #include "Level/LevelManager.h"
 #include "UI/UIObject.h"
 #include "UI/Component/UITextComponent.h"
+#include "UI/Component/UIImageComponent.h"
+#include "UI/Component/UITransformComponent.h"
 #include "UI/Font/FontAssetCache.h"   // フォント事前ロード / 準備完了判定
 #include "UI/Font/FontResource.h"
 #include "UI/Font/FontAsset.h"
@@ -31,6 +33,9 @@ namespace app
 		// UI 文字は英数字のみ。ASCII 専用の小さな MSDF アトラス(512²/約74KB)を使い、
 		// 起動時に即ロードできるようにする(全文字版 CorporateLogo は 8411 グリフ・4096²/12MB で重い)。
 		static const char*        UI_FONT_PATH    = "Assets/Font/UI/atlas.json";
+		// タイトルの筆文字「残刃 / 侍」用。日本語グリフ全部入りの重いアトラス(4096²)。
+		// タイトルはこのフォントが主役なので、BootState で準備完了を待ってから表示する。
+		static const char*        TITLE_FONT_PATH = "Assets/Font/CorporateLogo/atlas.json";
 		static constexpr uint32_t LOAD_PER_FRAME  = 20;     // 1 フレームあたり生成数(ローディングを見せるため小さめ)
 		static constexpr float    MIN_LOADING_SEC = 1.0f;   // ローディング表示の最低時間(演出用)
 		static constexpr float    FONT_WAIT_MAX   = 15.0f;  // フォント準備待ちの安全上限(未完でも進む)
@@ -41,6 +46,18 @@ namespace app
 		bool IsUIFontReady()
 		{
 			auto fontRes = aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
+			if (!fontRes || !fontRes->IsCompleted()) return false;
+			const aq::ui::FontAsset* fa = fontRes->GetFontAsset();
+			if (!fa) return false;
+			auto srv = fa->GetAtlasSRV();
+			return srv && srv->GetNativeHandle() != nullptr;
+		}
+
+
+		// タイトル筆文字用フォント(CorporateLogo)が描画可能かを返す。IsUIFontReady と同様。
+		bool IsTitleFontReady()
+		{
+			auto fontRes = aq::ui::FontAssetCache::Get().Load(TITLE_FONT_PATH);
 			if (!fontRes || !fontRes->IsCompleted()) return false;
 			const aq::ui::FontAsset* fa = fontRes->GetFontAsset();
 			if (!fa) return false;
@@ -133,11 +150,28 @@ namespace app
 		public:
 			void OnUpdate(GameFlow& flow, const float /*dt*/) override
 			{
-				if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
+				auto& screens = aq::ui::UIContext::Get().Screens();
+				auto* title   = static_cast<TitleScreen*>(screens.Top());   // 表示中はタイトルが最前面
 
-				aq::ui::UIContext::Get().Screens().Replace("Loading");
-				flow.ChangeState(std::make_unique<LoadingState>());
+				// 未押下: 決定入力を待ち、押されたらフラッシュ演出を開始する。
+				if (!startRequested_)
+				{
+					if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
+					startRequested_ = true;
+					if (title) { title->RequestStart(); }
+					return;
+				}
+
+				// フラッシュが十分進んだらローディングへ切替(世界生成/ロードは LoadingState で行う)。
+				if (!title || title->IsStartFlashDone())
+				{
+					screens.Replace("Loading");
+					flow.ChangeState(std::make_unique<LoadingState>());
+				}
 			}
+
+		private:
+			bool startRequested_ = false;
 		};
 
 
@@ -154,7 +188,8 @@ namespace app
 			void OnUpdate(GameFlow& flow, const float dt) override
 			{
 				timer_ += dt;
-				if (IsUIFontReady() || timer_ >= FONT_WAIT_MAX)
+				// タイトルは筆文字が主役。ASCII とタイトル用フォントの両方が整うまで待つ(安全上限あり)。
+				if ((IsUIFontReady() && IsTitleFontReady()) || timer_ >= FONT_WAIT_MAX)
 				{
 					aq::ui::UIContext::Get().Screens().Replace("Title");
 					flow.ChangeState(std::make_unique<TitleState>());
@@ -196,6 +231,159 @@ namespace app
 				text->color   = { 1.0f, 1.0f, 1.0f, 1.0f };   // 黒背景に白文字(TextStyle に依らず可視化)
 			}
 		}
+	}
+
+
+	// ── タイトル画面(案A「墨」) ────────────────────────────────────────────────
+
+	namespace
+	{
+		// 経過 t[s] を区間 [delay, delay+dur] で 0..1 に正規化し、EaseOut(cubic)を掛けた値。
+		// HTML 版 cubic-bezier(.2,.7,.2,1) の減速カーブを近似する。
+		float EaseOutSeg(const float t, const float delay, const float dur)
+		{
+			if (dur <= 0.0f) { return t >= delay ? 1.0f : 0.0f; }
+			float p = (t - delay) / dur;
+			if (p <= 0.0f) { return 0.0f; }
+			if (p >= 1.0f) { return 1.0f; }
+			const float inv = 1.0f - p;
+			return 1.0f - inv * inv * inv;
+		}
+
+
+		// テキストの不透明度。a==0 はスタイル既定色扱い(不可視にできない)になるため最小値でクランプ。
+		void SetTextAlpha(aq::ui::UIObject* obj, const float a)
+		{
+			if (!obj) { return; }
+			if (auto* t = obj->GetComponent<aq::ui::UITextComponent>()) {
+				t->color.w = a < 0.02f ? 0.02f : a;
+			}
+		}
+
+
+		// 画像の不透明度(a==0 は完全透明で問題なし)。
+		void SetImageAlpha(aq::ui::UIObject* obj, const float a)
+		{
+			if (!obj) { return; }
+			if (auto* i = obj->GetComponent<aq::ui::UIImageComponent>()) {
+				i->color.w = a;
+			}
+		}
+
+
+		// Transform の等方スケール(画像矩形の拡縮に使う。テキストのグリフは fontSize/scale 側で拡縮)。
+		void SetUniformScale(aq::ui::UIObject* obj, const float s)
+		{
+			if (!obj) { return; }
+			if (auto* t = obj->GetComponent<aq::ui::UITransformComponent>()) {
+				t->localScale.x = s;
+				t->localScale.y = s;
+			}
+		}
+	}
+
+
+	void TitleScreen::OnEnter()
+	{
+		elapsed_      = 0.0f;
+		startPressed_ = false;
+		flashTime_    = 0.0f;
+
+		// 名前解決は入場時に一度だけ行い、以降 OnUpdate はキャッシュしたポインタを使う。
+		eyebrow_   = Resolve(FindHandle("Eyebrow"));
+		kanji_     = Resolve(FindHandle("Kanji"));
+		sealOuter_ = Resolve(FindHandle("SealOuter"));
+		sealInner_ = Resolve(FindHandle("SealInner"));
+		sealChar_  = Resolve(FindHandle("SealChar"));
+		romaji_    = Resolve(FindHandle("Romaji"));
+		press_     = Resolve(FindHandle("Press"));
+		flash_     = Resolve(FindHandle("Flash"));
+	}
+
+
+	void TitleScreen::OnUpdate(const float dt)
+	{
+		elapsed_ += dt;
+		const float t = elapsed_;
+
+		// 筆文字「残刃」: にじみ登場(scale 1.35→1.0 / alpha 0→1)。delay 0.15 / dur 1.5
+		if (kanji_)
+		{
+			const float p = EaseOutSeg(t, 0.15f, 1.5f);
+			if (auto* txt = kanji_->GetComponent<aq::ui::UITextComponent>()) {
+				txt->scale   = 1.35f - 0.35f * p;
+				txt->color.w = p < 0.02f ? 0.02f : p;
+			}
+		}
+
+		// eyebrow "THE LAST BLADE": フェードイン。delay 1.1 / dur 1.2
+		SetTextAlpha(eyebrow_, EaseOutSeg(t, 1.1f, 1.2f));
+
+		// 落款「侍」: せり出し(scale 0.4→1.0 / alpha 0→1)。delay 1.3 / dur 1.4
+		{
+			const float p = EaseOutSeg(t, 1.3f, 1.4f);
+			const float s = 0.4f + 0.6f * p;
+			SetUniformScale(sealOuter_, s);
+			SetUniformScale(sealInner_, s);
+			SetImageAlpha(sealOuter_, p);
+			SetImageAlpha(sealInner_, p);
+			if (sealChar_) {
+				if (auto* txt = sealChar_->GetComponent<aq::ui::UITextComponent>()) {
+					txt->scale   = s;   // 文字はフォントスケールで拡縮(矩形スケールではグリフが変わらない)
+					txt->color.w = p < 0.02f ? 0.02f : p;
+				}
+			}
+		}
+
+		// romaji "ZANJIN": 下からせり上がりつつフェード(y 357→315)。delay 1.2 / dur 1.0
+		{
+			const float p = EaseOutSeg(t, 1.2f, 1.0f);
+			if (romaji_) {
+				if (auto* tr = romaji_->GetComponent<aq::ui::UITransformComponent>()) {
+					tr->localPosition.y = 357.0f - 42.0f * p;
+				}
+			}
+			SetTextAlpha(romaji_, p);
+		}
+
+		// PRESS ANY BUTTON: 1.8s でフェードイン後、周期 1.6s で点滅(高→低のホールド型)。
+		{
+			float a;
+			if (t < 1.8f) {
+				a = 0.0f;
+			} else if (t < 2.0f) {
+				a = (t - 2.0f + 0.2f) / 0.2f;   // 1.8→2.0 で 0→1
+			} else {
+				// fmod を使わずに位相を求める(cmath 非依存)。
+				const float x  = t - 2.0f;
+				const int   n  = static_cast<int>(x / 1.6f);
+				const float ph = (x - static_cast<float>(n) * 1.6f) / 1.6f;
+				a = ph < 0.5f ? 1.0f : 0.12f;
+			}
+			SetTextAlpha(press_, a);
+		}
+
+		// 決定後の白フラッシュ(alpha 0.85→0 / 0.5s)。
+		if (startPressed_)
+		{
+			flashTime_ += dt;
+			float fa = 0.85f * (1.0f - flashTime_ / 0.5f);
+			if (fa < 0.0f) { fa = 0.0f; }
+			SetImageAlpha(flash_, fa);
+		}
+	}
+
+
+	void TitleScreen::RequestStart()
+	{
+		startPressed_ = true;
+		flashTime_    = 0.0f;
+	}
+
+
+	bool TitleScreen::IsStartFlashDone() const
+	{
+		return startPressed_ && flashTime_ >= 0.35f;
 	}
 
 
@@ -245,6 +433,10 @@ namespace app
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
 			// UI フォント(小さな ASCII アトラス)を先読み。テキストはアトラス完了まで描画されないため。
 			aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
+			// タイトル筆文字用フォント(CorporateLogo)も先読み。BootState が準備完了を待つ。
+			aq::ui::FontAssetCache::Get().Load(TITLE_FONT_PATH);
+			// タイトルの単色塗り(和紙/落款/フラッシュ)に使う白テクスチャ。
+			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/UI/Textures/white.png");
 			preloaded_ = true;
 		}
 

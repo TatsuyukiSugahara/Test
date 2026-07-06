@@ -1,0 +1,22 @@
+{
+    "name": "Sumi",
+    "fontPath": "Assets/Font/CorporateLogo/atlas.json",
+    "fontSize": 48.0,
+    "fillColor": [0.1294, 0.1216, 0.1059, 1.0],
+    "outline": {
+        "enabled": false,
+        "color": [0.0, 0.0, 0.0, 0.0],
+        "width": 0.0
+    },
+    "shadow": {
+        "enabled": true,
+        "color": [0.0, 0.0, 0.0, 0.18],
+        "offset": [0.0, 8.0],
+        "softness": 0.14
+    },
+    "gradient": {
+        "enabled": false,
+        "topColor": [1.0, 1.0, 1.0, 1.0],
+        "bottomColor": [1.0, 1.0, 1.0, 1.0]
+    }
+}

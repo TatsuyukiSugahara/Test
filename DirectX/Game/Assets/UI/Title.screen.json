@@ -1,0 +1,29 @@
+{
+    "name": "TitleRoot",
+    "components": {
+        "transform": { "active": true, "sizeDelta": [1920, 1080] },
+        "canvas": { "resolution": [1920, 1080] }
+    },
+    "children": [
+        {
+            "name": "TitleImage",
+            "components": {
+                "transform": { "position": [0, -120, 0], "sizeDelta": [512, 512] },
+                "image": { "texture": "Assets/Character/Character.png", "color": [1, 1, 1, 1] }
+            }
+        },
+        {
+            "name": "TitleText",
+            "components": {
+                "transform": { "position": [0, 300, 0], "sizeDelta": [1000, 80] },
+                "text": {
+                    "content": "Press A / Space to Start",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1, 1, 1, 1]
+                }
+            }
+        }
+    ]
+}

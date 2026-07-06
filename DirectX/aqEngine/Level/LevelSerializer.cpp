@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "Level/LevelSerializer.h"
 #include "ECS/PrefabSerializer.h"
-#include <string>
 
 
 namespace aq
@@ -63,9 +62,18 @@ namespace aq
 					{
 						if (!sub.IsObject() || !sub.Contains("level")) continue;
 						SubLevelRef ref;
-						// サブLevel パスは親 .level.json のディレクトリ基準で解決しておく（再帰ロードで直接使える）。
-						ref.path        = JoinPath(baseDir, sub["level"].AsString());
 						ref.loadOnStart = sub.Contains("loadOnStart") ? sub["loadOnStart"].AsBool(true) : true;
+
+						const util::JsonValue& lv = sub["level"];
+						if (lv.IsObject()) {
+							// インライン定義: その場で LevelData を構築する（entities/subLevels を再帰解決）。
+							ref.inlineData = Build(lv, baseDir);
+						} else if (lv.IsString()) {
+							// 外部ファイル参照: 親 .level.json のディレクトリ基準で解決しておく（再帰ロードで直接使える）。
+							ref.path = JoinPath(baseDir, lv.AsString());
+						} else {
+							continue;
+						}
 						data->subLevels.push_back(std::move(ref));
 					}
 				}

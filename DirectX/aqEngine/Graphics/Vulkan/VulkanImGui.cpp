@@ -6,10 +6,7 @@
 #include "Graphics/Vulkan/VulkanResources.h"
 #include "Graphics/Vulkan/VulkanBuffers.h"
 #include "Graphics/Vulkan/VulkanPipelineLayout.h"
-#include "Graphics/GraphicsDevice.h"
 #include <imgui/imgui.h>
-#include <memory>
-#include <vector>
 
 namespace aq
 {

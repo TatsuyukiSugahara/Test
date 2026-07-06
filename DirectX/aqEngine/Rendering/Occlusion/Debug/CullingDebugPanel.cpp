@@ -2,7 +2,6 @@
 #include "CullingDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
-#include "Component/BodyComponentSystem.h"
 #include "Rendering/Occlusion/ClusterCull.h"
 
 

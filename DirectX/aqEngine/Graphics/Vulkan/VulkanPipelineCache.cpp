@@ -2,7 +2,6 @@
 #ifdef ENGINE_GRAPHICS_VULKAN
 #include "Graphics/Vulkan/VulkanPipelineCache.h"
 #include "Graphics/Vulkan/VulkanShader.h"
-#include <vector>
 
 namespace aq
 {

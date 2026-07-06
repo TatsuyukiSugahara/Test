@@ -1,7 +1,6 @@
 #include "aq.h"
 #ifdef ENGINE_GRAPHICS_VULKAN
 #include "Graphics/Vulkan/VulkanPipelineLayout.h"
-#include <vector>
 
 namespace aq
 {

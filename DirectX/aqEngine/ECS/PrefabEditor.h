@@ -21,8 +21,10 @@ namespace aq
 		struct PrefabEditNode
 		{
 			std::string                                  name = "Node";
-			std::vector<PrefabEditComponent>             components;
-			std::vector<std::unique_ptr<PrefabEditNode>> children;   // ポインタ安定のため unique_ptr
+			std::string                                  prefabRef;          // 非空 = .prefab.json 参照ノード（実体はロード時に解決）
+			std::vector<PrefabEditComponent>             components;         // 通常=インライン / 参照ノード=override コンポーネント（deep-merge/追加）
+			std::vector<std::string>                     removedComponents;  // 参照ノードの override: 参照先から除去する typeName
+			std::vector<std::unique_ptr<PrefabEditNode>> children;           // ポインタ安定のため unique_ptr
 		};
 
 

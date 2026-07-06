@@ -107,6 +107,7 @@ public:\
 			virtual ResourceBase* Create() = 0;
 
 			void Request(const char* path) { requestPath_ = path ? path : ""; }
+			const std::string& GetRequestPath() const { return requestPath_; }   // 計測ログ用
 			void SetRefResource(const RefResource& refResource) { resource_ = refResource; }
 
 			/** ThreadPool::Get() へロードをサブミットする */
@@ -192,18 +193,18 @@ public:\
 			/**
 			 * ローカル空間の AABB を返す (カリング用)。
 			 * 初回呼び出し時に頂点列から計算してキャッシュする。
-			 * ゲームスレッドからのみ呼ぶこと (ロード完了後)。
+			 * 複数システムが同一 wave で並列実行される (SystemManager) ため、call_once で 1 回だけ生成する。
 			 */
 			const math::AABB& GetLocalAABB() const
 			{
-				if (!aabbComputed_)
+				std::call_once(aabbOnce_, [this]()
 				{
 					math::AABBBuilder builder;
 					for (const graphics::VertexData& v : Get()->vertics)
 						builder.Add(v.position);
 					localAABB_    = builder.Build();
 					aabbComputed_ = true;
-				}
+				});
 				return localAABB_;
 			}
 
@@ -223,22 +224,28 @@ public:\
 		private:
 			inline MeshData* Get() const { return static_cast<MeshData*>(data_); }
 
+			// 並列システムから同時に到達しうるため call_once で 1 回だけ生成する
+			// (共有メンバ clusters_/reorderedIndices_ への同時書き込みを防ぐ)。
 			void EnsureClusters() const
 			{
-				if (clustersComputed_) return;
-				std::vector<math::Vector3> positions;
-				positions.reserve(Get()->vertics.size());
-				for (const graphics::VertexData& v : Get()->vertics)
-					positions.push_back(v.position);
-				graphics::GenerateClusters(positions, Get()->indices, 64u, clusters_, reorderedIndices_);
-				clustersComputed_ = true;
+				std::call_once(clustersOnce_, [this]()
+				{
+					std::vector<math::Vector3> positions;
+					positions.reserve(Get()->vertics.size());
+					for (const graphics::VertexData& v : Get()->vertics)
+						positions.push_back(v.position);
+					graphics::GenerateClusters(positions, Get()->indices, 64u, clusters_, reorderedIndices_);
+					clustersComputed_ = true;
+				});
 			}
 
-			mutable math::AABB localAABB_;
-			mutable bool       aabbComputed_ = false;
+			mutable math::AABB     localAABB_;
+			mutable bool           aabbComputed_ = false;
+			mutable std::once_flag aabbOnce_;
 			mutable std::vector<graphics::MeshCluster> clusters_;
 			mutable std::vector<uint32_t>              reorderedIndices_;
-			mutable bool       clustersComputed_ = false;
+			mutable bool           clustersComputed_ = false;
+			mutable std::once_flag clustersOnce_;
 		};
 		using RefMeshResource = std::shared_ptr<MeshResource>;
 
@@ -338,14 +345,14 @@ public:\
 			 */
 			const math::AABB& GetLocalAABB() const
 			{
-				if (!aabbComputed_)
+				std::call_once(aabbOnce_, [this]()
 				{
 					math::AABBBuilder builder;
 					for (const graphics::SkinnedVertexData& v : Get()->vertices)
 						builder.Add(v.position);
 					localAABB_    = builder.Build();
 					aabbComputed_ = true;
-				}
+				});
 				return localAABB_;
 			}
 
@@ -365,22 +372,28 @@ public:\
 		private:
 			inline SkeletalMeshData* Get() const { return static_cast<SkeletalMeshData*>(data_); }
 
+			// 並列システムから同時に到達しうるため call_once で 1 回だけ生成する
+			// (共有メンバ clusters_/reorderedIndices_ への同時書き込みを防ぐ)。
 			void EnsureClusters() const
 			{
-				if (clustersComputed_) return;
-				std::vector<math::Vector3> positions;
-				positions.reserve(Get()->vertices.size());
-				for (const graphics::SkinnedVertexData& v : Get()->vertices)
-					positions.push_back(v.position);
-				graphics::GenerateClusters(positions, Get()->indices, 64u, clusters_, reorderedIndices_);
-				clustersComputed_ = true;
+				std::call_once(clustersOnce_, [this]()
+				{
+					std::vector<math::Vector3> positions;
+					positions.reserve(Get()->vertices.size());
+					for (const graphics::SkinnedVertexData& v : Get()->vertices)
+						positions.push_back(v.position);
+					graphics::GenerateClusters(positions, Get()->indices, 64u, clusters_, reorderedIndices_);
+					clustersComputed_ = true;
+				});
 			}
 
-			mutable math::AABB localAABB_;
-			mutable bool       aabbComputed_ = false;
+			mutable math::AABB     localAABB_;
+			mutable bool           aabbComputed_ = false;
+			mutable std::once_flag aabbOnce_;
 			mutable std::vector<graphics::MeshCluster> clusters_;
 			mutable std::vector<uint32_t>              reorderedIndices_;
-			mutable bool       clustersComputed_ = false;
+			mutable bool           clustersComputed_ = false;
+			mutable std::once_flag clustersOnce_;
 		};
 		using RefSkeletalMeshResource = std::shared_ptr<SkeletalMeshResource>;
 

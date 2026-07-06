@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "EntityContext.h"
-#include "Component/HierarchicalTransformComponent.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #endif

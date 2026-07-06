@@ -3,10 +3,7 @@
 #include "GBufferItemCommand.h"
 #include "DeferredLightingCommand.h"
 #include "DeferredDecalCommand.h"
-#include "Rendering/FrameCommands.h"
 #include "Rendering/SetBlendModeCommand.h"
-#include "Rendering/RenderCommandList.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Deferred/Debug/DeferredDebugPanel.h"

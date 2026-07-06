@@ -1,10 +1,6 @@
 #include "aq.h"
 #include "OceanMesh.h"
-#include "Rendering/RenderFrame.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
-#include "Resource/Resource.h"
-#include "Engine.h"
 
 
 namespace aq

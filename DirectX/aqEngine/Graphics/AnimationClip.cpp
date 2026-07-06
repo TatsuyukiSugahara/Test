@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "AnimationClip.h"
-#include <DirectXMath.h>
 #include <cmath>
 
 

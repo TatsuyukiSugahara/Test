@@ -2,6 +2,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/IDebugRenderable.h"
 #include "ECS/PrefabEditor.h"   // ecs::PrefabEditNode
+#include "Level/LevelManager.h" // LevelLoadHandle
 #include <memory>
 #include <string>
 #include <vector>
@@ -23,8 +24,11 @@ namespace aq
 			/** サブLevel エントリ（.level.json の subLevels[] に対応） */
 			struct SubLevelEdit
 			{
-				std::string path;
-				bool        loadOnStart = true;
+				bool                                              isInline = false;   // true = その場で作るインライン定義
+				std::string                                       path;               // isInline=false: 外部 .level.json パス
+				std::string                                       name = "SubLevel";  // isInline=true: 名前
+				std::vector<std::unique_ptr<ecs::PrefabEditNode>> entities;           // isInline=true: 配下 entity ツリー
+				bool                                              loadOnStart = true;
 			};
 
 			/** 編集モデル（.level.json に対応） */
@@ -37,6 +41,7 @@ namespace aq
 			ecs::PrefabEditNode* pendingDelete_ = nullptr;
 			bool                 show_          = false;
 			char                 pathBuf_[260]  = "Assets/Levels/New.level.json";
+			LevelLoadHandle      lastAsync_;                     // 直近の LoadAsync 進捗（バー表示用）
 
 
 		public:
@@ -52,9 +57,17 @@ namespace aq
 			void NewLevel();
 
 			void DrawToolbar();
-			void DrawEntities();
 			void DrawInspector();
 			void DrawSubLevels();
+
+			/** entity リストを描画する（+ Entity / + Prefab ボタン + ツリー）。トップレベルとインライン sub-level で共有。 */
+			void DrawEntityList(std::vector<std::unique_ptr<ecs::PrefabEditNode>>& list, const char* idLabel);
+
+			/** list に entity を追加する。asPrefab=true なら prefabRef を持つ参照ノード、false なら Transform 必須の実体ノード。 */
+			void AddEntityNode(std::vector<std::unique_ptr<ecs::PrefabEditNode>>& list, const bool asPrefab);
+
+			/** list から pendingDelete_ を外す（トップレベル除去 or 木からの除去）。外したら true。 */
+			bool RemovePendingFrom(std::vector<std::unique_ptr<ecs::PrefabEditNode>>& list);
 
 			/** 編集モデル → .level.json 相当の JSON。Save / Load in World が共有する。 */
 			util::JsonValue BuildJson() const;

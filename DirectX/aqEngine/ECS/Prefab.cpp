@@ -79,40 +79,54 @@ namespace aq
 				const EntityManager::DeferredCreateFn&                    create,
 				const std::function<void(Entity, const PrefabNodeData&)>& onEachCreated)
 			{
-				Entity entity = create(CollectTypes(node.components));
+				// 1 ノードを生成（子は再帰しない共有プリミティブへ委譲）。
+				Entity entity = InstantiatePrefabNode(node, parent, create, onEachCreated);
 				if (!entity.IsValid()) return entity;
 
-				EntityContext& ctx = EntityContext::Get();
 				const EntityHandle self = entity.GetHandle();
-
-				// 各コンポーネントを JsonValue から復元する。
-				const ComponentRegistry& registry = ComponentRegistry::Get();
-				for (const auto& kv : node.components.GetObject())
-				{
-					const ComponentMeta* meta = registry.Find(kv.first);
-					if (meta && meta->deserialize) {
-						meta->deserialize(self, kv.second);
-					}
-				}
-
-#ifdef AQ_DEBUG_IMGUI
-				if (auto* tag = entity.GetComponent<EntityDebugTag>()) {
-					tag->SetName(node.name.c_str());
-				}
-#endif
-
-				// 生成・deserialize 完了直後のフック（Level 層が levelId を差す等）。
-				if (onEachCreated) onEachCreated(entity, node);
-
-				if (parent.IsValid()) {
-					ctx.SetParent(self, parent);
-				}
-
 				for (const PrefabNodeData& child : node.children) {
 					InstantiateNode(child, self, create, onEachCreated);
 				}
 				return entity;
 			}
+		}
+
+
+		Entity InstantiatePrefabNode(
+			const PrefabNodeData&                                     node,
+			EntityHandle                                              parent,
+			const std::function<Entity(std::vector<TypeInfo>)>&       create,
+			const std::function<void(Entity, const PrefabNodeData&)>& onEachCreated)
+		{
+			Entity entity = create(CollectTypes(node.components));
+			if (!entity.IsValid()) return entity;
+
+			EntityContext& ctx = EntityContext::Get();
+			const EntityHandle self = entity.GetHandle();
+
+			// 各コンポーネントを JsonValue から復元する。
+			const ComponentRegistry& registry = ComponentRegistry::Get();
+			for (const auto& kv : node.components.GetObject())
+			{
+				const ComponentMeta* meta = registry.Find(kv.first);
+				if (meta && meta->deserialize) {
+					meta->deserialize(self, kv.second);
+				}
+			}
+
+#ifdef AQ_DEBUG_IMGUI
+			if (auto* tag = entity.GetComponent<EntityDebugTag>()) {
+				tag->SetName(node.name.c_str());
+			}
+#endif
+
+			// 生成・deserialize 完了直後のフック（Level 層が levelId を差す等）。
+			if (onEachCreated) onEachCreated(entity, node);
+
+			if (parent.IsValid()) {
+				ctx.SetParent(self, parent);
+			}
+			return entity;
 		}
 
 

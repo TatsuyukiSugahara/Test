@@ -1,9 +1,7 @@
 #include "aq.h"
 #include "ProfilerDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
-#include <algorithm>
 #include <imgui/imgui.h>
-#include "RenderConfig.h"
 #include "Memory/MemoryManager.h"
 
 
@@ -29,25 +27,22 @@ namespace aq
 
 		void ProfilerDebugPanel::RenderContent()
 		{
-			// 停止中でなければ毎フレームスナップショットを更新。
-			// FrameMs も同時に凍結し、Stop 中は時間軸が動かないようにする。
+			// CPU スナップショットは毎フレーム凍結する (Stop 中は固定)。メモリの軽量値 (合計/予算) も同時に取る。
+			// ★ 重いソース別集計 (CaptureUsageBySource) は Memory タブ表示中のみ行う (下)。
+			//    これにより CPU タブを見ている間はプロファイラ自体が軽いまま保たれる。
 			if (!paused_)
 			{
 				Profiler::Get().CaptureSnapshot(snapshot_);
 				snapshotFrameMs_ = Profiler::Get().FrameMs();
-				// メモリ観測も同時に凍結する。
 				if (memory::MemoryManager::IsInitialized()) {
 					auto& mm   = memory::MemoryManager::Get();
 					memBytes_  = mm.GetTrackedBytes();
 					memBudget_ = mm.GetMemoryBudgetBytes();
 					memOver_   = mm.IsOverMemoryBudget();
 				}
-#ifdef _DEBUG
-				memory::CaptureUsageBySource(memUsage_);
-				memCount_ = memory::GetTrackedCount();
-#endif
 			}
 
+			// 共通ツールバー: Stop/Resume + 状態
 			if (ImGui::Button(paused_ ? "Resume" : "Stop"))
 				paused_ = !paused_;
 			ImGui::SameLine();
@@ -55,11 +50,35 @@ namespace aq
 				paused_ ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : ImVec4(0.4f, 1.0f, 0.4f, 1.0f),
 				paused_ ? "停止中 (表示を固定)" : "計測中 (毎フレーム更新)");
 
-			ImGui::SameLine();
+			if (ImGui::BeginTabBar("##profiler_tabs"))
+			{
+				if (ImGui::BeginTabItem("CPU"))
+				{
+					RenderCpuTab();
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Memory"))
+				{
+					// このタブが表示されているフレームのみ重い内訳集計を行う (プロファイラを軽く保つ)。
+					if (!paused_)
+					{
+#ifdef _DEBUG
+						memory::CaptureUsageBySource(memUsage_);
+						memCount_ = memory::GetTrackedCount();
+#endif
+					}
+					RenderMemoryTab();
+					ImGui::EndTabItem();
+				}
+				ImGui::EndTabBar();
+			}
+		}
+
+
+		void ProfilerDebugPanel::RenderCpuTab()
+		{
 			ImGui::SetNextItemWidth(160.0f);
 			ImGui::SliderFloat("Zoom", &zoom_, 1.0f, 50.0f, "%.1fx");
-
-			// カリング系トグル/統計は Rendering タブの "Culling" へ移動 (CullingDebugPanel)。
 
 			ImGui::Separator();
 
@@ -101,16 +120,7 @@ namespace aq
 			const double maxMs = (mainMs > renderMs) ? mainMs : renderMs;
 			ImGui::Text("Main CPU: %.2f ms   Render CPU: %.2f ms   (sum %.2f / max %.2f)",
 			            mainMs, renderMs, sumMs, maxMs);
-			{
-				const double memMb = static_cast<double>(memBytes_) / (1024.0 * 1024.0);
-				if (memBudget_ > 0) {
-					const double bMb = static_cast<double>(memBudget_) / (1024.0 * 1024.0);
-					ImGui::TextColored(memOver_ ? ImVec4(1.0f, 0.4f, 0.4f, 1.0f) : ImVec4(0.7f, 0.9f, 1.0f, 1.0f),
-					                   "Memory: %.1f / %.1f MB", memMb, bMb);
-				} else {
-					ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Memory: %.1f MB", memMb);
-				}
-			}
+
 			// 重複の目安: Frame が sum に近い→直列的、max に近い→重複できている。
 			if (frameMs > 0.0 && sumMs > 0.0)
 			{
@@ -125,10 +135,6 @@ namespace aq
 
 			// メイン表示: タイムライン (横=時間 / 縦=スレッド)
 			RenderTimeline();
-
-			ImGui::Separator();
-
-			RenderMemory();
 
 			ImGui::Separator();
 
@@ -379,11 +385,8 @@ namespace aq
 		}
 
 
-		void ProfilerDebugPanel::RenderMemory()
+		void ProfilerDebugPanel::RenderMemoryTab()
 		{
-			if (!ImGui::CollapsingHeader("メモリ", ImGuiTreeNodeFlags_DefaultOpen))
-				return;
-
 			const double mb       = static_cast<double>(memBytes_)  / (1024.0 * 1024.0);
 			const double budgetMb = static_cast<double>(memBudget_) / (1024.0 * 1024.0);
 

@@ -1,8 +1,6 @@
 #include "aq.h"
 #include "AudioBank.h"
 #include "Util/SimpleJson.h"
-#include "Util/CRC32.h"
-#include "Resource/Resource.h"
 #include "Sound/SoundClip.h"
 
 

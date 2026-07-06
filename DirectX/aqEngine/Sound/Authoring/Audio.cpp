@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "Audio.h"
 #include "AudioDirector.h"
-#include "Util/CRC32.h"
 
 
 namespace aq

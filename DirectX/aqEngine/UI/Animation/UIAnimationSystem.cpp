@@ -2,7 +2,6 @@
 #include "UIAnimationSystem.h"
 #include "UI/UIObject.h"
 #include "UI/Screen/UIScreen.h"
-#include "UI/Screen/UIScreenManager.h"
 #include "UI/Component/UIAnimationComponent.h"
 
 namespace aq

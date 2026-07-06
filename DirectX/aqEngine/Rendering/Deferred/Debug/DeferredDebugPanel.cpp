@@ -1,9 +1,7 @@
 #include "aq.h"
 #include "DeferredDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
-#include "Rendering/Deferred/DeferredRenderer.h"
 #include "Rendering/Shadow/IShadowRenderer.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/IRenderTarget.h"
 #include <imgui/imgui.h>
 

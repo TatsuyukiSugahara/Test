@@ -92,7 +92,8 @@ namespace aq
 
 		void PrefabEditorPanel::DrawTree(PrefabEditNode* node, int depth)
 		{
-			PrefabNodeDrawTree(node, selected_, pendingDelete_, root_.get(), depth);
+			// Prefab エディタは Transform 必須化しない（従来どおり）。
+			PrefabNodeDrawTree(node, selected_, pendingDelete_, root_.get(), depth, false);
 		}
 
 
@@ -111,7 +112,7 @@ namespace aq
 				ImGui::TextDisabled("No node selected.");
 				return;
 			}
-			PrefabNodeDrawInspector(*selected_, selected_);
+			PrefabNodeDrawInspector(*selected_, selected_, false);
 		}
 
 

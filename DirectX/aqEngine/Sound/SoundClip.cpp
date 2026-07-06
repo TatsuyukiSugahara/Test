@@ -2,10 +2,7 @@
 #include "SoundClip.h"
 #include "Decoder/WavDecoder.h"
 #include "Decoder/MFDecoder.h"
-#include "Resource/Resource.h"
 #include <filesystem>
-#include <algorithm>
-#include <string>
 
 
 namespace aq

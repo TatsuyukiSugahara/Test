@@ -3,9 +3,7 @@
 #include "UIBatchRenderCommand.h"
 #include "UIRenderPipeline.h"
 #include "UI/UIObject.h"
-#include "UI/UIContext.h"
 #include "UI/Screen/UIScreen.h"
-#include "UI/Screen/UIScreenManager.h"
 #include "UI/Component/UITransformComponent.h"
 #include "UI/Component/UIImageComponent.h"
 #include "UI/Component/UINineSliceComponent.h"
@@ -15,7 +13,6 @@
 #include "UI/Font/FontAssetCache.h"
 #include "UI/Font/TextStyleCache.h"
 #include "UI/Font/TextLayout.h"
-#include "Rendering/RenderCommandList.h"
 #include <cmath>
 
 namespace aq

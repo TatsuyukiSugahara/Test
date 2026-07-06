@@ -22,6 +22,9 @@
     <Filter Include="Graphics\D3D12">
       <UniqueIdentifier>{c5d6e7f8-a9b0-1c2d-3e4f-506172839405}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Graphics\Vulkan">
+      <UniqueIdentifier>{a7f3c9d2-1b4e-4c8a-9f6d-2e5b8c1a4d7f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="HID">
       <UniqueIdentifier>{8a076a85-db57-43bd-8ad9-3bd36c05730f}</UniqueIdentifier>
     </Filter>
@@ -133,8 +136,65 @@
     <Filter Include="Util\Debug">
       <UniqueIdentifier>{b1f6d622-ea1e-50eb-a2a1-276f1998dacc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ThirdParty">
+      <UniqueIdentifier>{84b2d0f6-b0a8-410a-9583-cf92ace07899}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty\DirectXTex">
+      <UniqueIdentifier>{bfc70cc3-a96f-45c3-845c-6a008161b003}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\ThirdParty\DirectXTex\BC.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\BC4BC5.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\BC6HBC7.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexCompress.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexConvert.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexDDS.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexFlipRotate.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexHDR.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexImage.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexMipmaps.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexMisc.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexNormalMaps.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexPMAlpha.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexResize.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexTGA.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexUtil.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexWIC.cpp">
+      <Filter>ThirdParty\DirectXTex</Filter>
+    </ClCompile>
     <ClCompile Include="aq.cpp" />
     <ClCompile Include="Core\Application.cpp">
       <Filter>Core</Filter>
@@ -587,17 +647,39 @@
     <ClCompile Include="Sound\Video\VideoPlayer.cpp">
       <Filter>Sound\Video</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanRenderContextImpl.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanBuffers.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanShader.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanVMAImpl.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanPipelineLayout.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanPipelineCache.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanRenderTarget.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanResources.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanDepthMap.cpp" />
-    <ClCompile Include="Graphics\Vulkan\VulkanImGui.cpp" />
+    <ClCompile Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanRenderContextImpl.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanBuffers.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanShader.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanVMAImpl.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanPipelineLayout.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanPipelineCache.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanRenderTarget.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanResources.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanDepthMap.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Vulkan\VulkanImGui.cpp">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClCompile>
     <ClCompile Include="..\ThirdParty\spirv_reflect\spirv_reflect.c" />
   </ItemGroup>
   <ItemGroup>
@@ -1318,17 +1400,39 @@
     <ClInclude Include="Sound\Video\VideoPlayer.h">
       <Filter>Sound\Video</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\Vulkan\VulkanCommon.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanRenderContextImpl.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanBuffers.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanShader.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanPipelineLayout.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanPipelineCache.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanRenderTarget.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanResources.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanDepthMap.h" />
-    <ClInclude Include="Graphics\Vulkan\VulkanImGui.h" />
+    <ClInclude Include="Graphics\Vulkan\VulkanCommon.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanGraphicsDeviceImpl.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanRenderContextImpl.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanBuffers.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanShader.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanPipelineLayout.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanPipelineCache.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanRenderTarget.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanResources.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanDepthMap.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Vulkan\VulkanImGui.h">
+      <Filter>Graphics\Vulkan</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

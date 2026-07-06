@@ -1,27 +1,12 @@
 #include "aq.h"
 #include "Application.h"
-#include "Engine.h"
-#include "RenderConfig.h"
-#include "Resource/Resource.h"
 #include "ECS/EntityContext.h"
 #include "HID/Input.h"
-#include "UI/UIContext.h"
 #include "UI/Input/UIInputSystem.h"
-#include "UI/Screen/UIScreenManager.h"
 #include "UI/Rendering/UIBatchRenderer.h"
-#include "Graphics/Camera.h"
-#include "Graphics/GraphicsDevice.h"
-#include "Graphics/LightManager.h"
-#include "Rendering/RenderFrame.h"
-#include "Rendering/RenderCommandList.h"
-#include "Rendering/FrameCommands.h"
-#include "Component/TransformComponentSystem.h"
-#include "Component/HierarchicalTransformComponent.h"
-#include "Component/BodyComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
 #include "ECS/SpawnSystem.h"
 #include "Util/Profiler.h"
-#include "Rendering/Deferred/DeferredRenderer.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
@@ -45,11 +30,11 @@
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #include "Level/LevelComponentRegistry.h"
 #include "Level/LevelStreamSystem.h"
+#include "Level/LevelManager.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "DebugUI.h"
 #include "Ocean/Debug/OceanDebugPanel.h"
 #include "Rendering/Debug/RenderingDebugPanel.h"
-#include "Rendering/Deferred/DeferredRenderer.h"
 #include "ECS/SceneHierarchySystem.h"
 #include "UI/Debug/UIEditorDebugPanel.h"
 #include "UI/Debug/TextStyleEditorPanel.h"
@@ -359,6 +344,12 @@ namespace aq
 			AQ_PROFILE_SCOPE("EntityContext::Update");
 			aq::ecs::EntityContext::Get().Update();
 		}
+		// Level の非同期ロード進行 / ファイル変更監視は EntityContext::Update 後の安全点で実行する
+		// （ForEach/並列システム外・単一スレッド）。ここで即時のエンティティ生成を安全に行える。
+		{
+			AQ_PROFILE_SCOPE("LevelManager::Tick");
+			aq::level::LevelManager::Get().Tick(aq::Engine::GetDeltaTime());
+		}
 		{
 			AQ_PROFILE_SCOPE("ResourceManager::Update");
 			aq::res::ResourceManager::Get().Update();
@@ -455,6 +446,10 @@ namespace aq
 					const char* backend = "?";
 #endif
 					ImGui::Text("%s  %.1f FPS (%.2f ms)", backend, fps, ms);
+#ifdef AQ_DEBUG_IMGUI
+					// トグル操作のヒント（非表示中は重いデバッグ描画がスキップされる）。
+					ImGui::TextDisabled(showDebugUI_ ? "F1 / 中クリック: Debug UI を隠す" : "F1 / 中クリック: Debug UI を表示");
+#endif
 
 #if defined(ENGINE_GRAPHICS_D3D12)
 					// VSync を実機で切り替えられるようにする
@@ -473,7 +468,10 @@ namespace aq
 			{ AQ_PROFILE_SCOPE("OnImGuiRender"); OnImGuiRender(); }
 
 #ifdef AQ_DEBUG_IMGUI
-			if (ImGui::GetIO().MouseClicked[2])
+			// デバッグ UI 表示トグル: 中クリック or F1。非表示中は下の重い ECS::DebugRender / 各パネル描画を
+			// 完全にスキップする（毎フレーム 100+ エンティティを ImGui 描画する処理が止まり大幅に軽くなる）。
+			// F1 は ImGui のキー状態で判定し、ゲーム入力抑制（WantCaptureKeyboard）の影響を受けない。
+			if (ImGui::GetIO().MouseClicked[2] || ImGui::IsKeyPressed(ImGuiKey_F1, false))
 				showDebugUI_ = !showDebugUI_;
 
 			if (showDebugUI_)

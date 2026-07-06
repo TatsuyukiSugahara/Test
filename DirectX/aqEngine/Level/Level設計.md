@@ -473,9 +473,157 @@ class LevelEditorPanel : public IDebugRenderable
 | L7a | ✅ `PrefabEditorPanel` のノード編集部を共有関数へ切り出し（[../ECS/PrefabEditNodeOps.h](../ECS/PrefabEditNodeOps.h) / .cpp。`PrefabNodeToJson`/`FromJson`/`DrawTree`/`DrawInspector`/`Remove`。PrefabEditorPanel は委譲＝挙動不変） |
 | L7b | ✅ `LevelEditorPanel` 骨組み（複数 root entities ツリー + Inspector + Save/Load）… [LevelEditor.h](LevelEditor.h) / .cpp |
 | L7c | ✅ subLevels 行 UI（path + loadOnStart）+ `.level.json` 往復 + Load in World（in-memory 登録→`LevelManager::Load`） |
-| L7d | 未: entity の `.prefab.json` 参照モード（エディタは現状インライン components のみ復元・"prefab" 参照は展開しない） + `LevelStreamComponent` の FillReflectPtrFns 対応（Add Component パレットに出すため） |
+| L7d | ✅ entity の `.prefab.json` 参照モード（`PrefabEditNode::prefabRef`・Inspector に "Prefab Ref"・JSON `{ name, prefab }` 往復）。✅ Level エディタの Entity は Transform 必須化（`PrefabNodeEnsureTransform`。HTC は実行時 `CollectTypes` が自動付与）。✅ インラインサブLevel（`.level.json` の `subLevels[].level` に文字列=ファイル / オブジェクト=インライン定義）。／ 未: `LevelStreamComponent` の FillReflectPtrFns 対応、override 編集 UI・参照の変更検知（§16） |
 
 > **実装状況（L7a-c 完了・ビルド検証）**: ソリューション Debug|x64 ビルド成功。`Application` が全シーン共通で
 > `LevelEditorPanel` を DebugUI に登録（Tools > Level Editor）… [../Core/Application.cpp](../Core/Application.cpp)。
 > ノード編集は Prefab エディタと `PrefabEditNodeOps` を共有（単一の真実）。
-> **残（L7d）**: prefab 参照モードと `LevelStreamComponent` のエディタ配置対応。
+>
+> **追加実装（L7d 一部・ビルド検証）**:
+> - **プレハブ参照配置**: `PrefabEditNode::prefabRef`（[../ECS/PrefabEditor.h](../ECS/PrefabEditor.h)）。エディタの **「+ Prefab」ボタン**（`+ Entity` とは別枠）で
+>   参照ノードを追加、Inspector の "Prefab Ref" でパス編集。JSON は `{ name, prefab }` で往復（[../ECS/PrefabEditNodeOps.cpp](../ECS/PrefabEditNodeOps.cpp)）。
+>   実体は**ロード時に参照先から解決**（変更は再ロード＝§16 D1/D2 で反映）。
+> - **Transform 必須化**: Level エディタで作る Entity（新規・子）は `PrefabNodeEnsureTransform` で TransformComponent を必ず持つ。
+>   HTC は実行時 `CollectTypes`（[../ECS/Prefab.cpp](../ECS/Prefab.cpp)）が Transform→HTC を自動付与するため常に成立。Prefab エディタ側は従来どおり（`ensureTransform=false`）。
+> - **インラインサブLevel**: `.level.json` の `subLevels[].level` が **文字列=外部ファイル参照 / オブジェクト=インライン定義**。
+>   `LevelSerializer` が再帰構築し `SubLevelRef::inlineData` に保持、`LevelManager::LoadInline` が生成（[LevelSerializer.cpp](LevelSerializer.cpp) / [LevelManager.cpp](LevelManager.cpp)）。
+>   **エディタでも作成可能**: subLevels の「+ File」（外部参照）/「+ Inline」（その場定義）ボタン。インラインは name + 配下 entities を
+>   同じツリー UI（`DrawEntityList`）で編集し `{ level:{ name, entities }, loadOnStart }` で往復（[LevelEditor.cpp](LevelEditor.cpp)）。
+> **残（L7d）**: `LevelStreamComponent` の FillReflectPtrFns 対応。override 編集 UI は §16 R2。参照の変更検知（D1/D2）は §16=実装済み。
+
+---
+
+## 15. ロード分散 / 非同期ロード（ローディング画面対応）設計メモ（未実装・優先度=次点）
+
+> **背景（現状の制約）**: `LevelManager::Load` は `RequestDeferredBuild` を **1 コマンド積むだけ**で、
+> 次の `FlushCommands` で**そのツリー全部（サブLevel 含む）をメインスレッドで同期一括生成**する。
+> JSON パース（`LevelSerializer`/`PrefabSerializer`）も未キャッシュ時はメイン同期。
+> → 大きな Level を差すと**そのフレームでスパイク**し、ローディング画面を出しても実ロード中は固まる。
+> フレーム分割も件数上限も進捗通知も**無い**（設計 §10.3/§10.4・W5 の将来課題に相当）。
+
+### 15.1 採用方針：まず「段階1＝フレーム分割ロード + 進捗」
+
+メインスレッドのまま、生成を複数フレームに分散し進捗を返す。これで**プログレスバー付きローディング画面が成立**する。
+
+**API 案**
+```cpp
+struct LevelLoadHandle
+{
+    LevelId  id;
+    uint32_t total = 0;      // 生成予定エンティティ総数
+    uint32_t built = 0;      // 生成済み
+    bool     IsDone()  const { return built >= total; }
+    float    Progress() const { return total ? float(built) / float(total) : 1.0f; }
+};
+
+// 非同期（分割）ロード。entitiesPerFrame ずつ生成する。
+LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId parent = {},
+                                        uint32_t entitiesPerFrame = 64);
+```
+
+**実装スケッチ**
+- `LevelData` のフォレストを **平坦化した生成ジョブキュー**にする（各要素 = 型リスト + `JsonValue` + 親ハンドル + `levelId`）。
+  親子は生成順依存（HTC `SetParent` は親 Entity ハンドルが必要）なので **親→子の順**でキュー化し、生成済みハンドルを覚えて子に渡す。
+- 進行は専用の漸進ビルダ（`LevelManager` 内キュー）を**毎フレーム `entitiesPerFrame` 件**処理。生成は従来の
+  `RequestCreateEntityFromTypes`/`create` プリミティブを流用（`LevelMemberComponent` 注入 + `levelId` stamp は同じ）。
+- `built`/`total` を更新。ゲーム状態層が毎フレーム `Progress()` を UI に反映し `IsDone()` で遷移。
+- **最小実装（粗い分割）**: ツリー平坦化が重ければ、まず**「1 フレーム = トップレベル entity 1 本（サブツリー丸ごと）」**の粒度で分割開始 → 後でノード粒度へ精緻化。
+- 既存 `Load`（同期一括）は残す（小さい Level / 起動時用）。`LoadAsync` を併設する。
+
+**留意点**
+- `InstantiatePrefabTree` は「1 ツリー = 1 コマンド」前提。フレーム分割にはツリーを跨いで中断・再開できる
+  **ノード単位の生成経路**が要る（親ハンドル保持しながら）。ここが新規実装の肝。
+- `LevelStreamSystem` / World Partition のセル Load も、この `LoadAsync` に載せ替えれば**ストリーミングのスパイクも緩和**できる（§10.3 の「1 フレーム Load 上限」を包含）。
+
+### 15.2 段階2：非同期プリロード（本格・段階1の上に載せる）
+
+- バックグラウンドスレッドで **JSON パース → `LevelData` 構築**（参照展開含む）を先行実施（`LevelData` は不変・共有なのでスレッド跨ぎ安全）。
+- **Entity 生成はメインに残す**（ECS はスレッド安全性の都合でメイン生成が安全）＝段階1のフレーム分割をそのまま使う。
+- `LevelRegistry` に「バックグラウンドで parse 中」の状態を持たせ、完了後に段階1の生成キューへ投入。
+
+### 15.3 段階（サブフェーズ）
+| | 内容 |
+|---|---|
+| A1 | ✅ ノード単位の中断可能生成（`ecs::InstantiatePrefabNode`＝子を再帰しない1ノード生成を Prefab から公開・[../ECS/Prefab.cpp](../ECS/Prefab.cpp)）。`LevelData` フォレスト+loadOnStart サブLevel を `BuildJob` 列にフラット化（`FlattenLevel`/`FlattenNode`・親ジョブ index 保持） |
+| A2 | ✅ `LevelManager::LoadAsync` + `LevelLoadHandle`（`entitiesPerFrame` ずつ・`shared_ptr<LevelLoadProgress>` で live 進捗） |
+| A3 | ✅（土台）ローディング画面用の進捗 API（`Progress()`/`IsDone()`/`Built()`/`Total()`）。Level エディタに "Load Async" + `ImGui::ProgressBar` の検証表示。ゲーム状態層への本配線は利用側で |
+| A4 | 未: `LevelStreamSystem` / World Partition セル Load を `LoadAsync` へ載せ替え（スパイク緩和） |
+| A5 | 未: 段階2：バックグラウンド JSON パース（`LevelData` 先行構築）を A2 の生成キューへ接続 |
+
+> **実装状況（段階1=A1-A3 完了・ビルド検証）**: ソリューション Debug|x64 ビルド成功。… [LevelManager.h](LevelManager.h) / [.cpp](LevelManager.cpp)
+> - **安全点での即時生成**: `LevelManager::Tick` を **`Application::Update` の `EntityContext::Update()` 後**（ForEach/並列システム外・単一スレッド）で呼び、
+>   そこで `EntityContext::CreateEntityFromTypes`（即時）を使って `entitiesPerFrame` 件ずつ生成する（[../Core/Application.cpp](../Core/Application.cpp)）。
+>   ※ システム更新フェーズ中の即時生成は不可（並列 ForEach と競合）。D2 ポーリングも同 Tick に統合し、`LevelStreamSystem` からの Tick 呼びは撤去。
+> - **フラット化**: フォレスト＋loadOnStart サブLevel を親→子順の `BuildJob` 列に。各ジョブは自身の `levelId` を持ち、生成時に `LevelMemberComponent` へ stamp。
+>   サブLevel の slot は LoadAsync 時に採番（読み込み中も IsLoaded=true）。循環は深さ上限 32 でガード。
+> - **進捗**: `LevelLoadHandle`（`shared_ptr<const LevelLoadProgress>`）で `built/total`・`done` を live に読める。
+> - 既存の同期 `Load` は温存（起動/リロード/ストリーム/プレビュー用）。`LoadAsync` は別 API。
+>
+> **未（段階1 残 / 段階2）**: A4（ストリーム/セル Load の LoadAsync 化）、A5（BG パース）、読み込み中の Unload 競合の厳密化。
+
+---
+
+## 16. 参照の変更検知・反映 / override（Prefab・Level 情報の上書き）設計メモ（一部実装・要方針確認）
+
+> 目的（要望）: Prefab / サブLevel を**参照として保持**し、参照先が変わったら**検知して反映**したい。
+> 必要なら参照先の情報を**上書き（override）**したい（Unity のプレハブ運用に近い）。
+
+### 16.1 現状（実装済みの土台）
+- **参照の保持**: エディタは `PrefabEditNode::prefabRef`（entity の prefab 参照）を持ち、JSON `{ name, prefab }` で往復（L7d）。
+  サブLevel も `subLevels[].level`（文字列=ファイル参照 / オブジェクト=インライン）を持つ。
+- **反映（ロード時）**: 参照は**ロード時に参照先ファイルから解決**される。
+  - `PrefabSerializer::FromJson` は呼び出しごとに `LoadContext`（`parseCache`）を作り直す＝**毎回ファイルを読み直す**。
+    → エディタ「Load in World」は毎回最新の prefab 内容を反映する。
+  - overrides 意味論（deep merge / added / removed・children は name 同定）は **PrefabSerializer に実装済み（§7.3）**。
+    ＝ `{ prefab, overrides }` を**手書き JSON なら今も反映される**。
+- **未反映になる箇所**: `PrefabRegistry` / `LevelRegistry` は**プロセス寿命でキャッシュ**する。
+  `LevelManager::Load(path)` は `LevelData`（prefab 参照は**parse 時に展開済み**）をキャッシュするので、
+  **参照先ファイルを更新してもキャッシュが残る限り反映されない**。
+
+### 16.2 変更検知・反映（3 段階・方針確認したい）
+| 段階 | 内容 | 実装量 |
+|---|---|---|
+| **D1（手動）** | エディタ/デバッグに **"Reload References"** ボタン: `PrefabRegistry`/`LevelRegistry` の `Clear()` → 対象 Level を Unload→Load し直す。最小で「変更を反映」を達成 | 小 |
+| **D2（半自動）** | ファイルの **mtime/ハッシュを記録**し、フレーム先頭 or 明示ポーリングで差分を検知→該当 Level を reload（内部は D1） | 中 |
+| **D3（自動監視）** | OS のファイル監視（`ReadDirectoryChangesW`）で `.prefab.json`/`.level.json` の変更を検知→自動 reload | 中〜大 |
+
+- **反映の実体は「Unload → Load し直し」**が現実解。**ライブ instance へ差分パッチ**（生成済み Entity の該当コンポーネントだけ更新し
+  ランタイム状態を保持）は Unity 相当で**非常に大きい**ため、初期は非対象。
+  → まず「該当 Level（またはその Entity 群）を作り直す」。ランタイム状態が消える点は許容 or 対象を絞る。
+- どの Entity がどの参照由来かは、`LevelMemberComponent`（所属 Level）に加え **参照元 prefabPath を持つ軽量タグ**を付ければ
+  「この prefab を使う Entity だけ作り直す」まで絞れる（D2/D3 の精緻化）。
+
+### 16.3 override（参照先情報の上書き）
+- **ランタイムは実装済み**（§7.3）。`{ prefab, overrides:{ components, addedComponents, removedComponents, children, removedChildren } }`。
+- **未実装 = エディタの override 編集 UI**。手順案:
+  1. 参照ノード（`prefabRef` 有）を選択したら、**参照先を解決してベース構成を表示**（`PrefabSerializer` でロード→読み取り専用ツリー）。
+  2. その上で値を変えた項目だけを **`overrides.components`（deep merge）** として `PrefabEditNode` に保持（新フィールド `util::JsonValue overrides;`）。
+  3. 追加/削除は `addedComponents` / `removedComponents`、子は name 同定で `overrides.children` / `removedChildren`。
+  4. 保存時 `{ name, prefab, overrides }` を書き出す（ランタイムはそのまま解釈）。
+- **サブLevel の override** も同型（`subLevels[].overrides` を Level ロードに適用）だが、Level 側の override 意味論は未実装
+  （現状サブLevel は参照 or インラインのみ）。必要なら prefab と同じ `ApplyPatch` を Level にも展開する。
+
+### 16.4 段階（サブフェーズ）
+| | 内容 |
+|---|---|
+| R1 | ✅ **D1**: `LevelManager::ReloadAll`（`PrefabRegistry`/`LevelRegistry` を Clear → ファイル由来 root を Unload→Load）。Level エディタに "Reload Refs" ボタン |
+| R2 | ✅（v1）エディタ override 編集 UI。参照ノードの `components` を **override（deep-merge/追加）** として編集、`removedComponents` で削除指定。`{ prefab, overrides:{ components, removedComponents } }` で往復（[../ECS/PrefabEditNodeOps.cpp](../ECS/PrefabEditNodeOps.cpp)）。／ 未: 参照先の**ベース構成を解決表示**、**フィールド単位の差分**（現状は「コンポーネント丸ごと override」）、**子（children）override** |
+| R3 | ✅ **D2**: `LevelManager::Tick`/`PollFileChanges`（0.5 秒間引きで root Level ファイルの mtime を確認→変更で reload）。エディタに "Auto" トグル（`SetAutoReload`）。`LevelStreamSystem::Update` から `Tick` |
+| R4 | 未: **D3**: OS ファイル監視（`ReadDirectoryChangesW`）での自動 reload |
+| R5（大）| 未: ライブ instance への差分パッチ（作り直さずランタイム状態保持）※要否は別途判断 |
+
+> **実装状況（R1=D1・R3=D2 完了・ビルド検証）**: ソリューション Debug|x64 ビルド成功。… [LevelManager.cpp](LevelManager.cpp) / [LevelEditor.cpp](LevelEditor.cpp) / [LevelStreamSystem.cpp](LevelStreamSystem.cpp)
+> - **D1（手動）**: "Reload Refs" ボタン → `ReloadAll`。キャッシュを捨てるため**プレハブ編集も反映**される。
+> - **D2（自動・mtime ポーリング）**: "Auto" ON で 0.5 秒毎に root Level ファイルの更新時刻を確認、変わっていたら
+>   キャッシュ Clear + 当該 Level を作り直す（参照プレハブも読み直される）。合成キー（`<inline>`/`<...preview...>`）は監視対象外。
+> - **既知の制約**: 変更検知の対象は**ロード済み root Level ファイルの mtime のみ**。
+>   「プレハブファイルだけを編集」した場合の自動検知は未（プレハブ依存の追跡が要る＝D2+）。当面は **D1 の手動 Reload で対応**。
+>   reload の実体は**Unload→Load の作り直し**なのでランタイム状態は保持されない（ライブパッチ R5 は別途）。
+>
+> **追加実装（R2 v1・ビルド検証）**: 参照ノードの Inspector に override 編集を追加。
+> - `PrefabEditNode` に `removedComponents`（[../ECS/PrefabEditor.h](../ECS/PrefabEditor.h)）。参照ノードでは `components` を **override** として扱い、
+>   `+ Add Component` で override/追加、`+ Remove Component` で `removedComponents` を編集。保存は `{ prefab, overrides:{ components, removedComponents } }`。
+> - ランタイムは `PrefabSerializer::ResolveNode/ApplyPatch`（§7.3）がそのまま適用（deep-merge / 追加 / 削除）。Prefab エディタ内のネスト参照でも同じ UI が使える。
+> - **未（R2.5）**: 参照先のベース構成を解決表示、**フィールド単位の差分**（現状は該当コンポーネントを丸ごと override）、children override。
+>
+> **残**: R2.5（フィールド差分・ベース表示・子 override）、R4（OS 監視 D3）、R5（ライブパッチ）、プレハブ単独編集の自動検知（D2+）。

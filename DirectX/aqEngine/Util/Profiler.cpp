@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "Profiler.h"
-#include <windows.h>
 
 
 namespace aq

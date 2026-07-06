@@ -3,7 +3,6 @@
 #include "D3D12Common.h"
 #include "D3D12Buffers.h"
 #include "D3D12GraphicsDeviceImpl.h"
-#include <algorithm>
 
 
 namespace aq

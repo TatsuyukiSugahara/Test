@@ -1,8 +1,6 @@
 #include "aq.h"
 #include "BloomRenderer.h"
 #include "BloomPassCommand.h"
-#include "Rendering/RenderCommandList.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/IShader.h"
 #ifdef AQ_DEBUG_IMGUI

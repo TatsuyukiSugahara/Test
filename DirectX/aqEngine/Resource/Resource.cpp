@@ -1,13 +1,11 @@
 #include "aq.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Resource.h"
-#include "Engine.h"
 #include "Platform/PlatformBudget.h"
 #include <cctype>
 #include <cstdio>
-#include <DirectXMath.h>
 #include <cmath>
 #include <filesystem>
+#include <typeinfo>   // 計測: 重いローダーの種別名 (typeid) 出力用
 
 
 namespace aq
@@ -1091,22 +1089,26 @@ namespace aq
 			if (!shaderData) {
 				return false;
 			}
-			return aq::graphics::ParseShaderResourceKey(requestPath_, shaderData->desc);
-		}
-
-
-		bool ShaderLoader::FinalizeLoading()
-		{
-			ShaderData* shaderData = static_cast<ShaderData*>(resource_->data_);
-			if (!shaderData) {
+			if (!aq::graphics::ParseShaderResourceKey(requestPath_, shaderData->desc)) {
 				return false;
 			}
 
+			// 重い実行時コンパイル(D3DCompile)はワーカースレッドで行い、メインスレッドの
+			// ロードヒッチを避ける。D3D12 の CreateShader はデバイス非依存(bytecode 生成のみ)で、
+			// D3D12Shader::Load をスレッド安全化済みなのでここで呼べる。
 			shaderData->shader = aq::graphics::GraphicsDevice::Get().CreateShader(
 				shaderData->desc.filePath.c_str(),
 				shaderData->desc.entryFuncName.c_str(),
 				shaderData->desc.shaderType);
 			return shaderData->shader != nullptr;
+		}
+
+
+		bool ShaderLoader::FinalizeLoading()
+		{
+			// コンパイルは Loading()(ワーカー)で完了済み。ここでは生成結果の検証のみ。
+			ShaderData* shaderData = static_cast<ShaderData*>(resource_->data_);
+			return shaderData && shaderData->shader != nullptr;
 		}
 
 
@@ -1166,10 +1168,31 @@ namespace aq
 				}
 			}
 
+			if (finishedLoaders.empty()) return;
+
+			// 計測: このフレームで仕上げ(FinalizeLoading = GPU アップロード等)したローダー数と所要時間。
+			const auto profStart = std::chrono::steady_clock::now();
+
+			// テクスチャアップロードをバッチ化: この仕上げループ内の CreateTexture2D の
+			// コピー実行/GPU 待機を End で 1 回にまとめ、per-texture の N×WaitForGPU を排す。
+			aq::graphics::GraphicsDevice::Get().BeginBatchedTextureUploads();
 			for (auto* loader : finishedLoaders) {
+				const auto lt0 = std::chrono::steady_clock::now();
 				loader->Finish();
+				const double lms = std::chrono::duration<double, std::milli>(
+					std::chrono::steady_clock::now() - lt0).count();
+				if (lms > 3.0) {   // 重いローダーだけ種別とパスを出す (犯人特定用)
+					EnginePrintf("[LoadProf]   slow finish: %6.2f ms  %-28s (%s)\n",
+						lms, typeid(*loader).name(), loader->GetRequestPath().c_str());
+				}
 				delete loader;
 			}
+			aq::graphics::GraphicsDevice::Get().EndBatchedTextureUploads();
+
+			const double ms = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - profStart).count();
+			EnginePrintf("[LoadProf] finalize: %u loaders, %.2f ms\n",
+				static_cast<uint32_t>(finishedLoaders.size()), ms);
 		}
 	}
 }

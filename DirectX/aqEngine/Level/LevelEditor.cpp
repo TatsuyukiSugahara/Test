@@ -26,9 +26,10 @@ namespace aq
 			subLevels_.clear();
 			pendingDelete_ = nullptr;
 
-			// 最初の空エンティティを 1 つ用意する。
+			// 最初の空エンティティを 1 つ用意する（Transform 必須）。
 			auto entity  = std::make_unique<ecs::PrefabEditNode>();
 			entity->name = "Entity";
+			ecs::PrefabNodeEnsureTransform(*entity);
 			selected_    = entity.get();
 			entities_.push_back(std::move(entity));
 		}
@@ -115,13 +116,14 @@ namespace aq
 			if (ImGui::SmallButton("+ Entity")) {
 				auto entity  = std::make_unique<ecs::PrefabEditNode>();
 				entity->name = "Entity";
+				ecs::PrefabNodeEnsureTransform(*entity);
 				selected_    = entity.get();
 				entities_.push_back(std::move(entity));
 			}
 
-			// 各トップレベル entity は削除可能にするため root=nullptr で描画する。
+			// 各トップレベル entity は削除可能にするため root=nullptr、Transform 必須で描画する。
 			for (const auto& entity : entities_) {
-				ecs::PrefabNodeDrawTree(entity.get(), selected_, pendingDelete_, nullptr, 0);
+				ecs::PrefabNodeDrawTree(entity.get(), selected_, pendingDelete_, nullptr, 0, true);
 			}
 		}
 
@@ -132,7 +134,7 @@ namespace aq
 				ImGui::TextDisabled("No node selected.");
 				return;
 			}
-			ecs::PrefabNodeDrawInspector(*selected_, selected_);
+			ecs::PrefabNodeDrawInspector(*selected_, selected_, true);
 		}
 
 

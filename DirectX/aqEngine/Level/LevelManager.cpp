@@ -128,10 +128,30 @@ namespace aq
 			loadStack_.push_back(key);
 			for (const SubLevelRef& sub : data->subLevels)
 			{
-				if (sub.loadOnStart) Load(sub.path, id);
+				if (!sub.loadOnStart) continue;
+				if (sub.inlineData) LoadInline(sub.inlineData, id);   // インライン定義
+				else                Load(sub.path, id);               // 外部ファイル参照
 			}
 			loadStack_.pop_back();
 
+			return id;
+		}
+
+
+		LevelId LevelManager::LoadInline(std::shared_ptr<const LevelData> data, LevelId parent)
+		{
+			if (!data) return LevelId();
+
+			const LevelId id = AllocateSlot("<inline>", data, parent);
+			InstantiateEntities(data, id);
+
+			// インラインのサブLevel も再帰（インライン / ファイル参照 両対応）。
+			for (const SubLevelRef& sub : data->subLevels)
+			{
+				if (!sub.loadOnStart) continue;
+				if (sub.inlineData) LoadInline(sub.inlineData, id);
+				else                Load(sub.path, id);
+			}
 			return id;
 		}
 

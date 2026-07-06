@@ -21,6 +21,7 @@ namespace aq
 		struct PrefabEditNode
 		{
 			std::string                                  name = "Node";
+			std::string                                  prefabRef;   // 非空 = .prefab.json 参照ノード（実体はロード時に解決）
 			std::vector<PrefabEditComponent>             components;
 			std::vector<std::unique_ptr<PrefabEditNode>> children;   // ポインタ安定のため unique_ptr
 		};

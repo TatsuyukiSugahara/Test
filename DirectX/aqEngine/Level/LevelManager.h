@@ -74,6 +74,10 @@ namespace aq
 			// data->entities のフォレストを 1 コマンドで遅延生成し、各 Entity へ levelId を差す。
 			void InstantiateEntities(const std::shared_ptr<const LevelData>& data, LevelId levelId);
 
+			// インライン定義のサブLevel をロードする（slot 採番 + entities 生成 + サブLevel 再帰）。
+			// ファイルを介さないため loadStack_（パス循環検出）は使わない。
+			LevelId LoadInline(std::shared_ptr<const LevelData> data, LevelId parent);
+
 			// index の現在 generation で LevelId を作る（内部用・呼び出し側で範囲確認済みのこと）。
 			LevelId MakeId(uint32_t index) const;
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "ECS/Prefab.h"   // ecs::PrefabNodeData
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -8,12 +9,16 @@ namespace aq
 {
 	namespace level
 	{
-		// 別 .level.json への参照 + ロードタイミング。
+		struct LevelData;   // 前方宣言（SubLevelRef のインライン定義参照用）
+
+
+		// サブLevel エントリ。外部 .level.json 参照（path）か、インライン定義（inlineData）のいずれか。
 		// loadOnStart=true は親 Level のロード時に一緒に読む。false は休眠（後から手動/自動ストリーム）。
 		struct SubLevelRef
 		{
-			std::string path;
-			bool        loadOnStart = true;
+			std::string                      path;                 // 外部ファイル参照の正本（inlineData が無い場合）
+			bool                             loadOnStart = true;
+			std::shared_ptr<const LevelData> inlineData;           // 非 null = インライン定義（path より優先）
 		};
 
 

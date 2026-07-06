@@ -473,12 +473,21 @@ class LevelEditorPanel : public IDebugRenderable
 | L7a | ✅ `PrefabEditorPanel` のノード編集部を共有関数へ切り出し（[../ECS/PrefabEditNodeOps.h](../ECS/PrefabEditNodeOps.h) / .cpp。`PrefabNodeToJson`/`FromJson`/`DrawTree`/`DrawInspector`/`Remove`。PrefabEditorPanel は委譲＝挙動不変） |
 | L7b | ✅ `LevelEditorPanel` 骨組み（複数 root entities ツリー + Inspector + Save/Load）… [LevelEditor.h](LevelEditor.h) / .cpp |
 | L7c | ✅ subLevels 行 UI（path + loadOnStart）+ `.level.json` 往復 + Load in World（in-memory 登録→`LevelManager::Load`） |
-| L7d | 未: entity の `.prefab.json` 参照モード（エディタは現状インライン components のみ復元・"prefab" 参照は展開しない） + `LevelStreamComponent` の FillReflectPtrFns 対応（Add Component パレットに出すため） |
+| L7d | ✅ entity の `.prefab.json` 参照モード（`PrefabEditNode::prefabRef`・Inspector に "Prefab Ref"・JSON `{ name, prefab }` 往復）。✅ Level エディタの Entity は Transform 必須化（`PrefabNodeEnsureTransform`。HTC は実行時 `CollectTypes` が自動付与）。✅ インラインサブLevel（`.level.json` の `subLevels[].level` に文字列=ファイル / オブジェクト=インライン定義）。／ 未: `LevelStreamComponent` の FillReflectPtrFns 対応、override 編集 UI・参照の変更検知（§16） |
 
 > **実装状況（L7a-c 完了・ビルド検証）**: ソリューション Debug|x64 ビルド成功。`Application` が全シーン共通で
 > `LevelEditorPanel` を DebugUI に登録（Tools > Level Editor）… [../Core/Application.cpp](../Core/Application.cpp)。
 > ノード編集は Prefab エディタと `PrefabEditNodeOps` を共有（単一の真実）。
-> **残（L7d）**: prefab 参照モードと `LevelStreamComponent` のエディタ配置対応。
+>
+> **追加実装（L7d 一部・ビルド検証）**:
+> - **プレハブ参照配置**: `PrefabEditNode::prefabRef`（[../ECS/PrefabEditor.h](../ECS/PrefabEditor.h)）。Inspector の "Prefab Ref" にパスを入れると参照ノードになり、
+>   JSON は `{ name, prefab }` で往復（[../ECS/PrefabEditNodeOps.cpp](../ECS/PrefabEditNodeOps.cpp)）。実体は**ロード時に参照先から解決**（変更は再ロードで反映）。
+> - **Transform 必須化**: Level エディタで作る Entity（新規・子）は `PrefabNodeEnsureTransform` で TransformComponent を必ず持つ。
+>   HTC は実行時 `CollectTypes`（[../ECS/Prefab.cpp](../ECS/Prefab.cpp)）が Transform→HTC を自動付与するため常に成立。Prefab エディタ側は従来どおり（`ensureTransform=false`）。
+> - **インラインサブLevel**: `.level.json` の `subLevels[].level` が **文字列=外部ファイル参照 / オブジェクト=インライン定義**。
+>   `LevelSerializer` が再帰構築し `SubLevelRef::inlineData` に保持、`LevelManager::LoadInline` が生成（[LevelSerializer.cpp](LevelSerializer.cpp) / [LevelManager.cpp](LevelManager.cpp)）。
+>   ※ エディタの subLevels 行 UI は現状ファイルパス専用（インライン定義は JSON 手書き。エディタ Load ではインライン行は復元しない＝要 L7 追補）。
+> **残（L7d）**: `LevelStreamComponent` の FillReflectPtrFns 対応。override 編集 UI と参照の変更検知は §16。
 
 ---
 
@@ -541,3 +550,58 @@ LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId paren
 
 > 実装再開の入口: **A1（中断可能なノード単位生成）**。ここが `LoadAsync` の土台。
 > 既存の同期 `Load` は温存し、`LoadAsync` を別 API として足す（呼び分け）。
+
+---
+
+## 16. 参照の変更検知・反映 / override（Prefab・Level 情報の上書き）設計メモ（一部実装・要方針確認）
+
+> 目的（要望）: Prefab / サブLevel を**参照として保持**し、参照先が変わったら**検知して反映**したい。
+> 必要なら参照先の情報を**上書き（override）**したい（Unity のプレハブ運用に近い）。
+
+### 16.1 現状（実装済みの土台）
+- **参照の保持**: エディタは `PrefabEditNode::prefabRef`（entity の prefab 参照）を持ち、JSON `{ name, prefab }` で往復（L7d）。
+  サブLevel も `subLevels[].level`（文字列=ファイル参照 / オブジェクト=インライン）を持つ。
+- **反映（ロード時）**: 参照は**ロード時に参照先ファイルから解決**される。
+  - `PrefabSerializer::FromJson` は呼び出しごとに `LoadContext`（`parseCache`）を作り直す＝**毎回ファイルを読み直す**。
+    → エディタ「Load in World」は毎回最新の prefab 内容を反映する。
+  - overrides 意味論（deep merge / added / removed・children は name 同定）は **PrefabSerializer に実装済み（§7.3）**。
+    ＝ `{ prefab, overrides }` を**手書き JSON なら今も反映される**。
+- **未反映になる箇所**: `PrefabRegistry` / `LevelRegistry` は**プロセス寿命でキャッシュ**する。
+  `LevelManager::Load(path)` は `LevelData`（prefab 参照は**parse 時に展開済み**）をキャッシュするので、
+  **参照先ファイルを更新してもキャッシュが残る限り反映されない**。
+
+### 16.2 変更検知・反映（3 段階・方針確認したい）
+| 段階 | 内容 | 実装量 |
+|---|---|---|
+| **D1（手動）** | エディタ/デバッグに **"Reload References"** ボタン: `PrefabRegistry`/`LevelRegistry` の `Clear()` → 対象 Level を Unload→Load し直す。最小で「変更を反映」を達成 | 小 |
+| **D2（半自動）** | ファイルの **mtime/ハッシュを記録**し、フレーム先頭 or 明示ポーリングで差分を検知→該当 Level を reload（内部は D1） | 中 |
+| **D3（自動監視）** | OS のファイル監視（`ReadDirectoryChangesW`）で `.prefab.json`/`.level.json` の変更を検知→自動 reload | 中〜大 |
+
+- **反映の実体は「Unload → Load し直し」**が現実解。**ライブ instance へ差分パッチ**（生成済み Entity の該当コンポーネントだけ更新し
+  ランタイム状態を保持）は Unity 相当で**非常に大きい**ため、初期は非対象。
+  → まず「該当 Level（またはその Entity 群）を作り直す」。ランタイム状態が消える点は許容 or 対象を絞る。
+- どの Entity がどの参照由来かは、`LevelMemberComponent`（所属 Level）に加え **参照元 prefabPath を持つ軽量タグ**を付ければ
+  「この prefab を使う Entity だけ作り直す」まで絞れる（D2/D3 の精緻化）。
+
+### 16.3 override（参照先情報の上書き）
+- **ランタイムは実装済み**（§7.3）。`{ prefab, overrides:{ components, addedComponents, removedComponents, children, removedChildren } }`。
+- **未実装 = エディタの override 編集 UI**。手順案:
+  1. 参照ノード（`prefabRef` 有）を選択したら、**参照先を解決してベース構成を表示**（`PrefabSerializer` でロード→読み取り専用ツリー）。
+  2. その上で値を変えた項目だけを **`overrides.components`（deep merge）** として `PrefabEditNode` に保持（新フィールド `util::JsonValue overrides;`）。
+  3. 追加/削除は `addedComponents` / `removedComponents`、子は name 同定で `overrides.children` / `removedChildren`。
+  4. 保存時 `{ name, prefab, overrides }` を書き出す（ランタイムはそのまま解釈）。
+- **サブLevel の override** も同型（`subLevels[].overrides` を Level ロードに適用）だが、Level 側の override 意味論は未実装
+  （現状サブLevel は参照 or インラインのみ）。必要なら prefab と同じ `ApplyPatch` を Level にも展開する。
+
+### 16.4 段階（サブフェーズ）
+| | 内容 |
+|---|---|
+| R1 | **D1**: Reload References（レジストリ Clear + 対象 Level 再ロード）。最小で「反映」を達成 |
+| R2 | エディタ override 編集 UI（参照先を解決表示 → 差分を `overrides` に保持 → `{prefab,overrides}` 保存） |
+| R3 | **D2**: mtime/ハッシュ差分検知で自動 reload（対象は参照元タグで絞る） |
+| R4 | **D3**: OS ファイル監視での自動 reload |
+| R5（大）| ライブ instance への差分パッチ（作り直さずランタイム状態保持）※要否は別途判断 |
+
+> 実装再開の入口: **R1（Reload References）**。まず「参照先を更新→ボタンで反映」を成立させ、
+> その後 R2（override 編集）→ R3/R4（自動検知）と積む。ライブパッチ（R5）は要否を見てから。
+> **確認したい**: 変更検知は **D1 手動ボタン / D2 ポーリング / D3 自動監視** のどれを目標にするか。

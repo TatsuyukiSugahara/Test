@@ -11,10 +11,16 @@ namespace aq
 	{
 		util::JsonValue PrefabNodeToJson(const PrefabEditNode& node)
 		{
-			ComponentRegistry& registry = ComponentRegistry::Get();
-
 			util::JsonValue obj = util::JsonValue::MakeObject();
 			obj.Set("name", util::JsonValue(node.name));
+
+			// 参照ノード: prefab パスのみを書き出す（components/children は解決時に参照先から展開される）。
+			if (!node.prefabRef.empty()) {
+				obj.Set("prefab", util::JsonValue(node.prefabRef));
+				return obj;
+			}
+
+			ComponentRegistry& registry = ComponentRegistry::Get();
 
 			util::JsonValue comps = util::JsonValue::MakeObject();
 			for (const PrefabEditComponent& c : node.components) {
@@ -39,10 +45,16 @@ namespace aq
 
 		std::unique_ptr<PrefabEditNode> PrefabNodeFromJson(const util::JsonValue& json)
 		{
-			ComponentRegistry& registry = ComponentRegistry::Get();
-
 			auto node = std::make_unique<PrefabEditNode>();
 			if (json.Contains("name")) { node->name = json["name"].AsString(); }
+
+			// 参照ノード: prefab パスを保持する（インライン components は解決時に参照先から展開される）。
+			if (json.Contains("prefab") && json["prefab"].IsString()) {
+				node->prefabRef = json["prefab"].AsString();
+				return node;
+			}
+
+			ComponentRegistry& registry = ComponentRegistry::Get();
 
 			if (json.Contains("components") && json["components"].IsObject()) {
 				for (const auto& kv : json["components"].GetObject()) {
@@ -66,8 +78,22 @@ namespace aq
 		}
 
 
+		void PrefabNodeEnsureTransform(PrefabEditNode& node)
+		{
+			ComponentRegistry& registry = ComponentRegistry::Get();
+			const TypeInfo transform = registry.TypeOf("Transform");
+			if (transform == TypeInfo()) { return; }             // 未登録なら何もしない
+
+			for (const PrefabEditComponent& c : node.components) {
+				if (c.data.Type() == transform) { return; }      // 既に持っている
+			}
+			node.components.push_back(PrefabEditComponent{ AlignedStorage(transform) });
+		}
+
+
 		void PrefabNodeDrawTree(PrefabEditNode* node, PrefabEditNode*& selected,
-			PrefabEditNode*& pendingDelete, const PrefabEditNode* root, const int depth)
+			PrefabEditNode*& pendingDelete, const PrefabEditNode* root, const int depth,
+			const bool ensureTransform)
 		{
 			constexpr int MAX_DEPTH = 64;
 			if (!node || depth >= MAX_DEPTH) { return; }
@@ -90,6 +116,7 @@ namespace aq
 				if (ImGui::MenuItem("Add Child")) {
 					auto child  = std::make_unique<PrefabEditNode>();
 					child->name = "Child";
+					if (ensureTransform) { PrefabNodeEnsureTransform(*child); }
 					selected    = child.get();
 					node->children.push_back(std::move(child));
 				}
@@ -101,7 +128,7 @@ namespace aq
 
 			if (opened) {
 				for (const auto& child : node->children) {
-					PrefabNodeDrawTree(child.get(), selected, pendingDelete, root, depth + 1);
+					PrefabNodeDrawTree(child.get(), selected, pendingDelete, root, depth + 1, ensureTransform);
 				}
 				ImGui::TreePop();
 			}
@@ -110,7 +137,7 @@ namespace aq
 		}
 
 
-		void PrefabNodeDrawInspector(PrefabEditNode& node, PrefabEditNode*& selected)
+		void PrefabNodeDrawInspector(PrefabEditNode& node, PrefabEditNode*& selected, const bool ensureTransform)
 		{
 			// 名前編集
 			char nameBuf[128];
@@ -119,7 +146,22 @@ namespace aq
 				node.name = nameBuf;
 			}
 
+			// Prefab 参照（非空 = 参照ノード。実体はロード時に参照先から解決・変更が反映される）
+			{
+				char refBuf[260];
+				std::snprintf(refBuf, sizeof(refBuf), "%s", node.prefabRef.c_str());
+				if (ImGui::InputText("Prefab Ref", refBuf, sizeof(refBuf))) {
+					node.prefabRef = refBuf;
+				}
+			}
+
 			ImGui::Separator();
+
+			// 参照ノードはコンポーネント/子を直接編集しない（参照先から展開されるため）。
+			if (!node.prefabRef.empty()) {
+				ImGui::TextWrapped("Prefab reference: components/children are resolved from the referenced prefab at load time.");
+				return;
+			}
 
 			ComponentRegistry& registry = ComponentRegistry::Get();
 
@@ -175,6 +217,7 @@ namespace aq
 			if (ImGui::Button("+ Add Child")) {
 				auto child  = std::make_unique<PrefabEditNode>();
 				child->name = "Child";
+				if (ensureTransform) { PrefabNodeEnsureTransform(*child); }
 				PrefabEditNode* added = child.get();
 				node.children.push_back(std::move(child));
 				selected = added;

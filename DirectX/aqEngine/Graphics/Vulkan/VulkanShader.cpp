@@ -6,8 +6,6 @@
 #include <spirv_reflect/spirv_reflect.h>
 #include <wrl/client.h>
 #include <filesystem>
-#include <string>
-#include <vector>
 
 #pragma comment(lib, "dxcompiler.lib")
 

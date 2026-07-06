@@ -1,9 +1,7 @@
 #include "aq.h"
 #include "ProfilerDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
-#include <algorithm>
 #include <imgui/imgui.h>
-#include "RenderConfig.h"
 #include "Memory/MemoryManager.h"
 
 

@@ -35,7 +35,6 @@
 #include "DebugUI.h"
 #include "Ocean/Debug/OceanDebugPanel.h"
 #include "Rendering/Debug/RenderingDebugPanel.h"
-#include "Rendering/Deferred/DeferredRenderer.h"
 #include "ECS/SceneHierarchySystem.h"
 #include "UI/Debug/UIEditorDebugPanel.h"
 #include "UI/Debug/TextStyleEditorPanel.h"

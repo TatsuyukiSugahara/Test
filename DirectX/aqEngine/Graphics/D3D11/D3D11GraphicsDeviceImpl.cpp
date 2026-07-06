@@ -5,7 +5,6 @@
 #include "D3D11Buffers.h"
 #include "D3D11Shader.h"
 #include "D3D11DepthMap.h"
-#include "Graphics/GraphicsDevice.h"
 #if defined(AQ_PLATFORM_UWP)
 #include <dxgi1_2.h>   // IDXGIFactory2 / CreateSwapChainForCoreWindow / DXGI_SWAP_CHAIN_DESC1
 #include <dxgi1_6.h>   // IDXGIFactory4 / IDXGIAdapter1 (D3D12 probe 用)

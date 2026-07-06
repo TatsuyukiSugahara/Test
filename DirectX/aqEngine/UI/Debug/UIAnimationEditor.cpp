@@ -2,9 +2,7 @@
 #include "UIAnimationEditor.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
-#include "UI/UIContext.h"
 #include "UI/UIObject.h"
-#include "UI/Screen/UIScreenManager.h"
 #include "UI/Screen/UIScreen.h"
 #include "UI/Component/UIAnimationComponent.h"
 #include "UI/Animation/UIAnimationSerializer.h"
@@ -12,8 +10,6 @@
 #include "UI/Animation/UIClipTrack.h"
 #include "UI/Animation/UIAnimationTrack.h"
 #include "Util/SimpleJson.h"
-#include <algorithm>
-#include <cstring>
 #include <cstdio>
 #include <cmath>
 

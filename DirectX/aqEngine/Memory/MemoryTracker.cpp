@@ -3,8 +3,6 @@
 
 #include "MemoryTracker.h"
 #include <cstdio>
-#include <atomic>
-#include <windows.h>
 
 
 namespace aq

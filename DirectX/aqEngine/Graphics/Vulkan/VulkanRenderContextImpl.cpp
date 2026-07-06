@@ -9,7 +9,6 @@
 #include "Graphics/Vulkan/VulkanRenderTarget.h"
 #include "Graphics/Vulkan/VulkanDepthMap.h"
 #include "Graphics/Vulkan/VulkanResources.h"
-#include <array>
 
 namespace aq
 {

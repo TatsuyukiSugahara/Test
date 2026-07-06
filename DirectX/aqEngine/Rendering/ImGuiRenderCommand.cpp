@@ -5,11 +5,9 @@
 #ifdef ENGINE_GRAPHICS_D3D11
 #include <imgui/imgui_impl_dx11.h>
 #elif defined(ENGINE_GRAPHICS_D3D12)
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
 #include "Graphics/D3D12/D3D12ImGui.h"
 #elif defined(ENGINE_GRAPHICS_VULKAN)
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
 #endif
 

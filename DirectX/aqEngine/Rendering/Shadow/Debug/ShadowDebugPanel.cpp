@@ -4,7 +4,6 @@
 #include <imgui/imgui.h>
 #include "Rendering/Shadow/IShadowRenderer.h"
 #include "Graphics/IDepthMap.h"
-#include "Graphics/LightManager.h"
 
 namespace aq
 {

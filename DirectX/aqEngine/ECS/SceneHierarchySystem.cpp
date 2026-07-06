@@ -1,12 +1,9 @@
 #include "aq.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "SceneHierarchySystem.h"
-#include "ECS/ECS.h"
 #include "ECS/EntityContext.h"
 #include "ECS/EntityDebugTag.h"
 #include "ECS/ComponentRegistry.h"
-#include "Component/TransformComponentSystem.h"
-#include "Component/HierarchicalTransformComponent.h"
 #include <imgui/imgui.h>
 
 namespace aq

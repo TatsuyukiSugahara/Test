@@ -1,11 +1,9 @@
 #include "stdafx.h"
 // UWP(Xbox 道A)のエントリ。デスクトップ構成では空 TU(Win32 は Main.cpp が担う)。
 #if defined(AQ_PLATFORM_UWP)
-#include <memory>
 #include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.UI.Core.h>
 #include "Application.h"
-#include "Engine.h"
 #include "Platform/PlatformUWP.h"
 
 using namespace winrt;

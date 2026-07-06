@@ -11,8 +11,6 @@
 #include "D3D12RootSignature.h"
 #include "D3D12PipelineStateCache.h"
 #include "D3D12GpuBuffer.h"
-#include "Graphics/GraphicsDevice.h"
-#include <vector>
 
 
 namespace aq

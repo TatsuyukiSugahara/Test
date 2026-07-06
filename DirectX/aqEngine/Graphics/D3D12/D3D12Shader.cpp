@@ -2,8 +2,6 @@
 #ifdef ENGINE_GRAPHICS_D3D12
 #include "D3D12Common.h"
 #include "D3D12Shader.h"
-#include "Engine.h"   // aq::Engine::GetContentRoot()
-#include <d3dcompiler.h>
 #include <filesystem>
 
 #pragma comment(lib, "d3dcompiler.lib")

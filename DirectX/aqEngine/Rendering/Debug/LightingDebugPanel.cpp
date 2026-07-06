@@ -2,7 +2,6 @@
 #include "LightingDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
-#include "Graphics/LightManager.h"
 #include "Graphics/Lighting.h"
 
 namespace aq

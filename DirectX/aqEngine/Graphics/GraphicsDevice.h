@@ -101,6 +101,10 @@ namespace aq
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data);
 			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height);
 
+			// テクスチャアップロードのバッチ制御 (per-texture の同期 GPU 待ちを 1 回にまとめる)。
+			void BeginBatchedTextureUploads() { impl_->BeginBatchedTextureUploads(); }
+			void EndBatchedTextureUploads()   { impl_->EndBatchedTextureUploads(); }
+
 			// GPU 駆動用バッファ
 			std::unique_ptr<IGpuBuffer> CreateStructuredBuffer(uint32_t stride, uint32_t count, const void* data)
 			{

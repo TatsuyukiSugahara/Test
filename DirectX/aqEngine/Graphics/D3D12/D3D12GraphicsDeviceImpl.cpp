@@ -142,6 +142,10 @@ namespace aq
 				CloseHandle(static_cast<HANDLE>(fenceEvent_));
 				fenceEvent_ = nullptr;
 			}
+			for (ID3D12Resource* ub : batchUploadBuffers_) SafeReleaseD3D12(ub);
+			batchUploadBuffers_.clear();
+			SafeReleaseD3D12(batchUploadList_);
+			SafeReleaseD3D12(batchUploadAlloc_);
 			SafeReleaseD3D12(commandList_);
 			for (auto& a : commandAlloc_) SafeReleaseD3D12(a);
 			SafeReleaseD3D12(swapChain_);
@@ -1022,37 +1026,64 @@ namespace aq
 			}
 			uploadBuffer->Unmap(0, nullptr);
 
-			// ── 一時コマンドリストでコピー → PIXEL_SHADER_RESOURCE へ遷移 → 実行・待機 ──
-			ID3D12CommandAllocator*    uploadAlloc = nullptr;
-			ID3D12GraphicsCommandList* uploadList  = nullptr;
-			device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&uploadAlloc));
-			device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAlloc, nullptr, IID_PPV_ARGS(&uploadList));
-
-			for (uint32_t i = 0; i < numSub; ++i)
+			// ── コピー → PIXEL_SHADER_RESOURCE へ遷移 ──
+			if (batchingUploads_)
 			{
-				D3D12_TEXTURE_COPY_LOCATION dst = {};
-				dst.pResource        = texResource;
-				dst.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-				dst.SubresourceIndex = i;
+				// バッチ中: 共有リストへコピーを積むだけ。実行/待機は EndBatchedTextureUploads で
+				// 1 回だけ行う (per-texture の WaitForGPU を排し、複数枚仕上げ時のヒッチを抑える)。
+				ID3D12GraphicsCommandList* rec = AcquireBatchUploadList();
+				for (uint32_t i = 0; i < numSub; ++i)
+				{
+					D3D12_TEXTURE_COPY_LOCATION dst = {};
+					dst.pResource        = texResource;
+					dst.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+					dst.SubresourceIndex = i;
 
-				D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
-				srcLoc.pResource       = uploadBuffer;
-				srcLoc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-				srcLoc.PlacedFootprint = layouts[i];
+					D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+					srcLoc.pResource       = uploadBuffer;
+					srcLoc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+					srcLoc.PlacedFootprint = layouts[i];
 
-				uploadList->CopyTextureRegion(&dst, 0, 0, 0, &srcLoc, nullptr);
+					rec->CopyTextureRegion(&dst, 0, 0, 0, &srcLoc, nullptr);
+				}
+				TransitionBarrier(rec, texResource,
+				                  D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				batchUploadBuffers_.push_back(uploadBuffer);   // フラッシュ(End)まで解放しない
 			}
-			TransitionBarrier(uploadList, texResource,
-			                  D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-			uploadList->Close();
+			else
+			{
+				// 従来: 使い捨てリストで即時実行・待機。
+				ID3D12CommandAllocator*    uploadAlloc = nullptr;
+				ID3D12GraphicsCommandList* uploadList  = nullptr;
+				device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&uploadAlloc));
+				device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAlloc, nullptr, IID_PPV_ARGS(&uploadList));
 
-			ID3D12CommandList* lists[] = { uploadList };
-			commandQueue_->ExecuteCommandLists(1, lists);
-			WaitForGPU();  // 同期実行。アップロードバッファを安全に解放できる。
+				for (uint32_t i = 0; i < numSub; ++i)
+				{
+					D3D12_TEXTURE_COPY_LOCATION dst = {};
+					dst.pResource        = texResource;
+					dst.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+					dst.SubresourceIndex = i;
 
-			uploadList->Release();
-			uploadAlloc->Release();
-			uploadBuffer->Release();
+					D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+					srcLoc.pResource       = uploadBuffer;
+					srcLoc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+					srcLoc.PlacedFootprint = layouts[i];
+
+					uploadList->CopyTextureRegion(&dst, 0, 0, 0, &srcLoc, nullptr);
+				}
+				TransitionBarrier(uploadList, texResource,
+				                  D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				uploadList->Close();
+
+				ID3D12CommandList* lists[] = { uploadList };
+				commandQueue_->ExecuteCommandLists(1, lists);
+				WaitForGPU();  // 同期実行。アップロードバッファを安全に解放できる。
+
+				uploadList->Release();
+				uploadAlloc->Release();
+				uploadBuffer->Release();
+			}
 
 			// ── ステージングヒープに SRV を作成 ──
 			const uint32_t slot = srvStagingNext_++;
@@ -1084,6 +1115,53 @@ namespace aq
 			view->Bind(texResource, srvCPU);  // texResource の所有権は D3D12Texture2D へ
 			return view;
 		}
+
+
+		void D3D12GraphicsDeviceImpl::BeginBatchedTextureUploads()
+		{
+			batchingUploads_ = true;
+		}
+
+
+		ID3D12GraphicsCommandList* D3D12GraphicsDeviceImpl::AcquireBatchUploadList()
+		{
+			if (!batchListOpen_)
+			{
+				if (batchUploadList_ == nullptr)
+				{
+					// 初回のみ生成。CreateCommandList は記録状態で返る。
+					device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&batchUploadAlloc_));
+					device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, batchUploadAlloc_, nullptr, IID_PPV_ARGS(&batchUploadList_));
+				}
+				else
+				{
+					batchUploadAlloc_->Reset();
+					batchUploadList_->Reset(batchUploadAlloc_, nullptr);
+				}
+				batchListOpen_ = true;
+			}
+			return batchUploadList_;
+		}
+
+
+		void D3D12GraphicsDeviceImpl::EndBatchedTextureUploads()
+		{
+			batchingUploads_ = false;
+			if (!batchListOpen_)
+			{
+				return;   // このスコープで CreateTexture2D が呼ばれなかった (待機コストゼロ)。
+			}
+
+			batchUploadList_->Close();
+			ID3D12CommandList* lists[] = { batchUploadList_ };
+			commandQueue_->ExecuteCommandLists(1, lists);
+			WaitForGPU();   // まとめて 1 回だけ待つ。以降アップロードバッファを安全に解放できる。
+
+			for (ID3D12Resource* ub : batchUploadBuffers_) ub->Release();
+			batchUploadBuffers_.clear();
+			batchListOpen_ = false;
+		}
+
 
 		std::unique_ptr<IDepthMap> D3D12GraphicsDeviceImpl::CreateDepthMap(uint32_t width, uint32_t /*height*/)
 		{

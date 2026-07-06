@@ -92,6 +92,16 @@ namespace aq
 			virtual std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) = 0;
 
 			/**
+			 * テクスチャアップロードのバッチ制御。
+			 * Begin/End で挟むと、その間の CreateTexture2D のコピー実行/GPU 待機を End で 1 回に
+			 * まとめる。per-texture の同期 GPU 待ちによるロードヒッチ (複数枚仕上げ時の N×WaitForGPU) を抑える。
+			 * 未対応バックエンドは no-op (CreateTexture2D は従来どおり即時同期アップロード)。
+			 * ネスト不可。End までに作られたテクスチャは End 後に使用可能になる。
+			 */
+			virtual void BeginBatchedTextureUploads() {}
+			virtual void EndBatchedTextureUploads()   {}
+
+			/**
 			 * R32_Float オフスクリーン RT (rtIndex) の内容を CPU へ取得する (GPU→CPU リードバック)。
 			 * frames-in-flight を考慮した遅延リードバック: 直近で GPU 完了済みのデータがあれば
 			 * outData (width*height 個の float) に格納して true を返し、同時に今フレームのコピーを記録する。

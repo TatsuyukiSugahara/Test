@@ -1166,12 +1166,17 @@ namespace aq
 			if (finishedLoaders.empty()) return;
 
 			// 計測: このフレームで仕上げ(FinalizeLoading = GPU アップロード等)したローダー数と所要時間。
-			// 無制限に一括仕上げしているため、ロード集中フレームでの最大スパイク源の裏取り用。
 			const auto profStart = std::chrono::steady_clock::now();
+
+			// テクスチャアップロードをバッチ化: この仕上げループ内の CreateTexture2D の
+			// コピー実行/GPU 待機を End で 1 回にまとめ、per-texture の N×WaitForGPU を排す。
+			aq::graphics::GraphicsDevice::Get().BeginBatchedTextureUploads();
 			for (auto* loader : finishedLoaders) {
 				loader->Finish();
 				delete loader;
 			}
+			aq::graphics::GraphicsDevice::Get().EndBatchedTextureUploads();
+
 			const double ms = std::chrono::duration<double, std::milli>(
 				std::chrono::steady_clock::now() - profStart).count();
 			EnginePrintf("[LoadProf] finalize: %u loaders, %.2f ms\n",

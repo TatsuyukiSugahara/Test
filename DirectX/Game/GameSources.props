@@ -11,7 +11,6 @@
     <ClCompile Include="Application\Actor\StateMachine.cpp" />
     <ClCompile Include="Application\Application.cpp" />
     <ClCompile Include="Application\GameFlow.cpp" />
-    <ClCompile Include="Application\TestScreen.cpp" />
     <ClCompile Include="Application\GameInput.cpp" />
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
     <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp" />
@@ -23,7 +22,6 @@
     <ClInclude Include="Application\Actor\StateMachine.h" />
     <ClInclude Include="Application\Application.h" />
     <ClInclude Include="Application\GameFlow.h" />
-    <ClInclude Include="Application\TestScreen.h" />
     <ClInclude Include="Application\GameAction.h" />
     <ClInclude Include="Application\GameInput.h" />
     <ClInclude Include="Application\ECS\ActorComponentSystem.h" />

@@ -20,7 +20,10 @@
 #include "UI/UIContext.h"
 #include "UI/UIObject.h"
 #include "UI/Component/UITextComponent.h"
-#include "UI/Font/FontAssetCache.h"   // フォント事前ロード用
+#include "UI/Font/FontAssetCache.h"   // フォント事前ロード / 準備完了判定
+#include "UI/Font/FontResource.h"
+#include "UI/Font/FontAsset.h"
+#include "Graphics/IShaderResourceView.h"
 #include "Resource/Resource.h"   // 事前ロード用(ResourceManager / GPUResource)
 #include "Engine.h"
 #ifdef AQ_DEBUG_IMGUI
@@ -34,8 +37,23 @@ namespace app
 	{
 		// タイトルで押す非同期ロード対象。ECS の効果(大量エンティティ)確認用の箱 1000 個 Level。
 		static const char*        STARTUP_LEVEL   = "Assets/Levels/Playground.level.json";
-		static constexpr uint32_t LOAD_PER_FRAME  = 20;    // 1 フレームあたり生成数(ローディングを見せるため小さめ)
-		static constexpr float    MIN_LOADING_SEC = 1.0f;  // ローディング表示の最低時間(演出用)
+		static const char*        UI_FONT_PATH    = "Assets/Font/CorporateLogo/atlas.json";
+		static constexpr uint32_t LOAD_PER_FRAME  = 20;     // 1 フレームあたり生成数(ローディングを見せるため小さめ)
+		static constexpr float    MIN_LOADING_SEC = 1.0f;   // ローディング表示の最低時間(演出用)
+		static constexpr float    FONT_WAIT_MAX   = 15.0f;  // フォント準備待ちの安全上限(未完でも進む)
+
+		// UI フォント(アトラステクスチャ含む)が描画可能な状態かを返す。
+		// テキストはアトラス SRV がバインド可能(GetNativeHandle 非 null)になるまで描画されないため、
+		// ローディング完了前にこれを待って "Now Loading" を確実に表示させる。
+		bool IsUIFontReady()
+		{
+			auto fontRes = aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
+			if (!fontRes || !fontRes->IsCompleted()) return false;
+			const aq::ui::FontAsset* fa = fontRes->GetFontAsset();
+			if (!fa) return false;
+			auto srv = fa->GetAtlasSRV();
+			return srv && srv->GetNativeHandle() != nullptr;
+		}
 	}
 
 
@@ -67,7 +85,14 @@ namespace app
 			void OnUpdate(GameFlow& flow, const float dt) override
 			{
 				timer_ += dt;
-				if (flow.LoadHandle().IsDone() && timer_ >= MIN_LOADING_SEC)
+
+				// 完了条件: Level 生成完了 + 最低表示時間 + (フォント準備完了 or 安全上限)。
+				// フォントを待つのは "Now Loading" テキストを確実に一度は表示させるため
+				// (アトラス 4096² は読み込みが重く、待たないと文字が出ないまま終わることがある)。
+				const bool ready = flow.LoadHandle().IsDone()
+				                && timer_ >= MIN_LOADING_SEC
+				                && (IsUIFontReady() || timer_ >= FONT_WAIT_MAX);
+				if (ready)
 				{
 					aq::ui::UIContext::Get().Screens().Pop();   // ローディングを閉じる
 					flow.ChangeState(std::make_unique<PlayingState>());

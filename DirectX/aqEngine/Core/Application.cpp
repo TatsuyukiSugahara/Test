@@ -459,6 +459,10 @@ namespace aq
 					const char* backend = "?";
 #endif
 					ImGui::Text("%s  %.1f FPS (%.2f ms)", backend, fps, ms);
+#ifdef AQ_DEBUG_IMGUI
+					// トグル操作のヒント（非表示中は重いデバッグ描画がスキップされる）。
+					ImGui::TextDisabled(showDebugUI_ ? "F1 / 中クリック: Debug UI を隠す" : "F1 / 中クリック: Debug UI を表示");
+#endif
 
 #if defined(ENGINE_GRAPHICS_D3D12)
 					// VSync を実機で切り替えられるようにする
@@ -477,7 +481,10 @@ namespace aq
 			{ AQ_PROFILE_SCOPE("OnImGuiRender"); OnImGuiRender(); }
 
 #ifdef AQ_DEBUG_IMGUI
-			if (ImGui::GetIO().MouseClicked[2])
+			// デバッグ UI 表示トグル: 中クリック or F1。非表示中は下の重い ECS::DebugRender / 各パネル描画を
+			// 完全にスキップする（毎フレーム 100+ エンティティを ImGui 描画する処理が止まり大幅に軽くなる）。
+			// F1 は ImGui のキー状態で判定し、ゲーム入力抑制（WantCaptureKeyboard）の影響を受けない。
+			if (ImGui::GetIO().MouseClicked[2] || ImGui::IsKeyPressed(ImGuiKey_F1, false))
 				showDebugUI_ = !showDebugUI_;
 
 			if (showDebugUI_)

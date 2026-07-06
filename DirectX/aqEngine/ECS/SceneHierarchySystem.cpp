@@ -90,27 +90,39 @@ namespace aq
 			}
 			ImGui::Separator();
 
-			// Spatial ルート（HTC あり・親なし）
+			// ルート(親なし)を「子あり」と「子なし(フラット)」に分類する。
+			// 子なしフラット分は ImGuiListClipper で可視行のみ描画し、100+ エンティティ(箱など)を
+			// 毎フレーム全描画していた重さを解消する。1 エンティティにつき HTC 取得は 1 回だけにする。
+			std::vector<EntityHandle> nestedRoots;  // 子を持つ root(通常は少数) → 通常の再帰描画
+			std::vector<EntityHandle> flatRoots;    // 子なし root → クリップ描画
+			std::vector<EntityHandle> otherFlat;    // HTC なし → クリップ描画
 			for (EntityHandle handle : allHandles)
 			{
 				auto* htc = ctx.GetComponent<HierarchicalTransformComponent>(handle);
-				if (!htc) continue;
-				if (ctx.IsValid(htc->parentHandle)) continue;
-				DrawEntityNode(handle);
+				if (!htc) { otherFlat.push_back(handle); continue; }
+				if (ctx.IsValid(htc->parentHandle)) continue;   // 子は親から辿るのでスキップ
+
+				bool hasChildren = false;
+				for (EntityHandle child : htc->childHandles)
+					if (ctx.IsValid(child)) { hasChildren = true; break; }
+
+				if (hasChildren) nestedRoots.push_back(handle);
+				else             flatRoots.push_back(handle);
 			}
 
-			// Other（HTC なし）
-			bool hasOther = false;
-			for (EntityHandle handle : allHandles)
-			{
-				if (ctx.GetComponent<HierarchicalTransformComponent>(handle)) continue;
-				if (!hasOther)
-				{
-					ImGui::Separator();
-					ImGui::TextDisabled("Other (no transform)");
-					hasOther = true;
-				}
+			// 子ありルートは階層描画(クリップ非対応・通常は少数)。
+			for (EntityHandle handle : nestedRoots)
 				DrawEntityNode(handle);
+
+			// 子なしルートは可視行のみ描画。
+			DrawFlatList(flatRoots);
+
+			// Other(HTC なし)
+			if (!otherFlat.empty())
+			{
+				ImGui::Separator();
+				ImGui::TextDisabled("Other (no transform)");
+				DrawFlatList(otherFlat);
 			}
 
 			ImGui::End();
@@ -208,6 +220,22 @@ namespace aq
 					DrawInsertGap(handle, childCount);
 				}
 				ImGui::TreePop();
+			}
+		}
+
+
+		// ── フラットリスト（可視行のみ描画） ──────────────────────────────────────
+
+		void SceneHierarchySystem::DrawFlatList(const std::vector<EntityHandle>& handles)
+		{
+			// 子を持たないエンティティ列。行高が一定なので ImGuiListClipper で可視範囲だけ描画する。
+			// 100+ の箱などを毎フレーム全部 TreeNodeEx + drag/drop で描画していた負荷を、可視分だけに削減。
+			ImGuiListClipper clipper;
+			clipper.Begin(static_cast<int>(handles.size()));
+			while (clipper.Step())
+			{
+				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
+					DrawEntityNode(handles[i]);
 			}
 		}
 

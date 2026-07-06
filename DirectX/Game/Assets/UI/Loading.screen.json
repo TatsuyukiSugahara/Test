@@ -18,7 +18,7 @@
                 "transform": { "position": [0, 0, 0], "sizeDelta": [1000, 120] },
                 "text": {
                     "content": "Now Loading",
-                    "textStylePath": "Assets/Styles/Default.textstyle.json",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
                     "alignH": "Center",
                     "alignV": "Middle",
                     "color": [1, 1, 1, 1]

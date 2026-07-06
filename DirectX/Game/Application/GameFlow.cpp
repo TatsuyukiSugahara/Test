@@ -37,7 +37,9 @@ namespace app
 	{
 		// タイトルで押す非同期ロード対象。ECS の効果(大量エンティティ)確認用の箱 1000 個 Level。
 		static const char*        STARTUP_LEVEL   = "Assets/Levels/Playground.level.json";
-		static const char*        UI_FONT_PATH    = "Assets/Font/CorporateLogo/atlas.json";
+		// UI 文字は英数字のみ。ASCII 専用の小さな MSDF アトラス(512²/約74KB)を使い、
+		// 起動時に即ロードできるようにする(全文字版 CorporateLogo は 8411 グリフ・4096²/12MB で重い)。
+		static const char*        UI_FONT_PATH    = "Assets/Font/UI/atlas.json";
 		static constexpr uint32_t LOAD_PER_FRAME  = 20;     // 1 フレームあたり生成数(ローディングを見せるため小さめ)
 		static constexpr float    MIN_LOADING_SEC = 1.0f;   // ローディング表示の最低時間(演出用)
 		static constexpr float    FONT_WAIT_MAX   = 15.0f;  // フォント準備待ちの安全上限(未完でも進む)
@@ -220,8 +222,8 @@ namespace app
 		{
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Terrain/rock.png");
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
-			// テキストはフォントアトラスのロード完了まで描画されない。ローディング表示中に確実に出せるよう先読みする。
-			aq::ui::FontAssetCache::Get().Load("Assets/Font/CorporateLogo/atlas.json");
+			// UI フォント(小さな ASCII アトラス)を先読み。テキストはアトラス完了まで描画されないため。
+			aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
 			preloaded_ = true;
 		}
 

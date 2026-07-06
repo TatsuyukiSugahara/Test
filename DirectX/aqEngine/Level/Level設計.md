@@ -479,3 +479,65 @@ class LevelEditorPanel : public IDebugRenderable
 > `LevelEditorPanel` を DebugUI に登録（Tools > Level Editor）… [../Core/Application.cpp](../Core/Application.cpp)。
 > ノード編集は Prefab エディタと `PrefabEditNodeOps` を共有（単一の真実）。
 > **残（L7d）**: prefab 参照モードと `LevelStreamComponent` のエディタ配置対応。
+
+---
+
+## 15. ロード分散 / 非同期ロード（ローディング画面対応）設計メモ（未実装・優先度=次点）
+
+> **背景（現状の制約）**: `LevelManager::Load` は `RequestDeferredBuild` を **1 コマンド積むだけ**で、
+> 次の `FlushCommands` で**そのツリー全部（サブLevel 含む）をメインスレッドで同期一括生成**する。
+> JSON パース（`LevelSerializer`/`PrefabSerializer`）も未キャッシュ時はメイン同期。
+> → 大きな Level を差すと**そのフレームでスパイク**し、ローディング画面を出しても実ロード中は固まる。
+> フレーム分割も件数上限も進捗通知も**無い**（設計 §10.3/§10.4・W5 の将来課題に相当）。
+
+### 15.1 採用方針：まず「段階1＝フレーム分割ロード + 進捗」
+
+メインスレッドのまま、生成を複数フレームに分散し進捗を返す。これで**プログレスバー付きローディング画面が成立**する。
+
+**API 案**
+```cpp
+struct LevelLoadHandle
+{
+    LevelId  id;
+    uint32_t total = 0;      // 生成予定エンティティ総数
+    uint32_t built = 0;      // 生成済み
+    bool     IsDone()  const { return built >= total; }
+    float    Progress() const { return total ? float(built) / float(total) : 1.0f; }
+};
+
+// 非同期（分割）ロード。entitiesPerFrame ずつ生成する。
+LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId parent = {},
+                                        uint32_t entitiesPerFrame = 64);
+```
+
+**実装スケッチ**
+- `LevelData` のフォレストを **平坦化した生成ジョブキュー**にする（各要素 = 型リスト + `JsonValue` + 親ハンドル + `levelId`）。
+  親子は生成順依存（HTC `SetParent` は親 Entity ハンドルが必要）なので **親→子の順**でキュー化し、生成済みハンドルを覚えて子に渡す。
+- 進行は専用の漸進ビルダ（`LevelManager` 内キュー）を**毎フレーム `entitiesPerFrame` 件**処理。生成は従来の
+  `RequestCreateEntityFromTypes`/`create` プリミティブを流用（`LevelMemberComponent` 注入 + `levelId` stamp は同じ）。
+- `built`/`total` を更新。ゲーム状態層が毎フレーム `Progress()` を UI に反映し `IsDone()` で遷移。
+- **最小実装（粗い分割）**: ツリー平坦化が重ければ、まず**「1 フレーム = トップレベル entity 1 本（サブツリー丸ごと）」**の粒度で分割開始 → 後でノード粒度へ精緻化。
+- 既存 `Load`（同期一括）は残す（小さい Level / 起動時用）。`LoadAsync` を併設する。
+
+**留意点**
+- `InstantiatePrefabTree` は「1 ツリー = 1 コマンド」前提。フレーム分割にはツリーを跨いで中断・再開できる
+  **ノード単位の生成経路**が要る（親ハンドル保持しながら）。ここが新規実装の肝。
+- `LevelStreamSystem` / World Partition のセル Load も、この `LoadAsync` に載せ替えれば**ストリーミングのスパイクも緩和**できる（§10.3 の「1 フレーム Load 上限」を包含）。
+
+### 15.2 段階2：非同期プリロード（本格・段階1の上に載せる）
+
+- バックグラウンドスレッドで **JSON パース → `LevelData` 構築**（参照展開含む）を先行実施（`LevelData` は不変・共有なのでスレッド跨ぎ安全）。
+- **Entity 生成はメインに残す**（ECS はスレッド安全性の都合でメイン生成が安全）＝段階1のフレーム分割をそのまま使う。
+- `LevelRegistry` に「バックグラウンドで parse 中」の状態を持たせ、完了後に段階1の生成キューへ投入。
+
+### 15.3 段階（サブフェーズ）
+| | 内容 |
+|---|---|
+| A1 | ノード単位の中断可能生成経路（`LevelData` フォレスト → 平坦ジョブキュー・親ハンドル保持） |
+| A2 | `LevelManager::LoadAsync` + `LevelLoadHandle`（毎フレーム N 件・進捗） |
+| A3 | ローディング画面配線（ゲーム状態層が Progress を UI 反映・IsDone で遷移） |
+| A4 | `LevelStreamSystem` / World Partition セル Load を `LoadAsync` へ載せ替え（スパイク緩和） |
+| A5 | 段階2：バックグラウンド JSON パース（`LevelData` 先行構築）を A2 の生成キューへ接続 |
+
+> 実装再開の入口: **A1（中断可能なノード単位生成）**。ここが `LoadAsync` の土台。
+> 既存の同期 `Load` は温存し、`LoadAsync` を別 API として足す（呼び分け）。

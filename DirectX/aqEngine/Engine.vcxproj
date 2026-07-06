@@ -221,7 +221,9 @@
     <ClCompile Include="Level\LevelManager.cpp" />
     <ClCompile Include="Level\LevelStreamSystem.cpp" />
     <ClCompile Include="Level\LevelComponentRegistry.cpp" />
+    <ClCompile Include="Level\LevelEditor.cpp" />
     <ClCompile Include="ECS\PrefabEditor.cpp" />
+    <ClCompile Include="ECS\PrefabEditNodeOps.cpp" />
     <ClCompile Include="ECS\SceneHierarchySystem.cpp" />
     <ClCompile Include="ECS\EntityContext.cpp" />
     <ClCompile Include="ECS\EntityManager.cpp" />
@@ -413,8 +415,10 @@
     <ClInclude Include="Level\LevelManager.h" />
     <ClInclude Include="Level\LevelStreamSystem.h" />
     <ClInclude Include="Level\LevelComponentRegistry.h" />
+    <ClInclude Include="Level\LevelEditor.h" />
     <ClInclude Include="ECS\AlignedStorage.h" />
     <ClInclude Include="ECS\PrefabEditor.h" />
+    <ClInclude Include="ECS\PrefabEditNodeOps.h" />
     <ClInclude Include="ECS\SceneHierarchySystem.h" />
     <ClInclude Include="ECS\EntityDebugTag.h" />
     <ClInclude Include="ECS\ImGuiFieldVisitor.h" />

@@ -394,7 +394,7 @@ class WorldStreamingSystem : public ecs::SystemBase { public: void Update() over
 | **L4** | `subLevels` + `loadOnStart` + 再帰 Load/Unload | 親子 Level のカスケード | ✅ 実装済み（ビルド検証・ランタイム自己テスト未） |
 | **L5** | `SetStartupLevel`/`LoadStartup` + ゲーム状態層からの配線 | プログラム指定の初期 Level 起動 | ✅ 実装済み（実機起動確認済み） |
 | **L6** | `LevelStreamComponent`/`LevelStreamSystem` | コンポーネント駆動の動的ストリーム | ✅ 実装済み（ビルド検証） |
-| **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 | 未（§14 設計メモあり） |
+| **L7（任意）** | Level エディタ（Prefab エディタ流用）/ Save | ImGui で Level 編集・保存 | ✅ L7a-c 実装済み（ビルド検証）/ L7d 未（§14） |
 
 ### World Partition
 | Phase | 内容 | 検証 |
@@ -470,10 +470,12 @@ class LevelEditorPanel : public IDebugRenderable
 ### 14.3 段階（L7 サブフェーズ）
 | | 内容 |
 |---|---|
-| L7a | `PrefabEditorPanel` のノード編集部を共有ウィジェットへ切り出し（挙動不変リファクタ） |
-| L7b | `LevelEditorPanel` 骨組み（entities ツリー + Inspector + Save/Load・subLevels なし） |
-| L7c | subLevels 行 UI + `.level.json` 往復 + Load in World プレビュー |
-| L7d | entity の `.prefab.json` 参照モード + `LevelStreamComponent` の FillReflectPtrFns 対応 |
+| L7a | ✅ `PrefabEditorPanel` のノード編集部を共有関数へ切り出し（[../ECS/PrefabEditNodeOps.h](../ECS/PrefabEditNodeOps.h) / .cpp。`PrefabNodeToJson`/`FromJson`/`DrawTree`/`DrawInspector`/`Remove`。PrefabEditorPanel は委譲＝挙動不変） |
+| L7b | ✅ `LevelEditorPanel` 骨組み（複数 root entities ツリー + Inspector + Save/Load）… [LevelEditor.h](LevelEditor.h) / .cpp |
+| L7c | ✅ subLevels 行 UI（path + loadOnStart）+ `.level.json` 往復 + Load in World（in-memory 登録→`LevelManager::Load`） |
+| L7d | 未: entity の `.prefab.json` 参照モード（エディタは現状インライン components のみ復元・"prefab" 参照は展開しない） + `LevelStreamComponent` の FillReflectPtrFns 対応（Add Component パレットに出すため） |
 
-> 実装再開時の入口: まず L7a のリファクタ（`PrefabEditorPanel` 内 `DrawTree`/`DrawInspector`/`NodeToJson`/`JsonToNode` の共有化）。
-> ここが済めば Level エディタは「複数 root + subLevels 行 + Save/Load」を足すだけになる。
+> **実装状況（L7a-c 完了・ビルド検証）**: ソリューション Debug|x64 ビルド成功。`Application` が全シーン共通で
+> `LevelEditorPanel` を DebugUI に登録（Tools > Level Editor）… [../Core/Application.cpp](../Core/Application.cpp)。
+> ノード編集は Prefab エディタと `PrefabEditNodeOps` を共有（単一の真実）。
+> **残（L7d）**: prefab 参照モードと `LevelStreamComponent` のエディタ配置対応。

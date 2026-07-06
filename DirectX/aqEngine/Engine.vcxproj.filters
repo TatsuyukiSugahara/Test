@@ -190,6 +190,12 @@
     <ClCompile Include="Level\LevelComponentRegistry.cpp">
       <Filter>Level</Filter>
     </ClCompile>
+    <ClCompile Include="Level\LevelEditor.cpp">
+      <Filter>Level</Filter>
+    </ClCompile>
+    <ClCompile Include="ECS\PrefabEditNodeOps.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
     <ClCompile Include="ECS\PrefabEditor.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
@@ -663,6 +669,12 @@
     </ClInclude>
     <ClInclude Include="Level\LevelComponentRegistry.h">
       <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelEditor.h">
+      <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\PrefabEditNodeOps.h">
+      <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="ECS\AlignedStorage.h">
       <Filter>ECS</Filter>

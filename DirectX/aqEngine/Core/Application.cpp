@@ -280,6 +280,10 @@ namespace aq
 			prefabEditorPanel_ = std::make_unique<aq::ecs::PrefabEditorPanel>();
 			aq::DebugUI::Get().Register(prefabEditorPanel_.get());
 
+			// Level エディタパネル（全シーン共通・アプリ寿命）
+			levelEditorPanel_ = std::make_unique<aq::level::LevelEditorPanel>();
+			aq::DebugUI::Get().Register(levelEditorPanel_.get());
+
 			// Hi-Z 可視化タブ
 			if (hiZRenderer_)
 			{

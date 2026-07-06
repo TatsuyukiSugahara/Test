@@ -8,19 +8,20 @@
         {
             "name": "TitleImage",
             "components": {
-                "transform": { "position": [960, 440, 0], "sizeDelta": [512, 512] },
+                "transform": { "position": [0, -120, 0], "sizeDelta": [512, 512] },
                 "image": { "texture": "Assets/Character/Character.png", "color": [1, 1, 1, 1] }
             }
         },
         {
             "name": "TitleText",
             "components": {
-                "transform": { "position": [960, 860, 0], "sizeDelta": [1000, 80] },
+                "transform": { "position": [0, 300, 0], "sizeDelta": [1000, 80] },
                 "text": {
                     "content": "Press A / Space to Start",
                     "textStylePath": "Assets/Styles/Default.textstyle.json",
                     "alignH": "Center",
-                    "alignV": "Middle"
+                    "alignV": "Middle",
+                    "color": [1, 1, 1, 1]
                 }
             }
         }

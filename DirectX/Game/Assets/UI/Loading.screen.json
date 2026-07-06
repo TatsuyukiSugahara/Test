@@ -8,14 +8,14 @@
         {
             "name": "LoadingBG",
             "components": {
-                "transform": { "position": [960, 540, 0], "sizeDelta": [1920, 1080] },
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
                 "image": { "texture": "Assets/Terrain/rock.png", "color": [0, 0, 0, 1] }
             }
         },
         {
             "name": "LoadingText",
             "components": {
-                "transform": { "position": [960, 540, 0], "sizeDelta": [1000, 120] },
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1000, 120] },
                 "text": {
                     "content": "Now Loading",
                     "textStylePath": "Assets/Styles/Default.textstyle.json",

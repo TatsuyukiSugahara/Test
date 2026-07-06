@@ -48,10 +48,20 @@ namespace app
 		};
 
 
-		// ローディング中。非同期ロード完了 + 最低表示時間経過でプレイへ。
+		// ローディング中。OnEnter で世界生成 + 非同期ロード開始。
+		// ※ 重い同期セットアップ(地形/スケルタルメッシュ読込)を「黒いローディング画面が出た後」に行うことで、
+		//   タイトルのまま固まって見えるのを防ぐ(前フレームでローディング画面が表示済みになる)。
 		class LoadingState : public IGameState
 		{
 		public:
+			void OnEnter(GameFlow& flow) override
+			{
+				flow.SetupWorld();
+				flow.SetLoadHandle(
+					aq::level::LevelManager::Get().LoadAsync(STARTUP_LEVEL, aq::level::LevelId(), LOAD_PER_FRAME));
+				timer_ = 0.0f;
+			}
+
 			void OnUpdate(GameFlow& flow, const float dt) override
 			{
 				timer_ += dt;
@@ -67,7 +77,7 @@ namespace app
 		};
 
 
-		// タイトル。決定(Space / パッド A)で世界生成 + 箱 Level の非同期ロードを開始しローディングへ。
+		// タイトル。決定(Space / パッド A)でローディング画面へ切替。世界生成/ロードは LoadingState::OnEnter で行う。
 		class TitleState : public IGameState
 		{
 		public:
@@ -75,9 +85,6 @@ namespace app
 			{
 				if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
 
-				flow.SetupWorld();
-				flow.SetLoadHandle(
-					aq::level::LevelManager::Get().LoadAsync(STARTUP_LEVEL, aq::level::LevelId(), LOAD_PER_FRAME));
 				aq::ui::UIContext::Get().Screens().Replace("Loading");
 				flow.ChangeState(std::make_unique<LoadingState>());
 			}
@@ -111,6 +118,7 @@ namespace app
 				std::string s = "Now Loading";
 				for (int i = 0; i < dotCount_; ++i) s += ".";
 				text->content = s;
+				text->color   = { 1.0f, 1.0f, 1.0f, 1.0f };   // 黒背景に白文字(TextStyle に依らず可視化)
 			}
 		}
 	}

@@ -107,6 +107,7 @@ public:\
 			virtual ResourceBase* Create() = 0;
 
 			void Request(const char* path) { requestPath_ = path ? path : ""; }
+			const std::string& GetRequestPath() const { return requestPath_; }   // 計測ログ用
 			void SetRefResource(const RefResource& refResource) { resource_ = refResource; }
 
 			/** ThreadPool::Get() へロードをサブミットする */

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cmath>
 #include <filesystem>
+#include <typeinfo>   // 計測: 重いローダーの種別名 (typeid) 出力用
 
 
 namespace aq
@@ -1172,7 +1173,14 @@ namespace aq
 			// コピー実行/GPU 待機を End で 1 回にまとめ、per-texture の N×WaitForGPU を排す。
 			aq::graphics::GraphicsDevice::Get().BeginBatchedTextureUploads();
 			for (auto* loader : finishedLoaders) {
+				const auto lt0 = std::chrono::steady_clock::now();
 				loader->Finish();
+				const double lms = std::chrono::duration<double, std::milli>(
+					std::chrono::steady_clock::now() - lt0).count();
+				if (lms > 3.0) {   // 重いローダーだけ種別とパスを出す (犯人特定用)
+					EnginePrintf("[LoadProf]   slow finish: %6.2f ms  %-28s (%s)\n",
+						lms, typeid(*loader).name(), loader->GetRequestPath().c_str());
+				}
 				delete loader;
 			}
 			aq::graphics::GraphicsDevice::Get().EndBatchedTextureUploads();

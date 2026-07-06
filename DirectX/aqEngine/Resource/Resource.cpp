@@ -1089,22 +1089,26 @@ namespace aq
 			if (!shaderData) {
 				return false;
 			}
-			return aq::graphics::ParseShaderResourceKey(requestPath_, shaderData->desc);
-		}
-
-
-		bool ShaderLoader::FinalizeLoading()
-		{
-			ShaderData* shaderData = static_cast<ShaderData*>(resource_->data_);
-			if (!shaderData) {
+			if (!aq::graphics::ParseShaderResourceKey(requestPath_, shaderData->desc)) {
 				return false;
 			}
 
+			// 重い実行時コンパイル(D3DCompile)はワーカースレッドで行い、メインスレッドの
+			// ロードヒッチを避ける。D3D12 の CreateShader はデバイス非依存(bytecode 生成のみ)で、
+			// D3D12Shader::Load をスレッド安全化済みなのでここで呼べる。
 			shaderData->shader = aq::graphics::GraphicsDevice::Get().CreateShader(
 				shaderData->desc.filePath.c_str(),
 				shaderData->desc.entryFuncName.c_str(),
 				shaderData->desc.shaderType);
 			return shaderData->shader != nullptr;
+		}
+
+
+		bool ShaderLoader::FinalizeLoading()
+		{
+			// コンパイルは Loading()(ワーカー)で完了済み。ここでは生成結果の検証のみ。
+			ShaderData* shaderData = static_cast<ShaderData*>(resource_->data_);
+			return shaderData && shaderData->shader != nullptr;
 		}
 
 

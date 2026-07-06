@@ -55,6 +55,14 @@ namespace aq
 				clips.PushBack(std::move(c));
 			}
 			out.Set("clips", std::move(clips));
+
+			// 再生中クリップ名を保存 (ロード時に自動再生させる)
+			if (isPlaying_ && currentHashKey_ != 0)
+			{
+				const auto it = slots_.find(currentHashKey_);
+				if (it != slots_.end() && !it->second.name.empty())
+					out.Set("current", util::JsonValue(it->second.name));
+			}
 		}
 
 
@@ -68,6 +76,13 @@ namespace aq
 			{
 				const util::JsonValue& c = clips[i];
 				AddAnimation(c["name"].AsString().c_str(), c["path"].AsString().c_str());
+			}
+
+			// 保存された再生中クリップをループ再生する
+			if (in.Contains("current"))
+			{
+				const std::string cur = in["current"].AsString();
+				if (!cur.empty()) Play(aqHash32(cur.c_str()), true);
 			}
 		}
 

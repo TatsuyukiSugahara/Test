@@ -3,6 +3,14 @@
 {
   "name": "Playground",
   "entities": [
+    { "name": "FBX_Character", "components": {
+      "Transform": { "position": [0, 13, 6], "scale": [10, 10, 10] },
+      "SkeletalMesh": { "model": "Assets/Character/Character.fbx", "texture": "", "modelRotation": [90, 180, 0] },
+      "Animation": { "playSpeed": 1.0, "clips": [
+        { "name": "Idle", "path": "Assets/Character/Character.fbx#Idle" },
+        { "name": "Happy", "path": "Assets/Character/Character.fbx#Happy" },
+        { "name": "ThrowFish", "path": "Assets/Character/Character.fbx#ThrowFish" }
+      ], "current": "Happy" } } },
     { "name": "Box_0", "components": { "Transform": { "position": [44, 19, 14], "scale": [1.19, 1.19, 1.19] }, "BoxStaticMesh": {} } },
     { "name": "Box_1", "components": { "Transform": { "position": [29, 9, 61], "scale": [1.48, 1.48, 1.48] }, "BoxStaticMesh": {} } },
     { "name": "Box_2", "components": { "Transform": { "position": [25, 2, -72], "scale": [1.00, 1.00, 1.00] }, "BoxStaticMesh": {} } },

@@ -552,39 +552,6 @@ namespace app
 #endif
 		}
 
-		// FBX 読み込みデモ: Character.fbx をスケルタルメッシュ+テクスチャで読み込み、
-		// 同一 FBX 内の複数アニメクリップを名前指定("path.fbx#ClipName")で登録して再生する。
-		// このモデルは 5 クリップ(Happy/Idle/Sad/Startled/ThrowFish)を持つ。
-		// スケールは FBX が約 0.87m と小さく、この海シーンの単位規約に合わせ拡大する。
-		{
-			auto entity = ctx.CreateEntity<
-				aq::ecs::TransformComponent,
-				aq::ecs::HierarchicalTransformComponent,
-				aq::ecs::SkeletalMeshComponent,
-				aq::ecs::AnimationComponent>();
-
-			auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
-			tc->position.Set(0.0f, spawnY + 10.0f, 6.0f);
-			tc->scale.Set(60.0f);
-
-			auto* skelComp = entity.GetComponent<aq::ecs::SkeletalMeshComponent>();
-			skelComp->SetShaderType(aq::graphics::SkeletalMesh::ShaderType::SkeletalModelLit);
-			skelComp->SetModelPath("Assets/Character/Character.fbx"); // アルベドは FBX 参照テクスチャを自動解決
-			// 向きは FBX ローダーの座標系設定で立たせている (エンティティ回転はゲーム操作用に空ける)。
-			skelComp->GetSkeletalMesh()->SetCastShadow(true);
-			skelComp->GetSkeletalMesh()->SetReceiveShadow(true);
-
-			auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
-			// 同一 FBX から複数クリップを登録 (名前指定)。インデックス指定 "#4" も可。
-			animComp->AddAnimation(aqHash32("Idle"),      "Assets/Character/Character.fbx#Idle");
-			animComp->AddAnimation(aqHash32("Happy"),     "Assets/Character/Character.fbx#Happy");
-			animComp->AddAnimation(aqHash32("ThrowFish"), "Assets/Character/Character.fbx#ThrowFish");
-			animComp->Play(aqHash32("Happy"), true);
-#ifdef AQ_DEBUG_IMGUI
-			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("FBX_Character");
-#endif
-		}
-
 		// キャラクターステアリング(入力 → 移動)
 		{
 			auto entity = ctx.CreateEntity<app::ecs::CharacterSteeringComponent>();

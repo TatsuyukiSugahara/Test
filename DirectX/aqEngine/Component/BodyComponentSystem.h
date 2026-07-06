@@ -83,6 +83,7 @@ namespace aq
 			std::string texturePath_;
 			std::string metallicRoughnessPath_;
 			aq::math::Matrix4x4 modelLocalMatrix_;
+			aq::math::Vector3   modelRotationEuler_ = aq::math::Vector3(0.0f, 0.0f, 0.0f); // モデル向き補正(度,XYZ)
 			bool textureLoadRequested_;
 			aq::graphics::StaticMesh::ShaderType shaderType_;
 
@@ -93,6 +94,21 @@ namespace aq
 			void Update();
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
 			void SetModelLocalMatrix(const aq::math::Matrix4x4& localMatrix);
+			/** モデル向き補正(度,XYZ)から回転行列を作りモデルローカル行列へ反映。
+			 *  インスペクター/JSON から設定する取込み向き補正。エンティティ回転とは別。 */
+			void ApplyModelRotation()
+			{
+				const float d2r = 3.14159265358979f / 180.0f;
+				aq::math::Matrix4x4 rx, ry, rz, xy, xyz;
+				rx.MakeRotationX(modelRotationEuler_.x * d2r);
+				ry.MakeRotationY(modelRotationEuler_.y * d2r);
+				rz.MakeRotationZ(modelRotationEuler_.z * d2r);
+				xy.Mull(rx, ry);
+				xyz.Mull(xy, rz);
+				SetModelLocalMatrix(xyz);
+			}
+			/** モデル向き補正(度,XYZ)を設定して即反映する (コード/デモ用)。 */
+			void SetModelRotationEuler(const aq::math::Vector3& deg) { modelRotationEuler_ = deg; ApplyModelRotation(); }
 			/** ロード前（SetModelPath より前）に呼ぶこと。ロード後の変更は再初期化されない。 */
 			void SetShaderType(aq::graphics::StaticMesh::ShaderType type) { shaderType_ = type; }
 			/** PBR 専用。SetShaderType(PBRLit) の後、SetModelPath() の前に呼ぶこと。 */
@@ -118,7 +134,9 @@ namespace aq
 				if (cm || ct)
 					SetModelPath(newModel.c_str(),
 					             newTexture.empty() ? nullptr : newTexture.c_str());
-				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
+				// モデル向き補正 (度, XYZ)。エンティティ回転とは別の「取込み向き」。編集で即反映。
+				visitor.Field("Model Rotation (deg)", modelRotationEuler_);
+				ApplyModelRotation();
 
 				// PBR マテリアルパラメータ（PBR シェーダー時のみ表示）
 				const bool isPBR =
@@ -144,6 +162,7 @@ namespace aq
 			{
 				visitor.FieldPath("model",   modelPath_,   "Model Path");
 				visitor.FieldPath("texture", texturePath_, "Texture Path");
+				visitor.Field("modelRotation", modelRotationEuler_);
 			}
 
 			// deserialize 後に呼ぶ。読み込んだパスからメッシュのロードを発火する。
@@ -152,6 +171,7 @@ namespace aq
 				if (!modelPath_.empty())
 					SetModelPath(modelPath_.c_str(),
 					             texturePath_.empty() ? nullptr : texturePath_.c_str());
+				ApplyModelRotation();
 			}
 		};
 
@@ -188,6 +208,7 @@ namespace aq
 			std::string                      texturePath_;
 			std::string                      metallicRoughnessPath_;
 			aq::math::Matrix4x4              modelLocalMatrix_;
+			aq::math::Vector3               modelRotationEuler_ = aq::math::Vector3(0.0f, 0.0f, 0.0f); // モデル向き補正(度,XYZ)
 			bool                             textureLoadRequested_;
 			aq::graphics::SkeletalMesh::ShaderType shaderType_
 				= aq::graphics::SkeletalMesh::ShaderType::SkeletalModelLit;
@@ -199,6 +220,21 @@ namespace aq
 			/** モデルパス (TKM v101) とオプションのテクスチャパスを設定する */
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
 			void SetModelLocalMatrix(const aq::math::Matrix4x4& localMatrix);
+			/** モデル向き補正(度,XYZ)から回転行列を作りモデルローカル行列へ反映。
+			 *  インスペクター/JSON から設定する取込み向き補正。エンティティ回転とは別。 */
+			void ApplyModelRotation()
+			{
+				const float d2r = 3.14159265358979f / 180.0f;
+				aq::math::Matrix4x4 rx, ry, rz, xy, xyz;
+				rx.MakeRotationX(modelRotationEuler_.x * d2r);
+				ry.MakeRotationY(modelRotationEuler_.y * d2r);
+				rz.MakeRotationZ(modelRotationEuler_.z * d2r);
+				xy.Mull(rx, ry);
+				xyz.Mull(xy, rz);
+				SetModelLocalMatrix(xyz);
+			}
+			/** モデル向き補正(度,XYZ)を設定して即反映する (コード/デモ用)。 */
+			void SetModelRotationEuler(const aq::math::Vector3& deg) { modelRotationEuler_ = deg; ApplyModelRotation(); }
 			/** ロード前（SetModelPath より前）に呼ぶこと。ロード後の変更は再初期化されない。 */
 			void SetShaderType(aq::graphics::SkeletalMesh::ShaderType type) { shaderType_ = type; }
 			/** PBR 専用。SetShaderType(SkeletalPBRLit) の後、SetModelPath() の前に呼ぶこと。 */
@@ -222,7 +258,9 @@ namespace aq
 				if (cm || ct)
 					SetModelPath(newModel.c_str(),
 					             newTexture.empty() ? nullptr : newTexture.c_str());
-				visitor.ReadOnly("state", IsCompleted() ? "Completed" : "Loading");
+				// モデル向き補正 (度, XYZ)。エンティティ回転とは別の「取込み向き」。編集で即反映。
+				visitor.Field("Model Rotation (deg)", modelRotationEuler_);
+				ApplyModelRotation();
 
 				// PBR マテリアルパラメータ（PBR シェーダー時のみ表示）
 				if (shaderType_ == aq::graphics::SkeletalMesh::ShaderType::SkeletalPBRLit)
@@ -243,6 +281,7 @@ namespace aq
 			{
 				visitor.FieldPath("model",   modelPath_,   "Model Path");
 				visitor.FieldPath("texture", texturePath_, "Texture Path");
+				visitor.Field("modelRotation", modelRotationEuler_);
 			}
 
 			// deserialize 後に呼ぶ。読み込んだパスからメッシュのロードを発火する。
@@ -251,6 +290,7 @@ namespace aq
 				if (!modelPath_.empty())
 					SetModelPath(modelPath_.c_str(),
 					             texturePath_.empty() ? nullptr : texturePath_.c_str());
+				ApplyModelRotation();
 			}
 		};
 

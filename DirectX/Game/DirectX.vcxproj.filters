@@ -27,6 +27,9 @@
     <ClCompile Include="Application\GameInput.cpp">
       <Filter>Application</Filter>
     </ClCompile>
+    <ClCompile Include="Application\GameFlow.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp">
       <Filter>Application\ECS</Filter>
     </ClCompile>
@@ -54,6 +57,9 @@
       <Filter>Application</Filter>
     </ClInclude>
     <ClInclude Include="Application\GameInput.h">
+      <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\GameFlow.h">
       <Filter>Application</Filter>
     </ClInclude>
     <ClInclude Include="Application\ECS\ActorComponentSystem.h">

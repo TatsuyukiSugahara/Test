@@ -325,13 +325,15 @@ namespace aq
 
 		void LevelManager::Tick(const float dt)
 		{
-			if (!autoReload_) return;
+			// §15: 非同期ロードを 1 フレーム分進める（安全点＝EntityContext::Update 後で呼ばれる前提）。
+			ProcessAsyncLoads();
 
+			// D2: ファイル変更の自動監視。
+			if (!autoReload_) return;
 			constexpr float POLL_INTERVAL = 0.5f;   // 監視の間引き（秒）
 			pollTimer_ += dt;
 			if (pollTimer_ < POLL_INTERVAL) return;
 			pollTimer_ = 0.0f;
-
 			PollFileChanges();
 		}
 
@@ -354,6 +356,125 @@ namespace aq
 			ecs::PrefabRegistry::Get().Clear();
 			for (const auto& c : changed) { if (IsLoaded(c.second)) Unload(c.second); }
 			for (const auto& c : changed) { Load(c.first); }
+		}
+
+
+		LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId parent, const uint32_t entitiesPerFrame)
+		{
+			const std::string key = LevelRegistry::Normalize(pathOrId);
+			std::shared_ptr<const LevelData> data = LevelRegistry::Get().Load(key);
+			if (!data)
+			{
+				EngineAssertMsg(false, "LevelManager::LoadAsync: failed to resolve level data");
+				return LevelLoadHandle();
+			}
+
+			const LevelId id = AllocateSlot(key, data, parent);
+			if (IsFileKey(key)) slots_[id.index].fileTime = QueryFileTime(key);
+
+			AsyncLoad load;
+			load.entitiesPerFrame = (entitiesPerFrame > 0) ? entitiesPerFrame : 1;
+			load.progress         = std::make_shared<LevelLoadProgress>();
+			load.progress->id     = id;
+
+			// フォレスト（+ loadOnStart サブLevel）を BuildJob 列にフラット化する。
+			FlattenLevel(data, id, load, 0);
+			load.progress->total = static_cast<uint32_t>(load.jobs.size());
+
+			LevelLoadHandle handle(load.progress);
+			asyncLoads_.push_back(std::move(load));
+			return handle;
+		}
+
+
+		void LevelManager::FlattenNode(const ecs::PrefabNodeData& node, LevelId levelId, const int32_t parentJobIndex, AsyncLoad& load)
+		{
+			const int32_t myIndex = static_cast<int32_t>(load.jobs.size());
+			BuildJob job;
+			job.node           = &node;
+			job.parentJobIndex = parentJobIndex;
+			job.levelId        = levelId;
+			load.jobs.push_back(job);
+
+			for (const ecs::PrefabNodeData& child : node.children)
+				FlattenNode(child, levelId, myIndex, load);
+		}
+
+
+		void LevelManager::FlattenLevel(const std::shared_ptr<const LevelData>& data, LevelId levelId, AsyncLoad& load, const int depth)
+		{
+			constexpr int MAX_DEPTH = 32;
+			if (!data || depth >= MAX_DEPTH) return;
+
+			load.keepAlive.push_back(data);   // job.node ポインタの生存を保証する
+
+			for (const ecs::PrefabNodeData& node : data->entities)
+				FlattenNode(node, levelId, -1, load);
+
+			// loadOnStart サブLevel も同じジョブ列に含める（各エンティティは自身の levelId を持つ）。
+			for (const SubLevelRef& sub : data->subLevels)
+			{
+				if (!sub.loadOnStart) continue;
+				if (sub.inlineData)
+				{
+					const LevelId childId = AllocateSlot("<inline>", sub.inlineData, levelId);
+					FlattenLevel(sub.inlineData, childId, load, depth + 1);
+				}
+				else
+				{
+					std::shared_ptr<const LevelData> subData = LevelRegistry::Get().Load(sub.path);
+					if (subData)
+					{
+						const LevelId childId = AllocateSlot(sub.path, subData, levelId);
+						if (IsFileKey(sub.path)) slots_[childId.index].fileTime = QueryFileTime(sub.path);
+						FlattenLevel(subData, childId, load, depth + 1);
+					}
+				}
+			}
+		}
+
+
+		void LevelManager::ProcessAsyncLoads()
+		{
+			if (asyncLoads_.empty()) return;
+
+			for (AsyncLoad& load : asyncLoads_)
+			{
+				uint32_t budget = load.entitiesPerFrame;
+				while (budget > 0 && load.cursor < load.jobs.size())
+				{
+					BuildJob&     job        = load.jobs[load.cursor];
+					const LevelId jobLevelId = job.levelId;
+
+					// LevelMemberComponent を注入する即時 create（安全点なので CreateEntityFromTypes を使える）。
+					const auto create = [](std::vector<ecs::TypeInfo> types) -> ecs::Entity
+					{
+						types.push_back(ecs::TypeInfo::Create<LevelMemberComponent>());
+						return ecs::EntityContext::Get().CreateEntityFromTypes(std::move(types));
+					};
+					const auto stamp = [jobLevelId](ecs::Entity e, const ecs::PrefabNodeData&)
+					{
+						if (auto* member = e.GetComponent<LevelMemberComponent>()) member->levelId = jobLevelId;
+					};
+
+					const ecs::EntityHandle parentHandle =
+						(job.parentJobIndex >= 0) ? load.jobs[job.parentJobIndex].handle : ecs::EntityHandle();
+
+					const ecs::Entity entity = ecs::InstantiatePrefabNode(*job.node, parentHandle, create, stamp);
+					job.handle = entity.GetHandle();
+
+					++load.cursor;
+					++load.progress->built;
+					--budget;
+				}
+				if (load.cursor >= load.jobs.size()) load.progress->done = true;
+			}
+
+			// 完了したロードを除去する。
+			asyncLoads_.erase(
+				std::remove_if(asyncLoads_.begin(), asyncLoads_.end(),
+					[](const AsyncLoad& a) { return a.progress->done; }),
+				asyncLoads_.end());
 		}
 	}
 }

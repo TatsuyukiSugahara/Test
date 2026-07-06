@@ -56,6 +56,16 @@ namespace aq
 		};
 
 
+		// 与えられた create プリミティブで 1 ノードだけを生成する（子は再帰しない）。
+		// create で Entity を作り、components を deserialize、name を DebugTag に設定、parent が有効なら親子付け、
+		// onEachCreated を呼ぶ。非同期/フレーム分割生成（Level の LoadAsync）が1ノード単位で回すために公開する。
+		Entity InstantiatePrefabNode(
+			const PrefabNodeData&                                     node,
+			EntityHandle                                              parent,
+			const std::function<Entity(std::vector<TypeInfo>)>&       create,
+			const std::function<void(Entity, const PrefabNodeData&)>& onEachCreated = nullptr);
+
+
 		// 与えられた create プリミティブで 1 ツリー（root + 子孫）を生成する低レベル API。
 		// Prefab::Instantiate / InstantiateImmediate はこれを onEachCreated=nullptr で呼ぶ薄いラッパ。
 		// Level 層が「LevelMemberComponent 型を注入する create」+「levelId を差す onEachCreated」で

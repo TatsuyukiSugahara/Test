@@ -12,6 +12,36 @@ namespace aq
 {
 	namespace level
 	{
+		// 非同期（フレーム分割）ロードの進捗。LevelManager が毎フレーム更新する（設計 §15 段階1）。
+		struct LevelLoadProgress
+		{
+			LevelId  id;
+			uint32_t total = 0;   // 生成予定エンティティ総数（サブLevel 含む）
+			uint32_t built = 0;   // 生成済み
+			bool     done  = false;
+		};
+
+
+		// LoadAsync の戻り値。進捗を live に読める薄いハンドル（shared_ptr で共有）。
+		// ローディング画面はこれを毎フレーム見て Progress()/IsDone() で遷移する。
+		class LevelLoadHandle
+		{
+		private:
+			std::shared_ptr<const LevelLoadProgress> progress_;
+
+		public:
+			LevelLoadHandle() = default;
+			explicit LevelLoadHandle(std::shared_ptr<const LevelLoadProgress> p) : progress_(std::move(p)) {}
+
+			bool     IsValid()    const { return static_cast<bool>(progress_); }
+			LevelId  GetLevelId() const { return progress_ ? progress_->id : LevelId(); }
+			uint32_t Total()      const { return progress_ ? progress_->total : 0; }
+			uint32_t Built()      const { return progress_ ? progress_->built : 0; }
+			bool     IsDone()     const { return !progress_ || progress_->done; }
+			float    Progress()   const { return (progress_ && progress_->total) ? static_cast<float>(progress_->built) / static_cast<float>(progress_->total) : 1.0f; }
+		};
+
+
 		// ロード済み Level のツリーを所有し、Load/Unload の実体を担うシングルトン。
 		// entities は単一グローバル EntityContext のワールドへ生成し、各 Entity に LevelMemberComponent
 		// を付与して所属を記録する（設計 §1・§7）。
@@ -30,6 +60,25 @@ namespace aq
 				int64_t                          fileTime   = 0; // ファイル由来 root の最終更新時刻（変更検知用・非ファイルは 0）
 			};
 
+			// 非同期ロードの 1 エンティティ生成ジョブ（フラット化・親→子順）。
+			struct BuildJob
+			{
+				const ecs::PrefabNodeData* node           = nullptr;   // 生成元ノード（keepAlive が生存保証）
+				int32_t                    parentJobIndex = -1;        // 同一 Level フォレスト内の親ジョブ（-1 = ルート）
+				LevelId                    levelId;                     // このエンティティの所属 Level
+				ecs::EntityHandle          handle;                      // 生成後に埋まる
+			};
+
+			// 進行中の非同期ロード 1 件。
+			struct AsyncLoad
+			{
+				std::vector<BuildJob>                         jobs;
+				size_t                                        cursor           = 0;
+				uint32_t                                      entitiesPerFrame = 64;
+				std::shared_ptr<LevelLoadProgress>            progress;
+				std::vector<std::shared_ptr<const LevelData>> keepAlive;   // node ポインタの生存保証
+			};
+
 		// ── メンバ変数 ──
 		private:
 			std::vector<LevelSlot>   slots_;
@@ -38,6 +87,7 @@ namespace aq
 			std::string              startupPath_;              // 起動時に読む Level（SetStartupLevel で設定）
 			bool                     autoReload_ = false;       // D2: ファイル変更の自動監視
 			float                    pollTimer_  = 0.0f;        // D2: ポーリング間引き用
+			std::vector<AsyncLoad>   asyncLoads_;               // §15: 進行中の非同期ロード
 
 		// ── メンバ関数 ──
 		public:
@@ -53,6 +103,14 @@ namespace aq
 			// 実体生成は次の FlushCommands。成功時はロード済み LevelId、失敗時は無効な LevelId を返す。
 			// ※ L2: entities のみ。subLevels の再帰ロードは L4。
 			LevelId Load(std::string_view pathOrId, LevelId parent = LevelId());
+
+			// pathOrId の Level を非同期（フレーム分割）ロードする（設計 §15 段階1）。entitiesPerFrame ずつ
+			// EntityContext::Update 後の安全点（Tick）で生成する。loadOnStart サブLevel も同じキューに含める。
+			// 進捗は返り値のハンドルで live に読める（ローディング画面用）。実体は複数フレームにわたり生成される。
+			LevelLoadHandle LoadAsync(std::string_view pathOrId, LevelId parent = LevelId(), const uint32_t entitiesPerFrame = 64);
+
+			// 進行中の非同期ロード件数（デバッグ表示用）。
+			size_t GetActiveAsyncCount() const { return asyncLoads_.size(); }
 
 			// Level をアンロードする。配下の全 Entity を遅延破棄（RequestDestroyEntity）し、
 			// サブLevel も再帰的に破棄する。LevelId は generation を進めて stale 化する。
@@ -111,6 +169,13 @@ namespace aq
 
 			// ファイル由来 root の mtime を確認し、変更されていた Level を作り直す（D2 本体）。
 			void PollFileChanges();
+
+			// 非同期ロードを 1 フレーム分進める（Tick から呼ぶ・安全点前提で即時生成する）。
+			void ProcessAsyncLoads();
+
+			// LevelData フォレスト（+ loadOnStart サブLevel）を BuildJob 列にフラット化し、slot も採番する。
+			void FlattenLevel(const std::shared_ptr<const LevelData>& data, LevelId levelId, AsyncLoad& load, const int depth);
+			void FlattenNode(const ecs::PrefabNodeData& node, LevelId levelId, const int32_t parentJobIndex, AsyncLoad& load);
 		};
 	}
 }

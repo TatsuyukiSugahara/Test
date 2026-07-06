@@ -96,6 +96,10 @@ namespace aq
 			ImGui::SameLine();
 			if (ImGui::Button("Load in World")) { LoadInWorld(); }
 			ImGui::SameLine();
+			if (ImGui::Button("Load Async")) {   // §15: フレーム分割ロード（保存済みファイルを非同期ロード）
+				lastAsync_ = LevelManager::Get().LoadAsync(pathBuf_);
+			}
+			ImGui::SameLine();
 			if (ImGui::Button("Reload Refs")) { LevelManager::Get().ReloadAll(); }   // D1: 手動リロード
 			ImGui::SameLine();
 			{
@@ -111,6 +115,13 @@ namespace aq
 			}
 			ImGui::SetNextItemWidth(-1.0f);
 			ImGui::InputText("##path", pathBuf_, sizeof(pathBuf_));
+
+			// 非同期ロードの進捗（ローディング画面配線の検証表示）。
+			if (lastAsync_.IsValid() && !lastAsync_.IsDone()) {
+				char buf[64];
+				std::snprintf(buf, sizeof(buf), "%u / %u", lastAsync_.Built(), lastAsync_.Total());
+				ImGui::ProgressBar(lastAsync_.Progress(), ImVec2(-1.0f, 0.0f), buf);
+			}
 		}
 
 

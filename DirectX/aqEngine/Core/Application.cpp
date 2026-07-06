@@ -45,6 +45,7 @@
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #include "Level/LevelComponentRegistry.h"
 #include "Level/LevelStreamSystem.h"
+#include "Level/LevelManager.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "DebugUI.h"
 #include "Ocean/Debug/OceanDebugPanel.h"
@@ -359,6 +360,9 @@ namespace aq
 			AQ_PROFILE_SCOPE("EntityContext::Update");
 			aq::ecs::EntityContext::Get().Update();
 		}
+		// Level の非同期ロード進行 / ファイル変更監視は EntityContext::Update 後の安全点で実行する
+		// （ForEach/並列システム外・単一スレッド）。ここで即時のエンティティ生成を安全に行える。
+		aq::level::LevelManager::Get().Tick(aq::Engine::GetDeltaTime());
 		{
 			AQ_PROFILE_SCOPE("ResourceManager::Update");
 			aq::res::ResourceManager::Get().Update();

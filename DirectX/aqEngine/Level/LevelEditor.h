@@ -2,6 +2,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/IDebugRenderable.h"
 #include "ECS/PrefabEditor.h"   // ecs::PrefabEditNode
+#include "Level/LevelManager.h" // LevelLoadHandle
 #include <memory>
 #include <string>
 #include <vector>
@@ -40,6 +41,7 @@ namespace aq
 			ecs::PrefabEditNode* pendingDelete_ = nullptr;
 			bool                 show_          = false;
 			char                 pathBuf_[260]  = "Assets/Levels/New.level.json";
+			LevelLoadHandle      lastAsync_;                     // 直近の LoadAsync 進捗（バー表示用）
 
 
 		public:

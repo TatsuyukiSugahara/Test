@@ -544,14 +544,22 @@ LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId paren
 ### 15.3 段階（サブフェーズ）
 | | 内容 |
 |---|---|
-| A1 | ノード単位の中断可能生成経路（`LevelData` フォレスト → 平坦ジョブキュー・親ハンドル保持） |
-| A2 | `LevelManager::LoadAsync` + `LevelLoadHandle`（毎フレーム N 件・進捗） |
-| A3 | ローディング画面配線（ゲーム状態層が Progress を UI 反映・IsDone で遷移） |
-| A4 | `LevelStreamSystem` / World Partition セル Load を `LoadAsync` へ載せ替え（スパイク緩和） |
-| A5 | 段階2：バックグラウンド JSON パース（`LevelData` 先行構築）を A2 の生成キューへ接続 |
+| A1 | ✅ ノード単位の中断可能生成（`ecs::InstantiatePrefabNode`＝子を再帰しない1ノード生成を Prefab から公開・[../ECS/Prefab.cpp](../ECS/Prefab.cpp)）。`LevelData` フォレスト+loadOnStart サブLevel を `BuildJob` 列にフラット化（`FlattenLevel`/`FlattenNode`・親ジョブ index 保持） |
+| A2 | ✅ `LevelManager::LoadAsync` + `LevelLoadHandle`（`entitiesPerFrame` ずつ・`shared_ptr<LevelLoadProgress>` で live 進捗） |
+| A3 | ✅（土台）ローディング画面用の進捗 API（`Progress()`/`IsDone()`/`Built()`/`Total()`）。Level エディタに "Load Async" + `ImGui::ProgressBar` の検証表示。ゲーム状態層への本配線は利用側で |
+| A4 | 未: `LevelStreamSystem` / World Partition セル Load を `LoadAsync` へ載せ替え（スパイク緩和） |
+| A5 | 未: 段階2：バックグラウンド JSON パース（`LevelData` 先行構築）を A2 の生成キューへ接続 |
 
-> 実装再開の入口: **A1（中断可能なノード単位生成）**。ここが `LoadAsync` の土台。
-> 既存の同期 `Load` は温存し、`LoadAsync` を別 API として足す（呼び分け）。
+> **実装状況（段階1=A1-A3 完了・ビルド検証）**: ソリューション Debug|x64 ビルド成功。… [LevelManager.h](LevelManager.h) / [.cpp](LevelManager.cpp)
+> - **安全点での即時生成**: `LevelManager::Tick` を **`Application::Update` の `EntityContext::Update()` 後**（ForEach/並列システム外・単一スレッド）で呼び、
+>   そこで `EntityContext::CreateEntityFromTypes`（即時）を使って `entitiesPerFrame` 件ずつ生成する（[../Core/Application.cpp](../Core/Application.cpp)）。
+>   ※ システム更新フェーズ中の即時生成は不可（並列 ForEach と競合）。D2 ポーリングも同 Tick に統合し、`LevelStreamSystem` からの Tick 呼びは撤去。
+> - **フラット化**: フォレスト＋loadOnStart サブLevel を親→子順の `BuildJob` 列に。各ジョブは自身の `levelId` を持ち、生成時に `LevelMemberComponent` へ stamp。
+>   サブLevel の slot は LoadAsync 時に採番（読み込み中も IsLoaded=true）。循環は深さ上限 32 でガード。
+> - **進捗**: `LevelLoadHandle`（`shared_ptr<const LevelLoadProgress>`）で `built/total`・`done` を live に読める。
+> - 既存の同期 `Load` は温存（起動/リロード/ストリーム/プレビュー用）。`LoadAsync` は別 API。
+>
+> **未（段階1 残 / 段階2）**: A4（ストリーム/セル Load の LoadAsync 化）、A5（BG パース）、読み込み中の Unload 競合の厳密化。
 
 ---
 

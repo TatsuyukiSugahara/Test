@@ -3,10 +3,34 @@
 #include "Level/LevelManager.h"   // aq::level::LevelLoadHandle
 #include "Math/Vector.h"
 #include "UI/Screen/UIScreen.h"
+#include <memory>
 
 namespace app
 {
-	// タイトル画面。画像 + "Press A" テキストは JSON。決定入力の判定は GameFlow が行う。
+	class GameFlow;
+
+
+	/**
+	 * ゲーム状態の基底。1 状態 1 クラスで表現する。
+	 * リザルト / ポーズ / タイトル選択など状態を増やすときは、このクラスを継承した状態を足すだけでよい
+	 * (中央の switch を編集しない)。プレイヤー用 IState/StateMachine と同じ流儀。
+	 */
+	class IGameState
+	{
+	public:
+		virtual ~IGameState() = default;
+
+		virtual void OnEnter (GameFlow& /*flow*/)                    {}
+		virtual void OnUpdate(GameFlow& /*flow*/, const float /*dt*/) {}
+		virtual void OnExit  (GameFlow& /*flow*/)                    {}
+	};
+
+
+
+
+	/**
+	 * タイトル画面。画像 + "Press A" テキストは JSON。決定入力の判定は TitleState が行う。
+	 */
 	class TitleScreen : public aq::ui::UIScreen
 	{
 	};
@@ -14,7 +38,9 @@ namespace app
 
 
 
-	// ローディング画面。"Now Loading" の末尾ドットを増減させて読み込み中を演出する。
+	/**
+	 * ローディング画面。"Now Loading" の末尾ドットを増減させて読み込み中を演出する。
+	 */
 	class LoadingScreen : public aq::ui::UIScreen
 	{
 	public:
@@ -30,24 +56,22 @@ namespace app
 
 
 
-	// 旧 IScene / SceneManager / BattleScene を置換するゲームフロー。
-	// Title → 決定で非同期 Level ロード(Loading 表示) → Playing、の状態機械。
-	// 3D 世界(地形/カメラ/プレイヤー/ステアリング)のセットアップと影の注視点も担う。
+	/**
+	 * 旧 IScene / SceneManager / BattleScene を置換する最上位ゲーム進行。
+	 * 状態オブジェクト(IGameState 派生)を 1 つ保持して駆動する状態機械。3D 世界のセットアップと
+	 * 影の注視点、状態間で共有するデータ(プレイヤー / 非同期ロードハンドル)も持つ。
+	 */
 	class GameFlow
 	{
 	// ── メンバ変数 ──
 	private:
-		enum class State
-		{
-			Title,
-			Loading,
-			Playing,
-		};
+		/** 状態関連 */
+		std::unique_ptr<IGameState> current_;
+		std::unique_ptr<IGameState> pending_;   // 次状態 (Update 境界で適用し、更新中の自己破棄を避ける)
 
-		State                      state_      = State::Title;
-		aq::ecs::EntityHandle      playerHandle_;
-		aq::level::LevelLoadHandle loadHandle_;
-		float                      loadTimer_  = 0.0f;
+		/** 状態間共有データ */
+		aq::ecs::EntityHandle       playerHandle_;
+		aq::level::LevelLoadHandle  loadHandle_;
 
 		static GameFlow* instance_;
 
@@ -55,22 +79,29 @@ namespace app
 	public:
 		void Update(const float dt);
 
-		// 影の投影中心(プレイヤー位置。未生成時は原点)。
+		// 影の投影中心 (プレイヤー位置。未生成時は原点)。
 		aq::math::Vector3 GetFocusPosition() const;
+
+		// 状態遷移。次の Update 境界で current_ を差し替える (state の OnUpdate 内から安全に呼べる)。
+		void ChangeState(std::unique_ptr<IGameState> next);
+
+		// ---- 状態から使う共有機能・データ ----
+		// 3D 世界 (地形/カメラ/ライト/プレイヤー/ステアリング) を生成する。
+		void SetupWorld();
+
+		aq::level::LevelLoadHandle&       LoadHandle()       { return loadHandle_; }
+		void SetLoadHandle(const aq::level::LevelLoadHandle& handle) { loadHandle_ = handle; }
 
 	private:
 		GameFlow() {}
 
-		// タイトル → ロード開始時に 3D 世界(地形/カメラ/ライト/プレイヤー/ステアリング)を生成する。
-		void SetupWorld();
-
 	// ── シングルトン ──
 	public:
-		static void Create();
+		static void      Create();
 		static GameFlow& Get() { return *instance_; }
-		static void Release();
+		static void      Release();
 
-		// UI 画面登録 + タイトル表示(Create の後に一度呼ぶ)。
+		// UI 画面登録 + 初期状態 (タイトル) 開始。Create の後に一度呼ぶ。
 		void Initialize();
 	};
 }

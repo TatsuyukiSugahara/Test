@@ -31,9 +31,57 @@ namespace app
 	namespace
 	{
 		// タイトルで押す非同期ロード対象。ECS の効果(大量エンティティ)確認用の箱 1000 個 Level。
-		static const char* STARTUP_LEVEL       = "Assets/Levels/Playground.level.json";
-		static constexpr uint32_t LOAD_PER_FRAME = 20;    // 1 フレームあたり生成数(ローディングを見せるため小さめ)
-		static constexpr float    MIN_LOADING_SEC = 1.0f; // ローディング表示の最低時間(演出用)
+		static const char*        STARTUP_LEVEL   = "Assets/Levels/Playground.level.json";
+		static constexpr uint32_t LOAD_PER_FRAME  = 20;    // 1 フレームあたり生成数(ローディングを見せるため小さめ)
+		static constexpr float    MIN_LOADING_SEC = 1.0f;  // ローディング表示の最低時間(演出用)
+	}
+
+
+	// ── ゲーム状態(1 状態 1 クラス。増やすときはここにクラスを足すだけ) ─────────────
+
+	namespace
+	{
+		// プレイ中。ワールドは ECS が駆動するので何もしない。
+		// 将来ここでポーズ/ゲームオーバー→リザルトなどへ ChangeState する。
+		class PlayingState : public IGameState
+		{
+		};
+
+
+		// ローディング中。非同期ロード完了 + 最低表示時間経過でプレイへ。
+		class LoadingState : public IGameState
+		{
+		public:
+			void OnUpdate(GameFlow& flow, const float dt) override
+			{
+				timer_ += dt;
+				if (flow.LoadHandle().IsDone() && timer_ >= MIN_LOADING_SEC)
+				{
+					aq::ui::UIContext::Get().Screens().Pop();   // ローディングを閉じる
+					flow.ChangeState(std::make_unique<PlayingState>());
+				}
+			}
+
+		private:
+			float timer_ = 0.0f;
+		};
+
+
+		// タイトル。決定(Space / パッド A)で世界生成 + 箱 Level の非同期ロードを開始しローディングへ。
+		class TitleState : public IGameState
+		{
+		public:
+			void OnUpdate(GameFlow& flow, const float /*dt*/) override
+			{
+				if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
+
+				flow.SetupWorld();
+				flow.SetLoadHandle(
+					aq::level::LevelManager::Get().LoadAsync(STARTUP_LEVEL, aq::level::LevelId(), LOAD_PER_FRAME));
+				aq::ui::UIContext::Get().Screens().Replace("Loading");
+				flow.ChangeState(std::make_unique<LoadingState>());
+			}
+		};
 	}
 
 
@@ -91,43 +139,29 @@ namespace app
 		screens.Register<TitleScreen>("Title",     "Assets/UI/Title.screen.json");
 		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
 		screens.Push("Title");
-		state_ = State::Title;
+
+		current_ = std::make_unique<TitleState>();
+		current_->OnEnter(*this);
+	}
+
+
+	void GameFlow::ChangeState(std::unique_ptr<IGameState> next)
+	{
+		pending_ = std::move(next);
 	}
 
 
 	void GameFlow::Update(const float dt)
 	{
-		switch (state_)
+		// 保留中の遷移を境界で適用する(状態の OnUpdate 内から ChangeState しても安全)。
+		if (pending_)
 		{
-			case State::Title:
-			{
-				// 決定(Space / パッド A)で世界を生成し、箱 Level を非同期ロードしてローディングへ。
-				if (GameInput::Get().IsTriggered(GameAction::Confirm))
-				{
-					SetupWorld();
-					loadHandle_ = aq::level::LevelManager::Get().LoadAsync(STARTUP_LEVEL, aq::level::LevelId(), LOAD_PER_FRAME);
-					loadTimer_  = 0.0f;
-					aq::ui::UIContext::Get().Screens().Replace("Loading");
-					state_ = State::Loading;
-				}
-				break;
-			}
-			case State::Loading:
-			{
-				// 非同期ロード完了 + 最低表示時間経過でプレイへ。
-				loadTimer_ += dt;
-				if (loadHandle_.IsDone() && loadTimer_ >= MIN_LOADING_SEC)
-				{
-					aq::ui::UIContext::Get().Screens().Pop();   // ローディングを閉じる
-					state_ = State::Playing;
-				}
-				break;
-			}
-			case State::Playing:
-			{
-				break;
-			}
+			if (current_) current_->OnExit(*this);
+			current_ = std::move(pending_);
+			current_->OnEnter(*this);
 		}
+
+		if (current_) current_->OnUpdate(*this, dt);
 	}
 
 

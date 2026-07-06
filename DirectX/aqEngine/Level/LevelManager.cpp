@@ -435,6 +435,10 @@ namespace aq
 		{
 			if (asyncLoads_.empty()) return;
 
+			// 計測: このフレームで生成した entity 数と所要時間。どこで時間を食っているかの裏取り用。
+			const auto profStart      = std::chrono::steady_clock::now();
+			uint32_t   builtThisFrame = 0;
+
 			for (AsyncLoad& load : asyncLoads_)
 			{
 				uint32_t budget = load.entitiesPerFrame;
@@ -462,9 +466,17 @@ namespace aq
 
 					++load.cursor;
 					++load.progress->built;
+					++builtThisFrame;
 					--budget;
 				}
 				if (load.cursor >= load.jobs.size()) load.progress->done = true;
+			}
+
+			if (builtThisFrame > 0)
+			{
+				const double ms = std::chrono::duration<double, std::milli>(
+					std::chrono::steady_clock::now() - profStart).count();
+				EnginePrintf("[LoadProf] entity build: %u ent, %.2f ms\n", builtThisFrame, ms);
 			}
 
 			// 完了したロードを除去する。

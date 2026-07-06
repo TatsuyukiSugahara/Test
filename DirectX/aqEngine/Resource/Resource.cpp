@@ -1163,10 +1163,19 @@ namespace aq
 				}
 			}
 
+			if (finishedLoaders.empty()) return;
+
+			// 計測: このフレームで仕上げ(FinalizeLoading = GPU アップロード等)したローダー数と所要時間。
+			// 無制限に一括仕上げしているため、ロード集中フレームでの最大スパイク源の裏取り用。
+			const auto profStart = std::chrono::steady_clock::now();
 			for (auto* loader : finishedLoaders) {
 				loader->Finish();
 				delete loader;
 			}
+			const double ms = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - profStart).count();
+			EnginePrintf("[LoadProf] finalize: %u loaders, %.2f ms\n",
+				static_cast<uint32_t>(finishedLoaders.size()), ms);
 		}
 	}
 }

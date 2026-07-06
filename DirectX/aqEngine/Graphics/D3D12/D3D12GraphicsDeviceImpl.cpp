@@ -320,6 +320,27 @@ namespace aq
 			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [swap] CreateDXGIFactory2 FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); EngineAssertMsg(false, "DXGI ファクトリ作成失敗"); return false; }
 			aq::StartupLog("    [swap] DXGI factory ok");
 
+			// ティアリング (可変リフレッシュ / VSync オフでの FPS 解放) 対応を問い合わせる。
+			// 対応時のみスワップチェーンに ALLOW_TEARING フラグを付け、Present でも同フラグを渡す。
+			// フリップモデルでは Present(0,0) だけでは vblank に同期し FPS が頭打ちになるため。
+			tearingSupported_ = false;
+#if !defined(AQ_PLATFORM_UWP)
+			{
+				IDXGIFactory5* factory5 = nullptr;
+				if (SUCCEEDED(factory->QueryInterface(IID_PPV_ARGS(&factory5))))
+				{
+					BOOL allowTearing = FALSE;
+					if (SUCCEEDED(factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+					                                            &allowTearing, sizeof(allowTearing))))
+					{
+						tearingSupported_ = (allowTearing == TRUE);
+					}
+					factory5->Release();
+				}
+				aq::StartupLog(tearingSupported_ ? "    [swap] tearing supported" : "    [swap] tearing NOT supported");
+			}
+#endif
+
 			DXGI_SWAP_CHAIN_DESC1 desc = {};
 			desc.BufferCount      = RENDER_TARGET_COUNT;
 			desc.Width            = width;
@@ -328,6 +349,7 @@ namespace aq
 			desc.BufferUsage      = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 			desc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 			desc.SampleDesc.Count = 1;
+			desc.Flags            = tearingSupported_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 
 			IDXGISwapChain1* swapChain1 = nullptr;
 #if defined(AQ_PLATFORM_UWP)
@@ -631,7 +653,10 @@ namespace aq
 			ID3D12CommandList* lists[] = { commandList_ };
 			commandQueue_->ExecuteCommandLists(1, lists);
 
-			swapChain_->Present(vsyncEnabled_ ? 1 : 0, 0);
+			// VSync オフかつティアリング対応時は ALLOW_TEARING を渡して vblank 同期を外す (FPS 解放)。
+			// このフラグは同期間隔 0・ウィンドウモードでのみ許可される。
+			const UINT presentFlags = (!vsyncEnabled_ && tearingSupported_) ? DXGI_PRESENT_ALLOW_TEARING : 0u;
+			swapChain_->Present(vsyncEnabled_ ? 1 : 0, presentFlags);
 
 			// frames-in-flight: GPU 完了を待たずに次フレームへ進む。
 			// このフレームの完了印をフェンスに刻み、次にこのスロットを再利用する時 (BeginFrame) に待つ。

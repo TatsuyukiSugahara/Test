@@ -180,6 +180,7 @@ namespace aq
 			uint64_t                   frameFenceValue_[FRAME_COUNT] = {};  // 各フレームスロットの完了印
 			uint32_t                   frameIndex_    = 0;                  // 現在の frames-in-flight スロット
 			bool                       vsyncEnabled_  = true;              // Present の同期間隔 (ImGui トグル)
+			bool                       tearingSupported_ = false;         // ALLOW_TEARING 対応 (VSync オフで FPS 解放に必要)
 
 			// メイン RT(深度付きオフスクリーン)。シーンはここへ描画し CopyToBackBuffer でバックバッファへ複写。
 			std::unique_ptr<D3D12RenderTarget> mainRenderTargets_[MAIN_RT_COUNT];

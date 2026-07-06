@@ -149,11 +149,6 @@ namespace app
 		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
 		screens.Push("Title");
 
-		// UI 画像テクスチャを起動時にプリロードしておく。UI 画像は未ロード中はバインドがスキップされ
-		// 表示が数フレーム遅れるため、事前にキャッシュして決定時に即座に黒背景を出せるようにする。
-		aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Terrain/rock.png");
-		aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
-
 		current_ = std::make_unique<TitleState>();
 		current_->OnEnter(*this);
 	}
@@ -167,6 +162,16 @@ namespace app
 
 	void GameFlow::Update(const float dt)
 	{
+		// UI 画像テクスチャの事前ロード(初回のみ)。リソースバンク登録は OnRegister(OnInitialize より後)なので、
+		// 最初の Update 時点で行う。未ロード中はバインドがスキップされ表示が遅れるため、
+		// 事前にキャッシュして決定時に即座に黒背景を出せるようにする。
+		if (!preloaded_)
+		{
+			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Terrain/rock.png");
+			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
+			preloaded_ = true;
+		}
+
 		// 保留中の遷移を境界で適用する(状態の OnUpdate 内から ChangeState しても安全)。
 		if (pending_)
 		{

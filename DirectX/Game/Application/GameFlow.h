@@ -72,6 +72,7 @@ namespace app
 		/** 状態間共有データ */
 		aq::ecs::EntityHandle       playerHandle_;
 		aq::level::LevelLoadHandle  loadHandle_;
+		bool                        preloaded_ = false;   // UI テクスチャの事前ロードを一度だけ行う
 
 		static GameFlow* instance_;
 

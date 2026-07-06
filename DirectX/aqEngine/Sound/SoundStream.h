@@ -34,7 +34,11 @@ namespace aq
 
 		// ── 定数 ──
 		private:
-			static constexpr uint32_t TARGET_QUEUED = 3u;     // 維持する投入バッファ数
+			// 維持する投入バッファ数。バッファ補充(Pump)はメインスレッドで行うため、
+			// 非同期ロード等でフレームが伸びるとアンダーラン(音切れ)する。先読みを深くして
+			// 許容ヒッチ幅を稼ぐ: 8 × CHUNK_FRAMES(4096) ≒ 48kHz で約 680ms。
+			// 上限は XAudio2SoundVoice の STREAM_BLOCK_COUNT(16) 未満に収めること。
+			static constexpr uint32_t TARGET_QUEUED = 8u;     // 維持する投入バッファ数
 			static constexpr uint32_t CHUNK_FRAMES  = 4096u;  // 1 回の供給フレーム数
 
 		// ── メンバ関数 ──

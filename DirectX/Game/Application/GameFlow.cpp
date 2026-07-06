@@ -20,6 +20,7 @@
 #include "UI/UIContext.h"
 #include "UI/UIObject.h"
 #include "UI/Component/UITextComponent.h"
+#include "UI/Font/FontAssetCache.h"   // フォント事前ロード用
 #include "Resource/Resource.h"   // 事前ロード用(ResourceManager / GPUResource)
 #include "Engine.h"
 #ifdef AQ_DEBUG_IMGUI
@@ -169,6 +170,8 @@ namespace app
 		{
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Terrain/rock.png");
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
+			// テキストはフォントアトラスのロード完了まで描画されない。ローディング表示中に確実に出せるよう先読みする。
+			aq::ui::FontAssetCache::Get().Load("Assets/Font/CorporateLogo/atlas.json");
 			preloaded_ = true;
 		}
 

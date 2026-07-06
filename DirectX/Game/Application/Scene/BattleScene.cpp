@@ -41,11 +41,12 @@ namespace app
 
 		void BattleScene::Initialize()
 		{
-			// ----- Level 起動ロード (Phase L5) -----
-			// データ駆動の起動 Level を読み込む。entities は遅延生成（次の FlushCommands で実体化）。
+			// ----- Level 起動ロード -----
+			// データ駆動の起動 Level（Player + 箱100個）を読み込む。entities は遅延生成（次の FlushCommands で実体化）。
+			// ※ Scene クラスは将来撤去予定。撤去時はこの起動ロードを後継のゲーム状態層/Application へ移す。
 			{
 				auto& levelManager = aq::level::LevelManager::Get();
-				levelManager.SetStartupLevel("Assets/Levels/Main.level.json");
+				levelManager.SetStartupLevel("Assets/Levels/Playground.level.json");
 				const aq::level::LevelId startup = levelManager.LoadStartup();
 				EngineAssertMsg(levelManager.IsLoaded(startup),
 					"BattleScene: startup level failed to load");

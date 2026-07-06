@@ -2,9 +2,7 @@
 #include "UIEditorDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
-#include "UI/UIContext.h"
 #include "UI/UIObject.h"
-#include "UI/Screen/UIScreenManager.h"
 #include "UI/Screen/UIScreen.h"
 #include "UI/Component/UITransformComponent.h"
 #include "UI/Component/UIImageComponent.h"
@@ -15,10 +13,6 @@
 #include "UI/Component/UITextComponent.h"
 #include "UI/Font/TextStyleCache.h"
 #include "UI/Resource/UIDocumentSerializer.h"
-#include "Resource/Resource.h"
-#include <memory>
-#include <string>
-#include <cstring>
 #include <cstdio>
 
 namespace aq

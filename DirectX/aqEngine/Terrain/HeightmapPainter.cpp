@@ -4,14 +4,11 @@
 
 #include "HeightmapChunk.h"
 #include "TerrainPaintTool.h"
-#include "Graphics/Camera.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 
 #include <imgui/imgui.h>
 #include <cmath>
 
-#include <DirectXTex/DirectXTex.h>
 
 namespace aq
 {

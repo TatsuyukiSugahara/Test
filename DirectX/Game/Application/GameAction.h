@@ -14,5 +14,7 @@ namespace app
 		LookRight,      // →キー
 		LookUp,         // ↑キー（ピッチ増加）
 		LookDown,       // ↓キー（ピッチ減少）
+
+		Confirm,        // 決定（キーボード Space / パッド A）。タイトル→ロード開始などに使う
 	};
 }

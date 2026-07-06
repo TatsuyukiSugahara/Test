@@ -3,8 +3,6 @@
 #include "Graphics/Vulkan/VulkanResources.h"
 #include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
 #include <vma/vk_mem_alloc.h>
-#include <vector>
-#include <cstring>
 
 namespace aq
 {

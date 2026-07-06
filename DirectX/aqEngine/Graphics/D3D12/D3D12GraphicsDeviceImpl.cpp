@@ -11,8 +11,6 @@
 #include "D3D12RootSignature.h"
 #include "D3D12PipelineStateCache.h"
 #include "D3D12GpuBuffer.h"
-#include "Graphics/GraphicsDevice.h"
-#include <vector>
 
 
 namespace aq
@@ -144,6 +142,10 @@ namespace aq
 				CloseHandle(static_cast<HANDLE>(fenceEvent_));
 				fenceEvent_ = nullptr;
 			}
+			for (ID3D12Resource* ub : batchUploadBuffers_) SafeReleaseD3D12(ub);
+			batchUploadBuffers_.clear();
+			SafeReleaseD3D12(batchUploadList_);
+			SafeReleaseD3D12(batchUploadAlloc_);
 			SafeReleaseD3D12(commandList_);
 			for (auto& a : commandAlloc_) SafeReleaseD3D12(a);
 			SafeReleaseD3D12(swapChain_);
@@ -320,6 +322,27 @@ namespace aq
 			if (FAILED(hr)) { char b[80]; sprintf_s(b, "    [swap] CreateDXGIFactory2 FAILED hr=0x%08X", static_cast<unsigned>(hr)); aq::StartupLog(b); EngineAssertMsg(false, "DXGI ファクトリ作成失敗"); return false; }
 			aq::StartupLog("    [swap] DXGI factory ok");
 
+			// ティアリング (可変リフレッシュ / VSync オフでの FPS 解放) 対応を問い合わせる。
+			// 対応時のみスワップチェーンに ALLOW_TEARING フラグを付け、Present でも同フラグを渡す。
+			// フリップモデルでは Present(0,0) だけでは vblank に同期し FPS が頭打ちになるため。
+			tearingSupported_ = false;
+#if !defined(AQ_PLATFORM_UWP)
+			{
+				IDXGIFactory5* factory5 = nullptr;
+				if (SUCCEEDED(factory->QueryInterface(IID_PPV_ARGS(&factory5))))
+				{
+					BOOL allowTearing = FALSE;
+					if (SUCCEEDED(factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+					                                            &allowTearing, sizeof(allowTearing))))
+					{
+						tearingSupported_ = (allowTearing == TRUE);
+					}
+					factory5->Release();
+				}
+				aq::StartupLog(tearingSupported_ ? "    [swap] tearing supported" : "    [swap] tearing NOT supported");
+			}
+#endif
+
 			DXGI_SWAP_CHAIN_DESC1 desc = {};
 			desc.BufferCount      = RENDER_TARGET_COUNT;
 			desc.Width            = width;
@@ -328,6 +351,7 @@ namespace aq
 			desc.BufferUsage      = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 			desc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 			desc.SampleDesc.Count = 1;
+			desc.Flags            = tearingSupported_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 
 			IDXGISwapChain1* swapChain1 = nullptr;
 #if defined(AQ_PLATFORM_UWP)
@@ -631,7 +655,10 @@ namespace aq
 			ID3D12CommandList* lists[] = { commandList_ };
 			commandQueue_->ExecuteCommandLists(1, lists);
 
-			swapChain_->Present(vsyncEnabled_ ? 1 : 0, 0);
+			// VSync オフかつティアリング対応時は ALLOW_TEARING を渡して vblank 同期を外す (FPS 解放)。
+			// このフラグは同期間隔 0・ウィンドウモードでのみ許可される。
+			const UINT presentFlags = (!vsyncEnabled_ && tearingSupported_) ? DXGI_PRESENT_ALLOW_TEARING : 0u;
+			swapChain_->Present(vsyncEnabled_ ? 1 : 0, presentFlags);
 
 			// frames-in-flight: GPU 完了を待たずに次フレームへ進む。
 			// このフレームの完了印をフェンスに刻み、次にこのスロットを再利用する時 (BeginFrame) に待つ。
@@ -999,37 +1026,64 @@ namespace aq
 			}
 			uploadBuffer->Unmap(0, nullptr);
 
-			// ── 一時コマンドリストでコピー → PIXEL_SHADER_RESOURCE へ遷移 → 実行・待機 ──
-			ID3D12CommandAllocator*    uploadAlloc = nullptr;
-			ID3D12GraphicsCommandList* uploadList  = nullptr;
-			device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&uploadAlloc));
-			device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAlloc, nullptr, IID_PPV_ARGS(&uploadList));
-
-			for (uint32_t i = 0; i < numSub; ++i)
+			// ── コピー → PIXEL_SHADER_RESOURCE へ遷移 ──
+			if (batchingUploads_)
 			{
-				D3D12_TEXTURE_COPY_LOCATION dst = {};
-				dst.pResource        = texResource;
-				dst.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-				dst.SubresourceIndex = i;
+				// バッチ中: 共有リストへコピーを積むだけ。実行/待機は EndBatchedTextureUploads で
+				// 1 回だけ行う (per-texture の WaitForGPU を排し、複数枚仕上げ時のヒッチを抑える)。
+				ID3D12GraphicsCommandList* rec = AcquireBatchUploadList();
+				for (uint32_t i = 0; i < numSub; ++i)
+				{
+					D3D12_TEXTURE_COPY_LOCATION dst = {};
+					dst.pResource        = texResource;
+					dst.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+					dst.SubresourceIndex = i;
 
-				D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
-				srcLoc.pResource       = uploadBuffer;
-				srcLoc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-				srcLoc.PlacedFootprint = layouts[i];
+					D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+					srcLoc.pResource       = uploadBuffer;
+					srcLoc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+					srcLoc.PlacedFootprint = layouts[i];
 
-				uploadList->CopyTextureRegion(&dst, 0, 0, 0, &srcLoc, nullptr);
+					rec->CopyTextureRegion(&dst, 0, 0, 0, &srcLoc, nullptr);
+				}
+				TransitionBarrier(rec, texResource,
+				                  D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				batchUploadBuffers_.push_back(uploadBuffer);   // フラッシュ(End)まで解放しない
 			}
-			TransitionBarrier(uploadList, texResource,
-			                  D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-			uploadList->Close();
+			else
+			{
+				// 従来: 使い捨てリストで即時実行・待機。
+				ID3D12CommandAllocator*    uploadAlloc = nullptr;
+				ID3D12GraphicsCommandList* uploadList  = nullptr;
+				device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&uploadAlloc));
+				device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAlloc, nullptr, IID_PPV_ARGS(&uploadList));
 
-			ID3D12CommandList* lists[] = { uploadList };
-			commandQueue_->ExecuteCommandLists(1, lists);
-			WaitForGPU();  // 同期実行。アップロードバッファを安全に解放できる。
+				for (uint32_t i = 0; i < numSub; ++i)
+				{
+					D3D12_TEXTURE_COPY_LOCATION dst = {};
+					dst.pResource        = texResource;
+					dst.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+					dst.SubresourceIndex = i;
 
-			uploadList->Release();
-			uploadAlloc->Release();
-			uploadBuffer->Release();
+					D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+					srcLoc.pResource       = uploadBuffer;
+					srcLoc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+					srcLoc.PlacedFootprint = layouts[i];
+
+					uploadList->CopyTextureRegion(&dst, 0, 0, 0, &srcLoc, nullptr);
+				}
+				TransitionBarrier(uploadList, texResource,
+				                  D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				uploadList->Close();
+
+				ID3D12CommandList* lists[] = { uploadList };
+				commandQueue_->ExecuteCommandLists(1, lists);
+				WaitForGPU();  // 同期実行。アップロードバッファを安全に解放できる。
+
+				uploadList->Release();
+				uploadAlloc->Release();
+				uploadBuffer->Release();
+			}
 
 			// ── ステージングヒープに SRV を作成 ──
 			const uint32_t slot = srvStagingNext_++;
@@ -1061,6 +1115,53 @@ namespace aq
 			view->Bind(texResource, srvCPU);  // texResource の所有権は D3D12Texture2D へ
 			return view;
 		}
+
+
+		void D3D12GraphicsDeviceImpl::BeginBatchedTextureUploads()
+		{
+			batchingUploads_ = true;
+		}
+
+
+		ID3D12GraphicsCommandList* D3D12GraphicsDeviceImpl::AcquireBatchUploadList()
+		{
+			if (!batchListOpen_)
+			{
+				if (batchUploadList_ == nullptr)
+				{
+					// 初回のみ生成。CreateCommandList は記録状態で返る。
+					device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&batchUploadAlloc_));
+					device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, batchUploadAlloc_, nullptr, IID_PPV_ARGS(&batchUploadList_));
+				}
+				else
+				{
+					batchUploadAlloc_->Reset();
+					batchUploadList_->Reset(batchUploadAlloc_, nullptr);
+				}
+				batchListOpen_ = true;
+			}
+			return batchUploadList_;
+		}
+
+
+		void D3D12GraphicsDeviceImpl::EndBatchedTextureUploads()
+		{
+			batchingUploads_ = false;
+			if (!batchListOpen_)
+			{
+				return;   // このスコープで CreateTexture2D が呼ばれなかった (待機コストゼロ)。
+			}
+
+			batchUploadList_->Close();
+			ID3D12CommandList* lists[] = { batchUploadList_ };
+			commandQueue_->ExecuteCommandLists(1, lists);
+			WaitForGPU();   // まとめて 1 回だけ待つ。以降アップロードバッファを安全に解放できる。
+
+			for (ID3D12Resource* ub : batchUploadBuffers_) ub->Release();
+			batchUploadBuffers_.clear();
+			batchListOpen_ = false;
+		}
+
 
 		std::unique_ptr<IDepthMap> D3D12GraphicsDeviceImpl::CreateDepthMap(uint32_t width, uint32_t /*height*/)
 		{

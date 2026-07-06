@@ -2,9 +2,8 @@
 #ifdef ENGINE_GRAPHICS_D3D12
 #include "D3D12Common.h"
 #include "D3D12Shader.h"
-#include "Engine.h"   // aq::Engine::GetContentRoot()
-#include <d3dcompiler.h>
 #include <filesystem>
+#include <vector>
 
 #pragma comment(lib, "d3dcompiler.lib")
 
@@ -15,34 +14,33 @@ namespace aq
 	{
 		namespace
 		{
-			// プロジェクトルート (Game/Assets を含むディレクトリ) を探す
+			// プロジェクトルート (Game/Assets を含むディレクトリ) を探す。
+			// ワーカースレッドから並列に呼ばれるため、C++11 のスレッドセーフな static 初期化で一度だけ算出する。
 			std::string FindProjectRoot()
 			{
-				static std::string cached;
-				if (!cached.empty()) return cached;
-
-				// UWP 等でプラットフォームがコンテンツ基点(パッケージ install フォルダ)を
-				// 返す場合はそれを採用し、ソースツリーの上方探索は行わない。
-				if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
-					cached = contentRoot;
-					return cached;
-				}
-
-				std::error_code ec;
-				std::filesystem::path dir = std::filesystem::current_path(ec);
-				if (ec) return std::string();
-
-				while (!dir.empty())
+				static const std::string cached = []() -> std::string
 				{
-					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec)
-					{
-						cached = dir.generic_string();
-						return cached;
+					// UWP 等でプラットフォームがコンテンツ基点(パッケージ install フォルダ)を
+					// 返す場合はそれを採用し、ソースツリーの上方探索は行わない。
+					if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
+						return contentRoot;
 					}
-					if (dir == dir.root_path()) break;
-					dir = dir.parent_path();
-				}
-				cached = std::filesystem::current_path(ec).generic_string();
+
+					std::error_code ec;
+					std::filesystem::path dir = std::filesystem::current_path(ec);
+					if (ec) return std::string();
+
+					while (!dir.empty())
+					{
+						if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec)
+						{
+							return dir.generic_string();
+						}
+						if (dir == dir.root_path()) break;
+						dir = dir.parent_path();
+					}
+					return std::filesystem::current_path(ec).generic_string();
+				}();
 				return cached;
 			}
 
@@ -72,6 +70,43 @@ namespace aq
 				const size_t slash = path.find_last_of('/');
 				return slash == std::string::npos ? std::string(".") : path.substr(0, slash);
 			}
+
+
+			// #include をシェーダのディレクトリ基準で解決する ID3DInclude 実装。
+			// SetCurrentDirectory(プロセス全体の CWD 変更) を使わずに済むため、コンパイルを
+			// ワーカースレッドで安全に実行できる(他スレッドのファイル I/O を壊さない)。
+			class ShaderIncludeHandler : public ID3DInclude
+			{
+			public:
+				explicit ShaderIncludeHandler(std::string baseDir) : baseDir_(std::move(baseDir)) {}
+
+				HRESULT __stdcall Open(D3D_INCLUDE_TYPE /*type*/, LPCSTR fileName,
+				                       LPCVOID /*parentData*/, LPCVOID* outData, UINT* outBytes) override
+				{
+					const std::filesystem::path full = std::filesystem::path(baseDir_) / fileName;
+					FILE* fp = nullptr;
+					if (fopen_s(&fp, full.string().c_str(), "rb") != 0 || !fp) return E_FAIL;
+					fseek(fp, 0, SEEK_END);
+					const long size = ftell(fp);
+					fseek(fp, 0, SEEK_SET);
+					if (size <= 0) { fclose(fp); return E_FAIL; }
+					char* buffer = new char[static_cast<size_t>(size)];
+					const size_t read = fread(buffer, 1, static_cast<size_t>(size), fp);
+					fclose(fp);
+					*outData  = buffer;
+					*outBytes = static_cast<UINT>(read);
+					return S_OK;
+				}
+
+				HRESULT __stdcall Close(LPCVOID data) override
+				{
+					delete[] static_cast<const char*>(data);
+					return S_OK;
+				}
+
+			private:
+				std::string baseDir_;
+			};
 
 			DXGI_FORMAT ComponentFormat(BYTE mask, D3D_REGISTER_COMPONENT_TYPE type)
 			{
@@ -108,9 +143,9 @@ namespace aq
 
 			const std::string resolved = ResolveShaderPath(filePath);
 
-			// ファイル読み込み
-			static char shaderBuffer[5 * 1024 * 1024];
-			uint32_t fileSize = 0;
+			// ファイル読み込み (スレッド安全: ワーカースレッドからも呼べるようローカルバッファを使う。
+			// 旧実装は 5MB の static バッファを共有していたため並列コンパイルで壊れる)
+			std::vector<char> shaderBuffer;
 			{
 				FILE* fp = nullptr;
 				if (fopen_s(&fp, resolved.c_str(), "rb") != 0 || !fp)
@@ -119,9 +154,13 @@ namespace aq
 					return false;
 				}
 				fseek(fp, 0, SEEK_END);
-				fileSize = static_cast<uint32_t>(ftell(fp));
+				const long fileSize = ftell(fp);
 				fseek(fp, 0, SEEK_SET);
-				fread(shaderBuffer, fileSize, 1, fp);
+				if (fileSize > 0)
+				{
+					shaderBuffer.resize(static_cast<size_t>(fileSize));
+					fread(shaderBuffer.data(), 1, static_cast<size_t>(fileSize), fp);
+				}
 				fclose(fp);
 			}
 
@@ -131,19 +170,16 @@ namespace aq
 #endif
 			static const char* models[] = { "vs_5_0", "ps_5_0", "cs_5_0" };
 
-			// #include 解決のためカレントディレクトリを一時的に切り替える
-			char prevDir[MAX_PATH] = {};
-			GetCurrentDirectoryA(MAX_PATH, prevDir);
-			SetCurrentDirectoryA(GetDirectoryPath(resolved).c_str());
+			// #include はシェーダのディレクトリ基準で解決する。専用ハンドラを使うことで
+			// SetCurrentDirectory(プロセス全体の CWD 変更) を避け、ワーカースレッドから安全にコンパイルできる。
+			ShaderIncludeHandler includeHandler(GetDirectoryPath(resolved));
 
 			ID3DBlob* errorBlob = nullptr;
 			HRESULT hr = D3DCompile(
-				shaderBuffer, fileSize, nullptr, nullptr,
-				D3D_COMPILE_STANDARD_FILE_INCLUDE, entryFuncName,
+				shaderBuffer.data(), shaderBuffer.size(), resolved.c_str(), nullptr,
+				&includeHandler, entryFuncName,
 				models[static_cast<uint32_t>(shaderType)],
 				flags, 0, &blob_, &errorBlob);
-
-			SetCurrentDirectoryA(prevDir);
 
 			if (FAILED(hr))
 			{

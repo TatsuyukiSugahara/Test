@@ -3,14 +3,12 @@
 #include "AudioListenerComponent.h"
 #include "AudioSourceComponent.h"
 #include "AudioEventEmitterComponent.h"
-#include "Component/HierarchicalTransformComponent.h"
 #include "ECS/EntityContext.h"
 #include "Sound/SoundEngine.h"
 #include "Sound/SoundSource.h"
 #include "Sound/SoundClip.h"
 #include "Sound/Authoring/Audio.h"
 #include "Sound/Authoring/AudioDirector.h"
-#include <DirectXMath.h>
 
 
 namespace aq

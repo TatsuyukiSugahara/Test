@@ -2,6 +2,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "ECS/ECS.h"
 #include "ECS/Entity.h"
+#include <vector>
 
 namespace aq
 {
@@ -25,6 +26,8 @@ namespace aq
 			void DrawHierarchyWindow();
 			void DrawInspectorWindow();
 			void DrawEntityNode(EntityHandle handle, int depth = 0);
+			// 子を持たないエンティティ列を ImGuiListClipper で可視行のみ描画する（大量のフラット表示を軽量化）。
+			void DrawFlatList(const std::vector<EntityHandle>& handles);
 			void DrawInsertGap(EntityHandle parent, int insertIndex);
 			void MoveChildToIndex(EntityHandle parent, EntityHandle dragged, int insertIndex);
 			void DestroySubtree(EntityHandle handle);

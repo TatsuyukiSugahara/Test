@@ -82,6 +82,11 @@ namespace aq
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) override;
 			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) override;
 
+			// テクスチャアップロードのバッチ制御。Begin〜End 間の CreateTexture2D は
+			// 共有リストへコピーを積み、End で ExecuteCommandLists + WaitForGPU を 1 回だけ行う。
+			void BeginBatchedTextureUploads() override;
+			void EndBatchedTextureUploads()   override;
+
 			bool ReadbackOffscreenR32(uint32_t rtIndex, uint32_t width, uint32_t height,
 			                          std::vector<float>& outData) override;
 
@@ -145,6 +150,9 @@ namespace aq
 			bool CreateRtvDsvHeaps();
 			void WaitForGPU();
 
+			// バッチアップロード用の共有コマンドリストを (未オープンなら Reset して) 取得する。
+			ID3D12GraphicsCommandList* AcquireBatchUploadList();
+
 		private:
 			// スワップチェーンのバックバッファ数（フリップモデルのため 2 固定）。
 			// オフスクリーン RT ハンドルの基点も兼ねる。
@@ -180,6 +188,15 @@ namespace aq
 			uint64_t                   frameFenceValue_[FRAME_COUNT] = {};  // 各フレームスロットの完了印
 			uint32_t                   frameIndex_    = 0;                  // 現在の frames-in-flight スロット
 			bool                       vsyncEnabled_  = true;              // Present の同期間隔 (ImGui トグル)
+			bool                       tearingSupported_ = false;         // ALLOW_TEARING 対応 (VSync オフで FPS 解放に必要)
+
+			// テクスチャアップロードのバッチ (BeginBatchedTextureUploads〜End)。
+			// 共有アロケータ/リストを再利用し、End までのコピーを 1 回の Execute+WaitForGPU で流す。
+			ID3D12CommandAllocator*    batchUploadAlloc_ = nullptr;
+			ID3D12GraphicsCommandList* batchUploadList_  = nullptr;
+			std::vector<ID3D12Resource*> batchUploadBuffers_;              // フラッシュまで生存させる中間バッファ
+			bool                       batchingUploads_  = false;         // Begin〜End の内側か
+			bool                       batchListOpen_    = false;         // batchUploadList_ が記録中か
 
 			// メイン RT(深度付きオフスクリーン)。シーンはここへ描画し CopyToBackBuffer でバックバッファへ複写。
 			std::unique_ptr<D3D12RenderTarget> mainRenderTargets_[MAIN_RT_COUNT];

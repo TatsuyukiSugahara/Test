@@ -4,9 +4,6 @@
     <Filter Include="Application">
       <UniqueIdentifier>{05f5d6c2-0eb9-4f44-a771-2e0a6cbabde1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Application\Scene">
-      <UniqueIdentifier>{af14e523-8193-4aad-9893-996102390b23}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Application\ECS">
       <UniqueIdentifier>{dd20472a-3dcc-46aa-a0f6-a307ef217f92}</UniqueIdentifier>
     </Filter>
@@ -27,17 +24,11 @@
     <ClCompile Include="Application\Application.cpp">
       <Filter>Application</Filter>
     </ClCompile>
-    <ClCompile Include="Application\TestScreen.cpp">
-      <Filter>Application</Filter>
-    </ClCompile>
     <ClCompile Include="Application\GameInput.cpp">
       <Filter>Application</Filter>
     </ClCompile>
-    <ClCompile Include="Application\Scene\Scene.cpp">
-      <Filter>Application\Scene</Filter>
-    </ClCompile>
-    <ClCompile Include="Application\Scene\BattleScene.cpp">
-      <Filter>Application\Scene</Filter>
+    <ClCompile Include="Application\GameFlow.cpp">
+      <Filter>Application</Filter>
     </ClCompile>
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp">
       <Filter>Application\ECS</Filter>
@@ -62,20 +53,14 @@
     <ClInclude Include="Application\Application.h">
       <Filter>Application</Filter>
     </ClInclude>
-    <ClInclude Include="Application\TestScreen.h">
-      <Filter>Application</Filter>
-    </ClInclude>
     <ClInclude Include="Application\GameAction.h">
       <Filter>Application</Filter>
     </ClInclude>
     <ClInclude Include="Application\GameInput.h">
       <Filter>Application</Filter>
     </ClInclude>
-    <ClInclude Include="Application\Scene\Scene.h">
-      <Filter>Application\Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="Application\Scene\BattleScene.h">
-      <Filter>Application\Scene</Filter>
+    <ClInclude Include="Application\GameFlow.h">
+      <Filter>Application</Filter>
     </ClInclude>
     <ClInclude Include="Application\ECS\ActorComponentSystem.h">
       <Filter>Application\ECS</Filter>

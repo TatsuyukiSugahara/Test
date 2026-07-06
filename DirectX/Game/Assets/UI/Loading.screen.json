@@ -1,0 +1,29 @@
+{
+    "name": "LoadingRoot",
+    "components": {
+        "transform": { "active": true, "sizeDelta": [1920, 1080] },
+        "canvas": { "resolution": [1920, 1080] }
+    },
+    "children": [
+        {
+            "name": "LoadingBG",
+            "components": {
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
+                "image": { "texture": "Assets/Terrain/rock.png", "color": [0, 0, 0, 1] }
+            }
+        },
+        {
+            "name": "LoadingText",
+            "components": {
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1000, 120] },
+                "text": {
+                    "content": "Now Loading",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1, 1, 1, 1]
+                }
+            }
+        }
+    ]
+}

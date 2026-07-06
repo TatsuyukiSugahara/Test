@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "UIDocumentLoader.h"
-#include "UI/UIContext.h"
 #include "UI/UIObject.h"
 #include "UI/Component/UITransformComponent.h"
 #include "UI/Component/UICanvasComponent.h"
@@ -13,7 +12,6 @@
 #include "UI/Animation/UIAnimationSerializer.h"
 #include "Util/SimpleJson.h"
 #include "Graphics/IShaderResourceView.h"
-#include "Resource/Resource.h"
 
 namespace aq
 {

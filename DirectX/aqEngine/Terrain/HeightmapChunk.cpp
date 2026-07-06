@@ -1,7 +1,5 @@
 #include "aq.h"
 #include "HeightmapChunk.h"
-#include "Graphics/GraphicsDevice.h"
-#include "Resource/Resource.h"
 
 #include <cmath>
 #include <cctype>

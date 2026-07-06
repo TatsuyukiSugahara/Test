@@ -2,9 +2,7 @@
 #include "HiZDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Occlusion/HiZRenderer.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/IRenderTarget.h"
-#include "Graphics/Camera.h"
 #include <imgui/imgui.h>
 
 

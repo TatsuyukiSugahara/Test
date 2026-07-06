@@ -1,12 +1,8 @@
 #include "aq.h"
 #include "HardShadowRenderer.h"
 #include "ShadowPassCommand.h"
-#include "Rendering/RenderCommandList.h"
-#include "Rendering/RenderFrame.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/Lighting.h"
 #include <cmath>
-#include <algorithm>
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Shadow/Debug/ShadowDebugPanel.h"
 #endif

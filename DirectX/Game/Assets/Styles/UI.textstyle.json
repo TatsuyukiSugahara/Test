@@ -1,0 +1,22 @@
+{
+    "name": "UI",
+    "fontPath": "Assets/Font/UI/atlas.json",
+    "fontSize": 48.0,
+    "fillColor": [1.0, 1.0, 1.0, 1.0],
+    "outline": {
+        "enabled": true,
+        "color": [0.0, 0.0, 0.0, 0.85],
+        "width": 0.1
+    },
+    "shadow": {
+        "enabled": false,
+        "color": [0.0, 0.0, 0.0, 0.0],
+        "offset": [0.0, 0.0],
+        "softness": 0.05
+    },
+    "gradient": {
+        "enabled": false,
+        "topColor": [1.0, 1.0, 1.0, 1.0],
+        "bottomColor": [1.0, 1.0, 1.0, 1.0]
+    }
+}

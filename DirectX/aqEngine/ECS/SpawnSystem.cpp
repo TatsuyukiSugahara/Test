@@ -1,8 +1,6 @@
 #include "aq.h"
 #include "SpawnSystem.h"
-#include "Engine.h"
 #include "Prefab.h"
-#include "Component/HierarchicalTransformComponent.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #endif

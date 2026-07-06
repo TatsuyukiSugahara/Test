@@ -3,7 +3,6 @@
 #include "ShadowData.h"
 #include "Rendering/FrameContext.h"
 #include "Graphics/RenderContext.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 
 

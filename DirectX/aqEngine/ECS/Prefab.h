@@ -54,5 +54,29 @@ namespace aq
 		private:
 			std::shared_ptr<const PrefabData> data_;
 		};
+
+
+		// 与えられた create プリミティブで 1 ノードだけを生成する（子は再帰しない）。
+		// create で Entity を作り、components を deserialize、name を DebugTag に設定、parent が有効なら親子付け、
+		// onEachCreated を呼ぶ。非同期/フレーム分割生成（Level の LoadAsync）が1ノード単位で回すために公開する。
+		Entity InstantiatePrefabNode(
+			const PrefabNodeData&                                     node,
+			EntityHandle                                              parent,
+			const std::function<Entity(std::vector<TypeInfo>)>&       create,
+			const std::function<void(Entity, const PrefabNodeData&)>& onEachCreated = nullptr);
+
+
+		// 与えられた create プリミティブで 1 ツリー（root + 子孫）を生成する低レベル API。
+		// Prefab::Instantiate / InstantiateImmediate はこれを onEachCreated=nullptr で呼ぶ薄いラッパ。
+		// Level 層が「LevelMemberComponent 型を注入する create」+「levelId を差す onEachCreated」で
+		// 木構築ロジックを再利用するために公開する（Level 設計 §7）。
+		//   create        : 完全な TypeInfo 列から Entity を生成する（遅延 NoLock / 即時ロック版のいずれか）。
+		//   onEachCreated : 各ノード Entity の生成・deserialize 完了直後に呼ばれる（省略可）。root/子/孫すべてで発火。
+		// 戻り値は root Entity（失敗時は無効）。
+		Entity InstantiatePrefabTree(
+			const PrefabNodeData&                                     root,
+			EntityHandle                                              parent,
+			const std::function<Entity(std::vector<TypeInfo>)>&       create,
+			const std::function<void(Entity, const PrefabNodeData&)>& onEachCreated = nullptr);
 	}
 }

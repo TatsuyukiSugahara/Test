@@ -4,10 +4,7 @@
 #include "IDebugRenderable.h"
 #include <imgui/imgui.h>
 #include "Util/Profiler.h"
-#include <algorithm>
-#include <cstring>
 #include <iterator>
-#include <vector>
 
 namespace aq
 {

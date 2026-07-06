@@ -2,7 +2,6 @@
 #include "UIRenderPipeline.h"
 #include "UIRenderItem.h"
 #include "UIBatchRenderCommand.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/RenderContext.h"
 

@@ -37,8 +37,10 @@ DirectX/ThirdParty/DirectXTex/x64/
 # VS Code ワークスペース設定
 .vscode/
 
-# Claude Code 設定
-.claude/
+# Claude Code 設定(個人/マシン固有の設定は除外。ただし共有スキルは追跡)
+# 親を .claude/* にしないと配下の再包含(!)が効かない
+.claude/*
+!.claude/skills/
 
 # Vulkan validation log (runtime)
 vk_debug.log

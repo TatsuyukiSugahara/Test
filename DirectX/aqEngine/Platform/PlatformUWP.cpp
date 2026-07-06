@@ -1,15 +1,12 @@
 #include "aq.h"
 #if defined(AQ_PLATFORM_UWP)
 #include "Platform/PlatformUWP.h"
-#include <windows.h>   // WideCharToMultiByte(UWP でも利用可)
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.Storage.h>   // StorageFolder::Path() の consume 定義に必要
 #include <winrt/Windows.Graphics.Display.h>
 #include <winrt/Windows.System.h>    // MemoryManager(アプリメモリ上限/使用量)
 #include <winrt/Windows.ApplicationModel.Core.h>  // CoreApplication(Suspending/Resuming)
-#include <thread>                    // hardware_concurrency
-#include "Graphics/GraphicsDevice.h" // PLM: サスペンド時に GPU をアイドル化/Trim
 
 using namespace winrt;
 using namespace winrt::Windows::UI::Core;

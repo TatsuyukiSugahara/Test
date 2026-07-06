@@ -1,8 +1,6 @@
 #include "aq.h"
 #include "BloomDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
-#include "Rendering/PostProcess/BloomRenderer.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/IRenderTarget.h"
 #include <imgui/imgui.h>
 

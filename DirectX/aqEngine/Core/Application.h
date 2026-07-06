@@ -13,6 +13,7 @@
 #include "UI/Debug/UIAnimationEditor.h"
 #include "Util/Debug/ProfilerDebugPanel.h"
 #include "ECS/PrefabEditor.h"
+#include "Level/LevelEditor.h"
 #include <memory>
 #endif
 
@@ -76,6 +77,7 @@ namespace aq
 		std::unique_ptr<aq::ui::UIAnimationEditor>          uiAnimationEditor_;
 		std::unique_ptr<aq::profile::ProfilerDebugPanel>    profilerDebugPanel_;
 		std::unique_ptr<aq::ecs::PrefabEditorPanel>         prefabEditorPanel_;   // 全シーン共通の Prefab エディタ
+		std::unique_ptr<aq::level::LevelEditorPanel>        levelEditorPanel_;    // 全シーン共通の Level エディタ
 #endif
 	};
 }

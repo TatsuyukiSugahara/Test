@@ -3,7 +3,6 @@
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #include "Component/OceanComponent.h"
-#include "ECS/ECS.h"
 
 namespace aq
 {

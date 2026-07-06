@@ -6,9 +6,7 @@
 #include "D3D12ImGui.h"
 #include "D3D12GraphicsDeviceImpl.h"
 #include "D3D12Resources.h"
-#include "Graphics/GraphicsDevice.h"
 #include <imgui/imgui.h>
-#include <d3dcompiler.h>
 
 #pragma comment(lib, "d3dcompiler.lib")
 

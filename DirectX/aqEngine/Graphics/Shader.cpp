@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "Shader.h"
-#include <utility>
 
 
 namespace aq

@@ -1,6 +1,5 @@
 #include "aq.h"
 #include "WavStreamDecoder.h"
-#include <cstring>
 
 
 namespace aq

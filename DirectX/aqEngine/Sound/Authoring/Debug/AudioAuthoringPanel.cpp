@@ -2,10 +2,7 @@
 #include "AudioAuthoringPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
-#include <vector>
-#include <utility>
 #include <unordered_set>
-#include <string>
 #include <cstdio>
 #include <cfloat>
 #include "Sound/Authoring/AudioDirector.h"

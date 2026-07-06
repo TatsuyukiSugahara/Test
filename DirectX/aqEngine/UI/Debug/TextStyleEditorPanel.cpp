@@ -3,7 +3,6 @@
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #include "UI/Font/TextStyleCache.h"
-#include <cstring>
 #include <cstdio>
 
 namespace aq

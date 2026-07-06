@@ -493,7 +493,14 @@ namespace aq
 					if (!ctx.GetComponent<AnimationComponent>(h))             ctx.AddComponent<AnimationComponent>(h);
 				};
 #ifdef AQ_DEBUG_IMGUI
-				meta.drawInspector    = [](EntityHandle h) { auto* c = EntityContext::Get().GetComponent<AnimationComponent>(h); if (c) c->DrawInspectorImGui(); };
+				meta.drawInspector    = [](EntityHandle h)
+				{
+					auto* c = EntityContext::Get().GetComponent<AnimationComponent>(h);
+					if (!c) return;
+					// 同居する SkeletalMesh のモデルパスを渡し、.fbx ならクリップ候補を表示させる。
+					auto* sk = EntityContext::Get().GetComponent<SkeletalMeshComponent>(h);
+					c->DrawInspectorImGui(sk ? sk->GetModelPath() : std::string());
+				};
 				meta.drawInspectorPtr = [](void* p)        { static_cast<AnimationComponent*>(p)->DrawInspectorImGui(); };
 #endif
 				// collection のため Reflect ビジターではなく専用の SerializeTo/DeserializeFrom を使う。

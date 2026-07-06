@@ -88,22 +88,72 @@ namespace aq
 
 
 #ifdef AQ_DEBUG_IMGUI
-		void AnimationComponent::DrawInspectorImGui()
+		void AnimationComponent::DrawInspectorImGui(const std::string& fbxModelPath)
 		{
 			ImGui::DragFloat("Play Speed", &playSpeed_, 0.01f, 0.0f, 10.0f);
 
+			// --- FBX 内クリップの候補表示 (SkeletalMesh のモデルが .fbx のとき) ---
+			// 拡張子を大文字小文字問わず判定 (ASCII 前提で |32 して小文字化)。
+			bool isFbx = false;
+			if (fbxModelPath.size() >= 4)
+			{
+				const char* e = fbxModelPath.c_str() + fbxModelPath.size() - 4;
+				isFbx = e[0] == '.' && (e[1] | 32) == 'f' && (e[2] | 32) == 'b' && (e[3] | 32) == 'x';
+			}
+			if (isFbx)
+			{
+				if (fbxModelPath != clipListModel_)   // モデルが変わった時だけ再列挙 (キャッシュ)
+				{
+					clipListModel_ = fbxModelPath;
+					aq::res::GetFbxAnimationClipNames(fbxModelPath, clipList_);
+				}
+
+				ImGui::Separator();
+				ImGui::TextUnformatted("FBX clips:");
+				for (const std::string& clip : clipList_)
+				{
+					const uint32_t h      = aqHash32(clip.c_str());
+					const bool     exists = slots_.find(h) != slots_.end();
+					ImGui::PushID(clip.c_str());
+					if (ImGui::SmallButton(exists ? "added" : "add"))
+					{
+						if (!exists) AddAnimation(clip.c_str(), (fbxModelPath + "#" + clip).c_str());
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("play"))   // 未登録なら登録してから再生
+					{
+						if (!exists) AddAnimation(clip.c_str(), (fbxModelPath + "#" + clip).c_str());
+						Play(h, true);
+					}
+					ImGui::SameLine();
+					ImGui::TextUnformatted(clip.c_str());
+					ImGui::PopID();
+				}
+				if (clipList_.empty())
+					ImGui::TextDisabled("(no animations in this FBX)");
+			}
+
+			// --- 登録済みクリップ一覧 ---
+			ImGui::Separator();
 			uint32_t removeKey = 0;
 			bool     doRemove  = false;
 			for (auto& kv : slots_)
 			{
 				ImGui::PushID(static_cast<int>(kv.first));
-				const char* label = kv.second.name.empty() ? "(no name)" : kv.second.name.c_str();
+				const bool  playing = (kv.first == currentHashKey_ && isPlaying_);
+				const char* label   = kv.second.name.empty() ? "(no name)" : kv.second.name.c_str();
+				if (ImGui::SmallButton(playing ? "stop" : "play"))
+				{
+					if (playing) Stop(); else Play(kv.first, true);
+				}
+				ImGui::SameLine();
 				ImGui::TextUnformatted(label);
 				ImGui::SameLine();
 
 				char buf[512];
 				strncpy_s(buf, sizeof(buf), kv.second.path.c_str(), _TRUNCATE);
-				if (ImGui::InputText("path", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue))
+				ImGui::SetNextItemWidth(220.0f);
+				if (ImGui::InputText("##path", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue))
 				{
 					kv.second.path          = buf;
 					kv.second.loadRequested = false;   // 次 Update で再ロード
@@ -114,7 +164,7 @@ namespace aq
 			}
 			if (doRemove) slots_.erase(removeKey);
 
-			// 新規追加
+			// --- 手動追加 (パス直接入力) ---
 			static char newName[64] = "";
 			static char newPath[512] = "";
 			ImGui::Separator();

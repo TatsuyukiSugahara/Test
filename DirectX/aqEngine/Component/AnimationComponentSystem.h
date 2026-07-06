@@ -35,6 +35,11 @@ namespace aq
 			float                             playSpeed_;
 			bool                              isPlaying_;
 			bool                              isLooping_;
+#ifdef AQ_DEBUG_IMGUI
+			// エディタのクリップ候補表示用キャッシュ (モデルパスが変わった時だけ再列挙)。
+			std::string                       clipListModel_;
+			std::vector<std::string>          clipList_;
+#endif
 
 		public:
 			AnimationComponent();
@@ -59,7 +64,8 @@ namespace aq
 			void DeserializeFrom(const util::JsonValue& in);
 #ifdef AQ_DEBUG_IMGUI
 			// Prefab エディタ / Entity インスペクタ共用のクリップ一覧 UI（.cpp）。
-			void DrawInspectorImGui();
+			// fbxModelPath が .fbx の場合、その中のクリップ名を候補表示して選ぶだけで登録できる。
+			void DrawInspectorImGui(const std::string& fbxModelPath = "");
 #endif
 		};
 

@@ -36,6 +36,14 @@ public:\
 
 
 		/**
+		 * FBX 内のアニメーションスタック名を列挙する (エディタのクリップ候補表示用)。
+		 * geometry/embedded をスキップして軽量ロードする。失敗時は out は空。
+		 * 名前は "path.fbx#<名前>" の <名前> として AnimationComponent に使える。
+		 */
+		void GetFbxAnimationClipNames(const std::string& fbxPath, std::vector<std::string>& out);
+
+
+		/**
 		 * ファイルサイズをプラットフォーム予算(PlatformBudget)と照合する。
 		 * maxSingleFileBytes 超過なら診断ログを出して false を返す(ロード拒否)。予算内なら true。
 		 * ローダーの Loading()(ワーカースレッド)からファイルサイズ確定後に呼ぶ。path は診断用。

@@ -1667,6 +1667,32 @@ namespace aq
 		/*******************************************/
 
 
+		// FBX 内のアニメーションスタック名を列挙する (エディタのクリップ候補表示用)。
+		// geometry/embedded はスキップして高速化する。失敗時は out を空にする。
+		void GetFbxAnimationClipNames(const std::string& fbxPath, std::vector<std::string>& out)
+		{
+			out.clear();
+			ufbx_load_opts opts = {};
+			opts.ignore_geometry = true;
+			opts.ignore_embedded = true;
+
+			ufbx_scene* scene = nullptr;
+			ufbx_error  error = {};
+			for (const std::string& candidate : BuildResourcePathCandidates(fbxPath)) {
+				scene = ufbx_load_file(candidate.c_str(), &opts, &error);
+				if (scene) break;
+			}
+			if (!scene) return;
+
+			out.reserve(scene->anim_stacks.count);
+			for (size_t i = 0; i < scene->anim_stacks.count; ++i) {
+				const ufbx_string& n = scene->anim_stacks.data[i]->name;
+				out.emplace_back(n.data ? n.data : "", n.length);
+			}
+			ufbx_free_scene(scene);
+		}
+
+
 		ResourceManager::BankHashMap ResourceManager::bankMap_;
 		ResourceManager::ReflectionHashMap ResourceManager::loaderHashMap_;
 		ResourceManager* ResourceManager::instance_ = nullptr;

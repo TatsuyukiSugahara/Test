@@ -116,6 +116,31 @@ namespace app
 				flow.ChangeState(std::make_unique<LoadingState>());
 			}
 		};
+
+
+		// 起動時。重いフォントアトラス(4096²)の準備が整うまで黒いローディング画面で待ち、完了後にタイトルへ。
+		// これによりタイトル/ローディングのテキストが確実に表示される(未完のまま出て文字が出ないのを防ぐ)。
+		class BootState : public IGameState
+		{
+		public:
+			void OnEnter(GameFlow& /*flow*/) override
+			{
+				aq::ui::UIContext::Get().Screens().Push("Loading");   // 準備中は黒背景
+			}
+
+			void OnUpdate(GameFlow& flow, const float dt) override
+			{
+				timer_ += dt;
+				if (IsUIFontReady() || timer_ >= FONT_WAIT_MAX)
+				{
+					aq::ui::UIContext::Get().Screens().Replace("Title");
+					flow.ChangeState(std::make_unique<TitleState>());
+				}
+			}
+
+		private:
+			float timer_ = 0.0f;
+		};
 	}
 
 
@@ -173,9 +198,9 @@ namespace app
 		auto& screens = aq::ui::UIContext::Get().Screens();
 		screens.Register<TitleScreen>("Title",     "Assets/UI/Title.screen.json");
 		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
-		screens.Push("Title");
 
-		current_ = std::make_unique<TitleState>();
+		// フォント準備を待ってからタイトルを出す(BootState)。テキストを確実に表示するため。
+		current_ = std::make_unique<BootState>();
 		current_->OnEnter(*this);
 	}
 

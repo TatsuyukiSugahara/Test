@@ -3,7 +3,6 @@
 #include "AudioListenerComponent.h"
 #include "AudioSourceComponent.h"
 #include "AudioEventEmitterComponent.h"
-#include "Component/HierarchicalTransformComponent.h"
 #include "ECS/EntityContext.h"
 #include "Sound/SoundEngine.h"
 #include "Sound/SoundSource.h"

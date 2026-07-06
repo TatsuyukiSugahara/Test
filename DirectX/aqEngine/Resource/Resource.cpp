@@ -1,7 +1,5 @@
 #include "aq.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Resource.h"
-#include "Engine.h"
 #include "Platform/PlatformBudget.h"
 #include <cctype>
 #include <cstdio>

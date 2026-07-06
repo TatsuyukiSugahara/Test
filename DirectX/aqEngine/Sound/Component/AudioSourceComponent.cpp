@@ -2,7 +2,6 @@
 #include "AudioSourceComponent.h"
 #include "Sound/SoundEngine.h"
 #include "Sound/SoundClip.h"
-#include "Resource/Resource.h"
 
 
 namespace aq

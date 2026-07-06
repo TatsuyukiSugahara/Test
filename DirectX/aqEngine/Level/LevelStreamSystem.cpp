@@ -2,7 +2,6 @@
 #include "Level/LevelStreamSystem.h"
 #include "Level/LevelComponents.h"
 #include "Level/LevelManager.h"
-#include "ECS/ECS.h"            // ecs::Foreach
 #include "ECS/EntityContext.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>

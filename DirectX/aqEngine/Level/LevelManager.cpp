@@ -2,7 +2,6 @@
 #include "Level/LevelManager.h"
 #include "Level/LevelRegistry.h"
 #include "Level/LevelComponents.h"
-#include "ECS/ECS.h"            // ecs::Foreach
 #include "ECS/EntityContext.h"
 #include "ECS/Prefab.h"
 #include "ECS/PrefabRegistry.h" // ReloadAll でキャッシュを捨てる

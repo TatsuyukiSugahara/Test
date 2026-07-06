@@ -5,27 +5,19 @@
 #include "Actor/StateMachine.h"
 
 #include "Component/TerrainComponent.h"
-#include "Component/TransformComponentSystem.h"
-#include "Component/HierarchicalTransformComponent.h"
-#include "Component/BodyComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
 #include "ECS/EntityContext.h"
-#include "Graphics/Camera.h"
-#include "Graphics/LightManager.h"
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
-#include "UI/UIContext.h"
 #include "UI/UIObject.h"
 #include "UI/Component/UITextComponent.h"
 #include "UI/Font/FontAssetCache.h"   // フォント事前ロード / 準備完了判定
 #include "UI/Font/FontResource.h"
 #include "UI/Font/FontAsset.h"
 #include "Graphics/IShaderResourceView.h"
-#include "Resource/Resource.h"   // 事前ロード用(ResourceManager / GPUResource)
-#include "Engine.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "ECS/EntityDebugTag.h"
 #endif

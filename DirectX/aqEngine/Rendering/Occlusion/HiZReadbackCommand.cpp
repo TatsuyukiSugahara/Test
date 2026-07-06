@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "HiZReadbackCommand.h"
 #include "HiZRenderer.h"
-#include "Graphics/GraphicsDevice.h"
 
 
 namespace aq

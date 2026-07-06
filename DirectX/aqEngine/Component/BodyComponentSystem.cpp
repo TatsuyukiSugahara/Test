@@ -1,13 +1,8 @@
 #include "aq.h"
 #include "BodyComponentSystem.h"
-#include "TransformComponentSystem.h"
-#include "HierarchicalTransformComponent.h"
-#include "Graphics/Camera.h"
 #include "Component/TerrainComponent.h"
 #include "Component/DecalComponent.h"
 #include "Rendering/Occlusion/IOcclusionTester.h"
-#include "Resource/Resource.h"
-#include "Engine.h"
 
 namespace aq
 {

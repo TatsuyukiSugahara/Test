@@ -4,7 +4,6 @@
 #include "Graphics/RenderContext.h"
 #include "Graphics/IRenderContextImpl.h"
 #include "Graphics/GraphicsTypes.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/IRenderTarget.h"
 #include "Graphics/Lighting.h"
 

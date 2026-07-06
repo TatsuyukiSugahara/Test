@@ -27,6 +27,7 @@ namespace aq
 				std::vector<uint32_t>            children;      // 子 Level の slot index（Unload カスケード用）
 				uint32_t                         generation = 0;
 				bool                             loaded     = false;
+				int64_t                          fileTime   = 0; // ファイル由来 root の最終更新時刻（変更検知用・非ファイルは 0）
 			};
 
 		// ── メンバ変数 ──
@@ -35,6 +36,8 @@ namespace aq
 			std::vector<uint32_t>    freeList_;                 // 再利用可能な slot index
 			std::vector<std::string> loadStack_;                // 再帰ロード中の正規化パス（循環サブLevel 検出）
 			std::string              startupPath_;              // 起動時に読む Level（SetStartupLevel で設定）
+			bool                     autoReload_ = false;       // D2: ファイル変更の自動監視
+			float                    pollTimer_  = 0.0f;        // D2: ポーリング間引き用
 
 		// ── メンバ関数 ──
 		public:
@@ -65,6 +68,16 @@ namespace aq
 			// path から現在ロード済みの LevelId を引く。未ロードなら無効な LevelId。
 			LevelId Find(std::string_view pathOrId) const;
 
+			// D1: 参照キャッシュ（Prefab/Level レジストリ）を捨て、ファイル由来の全 root Level を作り直す（手動リロード）。
+			void ReloadAll();
+
+			// D2: ファイル変更の自動監視の ON/OFF。
+			void SetAutoReload(const bool enabled);
+			bool IsAutoReload() const;
+
+			// D2: 毎フレーム呼ぶ。autoReload_ が有効なら間引いてファイル mtime を確認し、変更を検知したら reload する。
+			void Tick(const float dt);
+
 		private:
 			LevelManager() = default;
 
@@ -89,6 +102,15 @@ namespace aq
 
 			// 親 Level の children リストから id を外す。
 			void DetachFromParent(LevelId id);
+
+			// key がファイルパスか（"<inline>" / "<...preview...>" などの合成キーでないか）。
+			static bool IsFileKey(const std::string& key);
+
+			// path の最終更新時刻を取得する。取得失敗は 0。
+			int64_t QueryFileTime(const std::string& path) const;
+
+			// ファイル由来 root の mtime を確認し、変更されていた Level を作り直す（D2 本体）。
+			void PollFileChanges();
 		};
 	}
 }

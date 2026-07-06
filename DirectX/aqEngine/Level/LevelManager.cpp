@@ -5,7 +5,10 @@
 #include "ECS/ECS.h"            // ecs::Foreach
 #include "ECS/EntityContext.h"
 #include "ECS/Prefab.h"
+#include "ECS/PrefabRegistry.h" // ReloadAll でキャッシュを捨てる
 #include <algorithm>
+#include <filesystem>
+#include <utility>
 
 
 namespace aq
@@ -34,11 +37,12 @@ namespace aq
 			}
 
 			LevelSlot& slot = slots_[index];
-			slot.path   = std::move(path);
-			slot.data   = std::move(data);
-			slot.parent = parent;
+			slot.path     = std::move(path);
+			slot.data     = std::move(data);
+			slot.parent   = parent;
 			slot.children.clear();
-			slot.loaded = true;
+			slot.loaded   = true;
+			slot.fileTime = 0;
 
 			LevelId id;
 			id.index      = index;
@@ -121,6 +125,7 @@ namespace aq
 			}
 
 			const LevelId id = AllocateSlot(key, data, parent);
+			if (IsFileKey(key)) slots_[id.index].fileTime = QueryFileTime(key);   // D2: 変更検知の基準時刻
 			InstantiateEntities(data, id);
 
 			// loadOnStart のサブLevel を再帰ロードする（親=このLevel。children は AllocateSlot が登録し、
@@ -267,6 +272,88 @@ namespace aq
 				}
 			}
 			return LevelId();
+		}
+
+
+		bool LevelManager::IsFileKey(const std::string& key)
+		{
+			// "<inline>" / "<level-editor-preview-N>" などの合成キーはファイルではない。
+			return !key.empty() && key.front() != '<';
+		}
+
+
+		int64_t LevelManager::QueryFileTime(const std::string& path) const
+		{
+			std::error_code ec;
+			const auto t = std::filesystem::last_write_time(path, ec);
+			if (ec) return 0;
+			return static_cast<int64_t>(t.time_since_epoch().count());
+		}
+
+
+		void LevelManager::ReloadAll()
+		{
+			// 参照キャッシュを捨てて参照先ファイルを読み直す。
+			ecs::PrefabRegistry::Get().Clear();
+			LevelRegistry::Get().Clear();
+
+			// ファイル由来の root Level を収集してから作り直す（reload 中に slots_ が変わるため収集と実行を分離）。
+			std::vector<std::pair<std::string, LevelId>> roots;
+			for (uint32_t i = 0; i < static_cast<uint32_t>(slots_.size()); ++i)
+			{
+				const LevelSlot& slot = slots_[i];
+				if (slot.loaded && !slot.parent.IsValid() && IsFileKey(slot.path))
+					roots.push_back({ slot.path, MakeId(i) });
+			}
+			for (const auto& r : roots) { if (IsLoaded(r.second)) Unload(r.second); }
+			for (const auto& r : roots) { Load(r.first); }
+		}
+
+
+		void LevelManager::SetAutoReload(const bool enabled)
+		{
+			autoReload_ = enabled;
+			pollTimer_  = 0.0f;
+		}
+
+
+		bool LevelManager::IsAutoReload() const
+		{
+			return autoReload_;
+		}
+
+
+		void LevelManager::Tick(const float dt)
+		{
+			if (!autoReload_) return;
+
+			constexpr float POLL_INTERVAL = 0.5f;   // 監視の間引き（秒）
+			pollTimer_ += dt;
+			if (pollTimer_ < POLL_INTERVAL) return;
+			pollTimer_ = 0.0f;
+
+			PollFileChanges();
+		}
+
+
+		void LevelManager::PollFileChanges()
+		{
+			// ファイル由来 root の mtime を確認し、変わっていた Level を作り直す。
+			std::vector<std::pair<std::string, LevelId>> changed;
+			for (uint32_t i = 0; i < static_cast<uint32_t>(slots_.size()); ++i)
+			{
+				const LevelSlot& slot = slots_[i];
+				if (!slot.loaded || slot.parent.IsValid() || !IsFileKey(slot.path)) continue;
+				const int64_t now = QueryFileTime(slot.path);
+				if (now != 0 && now != slot.fileTime) changed.push_back({ slot.path, MakeId(i) });
+			}
+			if (changed.empty()) return;
+
+			// 変更を検知したら参照先（プレハブ含む）も読み直すためキャッシュを捨てる。
+			LevelRegistry::Get().Clear();
+			ecs::PrefabRegistry::Get().Clear();
+			for (const auto& c : changed) { if (IsLoaded(c.second)) Unload(c.second); }
+			for (const auto& c : changed) { Load(c.first); }
 		}
 	}
 }

@@ -4,6 +4,7 @@
 #include "Level/LevelManager.h"
 #include "ECS/ECS.h"            // ecs::Foreach
 #include "ECS/EntityContext.h"
+#include "Engine.h"            // aq::Engine::GetDeltaTime
 #include <vector>
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
@@ -17,6 +18,9 @@ namespace aq
 		{
 			LevelManager&       levelManager = LevelManager::Get();
 			ecs::EntityContext& ctx          = ecs::EntityContext::Get();
+
+			// D2: ファイル変更の自動監視（autoReload_ が有効なときのみ間引いてポーリング）。
+			levelManager.Tick(aq::Engine::GetDeltaTime());
 
 			// Load/Unload は内部で別の Foreach を回す（ネスト走査を避ける）ため、
 			// まず対象 Entity を収集してから Foreach の外で実行する。

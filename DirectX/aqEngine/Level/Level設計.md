@@ -480,14 +480,16 @@ class LevelEditorPanel : public IDebugRenderable
 > ノード編集は Prefab エディタと `PrefabEditNodeOps` を共有（単一の真実）。
 >
 > **追加実装（L7d 一部・ビルド検証）**:
-> - **プレハブ参照配置**: `PrefabEditNode::prefabRef`（[../ECS/PrefabEditor.h](../ECS/PrefabEditor.h)）。Inspector の "Prefab Ref" にパスを入れると参照ノードになり、
->   JSON は `{ name, prefab }` で往復（[../ECS/PrefabEditNodeOps.cpp](../ECS/PrefabEditNodeOps.cpp)）。実体は**ロード時に参照先から解決**（変更は再ロードで反映）。
+> - **プレハブ参照配置**: `PrefabEditNode::prefabRef`（[../ECS/PrefabEditor.h](../ECS/PrefabEditor.h)）。エディタの **「+ Prefab」ボタン**（`+ Entity` とは別枠）で
+>   参照ノードを追加、Inspector の "Prefab Ref" でパス編集。JSON は `{ name, prefab }` で往復（[../ECS/PrefabEditNodeOps.cpp](../ECS/PrefabEditNodeOps.cpp)）。
+>   実体は**ロード時に参照先から解決**（変更は再ロード＝§16 D1/D2 で反映）。
 > - **Transform 必須化**: Level エディタで作る Entity（新規・子）は `PrefabNodeEnsureTransform` で TransformComponent を必ず持つ。
 >   HTC は実行時 `CollectTypes`（[../ECS/Prefab.cpp](../ECS/Prefab.cpp)）が Transform→HTC を自動付与するため常に成立。Prefab エディタ側は従来どおり（`ensureTransform=false`）。
 > - **インラインサブLevel**: `.level.json` の `subLevels[].level` が **文字列=外部ファイル参照 / オブジェクト=インライン定義**。
 >   `LevelSerializer` が再帰構築し `SubLevelRef::inlineData` に保持、`LevelManager::LoadInline` が生成（[LevelSerializer.cpp](LevelSerializer.cpp) / [LevelManager.cpp](LevelManager.cpp)）。
->   ※ エディタの subLevels 行 UI は現状ファイルパス専用（インライン定義は JSON 手書き。エディタ Load ではインライン行は復元しない＝要 L7 追補）。
-> **残（L7d）**: `LevelStreamComponent` の FillReflectPtrFns 対応。override 編集 UI と参照の変更検知は §16。
+>   **エディタでも作成可能**: subLevels の「+ File」（外部参照）/「+ Inline」（その場定義）ボタン。インラインは name + 配下 entities を
+>   同じツリー UI（`DrawEntityList`）で編集し `{ level:{ name, entities }, loadOnStart }` で往復（[LevelEditor.cpp](LevelEditor.cpp)）。
+> **残（L7d）**: `LevelStreamComponent` の FillReflectPtrFns 対応。override 編集 UI は §16 R2。参照の変更検知（D1/D2）は §16=実装済み。
 
 ---
 
@@ -596,12 +598,18 @@ LevelLoadHandle LevelManager::LoadAsync(std::string_view pathOrId, LevelId paren
 ### 16.4 段階（サブフェーズ）
 | | 内容 |
 |---|---|
-| R1 | **D1**: Reload References（レジストリ Clear + 対象 Level 再ロード）。最小で「反映」を達成 |
-| R2 | エディタ override 編集 UI（参照先を解決表示 → 差分を `overrides` に保持 → `{prefab,overrides}` 保存） |
-| R3 | **D2**: mtime/ハッシュ差分検知で自動 reload（対象は参照元タグで絞る） |
-| R4 | **D3**: OS ファイル監視での自動 reload |
-| R5（大）| ライブ instance への差分パッチ（作り直さずランタイム状態保持）※要否は別途判断 |
+| R1 | ✅ **D1**: `LevelManager::ReloadAll`（`PrefabRegistry`/`LevelRegistry` を Clear → ファイル由来 root を Unload→Load）。Level エディタに "Reload Refs" ボタン |
+| R2 | 未: エディタ override 編集 UI（参照先を解決表示 → 差分を `overrides` に保持 → `{prefab,overrides}` 保存） |
+| R3 | ✅ **D2**: `LevelManager::Tick`/`PollFileChanges`（0.5 秒間引きで root Level ファイルの mtime を確認→変更で reload）。エディタに "Auto" トグル（`SetAutoReload`）。`LevelStreamSystem::Update` から `Tick` |
+| R4 | 未: **D3**: OS ファイル監視（`ReadDirectoryChangesW`）での自動 reload |
+| R5（大）| 未: ライブ instance への差分パッチ（作り直さずランタイム状態保持）※要否は別途判断 |
 
-> 実装再開の入口: **R1（Reload References）**。まず「参照先を更新→ボタンで反映」を成立させ、
-> その後 R2（override 編集）→ R3/R4（自動検知）と積む。ライブパッチ（R5）は要否を見てから。
-> **確認したい**: 変更検知は **D1 手動ボタン / D2 ポーリング / D3 自動監視** のどれを目標にするか。
+> **実装状況（R1=D1・R3=D2 完了・ビルド検証）**: ソリューション Debug|x64 ビルド成功。… [LevelManager.cpp](LevelManager.cpp) / [LevelEditor.cpp](LevelEditor.cpp) / [LevelStreamSystem.cpp](LevelStreamSystem.cpp)
+> - **D1（手動）**: "Reload Refs" ボタン → `ReloadAll`。キャッシュを捨てるため**プレハブ編集も反映**される。
+> - **D2（自動・mtime ポーリング）**: "Auto" ON で 0.5 秒毎に root Level ファイルの更新時刻を確認、変わっていたら
+>   キャッシュ Clear + 当該 Level を作り直す（参照プレハブも読み直される）。合成キー（`<inline>`/`<...preview...>`）は監視対象外。
+> - **既知の制約**: 変更検知の対象は**ロード済み root Level ファイルの mtime のみ**。
+>   「プレハブファイルだけを編集」した場合の自動検知は未（プレハブ依存の追跡が要る＝D2+）。当面は **D1 の手動 Reload で対応**。
+>   reload の実体は**Unload→Load の作り直し**なのでランタイム状態は保持されない（ライブパッチ R5 は別途）。
+>
+> **残**: R2（override 編集 UI・ランタイムの overrides 意味論は §7.3 実装済み）、R4（OS 監視）、R5（ライブパッチ）。

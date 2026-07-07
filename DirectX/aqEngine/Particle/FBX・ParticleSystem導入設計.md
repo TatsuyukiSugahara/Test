@@ -159,8 +159,12 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 - [x] **P3**（2026-07-07 実装）`.particle` v1 の受け皿：`ParticleTypes`（ScalarValue/LUT/enum）+ `ParticleSystemData` +
   `ParticleLoader`（SimpleJson パース＋LUT 焼き込み）+ `AqParticleExporter.cs` + `sample/FX_Explosion.particle`。
   Engine.vcxproj/.filters・Application.cpp 登録済み。マイルストンの実ロード確認は P4 のインスペクタで行う
-- [ ] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim・仕様 §5 準拠）+ ビルボード
+- [~] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim・仕様 §5 準拠）+ ビルボード
   forward 描画（Alpha/Additive）。フリップブック/ストレッチ/overLifetime は最小。マイルストン：Sparks/Smoke が出る
+  - [x] **P4a**（CPU sim）`ParticleRandom`/`ParticleEmitterComponent`（SoA プール・再生状態）/`ParticleSystem`
+    実装・登録済み。emission→spawn→integrate（仕様 §5）、shape/initial/gravity/各 overLifetime/bursts を最小実装
+  - [ ] **P4b**（描画）専用頂点型（pos/uv/color）+ `Particle.fx` + `RenderFrame.particleItems` +
+    `RenderSystem::BuildRenderFrame` での収集 + `Renderer.cpp` 専用パス（`SetBlendModeCommand` で Alpha/Additive）
 - [ ] **P5** overLifetime（color/size/rotation/velocity）+ shape 各種 + bursts + フリップブック +
   StretchedBillboard + 距離ソート
 - [ ] **P6**（任意）Mesh renderer + GPU compute シミュレーション
@@ -195,7 +199,8 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 
 ## 7. 引き継ぎメモ（別PC / 次セッション用）
 
-> 現在ブランチ: `feature/particle`。P3 まで実装・コミット済み。次は **P4**。
+> 現在ブランチ: `feature/particle`。P3 + **P4a（CPU sim）** まで実装・コミット済み。次は **P4b（描画）**。
+> リファクタ済み: Loader/Data は `aqEngine/Resource/` へ移動し名前空間 `aq::res` に統一。
 
 ### 7.1 実装済み（P3・実在ファイル）
 
@@ -217,17 +222,37 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 - 新規 C++ ファイルは他の engine ファイルに合わせ **UTF-8 BOM 付き**（`.particle` は仕様 §2 で BOM なし）。
 - `ParticleTypes.h` 単体は cl.exe で構文コンパイル通過確認済み（LUT/Evaluate ロジック）。
 
-### 7.3 次の作業（P4）
+### 7.3a 実装済み（P4a・CPU sim・実在ファイル）
 
-1. `aqEngine/Particle/ParticleRandom.h` … `Hash(seed ^ RandomItem)` ヘルパ（仕様 §5）
-2. `aqEngine/Particle/ParticleEmitterComponent.h/.cpp` … `ecsComponent`。SoA プール
-   （`position/velocity/age/lifetime/seed/initialSize/initialColor/rotation`、`maxParticles` 確保・swap-remove）＋
-   再生状態（`playbackTime/emitAccumulator/aliveCount`）
-3. `aqEngine/Particle/ParticleSystem.h/.cpp` … `ecs::SystemBase`。更新順序は本書 §3.4（＝仕様 §5）に従う：
-   emission → spawn（`Evaluate(emitterNormT_spawn, r)`）→ integrate（`u=age/lifetime`）→ ビルボード生成 → `RenderFrame.forwardItems`
-4. `Particle.fx`（VS/PS）＋ `SetBlendModeCommand` で Alpha/Additive。動的VBは `StaticMesh::UpdateVertices` 流用
-5. `RandomItem` の項目網羅を確定（TwoConstants/TwoCurves を持つ全項目）
-6. 追加ファイルは [vs-project-files] 規約で登録（`ParticleRandom.h`/コンポーネント/システム→**Particle フィルタ**）
+- `aqEngine/Particle/ParticleRandom.h` … `Hash(uint32)`（fmix32）＋ `RandomUnit(seed, item/salt)`（仕様 §5）
+- `aqEngine/Particle/ParticleEmitterComponent.h/.cpp` … `aq::ecs::ParticleEmitterComponent`（`IComponent`）。
+  エミッタごとに `ParticleEmitterRuntime`（SoA: position/velocity/age/lifetime/seed/initialSize/initialColor/
+  rotation/size/color + aliveCount/playbackTime/emitAccumulator/spawnCounter、swap-remove 圧縮）。
+  `SetAsset(path)` で `.particle` を非同期ロード → `IsCompleted` 後に runtimes 構築。`Simulate(dt, worldOrigin)`。
+- `aqEngine/Particle/ParticleSystem.h/.cpp` … `aq::ecs::ParticleSystem`（`SystemBase`）。
+  `Foreach<ParticleEmitterComponent, HierarchicalTransformComponent>` で `htc->transform.position` を原点に `Simulate`。
+- 更新順序（§3.4／仕様 §5）: emission（rateOverTime）→ bursts → spawn（`Evaluate(emitterNormT, r)`）→
+  integrate（`u=age/lifetime`：gravity/velocity/size/color/rotation overLifetime）。
+- 登録: コンポーネント→`ECS/ComponentRegistry.cpp`（`ParticleEmitter`）、システム→`aqEngine/Core/Application.cpp::Register`
+  （`AddDependency<ParticleSystem, HierarcicalTransformSystem>` / `AddDependency<RenderSystem, ParticleSystem>`）。
+  `Engine.vcxproj`/`.filters` に Particle フィルタで追加。
+- `Vector3`/`Vector4` にスカラー倍・成分積・複合代入演算子を追加（`Math/Vector.h`）。
+- **未着手（P4a 範囲外）**: 描画。simulationSpace は World 前提で保持（Local はエミッタ回転無視）。
+  velocityOverLifetime.space も未考慮。フリップブック frame は未計算。
+
+### 7.3b 次の作業（P4b・描画）
+
+1. 専用頂点型（`position(3)/uv(2)/color(4)` = ワールド空間ビルボード）。`VertexData` は color 非対応のため新設（`UIVertex` が雛形）。
+2. `Game/Assets/Shader/Particle.fx`（`VSMain`/`PSMain`：`b0` に view/proj、`t0` テクスチャ、`PS = tex * color`）。
+   ※エントリは **VSMain/PSMain**、プロファイルは機能レベル自動選択（`main` 固定ではない）。
+3. `RenderFrame` に `std::vector<ParticleRenderItem> particleItems` を追加（ocean/decal と同じ流儀）。
+   `ParticleRenderItem`: 動的VB/IB/vs/ps/texture/sampler/indexCount + `graphics::BlendMode`（Alpha/Additive）。
+4. `RenderSystem::BuildRenderFrame`（`BodyComponentSystem.cpp`）に `Foreach<ParticleEmitterComponent>` を追加し、
+   runtimes からビルボード頂点を CPU 生成 → `particleItems` へ push。CameraData に right/up は無いので `viewMatrix` から抽出。
+5. `Renderer.cpp` に海（`Renderer.cpp:126`）流の専用パスを追加：`SetBlendModeCommand(AlphaBlend/Additive)` で囲んで描画、
+   最後に `Opaque` へ戻す（forward パスは全 Opaque のため）。`particle::BlendMode → graphics::BlendMode` 変換が必要。
+6. `renderer.texture`（Unity `Assets/…`）→ aq リソースパス解決（§7.4）。動的VBは `GraphicsDevice::CreateDynamicVertexBuffer`
+   に任意 stride で直接生成可（`StaticMesh` は `VertexData` stride 固定なので専用管理が無難）。
 
 ### 7.4 未決（P4 で判断が要る）
 

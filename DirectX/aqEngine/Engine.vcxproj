@@ -244,6 +244,7 @@
     <ClCompile Include="Graphics\D3D11\D3D11Buffers.cpp" />
     <ClCompile Include="Graphics\D3D11\D3D11Shader.cpp" />
     <ClCompile Include="Graphics\StaticMesh.cpp" />
+    <ClCompile Include="Graphics\InstancedStaticMesh.cpp" />
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
     <ClCompile Include="HID\XInputPadBackend.cpp" />
@@ -297,6 +298,7 @@
     <ClCompile Include="Physics\CharacterController.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
     <ClCompile Include="Rendering\DrawItemCommand.cpp" />
+    <ClCompile Include="Rendering\InstancedDrawItemCommand.cpp" />
     <ClCompile Include="Rendering\FrameCommands.cpp" />
     <ClCompile Include="Rendering\FrameContext.cpp" />
     <ClCompile Include="Rendering\RenderCommandList.cpp" />
@@ -401,6 +403,8 @@
     <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Component\AnimationComponentSystem.h" />
     <ClInclude Include="Component\BodyComponentSystem.h" />
+    <ClInclude Include="Component\InstancedStaticMeshComponentSystem.h" />
+    <ClInclude Include="Component\InstancedPointListComponentSystem.h" />
     <ClInclude Include="Component\DecalComponent.h" />
     <ClInclude Include="Component\TransformComponentSystem.h" />
     <ClInclude Include="Component\HierarchicalTransformComponent.h" />
@@ -442,6 +446,7 @@
     <ClInclude Include="Platform\PlatformUWP.h" />
     <ClInclude Include="Platform\PlatformWin32.h" />
     <ClInclude Include="aq.h" />
+    <ClInclude Include="RenderConfig.h" />
     <ClInclude Include="Graphics\AnimationClip.h" />
     <ClInclude Include="Graphics\Camera.h" />
     <ClInclude Include="Graphics\D3D11\D3D11Buffers.h" />
@@ -494,6 +499,7 @@
     <ClInclude Include="Graphics\Meshlet.h" />
     <ClInclude Include="Graphics\SkeletalMesh.h" />
     <ClInclude Include="Graphics\StaticMesh.h" />
+    <ClInclude Include="Graphics\InstancedStaticMesh.h" />
     <ClInclude Include="HID\ActionMap.h" />
     <ClInclude Include="HID\IPadBackend.h" />
     <ClInclude Include="HID\Input.h" />
@@ -530,6 +536,7 @@
     <ClInclude Include="Physics\PhysicsTypes.h" />
     <ClInclude Include="Physics\SphereCollider.h" />
     <ClInclude Include="Rendering\DrawItemCommand.h" />
+    <ClInclude Include="Rendering\InstancedDrawItemCommand.h" />
     <ClInclude Include="Rendering\FrameCommands.h" />
     <ClInclude Include="Rendering\FrameContext.h" />
     <ClInclude Include="Rendering\IRenderCommand.h" />
@@ -657,9 +664,6 @@
     <ProjectReference Include="..\ThirdParty\imgui\imgui.vcxproj">
       <Project>{EDAFA9B5-E723-4C02-9FE8-998CD822A808}</Project>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
   </ItemGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>

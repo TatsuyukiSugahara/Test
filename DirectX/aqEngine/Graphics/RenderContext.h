@@ -184,6 +184,19 @@ namespace aq
 			{
 				impl_->DrawIndexedIndirect(argsBuffer);
 			}
+
+			// ── インスタンシング ──
+			void IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vertexBuffer)
+			{
+				impl_->IASetVertexBufferSlot(slot, vertexBuffer);
+			}
+			void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
+			                          uint32_t startIndexLocation = 0, int32_t baseVertexLocation = 0,
+			                          uint32_t startInstanceLocation = 0)
+			{
+				impl_->DrawIndexedInstanced(indexCount, instanceCount,
+				                            startIndexLocation, baseVertexLocation, startInstanceLocation);
+			}
 			void UavBarrier(IGpuBuffer& buffer)
 			{
 				impl_->UavBarrier(buffer);

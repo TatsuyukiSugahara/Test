@@ -286,9 +286,6 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
       <Project>{EDAFA9B5-E723-4C02-9FE8-998CD822A808}</Project>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
   <!-- UWP(Xbox)構成でのみ appx マニフェストを含める。デスクトップ構成には影響させない。 -->
   <ItemGroup Condition="'$(Configuration)'=='DebugXbox' Or '$(Configuration)'=='ReleaseXbox'">
     <AppxManifest Include="Package.appxmanifest">

@@ -27,6 +27,8 @@ namespace aq
 				OceanLit,      // OceanLit.fx (Gerstner 波・Fresnel 海面)
 				PBRLit,        // PBRGBuffer.fx (ディファード PBR、static mesh)
 				TerrainPBRLit, // TerrainPBRGBuffer.fx (ディファード PBR、terrain)
+				InstancedSimple,   // InstancedSimple.fx (フォワード・per-instance ワールド行列・単色)
+				InstancedTextured, // InstancedModelTex.fx (per-instance ワールド行列・アルベドテクスチャ+簡易ライト)
 			};
 
 		private:
@@ -66,6 +68,13 @@ namespace aq
 			void Initialize(const void* vertexBuffer, const uint32_t vertexNum,
 			                const void* indexBuffer,  const uint32_t indexNum,
 			                const ShaderType shaderType);
+			/** 既存の共有 VB/IB を参照して初期化する(箱など同一ジオメトリを多数生成する用)。
+			 *  バッファを生成せず shared_ptr を共有するだけなので、コンポーネント破棄時に
+			 *  個別の GPU バッファ解放が発生しない(実行時破棄でも device removed を招かない)。 */
+			void InitializeShared(std::shared_ptr<IVertexBuffer> vertexBuffer,
+			                      std::shared_ptr<IIndexBuffer>  indexBuffer,
+			                      const uint32_t indexCount,
+			                      const ShaderType shaderType);
 			/** 動的VBで初期化 (HeightmapChunk ペイント用) */
 			void InitializeDynamic(const void* vertexBuffer, const uint32_t vertexNum,
 			                       const void* indexBuffer,  const uint32_t indexNum,

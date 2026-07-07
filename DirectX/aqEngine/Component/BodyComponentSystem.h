@@ -28,6 +28,7 @@ namespace aq
 
 		private:
 			ComponentState componentState_;
+			bool           visible_ = true;   // false で描画から外す(退避・遅延破棄などに使う)
 
 			aq::graphics::StaticMesh staticMesh_;
 
@@ -40,6 +41,11 @@ namespace aq
 
 		public:
 			inline bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
+
+			// 描画対象から外す/戻す。箱はバウンディングを持たずフラスタムカリングされないため、
+			// 位置退避では描画を止められない。確実に描画をスキップさせる手段として使う。
+			inline void SetVisible(bool v) { visible_ = v; }
+			inline bool IsVisible() const  { return visible_; }
 
 		public:
 			inline aq::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }

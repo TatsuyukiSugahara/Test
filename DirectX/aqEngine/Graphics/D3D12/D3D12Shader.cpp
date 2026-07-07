@@ -226,14 +226,21 @@ namespace aq
 				D3D12_SIGNATURE_PARAMETER_DESC paramDesc = {};
 				reflection->GetInputParameterDesc(i, &paramDesc);
 
+				// セマンティクスが "I_" 始まりの要素は per-instance ストリーム(slot1)として扱う。
+				// 例: HLSL の I_WORLD0..3 は reflection 上 SemanticName="I_WORLD"/Index=0..3 に分解される
+				// ため、完全一致でなく前方一致で判定する。AlignedByteOffset は APPEND なのでスロット別に
+				// オフセットが自動計算される。
+				const bool perInstance = semanticNames_[i].rfind("I_", 0) == 0;
+
 				D3D12_INPUT_ELEMENT_DESC elem = {};
 				elem.SemanticName         = semanticNames_[i].c_str();
 				elem.SemanticIndex        = paramDesc.SemanticIndex;
 				elem.Format               = ComponentFormat(paramDesc.Mask, paramDesc.ComponentType);
-				elem.InputSlot            = 0;
+				elem.InputSlot            = perInstance ? 1u : 0u;
 				elem.AlignedByteOffset    = D3D12_APPEND_ALIGNED_ELEMENT;
-				elem.InputSlotClass       = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-				elem.InstanceDataStepRate = 0;
+				elem.InputSlotClass       = perInstance ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA
+				                                        : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+				elem.InstanceDataStepRate = perInstance ? 1u : 0u;
 				elements_.push_back(elem);
 			}
 

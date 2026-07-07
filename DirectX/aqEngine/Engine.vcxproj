@@ -442,6 +442,7 @@
     <ClInclude Include="Platform\PlatformUWP.h" />
     <ClInclude Include="Platform\PlatformWin32.h" />
     <ClInclude Include="aq.h" />
+    <ClInclude Include="RenderConfig.h" />
     <ClInclude Include="Graphics\AnimationClip.h" />
     <ClInclude Include="Graphics\Camera.h" />
     <ClInclude Include="Graphics\D3D11\D3D11Buffers.h" />
@@ -657,9 +658,6 @@
     <ProjectReference Include="..\ThirdParty\imgui\imgui.vcxproj">
       <Project>{EDAFA9B5-E723-4C02-9FE8-998CD822A808}</Project>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
   </ItemGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>

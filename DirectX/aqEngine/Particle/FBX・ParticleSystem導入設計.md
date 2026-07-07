@@ -159,12 +159,13 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 - [x] **P3**（2026-07-07 実装）`.particle` v1 の受け皿：`ParticleTypes`（ScalarValue/LUT/enum）+ `ParticleSystemData` +
   `ParticleLoader`（SimpleJson パース＋LUT 焼き込み）+ `AqParticleExporter.cs` + `Game/Assets/Particle/FX_Explosion.particle`。
   Engine.vcxproj/.filters・Application.cpp 登録済み。マイルストンの実ロード確認は P4 のインスペクタで行う
-- [~] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim・仕様 §5 準拠）+ ビルボード
+- [x] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim・仕様 §5 準拠）+ ビルボード
   forward 描画（Alpha/Additive）。フリップブック/ストレッチ/overLifetime は最小。マイルストン：Sparks/Smoke が出る
   - [x] **P4a**（CPU sim）`ParticleRandom`/`ParticleEmitterComponent`（SoA プール・再生状態）/`ParticleSystem`
     実装・登録済み。emission→spawn→integrate（仕様 §5）、shape/initial/gravity/各 overLifetime/bursts を最小実装
-  - [ ] **P4b**（描画）専用頂点型（pos/uv/color）+ `Particle.fx` + `RenderFrame.particleItems` +
-    `RenderSystem::BuildRenderFrame` での収集 + `Renderer.cpp` 専用パス（`SetBlendModeCommand` で Alpha/Additive）
+  - [x] **P4b**（描画）`ParticleVertex`(pos/uv/color) + `Particle.fx`(手続き円×頂点カラー) + `RenderFrame.particleItems` +
+    `RenderSystem::BuildRenderFrame` での収集 + `Renderer.cpp` 専用パス（`ParticleDrawCommand` が Alpha/Additive を設定）。
+    テクスチャは未使用（§7.4 のパス解決待ち）。Playground.level に `FX_Test` を配置して確認
 - [ ] **P5** overLifetime（color/size/rotation/velocity）+ shape 各種 + bursts + フリップブック +
   StretchedBillboard + 距離ソート
 - [ ] **P6**（任意）Mesh renderer + GPU compute シミュレーション
@@ -198,8 +199,8 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 
 ## 7. 引き継ぎメモ（別PC / 次セッション用）
 
-> 現在ブランチ: `feature/particle`。P3 + **P4a（CPU sim）** まで実装・コミット済み。次は **P4b（描画）**。
-> リファクタ済み: Loader/Data は `aqEngine/Resource/` へ移動し名前空間 `aq::res` に統一。
+> 現在ブランチ: `feature/particle`。P3 + **P4（CPU sim + 描画）** まで実装・コミット済み。次は **P5**。
+> リファクタ済み: Loader/Data は `aqEngine/Resource/` へ移動し `aq::res` に統一。Component/System は `Component/ParticleComponentSystem` に集約。
 
 ### 7.1 実装済み（P3・実在ファイル）
 
@@ -239,19 +240,21 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 - **未着手（P4a 範囲外）**: 描画。simulationSpace は World 前提で保持（Local はエミッタ回転無視）。
   velocityOverLifetime.space も未考慮。フリップブック frame は未計算。
 
-### 7.3b 次の作業（P4b・描画）
+### 7.3b 実装済み（P4b・描画・実在ファイル）
 
-1. 専用頂点型（`position(3)/uv(2)/color(4)` = ワールド空間ビルボード）。`VertexData` は color 非対応のため新設（`UIVertex` が雛形）。
-2. `Game/Assets/Shader/Particle.fx`（`VSMain`/`PSMain`：`b0` に view/proj、`t0` テクスチャ、`PS = tex * color`）。
-   ※エントリは **VSMain/PSMain**、プロファイルは機能レベル自動選択（`main` 固定ではない）。
-3. `RenderFrame` に `std::vector<ParticleRenderItem> particleItems` を追加（ocean/decal と同じ流儀）。
-   `ParticleRenderItem`: 動的VB/IB/vs/ps/texture/sampler/indexCount + `graphics::BlendMode`（Alpha/Additive）。
-4. `RenderSystem::BuildRenderFrame`（`BodyComponentSystem.cpp`）に `Foreach<ParticleEmitterComponent>` を追加し、
-   runtimes からビルボード頂点を CPU 生成 → `particleItems` へ push。CameraData に right/up は無いので `viewMatrix` から抽出。
-5. `Renderer.cpp` に海（`Renderer.cpp:126`）流の専用パスを追加：`SetBlendModeCommand(AlphaBlend/Additive)` で囲んで描画、
-   最後に `Opaque` へ戻す（forward パスは全 Opaque のため）。`particle::BlendMode → graphics::BlendMode` 変換が必要。
-6. `renderer.texture`（Unity `Assets/…`）→ aq リソースパス解決（§7.4）。動的VBは `GraphicsDevice::CreateDynamicVertexBuffer`
-   に任意 stride で直接生成可（`StaticMesh` は `VertexData` stride 固定なので専用管理が無難）。
+- `Rendering/RenderFrame.h` … `ParticleVertex`（pos/uv/color）と `ParticleRenderItem`（動的VB/静的IB/vs/ps/indexCount/additive）、
+  `RenderFrame::particleItems` を追加。
+- `Game/Assets/Shader/Particle.fx` … `VSMain`（`b0` の view/proj で変換、world=Identity）/`PSMain`（uv 距離の柔らかい円 × 頂点カラー）。
+  テクスチャ非依存なので Unity のパス解決を待たず表示できる。
+- `Component/ParticleComponentSystem.{h,cpp}` … `FillParticleItems(out, camRight, camUp)` を追加。エミッタごとに動的VB/静的IB を
+  遅延生成（maxParticles ぶん）、生存粒子をカメラ right/up でクアッド展開（rotation はビュー軸ロール）して VB を更新し
+  `ParticleRenderItem` を積む。shader は `Assets/Shader/Particle.fx` を lazy ロード。
+- `Component/BodyComponentSystem.cpp`（`RenderSystem::BuildRenderFrame`）… `Foreach<ParticleEmitterComponent>` を追加。
+  カメラ右/上は `Camera::GetViewMatrixInverse()` の行（`_11.._13`=right, `_21.._23`=up）から取得。
+- `Rendering/ParticleDrawCommand.{h,cpp}` + `Renderer.cpp` … 海の後・ポストプロセスの前に専用パス。`ParticleDrawCommand` が
+  `OMSetBlendMode(Additive/AlphaBlend)` を自前設定して描画し、最後に `Opaque` へ戻す（forward は Opaque 固定のため）。
+- **未対応（P5 以降）**: テクスチャ（Unity `Assets/…` パス解決＝§7.4）、フリップブック、StretchedBillboard、距離ソート、
+  simulationSpace のエミッタ回転、velocityOverLifetime.space。サンプルは非ループ一発なのでレベル読み込み時に一度だけ再生。
 
 ### 7.4 未決（P4 で判断が要る）
 

@@ -156,9 +156,9 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 
 - [ ] **P1** Assimp 導入 + `FbxLoader::Loading()` 実装（static mesh）→ .fbx 表示
 - [ ] **P2** スキン/アニメの FBX 対応（`SkeletalMeshResource` / bone / anim）
-- [ ] **P3** `.particle` v1 の受け皿：`ParticleTypes`（ScalarValue/LUT/enum）+ `ParticleSystemData` +
+- [x] **P3**（2026-07-07 実装）`.particle` v1 の受け皿：`ParticleTypes`（ScalarValue/LUT/enum）+ `ParticleSystemData` +
   `ParticleLoader`（SimpleJson パース＋LUT 焼き込み）+ `AqParticleExporter.cs` + `sample/FX_Explosion.particle`。
-  マイルストン：サンプルをロードして焼き込み結果をインスペクタ確認
+  Engine.vcxproj/.filters・Application.cpp 登録済み。マイルストンの実ロード確認は P4 のインスペクタで行う
 - [ ] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim・仕様 §5 準拠）+ ビルボード
   forward 描画（Alpha/Additive）。フリップブック/ストレッチ/overLifetime は最小。マイルストン：Sparks/Smoke が出る
 - [ ] **P5** overLifetime（color/size/rotation/velocity）+ shape 各種 + bursts + フリップブック +
@@ -191,3 +191,46 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 | `Game/Assets/Shader/Particle.fx`（配置は要確認） | パーティクル VS/PS |
 | `Unity/Editor/AqParticleExporter.cs` | Unity 側エクスポータ |
 | `aqEngine/Particle/sample/FX_Explosion.particle` | ローダーテスト用サンプル |
+
+
+## 7. 引き継ぎメモ（別PC / 次セッション用）
+
+> 現在ブランチ: `feature/particle`。P3 まで実装・コミット済み。次は **P4**。
+
+### 7.1 実装済み（P3・実在ファイル）
+
+- `aqEngine/Particle/ParticleTypes.h` … 焼き込み済みデータ型。`ScalarValue::Evaluate(lutBase, t, r)`（4モード統一）、
+  `SampleLut`、`ColorValue`、各モジュール構造体、`EmitterData`（`curveLutPool` を所有）、`RandomItem` enum
+- `aqEngine/Particle/ParticleSystemData.h` … `aq::res::ResourceBase` 派生のイミュータブルリソース。`GetEmitter(i)` 等
+- `aqEngine/Particle/ParticleLoader.h/.cpp` … `Loading()` で JSON パース＋Hermite→64サンプル LUT 焼き込み。`version==1` 検証
+- `aqEngine/Particle/sample/FX_Explosion.particle` … Sparks+Smoke 2エミッタ
+- `Unity/Editor/AqParticleExporter.cs` … `Tools > aqEngine > Export ParticleSystem`
+- 登録: `Engine.vcxproj`/`.filters`（`ParticleTypes.h`→Particle フィルタ、他→Resource フィルタ）、
+  `Game/Application/Application.cpp`（`RegisterBank` + `Reflection`）
+- 使い方: `aq::res::ResourceManager::Get().Load<aq::particle::ParticleSystemData>("path/xxx.particle")`
+
+### 7.2 ビルド上の注意（別PCでも同じはず）
+
+- **デスクトップ（Debug/x64）構成は既存の依存 `DirectXTex\DirectXTex.h` 未配置だとリンク前に失敗する**
+  （この環境は `packages/directxtex_uwp.*` のみ）。P3 コードとは無関係。UWP/Xbox 構成、または
+  desktop 版 DirectXTex を配置した環境でフルビルドすること。
+- 新規 C++ ファイルは他の engine ファイルに合わせ **UTF-8 BOM 付き**（`.particle` は仕様 §2 で BOM なし）。
+- `ParticleTypes.h` 単体は cl.exe で構文コンパイル通過確認済み（LUT/Evaluate ロジック）。
+
+### 7.3 次の作業（P4）
+
+1. `aqEngine/Particle/ParticleRandom.h` … `Hash(seed ^ RandomItem)` ヘルパ（仕様 §5）
+2. `aqEngine/Particle/ParticleEmitterComponent.h/.cpp` … `ecsComponent`。SoA プール
+   （`position/velocity/age/lifetime/seed/initialSize/initialColor/rotation`、`maxParticles` 確保・swap-remove）＋
+   再生状態（`playbackTime/emitAccumulator/aliveCount`）
+3. `aqEngine/Particle/ParticleSystem.h/.cpp` … `ecs::SystemBase`。更新順序は本書 §3.4（＝仕様 §5）に従う：
+   emission → spawn（`Evaluate(emitterNormT_spawn, r)`）→ integrate（`u=age/lifetime`）→ ビルボード生成 → `RenderFrame.forwardItems`
+4. `Particle.fx`（VS/PS）＋ `SetBlendModeCommand` で Alpha/Additive。動的VBは `StaticMesh::UpdateVertices` 流用
+5. `RandomItem` の項目網羅を確定（TwoConstants/TwoCurves を持つ全項目）
+6. 追加ファイルは [vs-project-files] 規約で登録（`ParticleRandom.h`/コンポーネント/システム→**Particle フィルタ**）
+
+### 7.4 未決（P4 で判断が要る）
+
+- `renderer.texture` の Unity `Assets/…` → aq リソースパス解決（仕様 §7.10、本書 §5 TODO）
+- バーストのループ折り返し発火の取りこぼし（仕様 §7.3）
+- simulationSpace=Local/World の保持空間と描画変換の扱い（本書 §3.4）

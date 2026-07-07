@@ -1,6 +1,9 @@
-# FBX 読み込み・ParticleSystem 導入 設計（メモ・初版）
+# FBX 読み込み・ParticleSystem 導入 設計（メモ・第2版）
 
-> 対象コミット: 586d40b / 最終更新: 2026-07-06
+> 対象コミット: 7c6e081 / 最終更新: 2026-07-07
+>
+> Particle 側は [particleフォーマット仕様v1.md](particleフォーマット仕様v1.md) が一次資料（フォーマットは同書が正）。
+> 本書はそれを **どう実装に落とすか**（データ表現・ランタイム・描画・フェーズ）を決める設計メモ。
 
 > Unity で作成した **FBX モデル**と **ParticleSystem** を本エンジン（aq）で使えるようにする。
 > 既存の Sprite 描画（UIBatchRenderer）とモデル描画（StaticMesh / SkeletalMesh → RenderFrame）
@@ -57,68 +60,134 @@
 3. `.fbx` 拡張子を `Reflection<MeshResource, FbxLoader>()` に振り分け → [StaticMeshComponent::SetModelPath](../Component/BodyComponentSystem.h#L94) からそのまま使用可。
 4. プラットフォーム: PC 限定 `#if !defined(AQ_PLATFORM_UWP)` でランタイム直読み。UWP 出荷は TKM 変換を維持。
 
-## 3. ParticleSystem 対応（Unity 風・JSON エクスポート方式）
+## 3. ParticleSystem 対応（`.particle` v1 準拠）
 
-### 3.1 パイプライン
+### 3.1 パイプライン（仕様 §1）
 
 ```
 Unity ParticleSystem
-   │  C# エクスポータ（1本自作 / モジュール値をリフレクションで書き出し）
+   │  Unity/Editor/AqParticleExporter.cs（Tools > aqEngine > Export ParticleSystem）
    ▼
-xxx.particle（独自 JSON / Unity モジュールをミラー）
-   │  SimpleJson でロード
+xxx.particle（.particle v1 / SimpleJson でパース）
+   │  ParticleLoader：JSON → 焼き込み（カーブ/グラデを LUT 化）
    ▼
-ParticleSystemData（リソース）
+ParticleSystemData（イミュータブルなリソース。実行時はカーブ評価ゼロ）
    │  ParticleEmitterComponent が参照
    ▼
 ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → RenderFrame.forwardItems
 ```
 
-### 3.2 データ層 `ParticleSystemData`（リソース）
+### 3.2 仕様が設計を規定する3つの要点
 
-Unity のモジュールをミラーする。取り込む主な値:
+再考の核。仕様 v1 から確定した実装方針。
 
-- **Main**: duration / loop / startLifetime / startSpeed / startSize / startColor /
-  gravityModifier / maxParticles / simulationSpace（Local/World）
-- **Emission**: rateOverTime / bursts
-- **Shape**: Cone / Sphere / Box / Circle（生成位置・初速方向）
-- **over Lifetime**: velocity / color（グラデーション）/ size / rotation（カーブ）
-- **Renderer**: Billboard / Stretched / Mesh、テクスチャパス、blend（Additive / Alpha）
+1. **ロード時に LUT へ焼き込む（仕様 §4.2/§4.4）。**
+   Curve/TwoCurves は 64 サンプル float LUT（multiplier 込み）、Gradient は 64 サンプル RGBA LUT。
+   ステップキー（`|tangent| >= 1e18`）と `±1e30`（Infinity 置換）も焼き込み時に処理。
+   → **実行時はエルミート評価も JSON も触らない**。ホットループは配列参照＋線形補間のみ。
+2. **時間軸・乱数の二系統（仕様 §5）。** カーブ横軸 `t` は項目で異なる：
+   - **エミッタ正規化時間** `emitterNormT = (経過 - startDelay) を duration で正規化`
+     … `initial.*`（生成時サンプル）/ `gravityModifier`（毎フレーム）/ `rateOverTime`（毎フレーム）
+   - **粒子正規化年齢** `age/lifetime`（0〜1）… `*OverLifetime` / `frameOverTime`
+   乱数 `r` は **粒子ごと 32bit シード1個**を持ち、項目別に `Hash(seed ^ 項目ID) / UINT32_MAX`
+   で導出（項目間の相関を断つ）。項目 ID は `enum class ParticleRandomItem` で列挙する。
+3. **ScalarValue は統一型（仕様 §4.1）。** Constant / TwoConstants / Curve / TwoCurves を
+   1 つの評価関数 `Evaluate(t, r)` に集約：
+   - Constant → `a`
+   - TwoConstants → `lerp(a, b, r)`
+   - Curve → `SampleLUT(lutMin, t)`（multiplier 焼き込み済み）
+   - TwoCurves → `lerp(SampleLUT(lutMin, t), SampleLUT(lutMax, t), r)`
+   LUT は `ParticleSystemData` 所有の float プール（`std::vector<float>`）に連結配置し、
+   ScalarValue は `{ mode, a, b, lutMinOffset, lutMaxOffset }` の軽量タグ付き構造体にする
+   （定数がメモリを食わず、Curve 系はオフセット参照）。
 
-> カーブ/グラデーションは Unity の `AnimationCurve` / `Gradient` をキーポイント配列で JSON 化 →
-> エンジン側で線形/エルミート評価。
+### 3.3 データ層 `ParticleSystemData`（リソース・イミュータブル）
 
-### 3.3 ランタイム層（ECS）
+仕様 §6/§7 の構造をそのまま保持（焼き込み後）。
 
-- `ParticleEmitterComponent`: アセット参照 + 実行時パーティクル（SoA: position/velocity/life/size/color/rotation）
-  + emit アキュムレータ + 再生時刻。既存 `StaticMeshComponent` と同流儀。
-- `ParticleSystem`（`ecs::SystemBase`）の `Update()`:
-  1. Emit（rate + burst、shape から初期 pos/vel）
-  2. Integrate（velocity・gravity・over-lifetime カーブ、寿命減算、死んだ粒の除去）
-  3. ビルボード頂点生成 → `RenderItem` を組み `RenderFrame.forwardItems` へ push
-- **CPU シミュレーション先行**（既存の CPU 駆動設計に一致）。後で compute/UAV
-  （`IsComputeSupported()` ゲート）へ拡張可能。
-- スレッド境界（[../../設計書/05_マルチスレッド設計.md](../../設計書/05_マルチスレッド設計.md)）: sim=ゲームスレッド、
-  GPU リソース生成=メイン、描画=レンダースレッド消費。
+- ルート: `name` / `warnings`（ツール表示用に保持）/ `emitters[]`
+- エミッタ: 基本（duration・looping・startDelay・maxParticles・simulationSpace・gravityModifier）
+  + `initial` / `emission` / `shape` / `velocityOverLifetime` / `colorOverLifetime` /
+  `sizeOverLifetime` / `rotationOverLifetime` / `textureSheetAnimation` / `renderer`
+- カーブ/グラデは LUT オフセットで保持（§3.2-1）。`version != 1` はロードエラー、未知キーは無視。
 
-### 3.4 描画層（ビルボード）
+### 3.4 ランタイム層（ECS）
 
-- `CameraData` の right/up でクアッド展開、動的VBを毎フレーム更新（既存 `UpdateVertices` 流用）。
-- `Particle.fx`（VS: 変換 / PS: texture × color）を追加。Additive/Alpha は `SetBlendModeCommand`。
-- Alpha ブレンドは視点距離ソートが必要（Additive は不要）。
+- `ParticleEmitterComponent`（エミッタ 1 つにつき生成。または内部で N エミッタを配列保持）：
+  - アセット参照 `RefParticleSystemResource`
+  - **SoA プール**（`maxParticles` で確保・swap-remove で圧縮）：
+    `position[3] / velocity[3] / age / lifetime / seed(uint32) / initialSize / initialColor(RGBA) / rotation`
+  - 再生状態：`playbackTime / emitAccumulator / aliveCount`、バースト発火済みフラグ
+  - エミッタの原点は `HierarchicalTransformComponent` から取得（simulationSpace で解釈を変える）
+- `ParticleSystem`（`ecs::SystemBase`）`Update()` の **順序（仕様 §5 準拠）**：
+  1. `playbackTime += dt`、`emitterNormT` 算出（!looping はクランプ、looping は folding）
+  2. **Emission**：`emitAccumulator += rateOverTime.Evaluate(emitterNormT) * dt`、`floor` 個 spawn。
+     bursts は時刻交差で発火（**ループ折り返しを跨ぐフレームの取りこぼしに注意**＝仕様 §7.3 の警告）
+  3. **Spawn**：shape から pos/dir、`initial.*` を `Evaluate(emitterNormT_spawn, r_item)` で確定し
+     `lifetime/initialSize/initialColor/rotation/velocity(=dir*speed)/seed` を格納
+  4. **Integrate**（生存粒子ごと、`u = age/lifetime`）：
+     `age += dt` → 寿命超過は kill；
+     `velocity += gravityDir * 9.81 * gravityModifier.Evaluate(emitterNormT) * dt`；
+     velocityOverLifetime（Local/World）加算 → `position += velocity * dt`；
+     `size = initialSize * sizeOverLifetime.Evaluate(u)`；
+     `color = initialColor * colorGradientLUT(u)`；
+     `rotation += rotationOverLifetime.Evaluate(u) * dt`；
+     フリップブック frame（§3.5）
+  5. **描画データ生成** → `RenderItem` を `RenderFrame.forwardItems` へ push
+- `simulationSpace`：Local = 粒子をエミッタローカルで保持し描画時にワールド変換／
+  World = ワールドで保持しエミッタ移動に追従しない。gravity/velocity の適用空間もこれに従う。
+- **CPU シミュレーション先行**（既存 CPU 駆動設計に一致）。将来 compute/UAV
+  （`IsComputeSupported()` ゲート）へ。スレッド境界（[../../設計書/05_マルチスレッド設計.md](../../設計書/05_マルチスレッド設計.md)）：
+  sim=ゲームスレッド、GPU リソース生成=メイン、描画=レンダースレッド消費。
+
+### 3.5 描画層（ビルボード / フリップブック / ストレッチ）
+
+- 頂点：`position / uv（フリップブック小矩形）/ color(RGBA)`。`CameraData` の right/up で
+  クアッド展開し、`rotation` はビュー軸まわりのロール。動的VBを毎フレーム更新（既存 `UpdateVertices` 流用）。
+- `Particle.fx`（VS: 変換 / PS: texture × color）を追加。blend は `SetBlendModeCommand`
+  （Alpha / Additive）。**Alpha かつ sortMode=ByDistance のみ視点距離降順ソート**（Additive は不要）。
+- フリップブック UV（仕様 §7.9）：`frame = floor(startFrame + frameOverTime(u)*tilesX*tilesY*cycles) % 総数`、
+  左上原点・行優先で小矩形 UV を算出。
+- StretchedBillboard は velocity 方向＋`lengthScale`/`speedScale` で伸長。Mesh は P6（それまで Billboard 降格）。
+- **テクスチャ解決**：`renderer.texture` は Unity の `Assets/` 相対。aq リソースパスへの対応付けは
+  未決（§5 TODO）。
 
 ## 4. フェーズ計画
 
 - [ ] **P1** Assimp 導入 + `FbxLoader::Loading()` 実装（static mesh）→ .fbx 表示
 - [ ] **P2** スキン/アニメの FBX 対応（`SkeletalMeshResource` / bone / anim）
-- [ ] **P3** `ParticleSystemData` + `.particle` JSON ローダー + Unity C# エクスポータ
-- [ ] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim）+ ビルボード forward 描画
-- [ ] **P5** over-lifetime カーブ / shape / burst / アルファ距離ソート
-- [ ] **P6**（任意）GPU compute シミュレーション
+- [ ] **P3** `.particle` v1 の受け皿：`ParticleTypes`（ScalarValue/LUT/enum）+ `ParticleSystemData` +
+  `ParticleLoader`（SimpleJson パース＋LUT 焼き込み）+ `AqParticleExporter.cs` + `sample/FX_Explosion.particle`。
+  マイルストン：サンプルをロードして焼き込み結果をインスペクタ確認
+- [ ] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim・仕様 §5 準拠）+ ビルボード
+  forward 描画（Alpha/Additive）。フリップブック/ストレッチ/overLifetime は最小。マイルストン：Sparks/Smoke が出る
+- [ ] **P5** overLifetime（color/size/rotation/velocity）+ shape 各種 + bursts + フリップブック +
+  StretchedBillboard + 距離ソート
+- [ ] **P6**（任意）Mesh renderer + GPU compute シミュレーション
 
 ## 5. 未確認・TODO
 
 - [ ] Assimp の UWP/Xbox ビルド可否（現状は PC 限定前提）。
 - [ ] TKM/TKA と FBX 直読みの座標系・スケール差（Unity は左手Y-up・cm 単位）の吸収方針。
-- [ ] Unity C# エクスポータの出力スキーマ確定（`AnimationCurve`/`Gradient` の表現）。
-- [ ] パーティクルのメッシュ描画モード（Mesh renderer）を初版に含めるか。
+- [ ] **テクスチャ/メッシュのパス解決規約**（仕様 §7.10）：Unity `Assets/xxx` → aq リソースパスの
+  対応付け（エクスポータでリライトするか、マニフェストを持つか）。
+- [ ] LUT サンプル数 64 の妥当性（急峻カーブ）。ステップは別処理なので当面 64 で進める。
+- [ ] Gradient LUT のフォーマット（RGBA8 かハーフ float か：メモリ vs バンディング）。
+- [ ] バーストのループ折り返し発火の取りこぼし対策（仕様 §7.3）。
+- [ ] `ParticleRandomItem`（項目 ID）列挙の確定（TwoConstants/TwoCurves を持つ全項目）。
+
+## 6. 新規ファイル（P3/P4）
+
+いずれも追加時は [vs-project-files] 規約に従い vcxproj / GameSources.props / filters へ登録（フィルタ配置は要確認）。
+
+| ファイル | 役割 |
+|---|---|
+| `aqEngine/Particle/ParticleTypes.h` | ScalarValue / Curve LUT / Gradient LUT / `ParticleRandomItem` / 各モジュール構造体 |
+| `aqEngine/Particle/ParticleSystemData.h/.cpp` | イミュータブルなリソース（焼き込み済み）＋アクセサ |
+| `aqEngine/Particle/ParticleLoader.h/.cpp` | `ResourceLoaderBase` 実装。SimpleJson パース＋LUT 焼き込み。bank/reflection 登録 |
+| `aqEngine/Particle/ParticleRandom.h` | シード→ハッシュ、`Hash(seed ^ 項目ID)` ヘルパ |
+| `aqEngine/Particle/ParticleEmitterComponent.h/.cpp` | ECS コンポーネント（SoA プール・再生状態） |
+| `aqEngine/Particle/ParticleSystem.h/.cpp` | `ecs::SystemBase` の更新＋ビルボード生成 |
+| `Game/Assets/Shader/Particle.fx`（配置は要確認） | パーティクル VS/PS |
+| `Unity/Editor/AqParticleExporter.cs` | Unity 側エクスポータ |
+| `aqEngine/Particle/sample/FX_Explosion.particle` | ローダーテスト用サンプル |

@@ -3,6 +3,8 @@
 #include "Particle/ParticleRandom.h"
 #include "Resource/Resource.h"
 #include "Component/HierarchicalTransformComponent.h"
+#include "Graphics/GraphicsDevice.h"
+#include "Graphics/IShader.h"
 #include <algorithm>
 #include <cmath>
 
@@ -304,6 +306,7 @@ namespace aq
 
 		void ParticleEmitterComponent::Simulate(float dt, const aq::math::Vector3& worldOrigin)
 		{
+			lastWorldOrigin_ = worldOrigin;
 			if (state_ != State::Ready) {
 				EnsureRuntimes();
 				if (state_ != State::Ready) return;
@@ -311,6 +314,101 @@ namespace aq
 			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
 			for (size_t i = 0; i < emitters.size() && i < runtimes_.size(); ++i)
 				StepEmitter(runtimes_[i], emitters[i], dt, worldOrigin, playing_);
+		}
+
+
+		bool ParticleEmitterComponent::EnsureShaders()
+		{
+			auto& rm = aq::res::ResourceManager::Get();
+			if (!particleVs_)
+				particleVs_ = rm.LoadShader("Assets/Shader/Particle.fx", "VSMain", graphics::IShader::ShaderType::VS);
+			if (!particlePs_)
+				particlePs_ = rm.LoadShader("Assets/Shader/Particle.fx", "PSMain", graphics::IShader::ShaderType::PS);
+			return particleVs_ && particleVs_->IsCompleted() && particleVs_->GetShader()
+			    && particlePs_ && particlePs_->IsCompleted() && particlePs_->GetShader();
+		}
+
+
+		void ParticleEmitterComponent::EnsureBuffers(ParticleEmitterRenderState& rs, uint32_t quadCap)
+		{
+			if (rs.vb && rs.ib && rs.quadCapacity >= quadCap) return;
+			if (quadCap == 0) return;
+
+			const uint32_t vtxCount = quadCap * 4u;
+			std::vector<aq::rendering::ParticleVertex> zero(vtxCount);
+			rs.vb = graphics::GraphicsDevice::Get().CreateDynamicVertexBuffer(
+				vtxCount, static_cast<uint32_t>(sizeof(aq::rendering::ParticleVertex)), zero.data());
+
+			std::vector<uint32_t> idx;
+			idx.reserve(quadCap * 6u);
+			for (uint32_t q = 0; q < quadCap; ++q) {
+				const uint32_t b = q * 4u;
+				idx.push_back(b + 0); idx.push_back(b + 1); idx.push_back(b + 2);
+				idx.push_back(b + 2); idx.push_back(b + 1); idx.push_back(b + 3);
+			}
+			rs.ib = graphics::GraphicsDevice::Get().CreateIndexBuffer(
+				static_cast<uint32_t>(idx.size()), idx.data());
+
+			rs.quadCapacity = quadCap;
+		}
+
+
+		void ParticleEmitterComponent::FillParticleItems(
+			std::vector<aq::rendering::ParticleRenderItem>& out,
+			const aq::math::Vector3& camRight,
+			const aq::math::Vector3& camUp)
+		{
+			if (state_ != State::Ready) return;
+			if (!EnsureShaders()) return;
+
+			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
+			if (renderStates_.size() != runtimes_.size())
+				renderStates_.resize(runtimes_.size());
+
+			std::vector<aq::rendering::ParticleVertex> verts;
+			for (size_t i = 0; i < runtimes_.size() && i < emitters.size(); ++i) {
+				ParticleEmitterRuntime& rt = runtimes_[i];
+				if (rt.aliveCount == 0) continue;
+
+				const EmitterData& e = emitters[i];
+				const bool world = (e.simulationSpace == SimulationSpace::World);
+				ParticleEmitterRenderState& rs = renderStates_[i];
+				EnsureBuffers(rs, static_cast<uint32_t>(rt.position.size()));
+				if (!rs.vb || !rs.ib) continue;
+
+				verts.clear();
+				verts.reserve(rt.aliveCount * 4u);
+				for (uint32_t p = 0; p < rt.aliveCount; ++p) {
+					const aq::math::Vector3 wpos = world ? rt.position[p]
+					                                     : (lastWorldOrigin_ + rt.position[p]);
+					const float h   = rt.size[p] * 0.5f;
+					const float rad = rt.rotation[p] * DEG2RAD;
+					const float cs  = std::cos(rad);
+					const float sn  = std::sin(rad);
+					const aq::math::Vector3 r = (camRight * cs + camUp * sn) * h;   // 回転後の右半径
+					const aq::math::Vector3 u = (camUp * cs - camRight * sn) * h;   // 回転後の上半径
+					const aq::math::Vector4& c = rt.color[p];
+
+					aq::rendering::ParticleVertex v;
+					v.color = c;
+					v.position = wpos - r - u; v.uv = aq::math::Vector2(0.0f, 0.0f); verts.push_back(v);
+					v.position = wpos + r - u; v.uv = aq::math::Vector2(1.0f, 0.0f); verts.push_back(v);
+					v.position = wpos - r + u; v.uv = aq::math::Vector2(0.0f, 1.0f); verts.push_back(v);
+					v.position = wpos + r + u; v.uv = aq::math::Vector2(1.0f, 1.0f); verts.push_back(v);
+				}
+
+				rs.vb->Update(verts.data(),
+					static_cast<uint32_t>(verts.size() * sizeof(aq::rendering::ParticleVertex)));
+
+				aq::rendering::ParticleRenderItem item;
+				item.vertexBuffer = rs.vb;
+				item.indexBuffer  = rs.ib;
+				item.vs = std::shared_ptr<graphics::IShader>(particleVs_, particleVs_->GetShader());
+				item.ps = std::shared_ptr<graphics::IShader>(particlePs_, particlePs_->GetShader());
+				item.indexCount = rt.aliveCount * 6u;
+				item.additive   = (e.renderer.blendMode == BlendMode::Additive);
+				out.push_back(std::move(item));
+			}
 		}
 
 

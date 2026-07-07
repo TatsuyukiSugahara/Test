@@ -343,6 +343,7 @@
     <ClCompile Include="UI\Font\TextLayout.cpp" />
     <ClCompile Include="Component\OceanComponent.cpp" />
     <ClCompile Include="Rendering\OceanDrawCommand.cpp" />
+    <ClCompile Include="Rendering\ParticleDrawCommand.cpp" />
     <ClCompile Include="Util\SimpleJson.cpp" />
     <ClCompile Include="UI\UIContext.cpp" />
     <ClCompile Include="UI\UIObject.cpp" />
@@ -584,6 +585,7 @@
     <ClInclude Include="UI\Font\TextLayout.h" />
     <ClInclude Include="Component\OceanComponent.h" />
     <ClInclude Include="Rendering\OceanDrawCommand.h" />
+    <ClInclude Include="Rendering\ParticleDrawCommand.h" />
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h" />
     <ClInclude Include="Rendering\Occlusion\ClusterCull.h" />
     <ClInclude Include="Rendering\Occlusion\GpuClusterCuller.h" />

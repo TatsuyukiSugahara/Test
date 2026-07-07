@@ -572,6 +572,9 @@
     <ClCompile Include="Rendering\OceanDrawCommand.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\ParticleDrawCommand.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
     <ClCompile Include="Util\SimpleJson.cpp">
       <Filter>Util</Filter>
     </ClCompile>
@@ -1223,6 +1226,9 @@
       <Filter>Component</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\OceanDrawCommand.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\ParticleDrawCommand.h">
       <Filter>Rendering</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h">

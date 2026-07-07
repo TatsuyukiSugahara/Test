@@ -2,6 +2,7 @@
 #include "BodyComponentSystem.h"
 #include "Component/TerrainComponent.h"
 #include "Component/DecalComponent.h"
+#include "Component/ParticleComponentSystem.h"
 #include "Component/InstancedStaticMeshComponentSystem.h"
 #include "Component/InstancedPointListComponentSystem.h"
 #include "Rendering/Occlusion/IOcclusionTester.h"
@@ -716,6 +717,19 @@ namespace aq
 						frame.decalItems.push_back(item);
 					}
 				});
+
+			// パーティクル収集 (カメラ向きビルボードを CPU 生成)。
+			// カメラの右/上ワールドベクトルは逆ビュー行列の行から取る。
+			{
+				const math::Matrix4x4& invView = camera->GetViewMatrixInverse();
+				const math::Vector3 camRight(invView._11, invView._12, invView._13);
+				const math::Vector3 camUp   (invView._21, invView._22, invView._23);
+				aq::ecs::Foreach<ParticleEmitterComponent>(
+					[&frame, &camRight, &camUp](const aq::ecs::Entity&, ParticleEmitterComponent* emitter)
+					{
+						emitter->FillParticleItems(frame.particleItems, camRight, camUp);
+					});
+			}
 
 			// メインカメラのカリング統計を記録 (デバッグ表示用)
 			if (cameraType == CameraType::Main)

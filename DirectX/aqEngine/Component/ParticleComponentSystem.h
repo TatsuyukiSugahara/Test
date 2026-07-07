@@ -6,6 +6,7 @@
 #include "ECS/System.h"
 #include "Math/Vector.h"
 #include "Resource/ParticleSystemData.h"
+#include "Rendering/RenderFrame.h"
 
 
 namespace aq
@@ -48,6 +49,19 @@ namespace aq
 
 
 		/**
+		 * エミッタ 1 本ぶんの描画用 GPU リソース。
+		 * 動的 VB (今フレームのビルボード頂点) と静的 IB (クアッドインデックス) を
+		 * maxParticles ぶん確保して使い回す。
+		 */
+		struct ParticleEmitterRenderState
+		{
+			std::shared_ptr<graphics::IVertexBuffer> vb;
+			std::shared_ptr<graphics::IIndexBuffer>  ib;
+			uint32_t quadCapacity = 0;   // vb/ib が確保しているクアッド数
+		};
+
+
+		/**
 		 * パーティクルエミッタ コンポーネント。
 		 *
 		 * `.particle` アセット (aq::res::ParticleSystemData) を参照し、その全エミッタを
@@ -71,6 +85,12 @@ namespace aq
 			aq::res::RefParticleSystemResource asset_;
 			std::vector<ParticleEmitterRuntime> runtimes_;
 			bool                              playing_ = true;
+			aq::math::Vector3                 lastWorldOrigin_;   // Local エミッタの描画基点 (Simulate で更新)
+
+			// 描画用 (遅延生成)
+			std::vector<ParticleEmitterRenderState> renderStates_;
+			aq::res::RefShaderResource        particleVs_;
+			aq::res::RefShaderResource        particlePs_;
 
 		public:
 			ParticleEmitterComponent() = default;
@@ -90,6 +110,15 @@ namespace aq
 			 * worldOrigin は同居する HTC のワールド位置。ロード未完了なら何もしない。
 			 */
 			void Simulate(float dt, const aq::math::Vector3& worldOrigin);
+
+			/**
+			 * 生存粒子からカメラ向きビルボードを生成し、動的 VB を更新して
+			 * ParticleRenderItem を out へ積む (RenderSystem::BuildRenderFrame から)。
+			 * camRight/camUp はワールド空間のカメラ右/上ベクトル。
+			 */
+			void FillParticleItems(std::vector<aq::rendering::ParticleRenderItem>& out,
+			                       const aq::math::Vector3& camRight,
+			                       const aq::math::Vector3& camUp);
 
 			/** 描画側が参照する読み取り用アクセサ。 */
 			const aq::res::ParticleSystemData*        GetAsset()    const { return asset_.get(); }
@@ -130,6 +159,10 @@ namespace aq
 		private:
 			/** asset ロード完了後に runtimes_ を構築する。 */
 			void EnsureRuntimes();
+			/** Particle.fx の VS/PS をロードし、使用可能なら true。 */
+			bool EnsureShaders();
+			/** rs の VB/IB を quadCap ぶん (未確保/不足時のみ) 生成する。 */
+			void EnsureBuffers(ParticleEmitterRenderState& rs, uint32_t quadCap);
 		};
 
 

@@ -3,6 +3,8 @@
 #include "DrawItemCommand.h"
 #include "InstancedDrawItemCommand.h"
 #include "OceanDrawCommand.h"
+#include "ParticleDrawCommand.h"
+#include "SetBlendModeCommand.h"
 #include "FrameContext.h"
 #include "Occlusion/ClusterCull.h"
 #include "Occlusion/GpuClusterCuller.h"
@@ -129,6 +131,16 @@ namespace aq
 				for (const OceanRenderItem& item : frame.oceanItems) {
 					outList.Enqueue<OceanDrawCommand>(item, frame.camera);
 				}
+			}
+
+			// Pass 4.5: パーティクル (半透明ビルボード)。
+			// フォワード/海は Opaque のため、各コマンドが自前で AlphaBlend/Additive を設定する。
+			// 後続パス (ポストプロセス/UI) のために最後に Opaque へ戻す。
+			for (const ParticleRenderItem& item : frame.particleItems) {
+				outList.Enqueue<ParticleDrawCommand>(item, frame.camera);
+			}
+			if (!frame.particleItems.empty()) {
+				outList.Enqueue<SetBlendModeCommand>(graphics::BlendMode::Opaque);
 			}
 
 			// Pass 5: ポストプロセス (compute 非対応では Bloom が動かないのでスキップ)

@@ -151,6 +151,31 @@ namespace aq
 		};
 
 
+		/** パーティクルビルボード頂点 (CPU 展開・ワールド空間)。 */
+		struct ParticleVertex
+		{
+			math::Vector3 position;   // ワールド座標
+			math::Vector2 uv;         // クアッド内 [0,1]
+			math::Vector4 color;      // RGBA (over-lifetime 評価済み)
+		};
+
+
+		/**
+		 * パーティクル描画 1 エミッタ分。生存粒子ぶんのビルボードを 1 ドローで出す。
+		 * vertexBuffer は今フレームの頂点を書き込み済みの動的 VB、indexBuffer は
+		 * 静的なクアッドインデックス。blend は additive で切り替える。
+		 */
+		struct ParticleRenderItem
+		{
+			std::shared_ptr<graphics::IVertexBuffer> vertexBuffer;
+			std::shared_ptr<graphics::IIndexBuffer>  indexBuffer;
+			std::shared_ptr<graphics::IShader>       vs;
+			std::shared_ptr<graphics::IShader>       ps;
+			uint32_t indexCount = 0;
+			bool     additive   = false;   // true=Additive, false=AlphaBlend
+		};
+
+
 		/**
 		 * One frame's rendering snapshot.
 		 * Built by the game thread; consumed by Renderer / RenderThread.
@@ -165,8 +190,9 @@ namespace aq
 			std::vector<OceanRenderItem> oceanItems;   // 海描画用
 			std::vector<DecalRenderItem> decalItems;   // 投影デカール (GBuffer へ書き戻し)
 			std::vector<InstancedRenderItem> instancedItems;  // インスタンス描画 (forward)
+			std::vector<ParticleRenderItem>  particleItems;   // パーティクル (半透明ビルボード)
 
-			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); decalItems.clear(); instancedItems.clear(); }
+			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); decalItems.clear(); instancedItems.clear(); particleItems.clear(); }
 		};
 	}
 }

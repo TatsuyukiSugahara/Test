@@ -431,11 +431,8 @@
     <ClCompile Include="Physics\CharacterController.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="Particle\ParticleEmitterComponent.cpp">
-      <Filter>Particle</Filter>
-    </ClCompile>
-    <ClCompile Include="Particle\ParticleSystem.cpp">
-      <Filter>Particle</Filter>
+    <ClCompile Include="Component\ParticleComponentSystem.cpp">
+      <Filter>Component</Filter>
     </ClCompile>
     <ClCompile Include="Resource\ParticleLoader.cpp">
       <Filter>Resource</Filter>
@@ -1156,11 +1153,8 @@
     <ClInclude Include="Particle\ParticleRandom.h">
       <Filter>Particle</Filter>
     </ClInclude>
-    <ClInclude Include="Particle\ParticleEmitterComponent.h">
-      <Filter>Particle</Filter>
-    </ClInclude>
-    <ClInclude Include="Particle\ParticleSystem.h">
-      <Filter>Particle</Filter>
+    <ClInclude Include="Component\ParticleComponentSystem.h">
+      <Filter>Component</Filter>
     </ClInclude>
     <ClInclude Include="Resource\ParticleSystemData.h">
       <Filter>Resource</Filter>

@@ -1,7 +1,8 @@
 ﻿#include "aq.h"
-#include "ParticleEmitterComponent.h"
+#include "ParticleComponentSystem.h"
 #include "Particle/ParticleRandom.h"
 #include "Resource/Resource.h"
+#include "Component/HierarchicalTransformComponent.h"
 #include <algorithm>
 #include <cmath>
 
@@ -24,7 +25,7 @@ namespace aq
 			constexpr float GRAVITY = 9.81f;
 
 
-			/** エミッタ正規化時間 emitterNormT を求める (仕様 §5)。looping は折り返し、非ループはクランプ。 */
+			/** エミッタ正規化時間 emitterNormT を求める。looping は折り返し、非ループはクランプ。 */
 			float NormT(const EmitterData& e, float playbackTime)
 			{
 				float t   = playbackTime - e.startDelay;
@@ -36,7 +37,7 @@ namespace aq
 			}
 
 
-			/** shape から生成位置 (エミッタローカル) と初期方向 (単位) を求める (仕様 §7.4)。 */
+			/** shape から生成位置 (エミッタローカル) と初期方向 (単位) を求める。 */
 			void SampleShape(const ShapeModule& shape, uint32_t seed, Vector3& outPos, Vector3& outDir)
 			{
 				if (!shape.enabled) {
@@ -151,7 +152,7 @@ namespace aq
 			}
 
 
-			/** エミッタ 1 本を dt 秒進める。emission → spawn → integrate の順 (仕様 §5)。 */
+			/** エミッタ 1 本を dt 秒進める。emission → spawn → integrate の順。 */
 			void StepEmitter(ParticleEmitterRuntime& rt, const EmitterData& e,
 			                 float dt, const Vector3& origin, bool playing)
 			{
@@ -310,6 +311,19 @@ namespace aq
 			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
 			for (size_t i = 0; i < emitters.size() && i < runtimes_.size(); ++i)
 				StepEmitter(runtimes_[i], emitters[i], dt, worldOrigin, playing_);
+		}
+
+
+		void ParticleSystem::Update()
+		{
+			const float deltaTime = aq::Engine::GetDeltaTime();
+			aq::ecs::Foreach<ParticleEmitterComponent, HierarchicalTransformComponent>(
+				[deltaTime](const aq::ecs::Entity&,
+				            ParticleEmitterComponent*        emitter,
+				            HierarchicalTransformComponent*  htc)
+				{
+					emitter->Simulate(deltaTime, htc->transform.position);
+				});
 		}
 	}
 }

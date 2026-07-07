@@ -9,7 +9,7 @@ namespace aq
 	{
 		/**
 		 * 32bit 整数ハッシュ (MurmurHash3 fmix32)。
-		 * 粒子シードと項目 ID を混ぜて相関のない乱数列を得るのに使う (仕様 §5)。
+		 * 粒子シードと項目 ID を混ぜて相関のない乱数列を得るのに使う。
 		 */
 		inline uint32_t Hash(uint32_t x)
 		{
@@ -30,7 +30,7 @@ namespace aq
 
 
 		/**
-		 * seed と項目 ID から [0,1) の一様乱数を導出する (仕様 §5)。
+		 * seed と項目 ID から [0,1) の一様乱数を導出する。
 		 * TwoConstants / TwoCurves の補間係数 r に使う。項目間の相関を断つ。
 		 */
 		inline float RandomUnit(uint32_t seed, RandomItem item)

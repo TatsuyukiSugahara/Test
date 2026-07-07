@@ -296,8 +296,7 @@
     <ClCompile Include="Physics\GhostBodyManager.cpp" />
     <ClCompile Include="Physics\BulletGhostNarrowphase.cpp" />
     <ClCompile Include="Physics\CharacterController.cpp" />
-    <ClCompile Include="Particle\ParticleEmitterComponent.cpp" />
-    <ClCompile Include="Particle\ParticleSystem.cpp" />
+    <ClCompile Include="Component\ParticleComponentSystem.cpp" />
     <ClCompile Include="Resource\ParticleLoader.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
     <ClCompile Include="Rendering\DrawItemCommand.cpp" />
@@ -561,8 +560,7 @@
     <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h" />
     <ClInclude Include="Particle\ParticleTypes.h" />
     <ClInclude Include="Particle\ParticleRandom.h" />
-    <ClInclude Include="Particle\ParticleEmitterComponent.h" />
-    <ClInclude Include="Particle\ParticleSystem.h" />
+    <ClInclude Include="Component\ParticleComponentSystem.h" />
     <ClInclude Include="Resource\ParticleSystemData.h" />
     <ClInclude Include="Resource\ParticleLoader.h" />
     <ClInclude Include="Resource\Resource.h" />

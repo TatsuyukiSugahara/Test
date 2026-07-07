@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "ECS/ECS.h"
+#include "ECS/System.h"
 #include "Math/Vector.h"
 #include "Resource/ParticleSystemData.h"
 
@@ -34,7 +35,7 @@ namespace aq
 
 			uint32_t aliveCount = 0;
 
-			// --- 再生状態 (仕様 §5) ---
+			// --- 再生状態 ---
 			float    playbackTime   = 0.0f;   // startDelay 込みの経過秒
 			float    emitAccumulator = 0.0f;  // rateOverTime の端数キャリー
 			float    prevLoopTime   = 0.0f;   // バースト発火のループ折り返し検出用
@@ -129,6 +130,22 @@ namespace aq
 		private:
 			/** asset ロード完了後に runtimes_ を構築する。 */
 			void EnsureRuntimes();
+		};
+
+
+		/**
+		 * パーティクル更新システム。
+		 *
+		 * ParticleEmitterComponent を持つ全エンティティを走査し、同居する
+		 * HierarchicalTransformComponent のワールド位置を原点として CPU
+		 * シミュレーションを 1 フレームぶん進める。
+		 * ワールド変換確定後に走らせるため HierarcicalTransformSystem に依存させること。
+		 * 描画データ生成は RenderSystem::BuildRenderFrame 側が runtimes を読んで行う。
+		 */
+		class ParticleSystem : public aq::ecs::SystemBase
+		{
+		public:
+			void Update() override;
 		};
 	}
 }

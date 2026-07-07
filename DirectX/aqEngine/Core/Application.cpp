@@ -5,7 +5,7 @@
 #include "UI/Input/UIInputSystem.h"
 #include "UI/Rendering/UIBatchRenderer.h"
 #include "Component/AnimationComponentSystem.h"
-#include "Particle/ParticleSystem.h"
+#include "Component/ParticleComponentSystem.h"
 #include "ECS/SpawnSystem.h"
 #include "Util/Profiler.h"
 #include "Rendering/Occlusion/HiZRenderer.h"

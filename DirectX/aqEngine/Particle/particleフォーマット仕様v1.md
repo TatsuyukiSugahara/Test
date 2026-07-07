@@ -255,5 +255,5 @@ Randomize Direction(無視)/ Scaling Mode ≠ Local(Local 扱い)/ Custom Simula
 
 ## 9. サンプル
 
-`sample/FX_Explosion.particle` を参照(Sparks + Smoke の 2 エミッタ。Curve /
+`Game/Assets/Particle/FX_Explosion.particle` を参照(Sparks + Smoke の 2 エミッタ。Curve /
 TwoConstants / Gradient / バースト / フリップブックを網羅したローダーテスト用データ)。

@@ -157,7 +157,7 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 - [ ] **P1** Assimp 導入 + `FbxLoader::Loading()` 実装（static mesh）→ .fbx 表示
 - [ ] **P2** スキン/アニメの FBX 対応（`SkeletalMeshResource` / bone / anim）
 - [x] **P3**（2026-07-07 実装）`.particle` v1 の受け皿：`ParticleTypes`（ScalarValue/LUT/enum）+ `ParticleSystemData` +
-  `ParticleLoader`（SimpleJson パース＋LUT 焼き込み）+ `AqParticleExporter.cs` + `sample/FX_Explosion.particle`。
+  `ParticleLoader`（SimpleJson パース＋LUT 焼き込み）+ `AqParticleExporter.cs` + `Game/Assets/Particle/FX_Explosion.particle`。
   Engine.vcxproj/.filters・Application.cpp 登録済み。マイルストンの実ロード確認は P4 のインスペクタで行う
 - [~] **P4** `ParticleEmitterComponent` + `ParticleSystem`（CPU sim・仕様 §5 準拠）+ ビルボード
   forward 描画（Alpha/Additive）。フリップブック/ストレッチ/overLifetime は最小。マイルストン：Sparks/Smoke が出る
@@ -190,11 +190,10 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 | `aqEngine/Resource/ParticleSystemData.h/.cpp` | イミュータブルなリソース（焼き込み済み）＋アクセサ |
 | `aqEngine/Resource/ParticleLoader.h/.cpp` | `ResourceLoaderBase` 実装。SimpleJson パース＋LUT 焼き込み。bank/reflection 登録 |
 | `aqEngine/Particle/ParticleRandom.h` | シード→ハッシュ、`Hash(seed ^ 項目ID)` ヘルパ |
-| `aqEngine/Particle/ParticleEmitterComponent.h/.cpp` | ECS コンポーネント（SoA プール・再生状態） |
-| `aqEngine/Particle/ParticleSystem.h/.cpp` | `ecs::SystemBase` の更新＋ビルボード生成 |
+| `aqEngine/Component/ParticleComponentSystem.h/.cpp` | ECS コンポーネント（SoA プール・再生状態）＋更新システム（`ecs::SystemBase`）を同居 |
 | `Game/Assets/Shader/Particle.fx`（配置は要確認） | パーティクル VS/PS |
 | `Unity/Editor/AqParticleExporter.cs` | Unity 側エクスポータ |
-| `aqEngine/Particle/sample/FX_Explosion.particle` | ローダーテスト用サンプル |
+| `Game/Assets/Particle/FX_Explosion.particle` | ローダーテスト用サンプル（.particle アセット） |
 
 
 ## 7. 引き継ぎメモ（別PC / 次セッション用）
@@ -208,7 +207,7 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
   `SampleLut`、`ColorValue`、各モジュール構造体、`EmitterData`（`curveLutPool` を所有）、`RandomItem` enum
 - `aqEngine/Resource/ParticleSystemData.h` … `aq::res::ResourceBase` 派生のイミュータブルリソース。`GetEmitter(i)` 等
 - `aqEngine/Resource/ParticleLoader.h/.cpp` … `Loading()` で JSON パース＋Hermite→64サンプル LUT 焼き込み。`version==1` 検証
-- `aqEngine/Particle/sample/FX_Explosion.particle` … Sparks+Smoke 2エミッタ
+- `Game/Assets/Particle/FX_Explosion.particle` … Sparks+Smoke 2エミッタ
 - `Unity/Editor/AqParticleExporter.cs` … `Tools > aqEngine > Export ParticleSystem`
 - 登録: `Engine.vcxproj`/`.filters`（`ParticleTypes.h`→Particle フィルタ、他→Resource フィルタ）、
   `Game/Application/Application.cpp`（`RegisterBank` + `Reflection`）
@@ -225,17 +224,17 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 ### 7.3a 実装済み（P4a・CPU sim・実在ファイル）
 
 - `aqEngine/Particle/ParticleRandom.h` … `Hash(uint32)`（fmix32）＋ `RandomUnit(seed, item/salt)`（仕様 §5）
-- `aqEngine/Particle/ParticleEmitterComponent.h/.cpp` … `aq::ecs::ParticleEmitterComponent`（`IComponent`）。
+- `aqEngine/Component/ParticleComponentSystem.h/.cpp` … `aq::ecs::ParticleEmitterComponent`（`IComponent`）と
+  `aq::ecs::ParticleSystem`（`SystemBase`）を同居（`AnimationComponentSystem` と同じ流儀）。
   エミッタごとに `ParticleEmitterRuntime`（SoA: position/velocity/age/lifetime/seed/initialSize/initialColor/
   rotation/size/color + aliveCount/playbackTime/emitAccumulator/spawnCounter、swap-remove 圧縮）。
-  `SetAsset(path)` で `.particle` を非同期ロード → `IsCompleted` 後に runtimes 構築。`Simulate(dt, worldOrigin)`。
-- `aqEngine/Particle/ParticleSystem.h/.cpp` … `aq::ecs::ParticleSystem`（`SystemBase`）。
+  `SetAsset(path)` で `.particle` を非同期ロード → `IsCompleted` 後に runtimes 構築。`ParticleSystem::Update` は
   `Foreach<ParticleEmitterComponent, HierarchicalTransformComponent>` で `htc->transform.position` を原点に `Simulate`。
 - 更新順序（§3.4／仕様 §5）: emission（rateOverTime）→ bursts → spawn（`Evaluate(emitterNormT, r)`）→
   integrate（`u=age/lifetime`：gravity/velocity/size/color/rotation overLifetime）。
 - 登録: コンポーネント→`ECS/ComponentRegistry.cpp`（`ParticleEmitter`）、システム→`aqEngine/Core/Application.cpp::Register`
   （`AddDependency<ParticleSystem, HierarcicalTransformSystem>` / `AddDependency<RenderSystem, ParticleSystem>`）。
-  `Engine.vcxproj`/`.filters` に Particle フィルタで追加。
+  `Engine.vcxproj`/`.filters` に追加（`ParticleRandom.h`→Particle、`ParticleComponentSystem`→Component フィルタ）。
 - `Vector3`/`Vector4` にスカラー倍・成分積・複合代入演算子を追加（`Math/Vector.h`）。
 - **未着手（P4a 範囲外）**: 描画。simulationSpace は World 前提で保持（Local はエミッタ回転無視）。
   velocityOverLifetime.space も未考慮。フリップブック frame は未計算。

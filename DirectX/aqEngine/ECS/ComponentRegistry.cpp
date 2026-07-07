@@ -5,7 +5,7 @@
 #include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
 #include "Component/DecalComponent.h"
-#include "Particle/ParticleEmitterComponent.h"
+#include "Component/ParticleComponentSystem.h"
 #include "Component/InstancedStaticMeshComponentSystem.h"
 #include "Component/InstancedPointListComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"

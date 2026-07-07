@@ -83,6 +83,21 @@ namespace aq
 					indexBuffer_  = GraphicsDevice::Get().CreateIndexBuffer(
 						pendingMesh_->GetIndicesSize(), pendingMesh_->GetIndices()->data());
 					indexCount_   = pendingMesh_->GetIndicesSize();
+
+					// アルベド未指定なら FBX 等のマテリアルからテクスチャを自動取得する。
+					if (!albedoResource_ && pendingMesh_->HasTexturePath()) {
+						albedoResource_ = aq::res::ResourceManager::Get().Load<aq::res::GPUResource>(
+							pendingMesh_->GetTexturePath().c_str());
+					}
+					// テクスチャがあるのにサンプラー未作成なら作る。
+					if (albedoResource_ && !sampler_) {
+						SamplerDesc desc;
+						desc.filter   = FilterMode::MinMagMipLinear;
+						desc.addressU = AddressMode::Wrap;
+						desc.addressV = AddressMode::Wrap;
+						desc.addressW = AddressMode::Wrap;
+						sampler_ = GraphicsDevice::Get().CreateSamplerState(desc);
+					}
 				}
 			}
 

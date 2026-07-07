@@ -6,6 +6,7 @@
 #include "Component/OceanComponent.h"
 #include "Component/DecalComponent.h"
 #include "Component/InstancedStaticMeshComponentSystem.h"
+#include "Component/InstancedPointListComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Sound/Component/AudioSourceComponent.h"
 #include "Sound/Component/AudioListenerComponent.h"
@@ -251,6 +252,64 @@ namespace aq
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<InstancedStaticMeshComponent>(h); };
 				FillReflectPtrFns<InstancedStaticMeshComponent>(meta);
 				registry.Register(TypeInfo::Create<InstancedStaticMeshComponent>(), std::move(meta));
+			}
+
+			// --- InstancedPointListComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Instanced Point List";
+				meta.typeName     = "InstancedPointList";
+				meta.requiredWith = {};
+				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<InstancedPointListComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<InstancedPointListComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<InstancedPointListComponent>(h))    ctx.AddComponent<InstancedPointListComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				// 座標を可変リストで編集する(各行 xyz 編集 + 行削除、末尾に追加、全消去)。
+				// TODO: 別途 JSON など外部データから配置座標を読み込む対応を予定(手入力に加えて)。
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<InstancedPointListComponent>(h);
+					if (!comp) return;
+
+					float scale = comp->GetScale();
+					if (ImGui::DragFloat("scale", &scale, 0.01f, 0.001f, 1000.0f)) { comp->SetScale(scale); }
+
+					auto& points = comp->Points();
+					ImGui::Text("points: %d", static_cast<int>(points.size()));
+
+					int removeIndex = -1;
+					for (int i = 0; i < static_cast<int>(points.size()); ++i)
+					{
+						ImGui::PushID(i);
+						float xyz[3] = { points[i].x, points[i].y, points[i].z };
+						if (ImGui::InputFloat3("##p", xyz)) {
+							points[i].x = xyz[0];
+							points[i].y = xyz[1];
+							points[i].z = xyz[2];
+						}
+						ImGui::SameLine();
+						if (ImGui::SmallButton("X")) { removeIndex = i; }
+						ImGui::PopID();
+					}
+					if (removeIndex >= 0) { points.erase(points.begin() + removeIndex); }
+
+					if (ImGui::Button("Add point")) { comp->AddPoint(aq::math::Vector3(0.0f, 0.0f, 0.0f)); }
+					ImGui::SameLine();
+					if (ImGui::Button("Clear"))     { comp->Clear(); }
+				};
+#endif
+				// 座標は動的なので永続化しない(serialize/deserialize は空)。
+				meta.serialize   = [](EntityHandle, util::JsonValue&) {};
+				meta.deserialize = [](EntityHandle, const util::JsonValue&) {};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<InstancedPointListComponent>(h); };
+				FillReflectPtrFns<InstancedPointListComponent>(meta);
+				registry.Register(TypeInfo::Create<InstancedPointListComponent>(), std::move(meta));
 			}
 
 			// --- StaticMeshComponent ---

@@ -13,6 +13,8 @@ namespace aq
 		 * RenderSystem の gather が、このリストの各座標に InstancedStaticMeshComponent の
 		 * メッシュを1インスタンスずつ配置する(1エンティティが多数インスタンスを表す)。
 		 * 座標は動的に追加/削除できる(ImGui などから)。scale は全点共通の一様スケール。
+		 *
+		 * TODO: 手入力に加えて、別途 JSON など外部データから配置座標を読み込む対応を予定。
 		 */
 		class InstancedPointListComponent : public aq::ecs::IComponent
 		{

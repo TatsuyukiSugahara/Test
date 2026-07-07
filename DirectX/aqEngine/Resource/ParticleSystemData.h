@@ -8,7 +8,7 @@
 
 namespace aq
 {
-	namespace particle
+	namespace res
 	{
 		/**
 		 * `.particle` v1 の焼き込み済みデータ本体。
@@ -16,9 +16,9 @@ namespace aq
 		 */
 		struct ParticleSystemInfo
 		{
-			std::string              name;
-			std::vector<std::string> warnings;     // エクスポート時警告 (ツール表示用)
-			std::vector<EmitterData> emitters;
+			std::string                       name;
+			std::vector<std::string>          warnings;   // エクスポート時警告 (ツール表示用)
+			std::vector<particle::EmitterData> emitters;
 		};
 
 
@@ -30,7 +30,7 @@ namespace aq
 		 */
 		class ParticleSystemData : public aq::res::ResourceBase
 		{
-			engineResource(aq::particle::ParticleSystemData);
+			engineResource(aq::res::ParticleSystemData);
 
 		public:
 			ParticleSystemData()
@@ -49,8 +49,8 @@ namespace aq
 		public:
 			const std::string& GetName()     const { return Get()->name; }
 			uint32_t           GetEmitterCount() const { return static_cast<uint32_t>(Get()->emitters.size()); }
-			const EmitterData& GetEmitter(const uint32_t index) const { return Get()->emitters[index]; }
-			const std::vector<EmitterData>&   GetEmitters() const { return Get()->emitters; }
+			const particle::EmitterData& GetEmitter(const uint32_t index) const { return Get()->emitters[index]; }
+			const std::vector<particle::EmitterData>& GetEmitters() const { return Get()->emitters; }
 			const std::vector<std::string>&   GetWarnings() const { return Get()->warnings; }
 
 			/** ローダーが構築に使う書き込み用アクセサ (ワーカースレッドから) */

@@ -1,7 +1,7 @@
 # `.particle` フォーマット仕様 v1
 
 > 対象: aqEngine Particle モジュール / 最終更新: 2026-07-06
-> 準拠実装: `Unity/Editor/AqParticleExporter.cs`(書き出し)、`aqEngine/Particle/ParticleSystemData.h/.cpp`(読み込み)
+> 準拠実装: `Unity/Editor/AqParticleExporter.cs`(書き出し)、`aqEngine/Resource/ParticleSystemData.h/.cpp`(読み込み)
 > 本書が正。実装と食い違う場合は実装を直すか本書を改訂する。
 
 ## 1. 概要

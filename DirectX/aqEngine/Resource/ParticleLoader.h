@@ -1,11 +1,11 @@
 ﻿#pragma once
 #include "Resource/Resource.h"
-#include "Particle/ParticleSystemData.h"
+#include "Resource/ParticleSystemData.h"
 
 
 namespace aq
 {
-	namespace particle
+	namespace res
 	{
 		/**
 		 * `.particle` v1 読み込み。

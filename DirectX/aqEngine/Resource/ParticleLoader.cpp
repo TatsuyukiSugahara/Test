@@ -1,7 +1,7 @@
-﻿#include "stdafx.h"
+﻿#include "aq.h"
 #include "ParticleLoader.h"
 #include "Particle/ParticleTypes.h"
-#include "Particle/ParticleSystemData.h"
+#include "Resource/ParticleSystemData.h"
 #include "Util/SimpleJson.h"
 #include <algorithm>
 #include <cmath>
@@ -9,8 +9,13 @@
 
 namespace aq
 {
-	namespace particle
+	namespace res
 	{
+		// 焼き込み対象の型 (ScalarValue / EmitterData / 各 enum 等) は
+		// ParticleTypes.h の aq::particle に定義されている。ローダは aq::res 側だが
+		// これらを無修飾で扱えるよう、この翻訳単位に限って取り込む。
+		using namespace aq::particle;
+
 		namespace
 		{
 			using aq::util::JsonValue;

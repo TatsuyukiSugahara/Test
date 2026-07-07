@@ -183,8 +183,8 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 | ファイル | 役割 |
 |---|---|
 | `aqEngine/Particle/ParticleTypes.h` | ScalarValue / Curve LUT / Gradient LUT / `ParticleRandomItem` / 各モジュール構造体 |
-| `aqEngine/Particle/ParticleSystemData.h/.cpp` | イミュータブルなリソース（焼き込み済み）＋アクセサ |
-| `aqEngine/Particle/ParticleLoader.h/.cpp` | `ResourceLoaderBase` 実装。SimpleJson パース＋LUT 焼き込み。bank/reflection 登録 |
+| `aqEngine/Resource/ParticleSystemData.h/.cpp` | イミュータブルなリソース（焼き込み済み）＋アクセサ |
+| `aqEngine/Resource/ParticleLoader.h/.cpp` | `ResourceLoaderBase` 実装。SimpleJson パース＋LUT 焼き込み。bank/reflection 登録 |
 | `aqEngine/Particle/ParticleRandom.h` | シード→ハッシュ、`Hash(seed ^ 項目ID)` ヘルパ |
 | `aqEngine/Particle/ParticleEmitterComponent.h/.cpp` | ECS コンポーネント（SoA プール・再生状態） |
 | `aqEngine/Particle/ParticleSystem.h/.cpp` | `ecs::SystemBase` の更新＋ビルボード生成 |
@@ -201,13 +201,13 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 
 - `aqEngine/Particle/ParticleTypes.h` … 焼き込み済みデータ型。`ScalarValue::Evaluate(lutBase, t, r)`（4モード統一）、
   `SampleLut`、`ColorValue`、各モジュール構造体、`EmitterData`（`curveLutPool` を所有）、`RandomItem` enum
-- `aqEngine/Particle/ParticleSystemData.h` … `aq::res::ResourceBase` 派生のイミュータブルリソース。`GetEmitter(i)` 等
-- `aqEngine/Particle/ParticleLoader.h/.cpp` … `Loading()` で JSON パース＋Hermite→64サンプル LUT 焼き込み。`version==1` 検証
+- `aqEngine/Resource/ParticleSystemData.h` … `aq::res::ResourceBase` 派生のイミュータブルリソース。`GetEmitter(i)` 等
+- `aqEngine/Resource/ParticleLoader.h/.cpp` … `Loading()` で JSON パース＋Hermite→64サンプル LUT 焼き込み。`version==1` 検証
 - `aqEngine/Particle/sample/FX_Explosion.particle` … Sparks+Smoke 2エミッタ
 - `Unity/Editor/AqParticleExporter.cs` … `Tools > aqEngine > Export ParticleSystem`
 - 登録: `Engine.vcxproj`/`.filters`（`ParticleTypes.h`→Particle フィルタ、他→Resource フィルタ）、
   `Game/Application/Application.cpp`（`RegisterBank` + `Reflection`）
-- 使い方: `aq::res::ResourceManager::Get().Load<aq::particle::ParticleSystemData>("path/xxx.particle")`
+- 使い方: `aq::res::ResourceManager::Get().Load<aq::res::ParticleSystemData>("path/xxx.particle")`
 
 ### 7.2 ビルド上の注意（別PCでも同じはず）
 

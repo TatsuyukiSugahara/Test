@@ -296,7 +296,7 @@
     <ClCompile Include="Physics\GhostBodyManager.cpp" />
     <ClCompile Include="Physics\BulletGhostNarrowphase.cpp" />
     <ClCompile Include="Physics\CharacterController.cpp" />
-    <ClCompile Include="Particle\ParticleLoader.cpp" />
+    <ClCompile Include="Resource\ParticleLoader.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
     <ClCompile Include="Rendering\DrawItemCommand.cpp" />
     <ClCompile Include="Rendering\InstancedDrawItemCommand.cpp" />
@@ -558,8 +558,8 @@
     <ClInclude Include="Rendering\PostProcess\BloomRenderer.h" />
     <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h" />
     <ClInclude Include="Particle\ParticleTypes.h" />
-    <ClInclude Include="Particle\ParticleSystemData.h" />
-    <ClInclude Include="Particle\ParticleLoader.h" />
+    <ClInclude Include="Resource\ParticleSystemData.h" />
+    <ClInclude Include="Resource\ParticleLoader.h" />
     <ClInclude Include="Resource\Resource.h" />
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Terrain\HeightmapPainter.h" />

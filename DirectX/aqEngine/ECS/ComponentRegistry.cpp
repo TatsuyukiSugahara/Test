@@ -5,6 +5,7 @@
 #include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
 #include "Component/DecalComponent.h"
+#include "Component/InstancedStaticMeshComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Sound/Component/AudioSourceComponent.h"
 #include "Sound/Component/AudioListenerComponent.h"
@@ -206,6 +207,50 @@ namespace aq
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<BoxStaticMeshComponent>(h); };
 				FillReflectPtrFns<BoxStaticMeshComponent>(meta);
 				registry.Register(TypeInfo::Create<BoxStaticMeshComponent>(), std::move(meta));
+			}
+
+			// --- InstancedStaticMeshComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Instanced Static Mesh";
+				meta.typeName     = "InstancedStaticMesh";
+				meta.requiredWith = {};
+				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<InstancedStaticMeshComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<InstancedStaticMeshComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<InstancedStaticMeshComponent>(h))   ctx.AddComponent<InstancedStaticMeshComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<InstancedStaticMeshComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Reflect(visitor);
+				};
+#endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<InstancedStaticMeshComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<InstancedStaticMeshComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<InstancedStaticMeshComponent>(h); };
+				FillReflectPtrFns<InstancedStaticMeshComponent>(meta);
+				registry.Register(TypeInfo::Create<InstancedStaticMeshComponent>(), std::move(meta));
 			}
 
 			// --- StaticMeshComponent ---

@@ -244,6 +244,7 @@
     <ClCompile Include="Graphics\D3D11\D3D11Buffers.cpp" />
     <ClCompile Include="Graphics\D3D11\D3D11Shader.cpp" />
     <ClCompile Include="Graphics\StaticMesh.cpp" />
+    <ClCompile Include="Graphics\InstancedStaticMesh.cpp" />
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
     <ClCompile Include="HID\XInputPadBackend.cpp" />
@@ -297,6 +298,7 @@
     <ClCompile Include="Physics\CharacterController.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
     <ClCompile Include="Rendering\DrawItemCommand.cpp" />
+    <ClCompile Include="Rendering\InstancedDrawItemCommand.cpp" />
     <ClCompile Include="Rendering\FrameCommands.cpp" />
     <ClCompile Include="Rendering\FrameContext.cpp" />
     <ClCompile Include="Rendering\RenderCommandList.cpp" />
@@ -401,6 +403,8 @@
     <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Component\AnimationComponentSystem.h" />
     <ClInclude Include="Component\BodyComponentSystem.h" />
+    <ClInclude Include="Component\InstancedStaticMeshComponentSystem.h" />
+    <ClInclude Include="Component\InstancedPointListComponentSystem.h" />
     <ClInclude Include="Component\DecalComponent.h" />
     <ClInclude Include="Component\TransformComponentSystem.h" />
     <ClInclude Include="Component\HierarchicalTransformComponent.h" />
@@ -495,6 +499,7 @@
     <ClInclude Include="Graphics\Meshlet.h" />
     <ClInclude Include="Graphics\SkeletalMesh.h" />
     <ClInclude Include="Graphics\StaticMesh.h" />
+    <ClInclude Include="Graphics\InstancedStaticMesh.h" />
     <ClInclude Include="HID\ActionMap.h" />
     <ClInclude Include="HID\IPadBackend.h" />
     <ClInclude Include="HID\Input.h" />
@@ -531,6 +536,7 @@
     <ClInclude Include="Physics\PhysicsTypes.h" />
     <ClInclude Include="Physics\SphereCollider.h" />
     <ClInclude Include="Rendering\DrawItemCommand.h" />
+    <ClInclude Include="Rendering\InstancedDrawItemCommand.h" />
     <ClInclude Include="Rendering\FrameCommands.h" />
     <ClInclude Include="Rendering\FrameContext.h" />
     <ClInclude Include="Rendering\IRenderCommand.h" />

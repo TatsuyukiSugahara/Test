@@ -2,6 +2,8 @@
 #include "BodyComponentSystem.h"
 #include "Component/TerrainComponent.h"
 #include "Component/DecalComponent.h"
+#include "Component/InstancedStaticMeshComponentSystem.h"
+#include "Component/InstancedPointListComponentSystem.h"
 #include "Rendering/Occlusion/IOcclusionTester.h"
 
 namespace aq
@@ -52,6 +54,29 @@ namespace aq
 				localMatrix.Mull(axisMatrix, scaleMatrix);
 				return localMatrix;
 			}
+
+
+			// 全箱で共有するキューブ VB/IB。weak_ptr で保持し、寿命は各箱(StaticMesh の shared_ptr)が持つ。
+			// Level の箱は実行時破棄されないため実行中は常に生存し、終了時(全箱破棄=デバイス破棄前)に
+			// 自然解放される。これで 1 箱ごとの committed バッファ生成/破棄が無くなり、メモリが O(1) に
+			// なり、実行時破棄でも GPU 使用中バッファ解放(device removed)が起きなくなる。
+			std::weak_ptr<aq::graphics::IVertexBuffer> g_sharedBoxVB;
+			std::weak_ptr<aq::graphics::IIndexBuffer>  g_sharedBoxIB;
+
+			void GetSharedBoxMesh(std::shared_ptr<aq::graphics::IVertexBuffer>& outVB,
+			                      std::shared_ptr<aq::graphics::IIndexBuffer>&  outIB)
+			{
+				outVB = g_sharedBoxVB.lock();
+				outIB = g_sharedBoxIB.lock();
+				if (outVB && outIB) { return; }
+
+				outVB = aq::graphics::GraphicsDevice::Get().CreateVertexBuffer(
+					ArraySize(BOX_VERTEX_BUFFER), sizeof(aq::graphics::VertexData), BOX_VERTEX_BUFFER);
+				outIB = aq::graphics::GraphicsDevice::Get().CreateIndexBuffer(
+					ArraySize(BOX_INDEX_BUFFER), BOX_INDEX_BUFFER);
+				g_sharedBoxVB = outVB;
+				g_sharedBoxIB = outIB;
+			}
 		}
 
 
@@ -70,7 +95,12 @@ namespace aq
 			{
 				case ComponentState::Loading:
 				{
-					staticMesh_.Initialize(BOX_VERTEX_BUFFER, ArraySize(BOX_VERTEX_BUFFER), BOX_INDEX_BUFFER, ArraySize(BOX_INDEX_BUFFER), aq::graphics::StaticMesh::ShaderType::SimpleBox);
+					// 全箱で 1 つのキューブ VB/IB を共有する(個別生成しない)。
+					std::shared_ptr<aq::graphics::IVertexBuffer> vb;
+					std::shared_ptr<aq::graphics::IIndexBuffer>  ib;
+					GetSharedBoxMesh(vb, ib);
+					staticMesh_.InitializeShared(vb, ib, ArraySize(BOX_INDEX_BUFFER),
+						aq::graphics::StaticMesh::ShaderType::SimpleBox);
 					componentState_ = ComponentState::Completed;
 					break;
 				}
@@ -432,6 +462,41 @@ namespace aq
 				{
 					decalComponent->Update();
 				});
+
+			// 点群インスタンス gather: InstancedStaticMeshComponent の mesh を PointList の各座標へ
+			// 配置する(1エンティティが多数インスタンスを表す)。座標はエンティティローカルとして扱い、
+			// エンティティのワールド変換を掛ける(エンティティを回せば群全体が周回する)。この Update は
+			// 単一走査なので競合しない。登録メッシュは最後に一括 Flush する(毎フレーム必ず)。
+			aq::ecs::Foreach<HierarchicalTransformComponent, InstancedStaticMeshComponent, InstancedPointListComponent>(
+				[](const aq::ecs::Entity&, HierarchicalTransformComponent* hierarchicalTransformComponent,
+				   InstancedStaticMeshComponent* meshComponent, InstancedPointListComponent* pointList)
+				{
+					auto* mesh = meshComponent->GetMesh();
+					if (mesh == nullptr) { return; }
+
+					// エンティティのワールド行列(S·R·T)。群全体の位置・向き・スケールを与える。
+					aq::math::Matrix4x4 es, er, et, esr, entityWorld;
+					es.MakeScaling(hierarchicalTransformComponent->transform.scale);
+					er.MakeRotationFromQuaternion(hierarchicalTransformComponent->transform.rotation);
+					et.MakeTranslation(hierarchicalTransformComponent->transform.position);
+					esr.Mull(es, er);
+					entityWorld.Mull(esr, et);
+
+					const float s = pointList->GetScale();
+					for (const aq::math::Vector3& p : pointList->GetPoints())
+					{
+						// ローカル: メッシュを scale して座標 p へ。世界: local · entityWorld。
+						aq::math::Matrix4x4 local, world;
+						local.MakeScaling(aq::math::Vector3(s));
+						local._41 = p.x;   // 平行移動(行優先: 並進は第4行)
+						local._42 = p.y;
+						local._43 = p.z;
+						world.Mull(local, entityWorld);
+						mesh->AddInstance(world);
+					}
+				});
+
+			aq::graphics::InstancedStaticMesh::FlushAllRegistered();
 		}
 
 
@@ -535,12 +600,15 @@ namespace aq
 			// SimpleBox は forward-only（G-Buffer パスなし）
 			aq::ecs::Foreach<BoxStaticMeshComponent>([&frame, &isVisible](const aq::ecs::Entity&, BoxStaticMeshComponent* comp)
 				{
-					if (!comp->IsCompleted()) return;
+					if (!comp->IsCompleted() || !comp->IsVisible()) return;
 					aq::rendering::RenderItem item;
 					if (comp->GetStaticMesh()->FillRenderItem(item) && isVisible(item)) {
 						frame.forwardItems.push_back(item);
 					}
 				});
+
+			// インスタンス描画アイテム(1メッシュ=1ドロー)。Flush 済みの登録メッシュから収集する。
+			aq::graphics::InstancedStaticMesh::CollectRenderItems(frame.instancedItems);
 
 			// ShaderType で deferred / forward を振り分け
 			aq::ecs::Foreach<StaticMeshComponent>([&frame, &isVisible, &accumClusters](const aq::ecs::Entity&, StaticMeshComponent* comp)

@@ -27,6 +27,8 @@ namespace aq
 				{ "Assets/Shader/OceanLit.fx",   "VSMain", "Assets/Shader/OceanLit.fx",   "PSMain", nullptr,                                 nullptr  },  // OceanLit
 				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain", "Assets/Shader/PBRGBuffer.fx",           "PSMain" },  // PBRLit
 				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain", "Assets/Shader/TerrainPBRGBuffer.fx",    "PSMain" },  // TerrainPBRLit
+				{ "Assets/Shader/InstancedSimple.fx", "VSMain", "Assets/Shader/InstancedSimple.fx", "PSMain", nullptr,             nullptr  },  // InstancedSimple
+				{ "Assets/Shader/InstancedModelTex.fx", "VSMain", "Assets/Shader/InstancedModelTex.fx", "PSMain", nullptr,       nullptr  },  // InstancedTextured
 			};
 		}
 
@@ -94,6 +96,22 @@ namespace aq
 			vertexBuffer_ = GraphicsDevice::Get().CreateVertexBuffer(vertexNum, sizeof(aq::graphics::VertexData), vertexBuffer);
 			indexBuffer_  = GraphicsDevice::Get().CreateIndexBuffer(indexNum, indexBuffer);
 			indicesSize_  = indexNum;
+
+			Initialize(shaderType);
+		}
+
+
+		void StaticMesh::InitializeShared(std::shared_ptr<IVertexBuffer> vertexBuffer,
+		                                  std::shared_ptr<IIndexBuffer>  indexBuffer,
+		                                  const uint32_t indexCount,
+		                                  const ShaderType shaderType)
+		{
+			isInitialized_ = false;
+			if (!vertexBuffer || !indexBuffer || indexCount == 0) return;
+
+			vertexBuffer_ = std::move(vertexBuffer);
+			indexBuffer_  = std::move(indexBuffer);
+			indicesSize_  = indexCount;
 
 			Initialize(shaderType);
 		}

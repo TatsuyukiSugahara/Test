@@ -415,6 +415,26 @@ namespace aq
 			device_->GetCommandList()->DrawIndexedInstanced(indexCount, 1, startIndexLocation, 0, 0);
 		}
 
+
+		void D3D12RenderContextImpl::IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vb)
+		{
+			device_->BeginFrameIfNeeded();
+			const D3D12_VERTEX_BUFFER_VIEW& view = static_cast<D3D12VertexBuffer&>(vb).GetView();
+			device_->GetCommandList()->IASetVertexBuffers(slot, 1, &view);
+		}
+
+
+		void D3D12RenderContextImpl::DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
+		                                                  uint32_t startIndexLocation, int32_t baseVertexLocation,
+		                                                  uint32_t startInstanceLocation)
+		{
+			device_->BeginFrameIfNeeded();
+			FlushPipeline();
+			FlushDescriptors();
+			device_->GetCommandList()->DrawIndexedInstanced(
+				indexCount, instanceCount, startIndexLocation, baseVertexLocation, startInstanceLocation);
+		}
+
 		void D3D12RenderContextImpl::Dispatch(uint32_t x, uint32_t y, uint32_t z)
 		{
 			device_->BeginFrameIfNeeded();

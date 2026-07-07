@@ -89,6 +89,14 @@ namespace aq
 			/** UAV バリア (前の compute 書き込みを次の compute 読み取りへ可視化)。 */
 			virtual void UavBarrier(IGpuBuffer& /*buffer*/) {}
 
+			// ── インスタンシング。未対応バックエンドは no-op。 ──
+			/** スロット指定で頂点バッファをバインドする(slot1 = per-instance ストリーム等)。 */
+			virtual void IASetVertexBufferSlot(uint32_t /*slot*/, IVertexBuffer& /*vertexBuffer*/) {}
+			/** インデックス付きインスタンス描画。 */
+			virtual void DrawIndexedInstanced(uint32_t /*indexCount*/, uint32_t /*instanceCount*/,
+			                                  uint32_t /*startIndexLocation*/, int32_t /*baseVertexLocation*/,
+			                                  uint32_t /*startInstanceLocation*/) {}
+
 			virtual void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) = 0;
 
 			// シャドウパス用

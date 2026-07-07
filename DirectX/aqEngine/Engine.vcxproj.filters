@@ -323,6 +323,9 @@
     <ClCompile Include="Graphics\StaticMesh.cpp">
       <Filter>Graphics</Filter>
     </ClCompile>
+    <ClCompile Include="Graphics\InstancedStaticMesh.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
     <ClCompile Include="HID\ActionMap.cpp">
       <Filter>HID</Filter>
     </ClCompile>
@@ -429,6 +432,9 @@
       <Filter>Resource</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\DrawItemCommand.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\InstancedDrawItemCommand.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\FrameCommands.cpp">
@@ -712,6 +718,12 @@
     <ClInclude Include="Component\BodyComponentSystem.h">
       <Filter>Component</Filter>
     </ClInclude>
+    <ClInclude Include="Component\InstancedStaticMeshComponentSystem.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\InstancedPointListComponentSystem.h">
+      <Filter>Component</Filter>
+    </ClInclude>
     <ClInclude Include="Component\DecalComponent.h">
       <Filter>Component</Filter>
     </ClInclude>
@@ -955,6 +967,9 @@
     <ClInclude Include="Graphics\StaticMesh.h">
       <Filter>Graphics</Filter>
     </ClInclude>
+    <ClInclude Include="Graphics\InstancedStaticMesh.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
     <ClInclude Include="HID\ActionMap.h">
       <Filter>HID</Filter>
     </ClInclude>
@@ -1061,6 +1076,9 @@
       <Filter>Physics</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\DrawItemCommand.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\InstancedDrawItemCommand.h">
       <Filter>Rendering</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\FrameCommands.h">

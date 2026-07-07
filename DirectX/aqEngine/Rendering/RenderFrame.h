@@ -133,6 +133,25 @@ namespace aq
 
 
 		/**
+		 * インスタンス描画1件分のデータ(1メッシュを instanceCount 個まとめて1ドロー)。
+		 * 共有ジオメトリ(slot0)+ per-instance ワールド行列の動的VB(slot1)+ IB を参照する。
+		 * instanceBuffer は「今フレームぶんの行列を書き込み済み」の動的VB(フレームリング)。
+		 */
+		struct InstancedRenderItem
+		{
+			std::shared_ptr<graphics::IVertexBuffer> vertexBuffer;    // 共有ジオメトリ(slot0)
+			std::shared_ptr<graphics::IVertexBuffer> instanceBuffer;  // per-instance ワールド行列(slot1・動的)
+			std::shared_ptr<graphics::IIndexBuffer>  indexBuffer;
+			std::shared_ptr<graphics::IShader>       vs;
+			std::shared_ptr<graphics::IShader>       ps;
+			std::shared_ptr<graphics::IShaderResourceView> albedo;   // アルベドテクスチャ(t0・任意)
+			std::shared_ptr<graphics::ISamplerState>       sampler;  // サンプラー(s0・任意)
+			uint32_t                                 indexCount    = 0;
+			uint32_t                                 instanceCount = 0;
+		};
+
+
+		/**
 		 * One frame's rendering snapshot.
 		 * Built by the game thread; consumed by Renderer / RenderThread.
 		 */
@@ -145,8 +164,9 @@ namespace aq
 			std::vector<RenderItem>      forwardItems;  // forward  (透明・特殊マテリアル)
 			std::vector<OceanRenderItem> oceanItems;   // 海描画用
 			std::vector<DecalRenderItem> decalItems;   // 投影デカール (GBuffer へ書き戻し)
+			std::vector<InstancedRenderItem> instancedItems;  // インスタンス描画 (forward)
 
-			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); decalItems.clear(); }
+			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); decalItems.clear(); instancedItems.clear(); }
 		};
 	}
 }

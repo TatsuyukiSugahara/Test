@@ -480,7 +480,12 @@ namespace aq
 
 			// シェーダー可視 ring ヒープ。frames-in-flight 分の区画に分け、各フレームは自区画を使う。
 			// GPU が前フレームの区画を読んでいる間に上書きしないよう、区画をフレームごとに分離する。
-			constexpr uint32_t MAX_TABLES_PER_FRAME = 4096;
+			// 1 フレーム 1 パスあたりの最大 SRV テーブル数(= 実質最大ドローコール数)。
+			// メイン + オフスクリーン等の複数パスで各オブジェクトが再描画されるため、多数の
+			// オブジェクト(箱ベンチ等)を描くと超過しやすい。超過は Release だと assert 無効で
+			// 使用中ディスクリプタ上書き→描画破壊になるため、余裕を持たせる。
+			// 16384 × SRV_TABLE_SIZE(12) × FRAME_COUNT(2) ≈ 39万ディスクリプタ(Tier1 上限 100万内)。
+			constexpr uint32_t MAX_TABLES_PER_FRAME = 16384;
 			srvRegionSize_         = MAX_TABLES_PER_FRAME * D3D12RootSignature::SRV_TABLE_SIZE;
 			srvShaderRingCapacity_ = srvRegionSize_ * FRAME_COUNT;
 			{

@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "Renderer.h"
 #include "DrawItemCommand.h"
+#include "InstancedDrawItemCommand.h"
 #include "OceanDrawCommand.h"
 #include "FrameContext.h"
 #include "Occlusion/ClusterCull.h"
@@ -104,6 +105,9 @@ namespace aq
 				for (const RenderItem& item : frame.forwardItems) {
 					RecordDrawItem(item, frame.camera, outList);
 				}
+				for (const InstancedRenderItem& item : frame.instancedItems) {
+					outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
+				}
 			}
 			else
 			{
@@ -113,6 +117,9 @@ namespace aq
 				}
 				for (const RenderItem& item : frame.forwardItems) {
 					RecordDrawItem(item, frame.camera, outList);
+				}
+				for (const InstancedRenderItem& item : frame.instancedItems) {
+					outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
 				}
 			}
 

@@ -3,94 +3,12 @@
   "bankId": "Main",
   "basePath": "Assets/Sound/",
   "kinds": {
-    "SE":       { "bus": "SE",  "loadPolicy": "preload", "cooldownMs": 120 },
-    "Footstep": { "bus": "SE",  "loadPolicy": "preload", "cooldownMs": 60, "maxVoices": 4, "voiceStealing": "oldest" },
-    "SE3D":     { "bus": "SE",  "loadPolicy": "preload", "spatialMode": "3d", "attenuation": "DefaultSE" },
-    "BGM":      { "bus": "BGM", "loadPolicy": "stream", "fadeInMs": 1000, "fadeOutMs": 1000 },
-    "Voice":    { "bus": "Voice", "loadPolicy": "preload" },
-    "Engine":   { "bus": "SE", "loadPolicy": "preload" },
-    "Ambience3D": { "bus": "SE", "spatialMode": "3d", "loadPolicy": "preload", "attenuation": "DefaultSE", "maxVoices": 2, "virtualize": true, "priority": 50 }
+    "SE":    { "bus": "SE",    "loadPolicy": "preload", "cooldownMs": 120 },
+    "BGM":   { "bus": "BGM",   "loadPolicy": "stream", "fadeInMs": 1000, "fadeOutMs": 1000 },
+    "Voice": { "bus": "Voice", "loadPolicy": "preload" }
   },
-  "states": {
-    "Music": { "values": [ "Explore", "Combat" ], "default": "Explore", "transitionMs": 800 }
-  },
-  "stateRules": [
-    { "when": { "group": "Music", "value": "Combat" },
-      "actions": [ { "action": "Play", "target": { "object": "BGM_Combat" }, "fadeMs": 1000 },
-                   { "action": "Stop", "target": { "object": "BGM_Explore" }, "fadeMs": 1000 } ] },
-    { "when": { "group": "Music", "value": "Explore" },
-      "actions": [ { "action": "Play", "target": { "object": "BGM_Explore" }, "fadeMs": 1000 },
-                   { "action": "Stop", "target": { "object": "BGM_Combat" }, "fadeMs": 1000 } ] }
-  ],
-  "ducking": {
-    "VoiceDuck": { "trigger": { "bus": "Voice" }, "target": { "bus": "BGM" }, "amountDb": -12.0, "attackMs": 120, "releaseMs": 500 }
-  },
-  "attenuations": {
-    "DefaultSE": { "model": "Inverse", "minDistance": 1.0, "maxDistance": 40.0 }
-  },
-  "rtpc": {
-    "Pitch3D":    { "min": 0.0, "max": 1.0, "default": 0.5 },
-    "EngineLoad": { "min": 0.0, "max": 1.0, "default": 0.0 }
-  },
-  "rtpcBindings": [
-    { "rtpc": "Pitch3D", "target": { "kind": "SE3D" }, "property": "pitch", "curve": [ [0.0, 0.7], [1.0, 1.6] ], "interp": "linear" }
-  ],
   "objects": {
-    "Beep":      { "type": "Sound", "kind": "SE",  "clip": "beep.wav" },
-    "Title_BGM": { "type": "Sound", "kind": "BGM", "clip": "bgm.wav", "loop": true },
-    "Beep3D":    { "type": "Sound", "kind": "SE3D", "clip": "beep.wav", "loop": true },
-    "Amb3D":     { "type": "Sound", "kind": "Ambience3D", "clip": "beep.wav", "loop": true },
-    "BGM_Explore": { "type": "Sound", "kind": "BGM", "clip": "bgm.wav", "loop": true },
-    "BGM_Combat":  { "type": "Sound", "kind": "BGM", "clip": "bgm_combat.wav", "loop": true },
-    "Voice_Test":  { "type": "Sound", "kind": "Voice", "clip": "voice.wav" },
-
-    "Engine_Blend": {
-      "type": "Blend", "kind": "Engine",
-      "layers": [
-        { "child": { "type": "Sound", "clip": "seq1.wav", "loop": true } },
-        { "child": { "type": "Sound", "clip": "seq3.wav", "loop": true }, "rtpc": "EngineLoad", "curve": [ [0.0, -40.0], [1.0, 0.0] ] }
-      ]
-    },
-
-    "Footstep_Random": {
-      "type": "Random", "kind": "Footstep",
-      "children": [ { "clip": "foot1.wav" }, { "clip": "foot2.wav" }, { "clip": "foot3.wav" } ],
-      "avoidRepeat": 1,
-      "volumeRandomDb": [ -2.0, 0.0 ],
-      "pitchRandom": [ 0.95, 1.06 ]
-    },
-
-    "Footstep_Wood": {
-      "type": "Random", "kind": "Footstep",
-      "children": [ { "clip": "wood1.wav" }, { "clip": "wood2.wav" } ],
-      "avoidRepeat": 1,
-      "pitchRandom": [ 0.97, 1.05 ]
-    },
-
-    "Footstep_Surface": {
-      "type": "Switch", "switchGroup": "Surface",
-      "map": {
-        "Grass": { "ref": "Footstep_Random" },
-        "Wood":  { "ref": "Footstep_Wood" }
-      },
-      "default": "Grass"
-    },
-
-    "Arpeggio_Seq": {
-      "type": "Sequence", "kind": "SE", "loop": true,
-      "children": [ { "clip": "seq1.wav" }, { "clip": "seq2.wav" }, { "clip": "seq3.wav" } ]
-    }
   },
   "events": {
-    "Test_Beep":      [ { "action": "Play", "target": { "object": "Beep" } } ],
-    "Play_TitleBGM":  [ { "action": "Play", "target": { "object": "Title_BGM" }, "fadeMs": 1000 } ],
-    "Stop_TitleBGM":  [ { "action": "Stop", "target": { "object": "Title_BGM" }, "fadeMs": 1000 } ],
-    "Player_Footstep":[ { "action": "Play", "target": { "object": "Footstep_Surface" } } ],
-    "Arpeggio_Step":  [ { "action": "Play", "target": { "object": "Arpeggio_Seq" } } ],
-    "Play_Beep3D":    [ { "action": "Play", "target": { "object": "Beep3D" } } ],
-    "Play_Voice":     [ { "action": "Play", "target": { "object": "Voice_Test" } } ],
-    "Play_Engine":    [ { "action": "Play", "target": { "object": "Engine_Blend" } } ],
-    "Stop_Engine":    [ { "action": "Stop", "target": { "kind": "Engine" } } ],
-    "Play_Amb3D":     [ { "action": "Play", "target": { "object": "Amb3D" } } ]
   }
 }

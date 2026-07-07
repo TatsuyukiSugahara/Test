@@ -7,6 +7,9 @@
 #include "Graphics/IShader.h"
 #include <algorithm>
 #include <cmath>
+#ifdef AQ_DEBUG_IMGUI
+#include <imgui/imgui.h>
+#endif
 
 
 namespace aq
@@ -353,12 +356,14 @@ namespace aq
 			rs.vb = graphics::GraphicsDevice::Get().CreateDynamicVertexBuffer(
 				vtxCount, static_cast<uint32_t>(sizeof(aq::rendering::ParticleVertex)), zero.data());
 
+			// 頂点 0=左下 1=右下 2=左上 3=右上。D3D12 は CULL_BACK + FrontCounterClockwise=FALSE
+			// (CW が表) のため、カメラから見て時計回りになる巻き順で三角形を張る (裏面カリング回避)。
 			std::vector<uint32_t> idx;
 			idx.reserve(quadCap * 6u);
 			for (uint32_t q = 0; q < quadCap; ++q) {
 				const uint32_t b = q * 4u;
-				idx.push_back(b + 0); idx.push_back(b + 1); idx.push_back(b + 2);
-				idx.push_back(b + 2); idx.push_back(b + 1); idx.push_back(b + 3);
+				idx.push_back(b + 0); idx.push_back(b + 2); idx.push_back(b + 1);
+				idx.push_back(b + 2); idx.push_back(b + 3); idx.push_back(b + 1);
 			}
 			rs.ib = graphics::GraphicsDevice::Get().CreateIndexBuffer(
 				static_cast<uint32_t>(idx.size()), idx.data());
@@ -437,5 +442,42 @@ namespace aq
 					emitter->Simulate(deltaTime, htc->transform.position);
 				});
 		}
+
+
+#ifdef AQ_DEBUG_IMGUI
+		void ParticleSystem::RenderContent()
+		{
+			int      entityCount = 0, readyCount = 0, shaderCount = 0;
+			uint32_t aliveTotal  = 0;
+			aq::ecs::Foreach<ParticleEmitterComponent>(
+				[&](const aq::ecs::Entity&, ParticleEmitterComponent* e)
+				{
+					++entityCount;
+					if (e->IsReady())      ++readyCount;
+					if (e->ShadersReady()) ++shaderCount;
+					aliveTotal += e->GetAliveCount();
+				});
+
+			ImGui::Text("Emitter entities : %d", entityCount);
+			ImGui::Text("Asset ready      : %d / %d", readyCount, entityCount);
+			ImGui::Text("Shader ready     : %d / %d", shaderCount, entityCount);
+			ImGui::Text("Alive particles  : %u", aliveTotal);
+
+			if (ImGui::Button("Restart all"))
+			{
+				aq::ecs::Foreach<ParticleEmitterComponent>(
+					[](const aq::ecs::Entity&, ParticleEmitterComponent* e) { e->Restart(); });
+			}
+
+			ImGui::Separator();
+			aq::ecs::Foreach<ParticleEmitterComponent>(
+				[](const aq::ecs::Entity&, ParticleEmitterComponent* e)
+				{
+					ImGui::Text("%-32s ready=%d shader=%d alive=%u",
+						e->GetAssetPath().empty() ? "(no asset)" : e->GetAssetPath().c_str(),
+						e->IsReady() ? 1 : 0, e->ShadersReady() ? 1 : 0, e->GetAliveCount());
+				});
+		}
+#endif
 	}
 }

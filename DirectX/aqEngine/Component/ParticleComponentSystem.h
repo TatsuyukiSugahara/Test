@@ -135,6 +135,13 @@ namespace aq
 				return n;
 			}
 
+			/** 描画シェーダ (Particle.fx) がロード完了しているか (デバッグ表示用)。 */
+			bool ShadersReady() const
+			{
+				return particleVs_ && particleVs_->IsCompleted()
+				    && particlePs_ && particlePs_->IsCompleted();
+			}
+
 #ifdef AQ_DEBUG_IMGUI
 			template <typename V>
 			void Inspect(V& visitor)
@@ -182,6 +189,12 @@ namespace aq
 		{
 		public:
 			void Update() override;
+
+#ifdef AQ_DEBUG_IMGUI
+			const char* GetDebugGroup()    const override { return "Particle"; }
+			const char* GetDebugTabLabel() const override { return "Particle"; }
+			void        RenderContent()          override;
+#endif
 		};
 	}
 }

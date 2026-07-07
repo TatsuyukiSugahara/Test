@@ -20,6 +20,8 @@
 #include "UI/Font/FontResource.h"
 #include "UI/Font/FontAsset.h"
 #include "Graphics/IShaderResourceView.h"
+#include "Sound/SoundClip.h"
+#include "Sound/SoundEngine.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "ECS/EntityDebugTag.h"
 #endif
@@ -36,6 +38,8 @@ namespace app
 		// タイトルの筆文字「残刃 / 侍」用。日本語グリフ全部入りの重いアトラス(4096²)。
 		// タイトルはこのフォントが主役なので、BootState で準備完了を待ってから表示する。
 		static const char*        TITLE_FONT_PATH = "Assets/Font/CorporateLogo/atlas.json";
+		// タイトルで決定(Space / パッド A)した瞬間に鳴らす SE。
+		static const char*        DECISION_SE_PATH = "Assets/Sound/Decision.wav";
 		static constexpr uint32_t LOAD_PER_FRAME  = 20;     // 1 フレームあたり生成数(ローディングを見せるため小さめ)
 		static constexpr float    MIN_LOADING_SEC = 1.0f;   // ローディング表示の最低時間(演出用)
 		static constexpr float    FONT_WAIT_MAX   = 15.0f;  // フォント準備待ちの安全上限(未完でも進む)
@@ -159,6 +163,11 @@ namespace app
 					if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
 					startRequested_ = true;
 					if (title) { title->RequestStart(); }
+					// 決定 SE を再生(クリップは GameFlow::Update で先読み済み)。
+					if (aq::sound::SoundEngine::IsAvailable()) {
+						auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);
+						aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
+					}
 					return;
 				}
 
@@ -437,6 +446,8 @@ namespace app
 			aq::ui::FontAssetCache::Get().Load(TITLE_FONT_PATH);
 			// タイトルの単色塗り(和紙/落款/フラッシュ)に使う白テクスチャ。
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/UI/Textures/white.png");
+			// 決定 SE を先読み(タイトルで押した瞬間に即鳴らせるように)。
+			aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);
 			preloaded_ = true;
 		}
 

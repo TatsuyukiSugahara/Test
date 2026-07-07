@@ -289,6 +289,20 @@ namespace aq
 		}
 
 
+		void ParticleEmitterComponent::Restart()
+		{
+			playing_ = true;
+			for (ParticleEmitterRuntime& rt : runtimes_) {
+				rt.aliveCount      = 0;
+				rt.playbackTime    = 0.0f;
+				rt.emitAccumulator = 0.0f;
+				rt.prevLoopTime    = 0.0f;
+				rt.spawnCounter    = 0;
+				std::fill(rt.burstFired.begin(), rt.burstFired.end(), uint8_t(0));
+			}
+		}
+
+
 		void ParticleEmitterComponent::EnsureRuntimes()
 		{
 			if (state_ == State::Ready) return;

@@ -103,6 +103,9 @@ namespace aq
 			void SetPlaying(bool v) { playing_ = v; }
 			bool IsPlaying() const  { return playing_; }
 
+			/** 全エミッタを頭から再生し直す (生存粒子を消し再生状態をリセット)。 */
+			void Restart();
+
 			bool IsReady() const { return state_ == State::Ready; }
 
 			/**

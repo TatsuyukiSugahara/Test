@@ -166,6 +166,7 @@ Transform スケールは v1 非対応(エクスポータが警告)。
 | `size` | ScalarValue | 1.0 | サイズ(m、ビルボード一辺 / メッシュスケール) |
 | `size3D` | object | — | **任意**。軸別サイズ `{ "x", "y", "z" }`(各 ScalarValue)。Unity の 3D Start Size。指定時は `size` より優先(ビルボードは x=横/y=縦、メッシュは xyz スケール)。ビーム板・円筒の非一様スケールに使う |
 | `rotation` | ScalarValue | 0.0 | ロール角(度)。ビルボードの回転 |
+| `rotation3D` | object | — | **任意**。軸別回転 `{ "x", "y", "z" }`(各 ScalarValue、度)。Unity の 3D Start Rotation。指定時は `rotation` より優先。ビルボードは z のみ使用、メッシュは ZXY 順(Unity と同順)で適用。板/円筒の向き付けに使う |
 | `color` | ColorValue | 白 | 初期色 |
 
 ### 7.3 `emission`

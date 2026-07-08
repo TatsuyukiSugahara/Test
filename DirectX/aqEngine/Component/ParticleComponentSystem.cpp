@@ -105,9 +105,30 @@ namespace aq
 			}
 
 
+			/** エミッタのローカル回転 (localRotationEuler, 度) を行列化する。 */
+			DirectX::XMMATRIX EmitterRotation(const EmitterData& e)
+			{
+				return DirectX::XMMatrixRotationRollPitchYaw(
+					e.localRotationEuler.x * DEG2RAD,
+					e.localRotationEuler.y * DEG2RAD,
+					e.localRotationEuler.z * DEG2RAD);
+			}
+
+
+			/** ベクトルを回転する (方向のみ・平行移動なし)。 */
+			Vector3 RotateVec(const DirectX::XMMATRIX& m, const Vector3& v)
+			{
+				Vector3 out;
+				DirectX::XMStoreFloat3(&out.vector,
+					DirectX::XMVector3TransformNormal(DirectX::XMLoadFloat3(&v.vector), m));
+				return out;
+			}
+
+
 			/** 粒子 1 個を生成してプール末尾へ積む。容量超過なら何もしない。 */
 			void Spawn(ParticleEmitterRuntime& rt, const EmitterData& e,
-			           float normT, const Vector3& origin, bool world)
+			           float normT, const Vector3& origin, bool world,
+			           const DirectX::XMMATRIX& emitterRot)
 			{
 				if (rt.aliveCount >= rt.position.size()) return;
 
@@ -124,8 +145,19 @@ namespace aq
 				rt.age[i]      = 0.0f;
 
 				const float speed = e.initial.speed.Evaluate(lut, normT, RandomUnit(s, RandomItem::Speed));
-				const float rot   = e.initial.rotation.Evaluate(lut, normT, RandomUnit(s, RandomItem::Rotation));
 				const Vector4 col = e.initial.color.Evaluate(RandomUnit(s, RandomItem::Color));
+
+				// 回転: 3D Start Rotation なら軸別、そうでなければ z ロールのみ
+				Vector3 rot;
+				if (e.initial.rotation3D) {
+					rot = Vector3(
+						e.initial.rotationX.Evaluate(lut, normT, RandomUnit(s, RandomItem::RotationX)),
+						e.initial.rotationY.Evaluate(lut, normT, RandomUnit(s, RandomItem::RotationY)),
+						e.initial.rotationZ.Evaluate(lut, normT, RandomUnit(s, RandomItem::Rotation)));
+				} else {
+					rot = Vector3(0.0f, 0.0f,
+						e.initial.rotation.Evaluate(lut, normT, RandomUnit(s, RandomItem::Rotation)));
+				}
 
 				// サイズ: 3D Start Size なら軸別、そうでなければ一様 (xyz 同値)
 				Vector3 sz3;
@@ -145,8 +177,14 @@ namespace aq
 				rt.size[i]         = sz3;
 				rt.color[i]        = col;
 
+				// shape のサンプルはエミッタローカル。エミッタ回転でワールド軸系へ揃え、
+				// ルート相対オフセット (localPosition) を加える。
+				// (Unity: エミッタが X=270° 等に回っていると、ローカル上向きの放出が
+				//  ワールドでは別方向になる。gravity はワールド軸なので回転はここで済ませる)
 				Vector3 lpos, ldir;
 				SampleShape(e.shape, s, lpos, ldir);
+				lpos = RotateVec(emitterRot, lpos) + e.localPosition;
+				ldir = RotateVec(emitterRot, ldir);
 				rt.velocity[i] = ldir * speed;
 				rt.position[i] = world ? (origin + lpos) : lpos;
 			}
@@ -174,6 +212,7 @@ namespace aq
 			{
 				const float* lut  = e.curveLutPool.empty() ? nullptr : e.curveLutPool.data();
 				const bool   world = (e.simulationSpace == SimulationSpace::World);
+				const DirectX::XMMATRIX emitterRot = EmitterRotation(e);
 
 				if (playing) {
 					rt.playbackTime += dt;
@@ -196,12 +235,17 @@ namespace aq
 					const float gm = e.gravityModifier.Evaluate(lut, normTNow, RandomUnit(rt.seed[i], RandomItem::GravityModifier));
 					if (gm != 0.0f) rt.velocity[i] += gravityDir * (GRAVITY * gm * dt);
 
-					// 速度の時間変化 (追加オフセットとして加算, space は MVP では無視)
+					// 速度の時間変化 (追加オフセットとして加算)。
+					// space=Local はエミッタ空間なのでエミッタ回転でワールド軸系へ変換する
+					// (例: X=270° 回転エミッタのローカル +Z はワールド +Y=上へ)。World はそのまま。
 					if (e.velocityOverLifetime.enabled) {
 						const float vx = e.velocityOverLifetime.linearX.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::VelocityX));
 						const float vy = e.velocityOverLifetime.linearY.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::VelocityY));
 						const float vz = e.velocityOverLifetime.linearZ.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::VelocityZ));
-						rt.position[i] += Vector3(vx, vy, vz) * dt;
+						Vector3 v(vx, vy, vz);
+						if (e.velocityOverLifetime.space == SimulationSpace::Local)
+							v = RotateVec(emitterRot, v);
+						rt.position[i] += v * dt;
 					}
 
 					rt.position[i] += rt.velocity[i] * dt;
@@ -225,9 +269,9 @@ namespace aq
 						col = col * e.colorOverLifetime.Evaluate(u);
 					rt.color[i] = col;
 
-					// 回転の時間変化
+					// 回転の時間変化 (z ロールのみ。軸別は v1 非対応)
 					if (e.rotationOverLifetime.enabled)
-						rt.rotation[i] += e.rotationOverLifetime.angularVelocity.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::RotationOverLifetime)) * dt;
+						rt.rotation[i].z += e.rotationOverLifetime.angularVelocity.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::RotationOverLifetime)) * dt;
 
 					++i;
 				}
@@ -247,7 +291,7 @@ namespace aq
 							rt.emitAccumulator += rate * dt;
 							while (rt.emitAccumulator >= 1.0f) {
 								rt.emitAccumulator -= 1.0f;
-								Spawn(rt, e, normT, origin, world);
+								Spawn(rt, e, normT, origin, world, emitterRot);
 							}
 						}
 					}
@@ -267,7 +311,7 @@ namespace aq
 								if (RandomUnit(bseed, 777u) <= b.probability) {
 									const float cnt = b.count.Evaluate(lut, normT, RandomUnit(bseed, RandomItem::BurstCount));
 									const int n = static_cast<int>(cnt + 0.5f);
-									for (int k = 0; k < n; ++k) Spawn(rt, e, normT, origin, world);
+									for (int k = 0; k < n; ++k) Spawn(rt, e, normT, origin, world, emitterRot);
 								}
 							}
 						}
@@ -288,7 +332,7 @@ namespace aq
 			seed.assign(cap, 0u);
 			initialSize.assign(cap, Vector3());
 			initialColor.assign(cap, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-			rotation.assign(cap, 0.0f);
+			rotation.assign(cap, Vector3());
 			size.assign(cap, Vector3());
 			color.assign(cap, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 
@@ -485,9 +529,12 @@ namespace aq
 			verts.reserve(static_cast<size_t>(rt.aliveCount) * vpp);
 			for (uint32_t p = 0; p < rt.aliveCount; ++p) {
 				const Vector3 wp = world ? rt.position[p] : (lastWorldOrigin_ + rt.position[p]);
-				const Vector3& sz = rt.size[p];   // 軸別 (3D Start Size 対応)
-				const DirectX::XMMATRIX roll = DirectX::XMMatrixRotationZ(rt.rotation[p] * DEG2RAD);
-				const DirectX::XMMATRIX rot  = DirectX::XMMatrixMultiply(roll, emitterRot);
+				const Vector3& sz  = rt.size[p];       // 軸別 (3D Start Size 対応)
+				const Vector3& prot = rt.rotation[p];   // 軸別 (3D Start Rotation 対応)
+				// RollPitchYaw は z→x→y の順に適用され Unity の Euler(ZXY) と同順
+				const DirectX::XMMATRIX particleRot = DirectX::XMMatrixRotationRollPitchYaw(
+					prot.x * DEG2RAD, prot.y * DEG2RAD, prot.z * DEG2RAD);
+				const DirectX::XMMATRIX rot = DirectX::XMMatrixMultiply(particleRot, emitterRot);
 				const DirectX::XMMATRIX m =
 					DirectX::XMMatrixMultiply(
 						DirectX::XMMatrixMultiply(DirectX::XMMatrixScaling(sz.x, sz.y, sz.z), rot),
@@ -688,7 +735,7 @@ namespace aq
 						r = across * hx;
 						u = dir * halfLen;
 					} else {
-						const float rad = rt.rotation[p] * DEG2RAD;
+						const float rad = rt.rotation[p].z * DEG2RAD;   // ビルボードは z ロールのみ
 						const float cs  = std::cos(rad);
 						const float sn  = std::sin(rad);
 						r = (camRight * cs + camUp * sn) * hx;   // 回転後の右半径

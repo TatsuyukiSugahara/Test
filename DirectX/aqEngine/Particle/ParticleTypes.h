@@ -28,7 +28,9 @@ namespace aq
 			Size,
 			SizeY,          // 3D Start Size 用 (X は Size を共用)
 			SizeZ,
-			Rotation,
+			Rotation,       // Z ロール (3D Start Rotation の Z も共用)
+			RotationX,      // 3D Start Rotation 用
+			RotationY,
 			Color,
 			GravityModifier,
 			RateOverTime,
@@ -170,6 +172,12 @@ namespace aq
 			ScalarValue sizeX;
 			ScalarValue sizeY;
 			ScalarValue sizeZ;
+
+			/** 3D Start Rotation (rotation3D 指定時のみ有効。度。メッシュ粒子の向き付け用) */
+			bool        rotation3D = false;
+			ScalarValue rotationX;
+			ScalarValue rotationY;
+			ScalarValue rotationZ;
 		};
 
 

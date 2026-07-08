@@ -306,7 +306,7 @@ namespace AqEngine.ParticleExport
 				{ "lifetime", Curve(main.startLifetime) },
 				{ "size",     Curve(main.startSize3D ? main.startSizeX : main.startSize) },
 				{ "speed",    Curve(main.startSpeed) },
-				{ "rotation", Curve(main.startRotation, Mathf.Rad2Deg) },   // Unity はラジアン
+				{ "rotation", Curve(main.startRotation3D ? main.startRotationZ : main.startRotation, Mathf.Rad2Deg) },   // Unity はラジアン
 				{ "color",    ColorValue(main.startColor) },
 			};
 			// 3D Start Size: 軸別サイズ (ビーム板/円筒メッシュの非一様スケールに必須)
@@ -317,6 +317,16 @@ namespace AqEngine.ParticleExport
 					{ "x", Curve(main.startSizeX) },
 					{ "y", Curve(main.startSizeY) },
 					{ "z", Curve(main.startSizeZ) },
+				};
+			}
+			// 3D Start Rotation: 軸別回転 (度)。ビーム板/円筒を立てる・寝かせる向き付けに必須
+			if (main.startRotation3D)
+			{
+				initial["rotation3D"] = new Dictionary<string, object>
+				{
+					{ "x", Curve(main.startRotationX, Mathf.Rad2Deg) },
+					{ "y", Curve(main.startRotationY, Mathf.Rad2Deg) },
+					{ "z", Curve(main.startRotationZ, Mathf.Rad2Deg) },
 				};
 			}
 

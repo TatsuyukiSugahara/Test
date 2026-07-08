@@ -288,6 +288,15 @@ namespace aq
 						out.initial.sizeY  = ParseScalar(s3["y"], pool, 1.0f);
 						out.initial.sizeZ  = ParseScalar(s3["z"], pool, 1.0f);
 					}
+
+					// 3D Start Rotation (任意フィールド。メッシュ粒子の向き付け)
+					const JsonValue& r3 = j["rotation3D"];
+					if (r3.IsObject()) {
+						out.initial.rotation3D = true;
+						out.initial.rotationX  = ParseScalar(r3["x"], pool, 0.0f);
+						out.initial.rotationY  = ParseScalar(r3["y"], pool, 0.0f);
+						out.initial.rotationZ  = ParseScalar(r3["z"], pool, 0.0f);
+					}
 				}
 
 				// emission (§7.3)

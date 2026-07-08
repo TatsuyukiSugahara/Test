@@ -11,7 +11,8 @@ namespace aq
 		//
 		// フォワードパスは Opaque 固定のため、このコマンドが自前でブレンド
 		// (AlphaBlend / Additive) を設定する。b0 に view/proj (world=Identity、
-		// 頂点は CPU でワールド展開済み) を積み、テクスチャは使わない。
+		// 頂点は CPU でワールド展開済み) を積む。item.texture があれば t0/s0 を束縛する
+		// (無ければ手続き円 PS を使うため束縛不要)。
 		// ============================================================
 		class ParticleDrawCommand final : public IRenderCommand
 		{

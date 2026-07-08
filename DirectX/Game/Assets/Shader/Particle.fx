@@ -1,6 +1,7 @@
 // パーティクル ビルボード シェーダ。
 // 頂点は CPU 側でカメラ right/up によりワールド空間へ展開済み。
-// テクスチャは使わず、uv 距離で柔らかく減衰させた丸い粒を頂点カラーで着色する。
+// PS は 2 系統: テクスチャ無し(PSMain=手続き円) / テクスチャ有り(PSTextured)。
+// フリップブックの小矩形 UV も CPU 側で頂点 uv に焼き込み済み。
 
 cbuffer VSPSCb : register(b0)
 {
@@ -8,6 +9,9 @@ cbuffer VSPSCb : register(b0)
     float4x4 view;
     float4x4 project;
 };
+
+Texture2D    albedo : register(t0);
+SamplerState smp    : register(s0);
 
 struct VSInput
 {
@@ -36,9 +40,16 @@ PSInput VSMain(VSInput input)
     return output;
 }
 
+// テクスチャ未指定のエミッタ用。uv 距離で柔らかく減衰させた丸い粒を頂点カラーで着色する。
 float4 PSMain(PSInput input) : SV_Target0
 {
     float2 d = input.uv * 2.0f - 1.0f;          // 中心基準 [-1,1]
     float falloff = saturate(1.0f - dot(d, d)); // 中心 1・周縁 0 の柔らかい円
     return float4(input.color.rgb * falloff, input.color.a * falloff);
+}
+
+// renderer.texture 指定時。頂点カラー(over-lifetime 評価済み) を乗算する。
+float4 PSTextured(PSInput input) : SV_Target0
+{
+    return albedo.Sample(smp, input.uv) * input.color;
 }

@@ -166,16 +166,21 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
   - [x] **P4b**（描画）`ParticleVertex`(pos/uv/color) + `Particle.fx`(手続き円×頂点カラー) + `RenderFrame.particleItems` +
     `RenderSystem::BuildRenderFrame` での収集 + `Renderer.cpp` 専用パス（`ParticleDrawCommand` が Alpha/Additive を設定）。
     テクスチャは未使用（§7.4 のパス解決待ち）。Playground.level に `FX_Test` を配置して確認
-- [ ] **P5** overLifetime（color/size/rotation/velocity）+ shape 各種 + bursts + フリップブック +
-  StretchedBillboard + 距離ソート
+- [x] **P5**（2026-07-07 実装）overLifetime（color/size/rotation/velocity）+ shape 各種 + bursts は P4a で完了。
+  本フェーズで **テクスチャ対応**（`renderer.texture` を Unity の `Assets/…` パスのまま `Load<GPUResource>`、
+  `Particle.fx` に `PSTextured` 追加、`ParticleRenderItem.texture/samplerState` + `ParticleDrawCommand` で t0/s0 束縛。
+  未指定/ロード失敗時は手続き円 PS へフォールバック）、**フリップブック**（§7.9 の小矩形 UV を CPU で頂点へ焼き込み）、
+  **距離ソート**（Alpha かつ `sortMode=ByDistance` のみ遠い順）、**StretchedBillboard**（速度方向 × `lengthScale`/`speedScale`）を実装。
+  `DirectX.sln` Debug/x64 フルビルド成功。
 - [ ] **P6**（任意）Mesh renderer + GPU compute シミュレーション
 
 ## 5. 未確認・TODO
 
 - [ ] Assimp の UWP/Xbox ビルド可否（現状は PC 限定前提）。
 - [ ] TKM/TKA と FBX 直読みの座標系・スケール差（Unity は左手Y-up・cm 単位）の吸収方針。
-- [ ] **テクスチャ/メッシュのパス解決規約**（仕様 §7.10）：Unity `Assets/xxx` → aq リソースパスの
-  対応付け（エクスポータでリライトするか、マニフェストを持つか）。
+- [x] **テクスチャのパス解決規約**（仕様 §7.10）：**Unity の `Assets/…` をそのまま aq のリソースパスとして使う**
+  （変換なし。アーティストが同じ相対パスで `Game/Assets/…` にテクスチャを配置する）。既存の `Assets/` 相対規約と一致。
+  メッシュ（`renderer.mesh`）は P6 で同方針を適用予定。
 - [ ] LUT サンプル数 64 の妥当性（急峻カーブ）。ステップは別処理なので当面 64 で進める。
 - [ ] Gradient LUT のフォーマット（RGBA8 かハーフ float か：メモリ vs バンディング）。
 - [ ] バーストのループ折り返し発火の取りこぼし対策（仕様 §7.3）。
@@ -199,7 +204,7 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 
 ## 7. 引き継ぎメモ（別PC / 次セッション用）
 
-> 現在ブランチ: `feature/particle`。P3 + **P4（CPU sim + 描画）** まで実装・コミット済み。次は **P5**。
+> 現在ブランチ: `feature/particle`。P3 + P4（CPU sim + 描画）+ **P5（テクスチャ/フリップブック/ソート/Stretched）** まで実装済み。次は **P6（任意）** か FBX の P1。
 > リファクタ済み: Loader/Data は `aqEngine/Resource/` へ移動し `aq::res` に統一。Component/System は `Component/ParticleComponentSystem` に集約。
 
 ### 7.1 実装済み（P3・実在ファイル）
@@ -216,11 +221,12 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 
 ### 7.2 ビルド上の注意（別PCでも同じはず）
 
-- **デスクトップ（Debug/x64）構成は既存の依存 `DirectXTex\DirectXTex.h` 未配置だとリンク前に失敗する**
-  （この環境は `packages/directxtex_uwp.*` のみ）。P3 コードとは無関係。UWP/Xbox 構成、または
-  desktop 版 DirectXTex を配置した環境でフルビルドすること。
+- **`Engine.vcxproj` を単体で msbuild すると `DirectXTex\DirectXTex.h` が見つからず失敗する。**
+  原因は依存欠落ではなく `$(SolutionDir)` 未定義（インクルードパスが `$(SolutionDir)ThirdParty`）。
+  実体は `ThirdParty/DirectXTex/` に同梱済み。**`DirectX.sln` をビルドする**か、
+  単体なら `/p:SolutionDir=<repo>\DirectX\` を渡すこと。
+  （※旧版メモの「DirectXTex 未配置で失敗」は誤り。Debug/x64 フルビルドは通る。）
 - 新規 C++ ファイルは他の engine ファイルに合わせ **UTF-8 BOM 付き**（`.particle` は仕様 §2 で BOM なし）。
-- `ParticleTypes.h` 単体は cl.exe で構文コンパイル通過確認済み（LUT/Evaluate ロジック）。
 
 ### 7.3a 実装済み（P4a・CPU sim・実在ファイル）
 
@@ -253,11 +259,32 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
   カメラ右/上は `Camera::GetViewMatrixInverse()` の行（`_11.._13`=right, `_21.._23`=up）から取得。
 - `Rendering/ParticleDrawCommand.{h,cpp}` + `Renderer.cpp` … 海の後・ポストプロセスの前に専用パス。`ParticleDrawCommand` が
   `OMSetBlendMode(Additive/AlphaBlend)` を自前設定して描画し、最後に `Opaque` へ戻す（forward は Opaque 固定のため）。
-- **未対応（P5 以降）**: テクスチャ（Unity `Assets/…` パス解決＝§7.4）、フリップブック、StretchedBillboard、距離ソート、
-  simulationSpace のエミッタ回転、velocityOverLifetime.space。サンプルは非ループ一発なのでレベル読み込み時に一度だけ再生。
+- **未対応（P4b 時点）**: テクスチャ、フリップブック、StretchedBillboard、距離ソート → **いずれも P5 で実装済み（§7.3c）**。
+  残: simulationSpace のエミッタ回転、velocityOverLifetime.space。サンプルは非ループ一発なのでレベル読み込み時に一度だけ再生。
 
-### 7.4 未決（P4 で判断が要る）
+### 7.3c 実装済み（P5・テクスチャ/フリップブック/ソート/Stretched）
 
-- `renderer.texture` の Unity `Assets/…` → aq リソースパス解決（仕様 §7.10、本書 §5 TODO）
+- `Rendering/RenderFrame.h` … `ParticleRenderItem` に `texture` / `samplerState` を追加。
+- `Game/Assets/Shader/Particle.fx` … `Texture2D albedo : t0` / `SamplerState smp : s0` と
+  **`PSTextured`**（`albedo.Sample(smp,uv) * color`）を追加。`PSMain`（手続き円）は据え置き。
+- `Rendering/ParticleDrawCommand.{h,cpp}` … `item.texture` があれば t0/s0 を束縛。
+- `Component/ParticleComponentSystem.{h,cpp}` …
+  - `EnsureTextures()`: `renderer.texture`（**Unity の `Assets/…` をそのまま**）を `Load<res::GPUResource>`。
+    s0 サンプラ（linear/clamp）を 1 個生成。**未指定/ロード失敗なら手続き円 PS へフォールバック**。
+  - `FillParticleItems(out, camRight, camUp, camForward, camPos)` へ拡張（呼び出し元 `BodyComponentSystem.cpp` も更新）。
+  - フリップブック: `frame = floor(startFrame + frameOverTime(u)*tiles*cycles) % 総数`、左上原点・行優先で小矩形 UV。
+    **クアッドの v を反転修正**（左下=vMax / 左上=vMin）。手続き円は対称なので見た目不変。
+  - 距離ソート: Alpha かつ `sortMode=ByDistance` のみ、カメラからの平方距離で遠い順に並べて頂点生成。
+  - StretchedBillboard: 縦軸 = 速度方向 ×(`size*lengthScale + speed*speedScale*0.5`)、横軸 = `cross(dir, camForward)`。
+- 検証: `DirectX.sln` Debug/x64 **フルビルド成功**（`Game.exe` 生成）。
+- テクスチャ素材: **プレースホルダを手続き生成して配置済み** — `Game/Assets/FX/spark.png`（128² 暖色グロー）/
+  `Game/Assets/FX/smoke_sheet.png`（256² = 4×4 フリップブック）。サンプル `.particle` の `renderer.texture` と一致。
+  差し替え自由（アーティスト素材を同じ相対パスで置けばよい）。
+- **実行時の実描画は未確認**（この環境ではゲーム描画まで走らせられないため）。ビルドは通る。
+
+### 7.4 未決 / 残課題
+
 - バーストのループ折り返し発火の取りこぼし（仕様 §7.3）
-- simulationSpace=Local/World の保持空間と描画変換の扱い（本書 §3.4）
+- simulationSpace=Local/World の保持空間と描画変換の扱い（本書 §3.4）。現状 Local はエミッタ回転を無視。
+- `velocityOverLifetime.space` の Local/World 切り替え（現状は未使用）
+- `renderer.mesh`（Mesh renderer）は P6。パス解決はテクスチャと同方針の予定。

@@ -155,7 +155,7 @@ namespace aq
 		struct ParticleVertex
 		{
 			math::Vector3 position;   // ワールド座標
-			math::Vector2 uv;         // クアッド内 [0,1]
+			math::Vector2 uv;         // テクスチャ UV (フリップブック時は小矩形)
 			math::Vector4 color;      // RGBA (over-lifetime 評価済み)
 		};
 
@@ -171,6 +171,12 @@ namespace aq
 			std::shared_ptr<graphics::IIndexBuffer>  indexBuffer;
 			std::shared_ptr<graphics::IShader>       vs;
 			std::shared_ptr<graphics::IShader>       ps;
+
+			// t0 テクスチャ。nullptr なら手続き円 PS (PSMain)、非 nullptr なら PSTextured を使う。
+			// 非 nullptr のとき s0 に samplerState を積む。
+			std::shared_ptr<graphics::IShaderResourceView> texture;
+			std::shared_ptr<graphics::ISamplerState>       samplerState;
+
 			uint32_t indexCount = 0;
 			bool     additive   = false;   // true=Additive, false=AlphaBlend
 		};

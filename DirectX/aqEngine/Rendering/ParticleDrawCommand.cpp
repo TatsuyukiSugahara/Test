@@ -35,6 +35,13 @@ namespace aq
 			ctx.VSSetConstantBuffer(0, *drawCB);
 			ctx.PSSetConstantBuffer(0, *drawCB);
 
+			// t0/s0: テクスチャ (未指定なら手続き円 PS のため束縛しない)
+			if (item_.texture) {
+				ctx.PSSetShaderResource(0, *item_.texture);
+				if (item_.samplerState)
+					ctx.PsSetSampler(0, *item_.samplerState);
+			}
+
 			ctx.IASetVertexBuffer(*item_.vertexBuffer);
 			ctx.IASetIndexBuffer(*item_.indexBuffer);
 			ctx.IASetPrimitiveTopology(graphics::PrimitiveTopology::TriangleList);

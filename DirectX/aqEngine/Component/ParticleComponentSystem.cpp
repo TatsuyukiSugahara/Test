@@ -341,8 +341,37 @@ namespace aq
 				particleVs_ = rm.LoadShader("Assets/Shader/Particle.fx", "VSMain", graphics::IShader::ShaderType::VS);
 			if (!particlePs_)
 				particlePs_ = rm.LoadShader("Assets/Shader/Particle.fx", "PSMain", graphics::IShader::ShaderType::PS);
+			if (!particlePsTextured_)
+				particlePsTextured_ = rm.LoadShader("Assets/Shader/Particle.fx", "PSTextured", graphics::IShader::ShaderType::PS);
+
+			// テクスチャ PS は使うエミッタが無ければ未完了でも構わないので必須にしない。
 			return particleVs_ && particleVs_->IsCompleted() && particleVs_->GetShader()
 			    && particlePs_ && particlePs_->IsCompleted() && particlePs_->GetShader();
+		}
+
+
+		void ParticleEmitterComponent::EnsureTextures()
+		{
+			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
+			if (textures_.size() != emitters.size())
+				textures_.resize(emitters.size());
+
+			auto& rm = aq::res::ResourceManager::Get();
+			for (size_t i = 0; i < emitters.size(); ++i) {
+				// renderer.texture は Unity の "Assets/..." 相対をそのまま aq のリソースパスとして使う。
+				const std::string& path = emitters[i].renderer.texture;
+				if (!textures_[i] && !path.empty())
+					textures_[i] = rm.Load<aq::res::GPUResource>(path.c_str());
+			}
+
+			if (!sampler_) {
+				graphics::SamplerDesc desc;
+				desc.filter   = graphics::FilterMode::MinMagMipLinear;
+				desc.addressU = graphics::AddressMode::Clamp;
+				desc.addressV = graphics::AddressMode::Clamp;
+				desc.addressW = graphics::AddressMode::Clamp;
+				sampler_ = graphics::GraphicsDevice::Get().CreateSamplerState(desc);
+			}
 		}
 
 
@@ -375,45 +404,132 @@ namespace aq
 		void ParticleEmitterComponent::FillParticleItems(
 			std::vector<aq::rendering::ParticleRenderItem>& out,
 			const aq::math::Vector3& camRight,
-			const aq::math::Vector3& camUp)
+			const aq::math::Vector3& camUp,
+			const aq::math::Vector3& camForward,
+			const aq::math::Vector3& camPos)
 		{
 			if (state_ != State::Ready) return;
 			if (!EnsureShaders()) return;
+			EnsureTextures();
 
 			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
 			if (renderStates_.size() != runtimes_.size())
 				renderStates_.resize(runtimes_.size());
 
+			// 距離ソート用 (平方距離で十分。sqrt を避ける)
+			auto distSq = [](const Vector3& a, const Vector3& b)
+				{
+					const float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+					return dx * dx + dy * dy + dz * dz;
+				};
+
 			std::vector<aq::rendering::ParticleVertex> verts;
+			std::vector<Vector3>  wpos;
+			std::vector<uint32_t> order;
 			for (size_t i = 0; i < runtimes_.size() && i < emitters.size(); ++i) {
 				ParticleEmitterRuntime& rt = runtimes_[i];
 				if (rt.aliveCount == 0) continue;
 
-				const EmitterData& e = emitters[i];
-				const bool world = (e.simulationSpace == SimulationSpace::World);
+				const EmitterData& e     = emitters[i];
+				const float*       lut   = e.curveLutPool.data();
+				const bool         world = (e.simulationSpace == SimulationSpace::World);
+				const bool additive      = (e.renderer.blendMode == BlendMode::Additive);
+
 				ParticleEmitterRenderState& rs = renderStates_[i];
 				EnsureBuffers(rs, static_cast<uint32_t>(rt.position.size()));
 				if (!rs.vb || !rs.ib) continue;
 
+				// renderer.texture (ロード完了時のみ束縛。未完了なら手続き円で描く)
+				aq::res::RefGPUResource texRes = (i < textures_.size()) ? textures_[i] : nullptr;
+				graphics::IShaderResourceView* srv =
+					(texRes && texRes->IsCompleted()) ? texRes->GetShaderResourceView() : nullptr;
+				const bool textured = (srv != nullptr)
+				                    && particlePsTextured_ && particlePsTextured_->IsCompleted()
+				                    && particlePsTextured_->GetShader();
+
+				// ワールド座標を先に確定 (ソートと頂点生成で共用)
+				wpos.resize(rt.aliveCount);
+				for (uint32_t p = 0; p < rt.aliveCount; ++p)
+					wpos[p] = world ? rt.position[p] : (lastWorldOrigin_ + rt.position[p]);
+
+				// 描画順: Alpha かつ ByDistance のときだけカメラから遠い順 (Additive は順序非依存)
+				order.resize(rt.aliveCount);
+				for (uint32_t p = 0; p < rt.aliveCount; ++p) order[p] = p;
+				if (!additive && e.renderer.sortMode == SortMode::ByDistance) {
+					std::sort(order.begin(), order.end(),
+						[&](uint32_t a, uint32_t b)
+						{
+							return distSq(wpos[a], camPos) > distSq(wpos[b], camPos);
+						});
+				}
+
+				// フリップブック (仕様 §7.9)
+				const TextureSheetAnimationModule& tsa = e.textureSheetAnimation;
+				const int32_t tilesX      = tsa.tilesX > 0 ? tsa.tilesX : 1;
+				const int32_t tilesY      = tsa.tilesY > 0 ? tsa.tilesY : 1;
+				const int32_t totalFrames = tilesX * tilesY;
+				const int32_t cycles      = tsa.cycles > 0 ? tsa.cycles : 1;
+				const bool    flipbook    = tsa.enabled && totalFrames > 1;
+
+				const bool stretched = (e.renderer.type == RendererType::StretchedBillboard);
+
 				verts.clear();
 				verts.reserve(rt.aliveCount * 4u);
-				for (uint32_t p = 0; p < rt.aliveCount; ++p) {
-					const aq::math::Vector3 wpos = world ? rt.position[p]
-					                                     : (lastWorldOrigin_ + rt.position[p]);
-					const float h   = rt.size[p] * 0.5f;
-					const float rad = rt.rotation[p] * DEG2RAD;
-					const float cs  = std::cos(rad);
-					const float sn  = std::sin(rad);
-					const aq::math::Vector3 r = (camRight * cs + camUp * sn) * h;   // 回転後の右半径
-					const aq::math::Vector3 u = (camUp * cs - camRight * sn) * h;   // 回転後の上半径
-					const aq::math::Vector4& c = rt.color[p];
+				for (uint32_t oi = 0; oi < rt.aliveCount; ++oi) {
+					const uint32_t p  = order[oi];
+					const Vector3& wp = wpos[p];
+					const float    h  = rt.size[p] * 0.5f;
 
+					// --- UV 小矩形 (左上原点・行優先。v は上が vMin) ---
+					float uMin = 0.0f, uMax = 1.0f, vMin = 0.0f, vMax = 1.0f;
+					if (flipbook) {
+						const float u01 = rt.lifetime[p] > 0.0f ? (rt.age[p] / rt.lifetime[p]) : 0.0f;
+						const float sf  = tsa.startFrame.Evaluate(lut, u01, RandomUnit(rt.seed[p], RandomItem::StartFrame));
+						const float fo  = tsa.frameOverTime.Evaluate(lut, u01, RandomUnit(rt.seed[p], RandomItem::Frame));
+						int32_t frame   = static_cast<int32_t>(std::floor(sf + fo * static_cast<float>(totalFrames * cycles)));
+						frame %= totalFrames;
+						if (frame < 0) frame += totalFrames;
+						const int32_t col = frame % tilesX;
+						const int32_t row = frame / tilesX;
+						uMin = static_cast<float>(col)        / static_cast<float>(tilesX);
+						uMax = static_cast<float>(col + 1)    / static_cast<float>(tilesX);
+						vMin = static_cast<float>(row)        / static_cast<float>(tilesY);
+						vMax = static_cast<float>(row + 1)    / static_cast<float>(tilesY);
+					}
+
+					// --- クアッドの半径ベクトル ---
+					Vector3 r, u;
+					if (stretched) {
+						// 速度方向に伸ばす。横軸は速度とカメラ前方の外積。
+						Vector3     dir   = rt.velocity[p];
+						const float speed = dir.Length();
+						if (speed > 1.0e-4f) dir.Normalize();
+						else                 dir = camUp;
+
+						Vector3 across;
+						across.Cross(dir, camForward);
+						if (across.Length() > 1.0e-4f) across.Normalize();
+						else                           across = camRight;
+
+						const float halfLen = h * e.renderer.lengthScale
+						                    + speed * e.renderer.speedScale * 0.5f;
+						r = across * h;
+						u = dir * halfLen;
+					} else {
+						const float rad = rt.rotation[p] * DEG2RAD;
+						const float cs  = std::cos(rad);
+						const float sn  = std::sin(rad);
+						r = (camRight * cs + camUp * sn) * h;   // 回転後の右半径
+						u = (camUp * cs - camRight * sn) * h;   // 回転後の上半径
+					}
+
+					// 頂点 0=左下 1=右下 2=左上 3=右上 (EnsureBuffers のインデックス順に一致)
 					aq::rendering::ParticleVertex v;
-					v.color = c;
-					v.position = wpos - r - u; v.uv = aq::math::Vector2(0.0f, 0.0f); verts.push_back(v);
-					v.position = wpos + r - u; v.uv = aq::math::Vector2(1.0f, 0.0f); verts.push_back(v);
-					v.position = wpos - r + u; v.uv = aq::math::Vector2(0.0f, 1.0f); verts.push_back(v);
-					v.position = wpos + r + u; v.uv = aq::math::Vector2(1.0f, 1.0f); verts.push_back(v);
+					v.color = rt.color[p];
+					v.position = wp - r - u; v.uv = aq::math::Vector2(uMin, vMax); verts.push_back(v);
+					v.position = wp + r - u; v.uv = aq::math::Vector2(uMax, vMax); verts.push_back(v);
+					v.position = wp - r + u; v.uv = aq::math::Vector2(uMin, vMin); verts.push_back(v);
+					v.position = wp + r + u; v.uv = aq::math::Vector2(uMax, vMin); verts.push_back(v);
 				}
 
 				rs.vb->Update(verts.data(),
@@ -423,9 +539,15 @@ namespace aq
 				item.vertexBuffer = rs.vb;
 				item.indexBuffer  = rs.ib;
 				item.vs = std::shared_ptr<graphics::IShader>(particleVs_, particleVs_->GetShader());
-				item.ps = std::shared_ptr<graphics::IShader>(particlePs_, particlePs_->GetShader());
+				item.ps = textured
+					? std::shared_ptr<graphics::IShader>(particlePsTextured_, particlePsTextured_->GetShader())
+					: std::shared_ptr<graphics::IShader>(particlePs_, particlePs_->GetShader());
+				if (textured) {
+					item.texture      = std::shared_ptr<graphics::IShaderResourceView>(texRes, srv);
+					item.samplerState = sampler_;
+				}
 				item.indexCount = rt.aliveCount * 6u;
-				item.additive   = (e.renderer.blendMode == BlendMode::Additive);
+				item.additive   = additive;
 				out.push_back(std::move(item));
 			}
 		}

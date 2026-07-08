@@ -90,7 +90,10 @@ namespace aq
 			// 描画用 (遅延生成)
 			std::vector<ParticleEmitterRenderState> renderStates_;
 			aq::res::RefShaderResource        particleVs_;
-			aq::res::RefShaderResource        particlePs_;
+			aq::res::RefShaderResource        particlePs_;          // 手続き円 (テクスチャ無し)
+			aq::res::RefShaderResource        particlePsTextured_;  // renderer.texture 指定時
+			std::shared_ptr<graphics::ISamplerState> sampler_;      // s0 (linear/clamp)
+			std::vector<aq::res::RefGPUResource>     textures_;     // エミッタごと (空パスなら nullptr)
 
 		public:
 			ParticleEmitterComponent() = default;
@@ -117,11 +120,17 @@ namespace aq
 			/**
 			 * 生存粒子からカメラ向きビルボードを生成し、動的 VB を更新して
 			 * ParticleRenderItem を out へ積む (RenderSystem::BuildRenderFrame から)。
-			 * camRight/camUp はワールド空間のカメラ右/上ベクトル。
+			 * フリップブック UV / 距離ソート / StretchedBillboard をここで解決する。
+			 * @param camRight   ワールド空間のカメラ右ベクトル
+			 * @param camUp      ワールド空間のカメラ上ベクトル
+			 * @param camForward ワールド空間のカメラ前方ベクトル (Stretched の横軸算出用)
+			 * @param camPos     ワールド空間のカメラ位置 (距離ソート用)
 			 */
 			void FillParticleItems(std::vector<aq::rendering::ParticleRenderItem>& out,
 			                       const aq::math::Vector3& camRight,
-			                       const aq::math::Vector3& camUp);
+			                       const aq::math::Vector3& camUp,
+			                       const aq::math::Vector3& camForward,
+			                       const aq::math::Vector3& camPos);
 
 			/** 描画側が参照する読み取り用アクセサ。 */
 			const aq::res::ParticleSystemData*        GetAsset()    const { return asset_.get(); }
@@ -169,8 +178,10 @@ namespace aq
 		private:
 			/** asset ロード完了後に runtimes_ を構築する。 */
 			void EnsureRuntimes();
-			/** Particle.fx の VS/PS をロードし、使用可能なら true。 */
+			/** Particle.fx の VS/PS (手続き円・テクスチャ) をロードし、使用可能なら true。 */
 			bool EnsureShaders();
+			/** renderer.texture のテクスチャと s0 サンプラを (未生成なら) 用意する。 */
+			void EnsureTextures();
 			/** rs の VB/IB を quadCap ぶん (未確保/不足時のみ) 生成する。 */
 			void EnsureBuffers(ParticleEmitterRenderState& rs, uint32_t quadCap);
 		};

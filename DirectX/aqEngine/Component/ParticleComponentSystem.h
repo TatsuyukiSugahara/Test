@@ -57,7 +57,9 @@ namespace aq
 		{
 			std::shared_ptr<graphics::IVertexBuffer> vb;
 			std::shared_ptr<graphics::IIndexBuffer>  ib;
-			uint32_t quadCapacity = 0;   // vb/ib が確保しているクアッド数
+			uint32_t quadCapacity = 0;     // vb/ib が確保している粒子数
+			uint32_t vertsPerParticle = 0; // Mesh 用: 1 粒子あたり頂点数 (billboard は 4 相当・未使用)
+			uint32_t idxPerParticle   = 0; // Mesh 用: 1 粒子あたり index 数
 		};
 
 
@@ -94,6 +96,7 @@ namespace aq
 			aq::res::RefShaderResource        particlePsTextured_;  // renderer.texture 指定時
 			std::shared_ptr<graphics::ISamplerState> sampler_;      // s0 (linear/clamp)
 			std::vector<aq::res::RefGPUResource>     textures_;     // エミッタごと (空パスなら nullptr)
+			std::vector<aq::res::RefMeshResource>    meshes_;       // Mesh エミッタごと (それ以外は nullptr)
 
 		public:
 			ParticleEmitterComponent() = default;
@@ -182,6 +185,23 @@ namespace aq
 			bool EnsureShaders();
 			/** renderer.texture のテクスチャと s0 サンプラを (未生成なら) 用意する。 */
 			void EnsureTextures();
+			/** Mesh レンダラーの renderer.mesh を (未生成なら) 非同期ロードする。 */
+			void EnsureMeshes();
+			/**
+			 * バンドル内アセットのパスを解決する。
+			 * "Assets/…" 始まりはコンテンツルート相対としてそのまま、それ以外は
+			 * .particle ファイルのあるフォルダ相対 (エクスポータの Textures/…・Meshes/… バンドル) として解決する。
+			 */
+			std::string ResolveBundlePath(const std::string& path) const;
+			/** rs を Mesh 描画用 (VB=vpp*maxParticles / IB=メッシュ index パターン) に用意する。 */
+			void EnsureMeshBuffers(ParticleEmitterRenderState& rs, uint32_t vpp, uint32_t ipp,
+			                       const std::vector<uint32_t>& meshIndices, uint32_t maxParticles);
+			/** Mesh エミッタ 1 本を頂点展開して out へ積む (FillParticleItems から)。 */
+			void FillMeshEmitter(size_t emitterIndex, ParticleEmitterRenderState& rs,
+			                     const ParticleEmitterRuntime& rt, const aq::particle::EmitterData& e,
+			                     std::vector<aq::rendering::ParticleRenderItem>& out,
+			                     aq::res::RefGPUResource texRes, graphics::IShaderResourceView* srv,
+			                     bool textured, bool additive);
 			/** rs の VB/IB を quadCap ぶん (未確保/不足時のみ) 生成する。 */
 			void EnsureBuffers(ParticleEmitterRenderState& rs, uint32_t quadCap);
 		};

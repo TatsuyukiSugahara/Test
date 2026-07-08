@@ -166,43 +166,6 @@ namespace aq
 
 				if (playing) {
 					rt.playbackTime += dt;
-					const float normT     = NormT(e, rt.playbackTime);
-					const float localTime = rt.playbackTime - e.startDelay;
-					const bool  active    = e.looping || (localTime <= e.duration);
-
-					// 連続放出 (rateOverTime)
-					if (e.emission.enabled && active && localTime >= 0.0f) {
-						const float rate = e.emission.rateOverTime.Evaluate(lut, normT, 0.5f);
-						if (rate > 0.0f) {
-							rt.emitAccumulator += rate * dt;
-							while (rt.emitAccumulator >= 1.0f) {
-								rt.emitAccumulator -= 1.0f;
-								Spawn(rt, e, normT, origin, world);
-							}
-						}
-					}
-
-					// バースト (MVP: ループごとに time 到達で 1 回発火)
-					if (active && localTime >= 0.0f && !e.emission.bursts.empty()) {
-						const float dur   = e.duration > 0.0f ? e.duration : 1.0f;
-						const float loopT = e.looping ? std::fmod(localTime, dur) : localTime;
-						if (e.looping && loopT < rt.prevLoopTime) {
-							std::fill(rt.burstFired.begin(), rt.burstFired.end(), uint8_t(0));
-						}
-						for (size_t bi = 0; bi < e.emission.bursts.size(); ++bi) {
-							const EmissionBurst& b = e.emission.bursts[bi];
-							if (!rt.burstFired[bi] && loopT >= b.time) {
-								rt.burstFired[bi] = 1;
-								const uint32_t bseed = Hash(rt.seedBase ^ static_cast<uint32_t>(bi * 0x9e3779b9u));
-								if (RandomUnit(bseed, 777u) <= b.probability) {
-									const float cnt = b.count.Evaluate(lut, normT, RandomUnit(bseed, RandomItem::BurstCount));
-									const int n = static_cast<int>(cnt + 0.5f);
-									for (int k = 0; k < n; ++k) Spawn(rt, e, normT, origin, world);
-								}
-							}
-						}
-						rt.prevLoopTime = loopT;
-					}
 				}
 
 				// 積分 (生存粒子ごと, u = age/lifetime)
@@ -249,6 +212,49 @@ namespace aq
 						rt.rotation[i] += e.rotationOverLifetime.angularVelocity.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::RotationOverLifetime)) * dt;
 
 					++i;
+				}
+
+				// 放出は死亡処理の後 (Unity と同順)。maxParticles 上限に張り付くエミッタ
+				// (常駐リング/グロー等) が寿命で死んだ同一フレームに補充され、1 フレームの
+				// 明滅 (ちらつき) を防ぐ。
+				if (playing) {
+					const float normT     = NormT(e, rt.playbackTime);
+					const float localTime = rt.playbackTime - e.startDelay;
+					const bool  active    = e.looping || (localTime <= e.duration);
+
+					// 連続放出 (rateOverTime)
+					if (e.emission.enabled && active && localTime >= 0.0f) {
+						const float rate = e.emission.rateOverTime.Evaluate(lut, normT, 0.5f);
+						if (rate > 0.0f) {
+							rt.emitAccumulator += rate * dt;
+							while (rt.emitAccumulator >= 1.0f) {
+								rt.emitAccumulator -= 1.0f;
+								Spawn(rt, e, normT, origin, world);
+							}
+						}
+					}
+
+					// バースト (MVP: ループごとに time 到達で 1 回発火)
+					if (active && localTime >= 0.0f && !e.emission.bursts.empty()) {
+						const float dur   = e.duration > 0.0f ? e.duration : 1.0f;
+						const float loopT = e.looping ? std::fmod(localTime, dur) : localTime;
+						if (e.looping && loopT < rt.prevLoopTime) {
+							std::fill(rt.burstFired.begin(), rt.burstFired.end(), uint8_t(0));
+						}
+						for (size_t bi = 0; bi < e.emission.bursts.size(); ++bi) {
+							const EmissionBurst& b = e.emission.bursts[bi];
+							if (!rt.burstFired[bi] && loopT >= b.time) {
+								rt.burstFired[bi] = 1;
+								const uint32_t bseed = Hash(rt.seedBase ^ static_cast<uint32_t>(bi * 0x9e3779b9u));
+								if (RandomUnit(bseed, 777u) <= b.probability) {
+									const float cnt = b.count.Evaluate(lut, normT, RandomUnit(bseed, RandomItem::BurstCount));
+									const int n = static_cast<int>(cnt + 0.5f);
+									for (int k = 0; k < n; ++k) Spawn(rt, e, normT, origin, world);
+								}
+							}
+						}
+						rt.prevLoopTime = loopT;
+					}
 				}
 			}
 		} // namespace
@@ -350,6 +356,20 @@ namespace aq
 		}
 
 
+		std::string ParticleEmitterComponent::ResolveBundlePath(const std::string& path) const
+		{
+			// "Assets/…" はコンテンツルート相対としてそのまま使う (Unity パス互換)。
+			if (path.rfind("Assets/", 0) == 0 || path.rfind("assets/", 0) == 0)
+				return path;
+
+			// それ以外は .particle と同じフォルダ相対 (エクスポータの Textures/・Meshes/ バンドル)。
+			const size_t slash = assetPath_.find_last_of("/\\");
+			if (slash == std::string::npos)
+				return path;
+			return assetPath_.substr(0, slash + 1) + path;
+		}
+
+
 		void ParticleEmitterComponent::EnsureTextures()
 		{
 			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
@@ -358,10 +378,9 @@ namespace aq
 
 			auto& rm = aq::res::ResourceManager::Get();
 			for (size_t i = 0; i < emitters.size(); ++i) {
-				// renderer.texture は Unity の "Assets/..." 相対をそのまま aq のリソースパスとして使う。
 				const std::string& path = emitters[i].renderer.texture;
 				if (!textures_[i] && !path.empty())
-					textures_[i] = rm.Load<aq::res::GPUResource>(path.c_str());
+					textures_[i] = rm.Load<aq::res::GPUResource>(ResolveBundlePath(path).c_str());
 			}
 
 			if (!sampler_) {
@@ -372,6 +391,118 @@ namespace aq
 				desc.addressW = graphics::AddressMode::Clamp;
 				sampler_ = graphics::GraphicsDevice::Get().CreateSamplerState(desc);
 			}
+		}
+
+
+		void ParticleEmitterComponent::EnsureMeshes()
+		{
+			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
+			if (meshes_.size() != emitters.size())
+				meshes_.resize(emitters.size());
+
+			auto& rm = aq::res::ResourceManager::Get();
+			for (size_t i = 0; i < emitters.size(); ++i) {
+				const EmitterData& e = emitters[i];
+				const std::string& path = e.renderer.mesh;
+				if (e.renderer.type == RendererType::Mesh && !meshes_[i] && !path.empty())
+					meshes_[i] = rm.Load<aq::res::MeshResource>(ResolveBundlePath(path).c_str());
+			}
+		}
+
+
+		void ParticleEmitterComponent::EnsureMeshBuffers(ParticleEmitterRenderState& rs,
+			uint32_t vpp, uint32_t ipp, const std::vector<uint32_t>& meshIndices, uint32_t maxParticles)
+		{
+			if (rs.vb && rs.ib && rs.quadCapacity >= maxParticles
+			    && rs.vertsPerParticle == vpp && rs.idxPerParticle == ipp) return;
+			if (maxParticles == 0 || vpp == 0 || ipp == 0) return;
+
+			const uint32_t vtxCount = vpp * maxParticles;
+			std::vector<aq::rendering::ParticleVertex> zero(vtxCount);
+			rs.vb = graphics::GraphicsDevice::Get().CreateDynamicVertexBuffer(
+				vtxCount, static_cast<uint32_t>(sizeof(aq::rendering::ParticleVertex)), zero.data());
+
+			// メッシュの index パターンを粒子ごとに頂点オフセットして敷き詰める (巻き順はそのまま)。
+			std::vector<uint32_t> idx;
+			idx.reserve(static_cast<size_t>(ipp) * maxParticles);
+			for (uint32_t p = 0; p < maxParticles; ++p) {
+				const uint32_t base = p * vpp;
+				for (uint32_t j = 0; j < ipp; ++j)
+					idx.push_back(base + meshIndices[j]);
+			}
+			rs.ib = graphics::GraphicsDevice::Get().CreateIndexBuffer(
+				static_cast<uint32_t>(idx.size()), idx.data());
+
+			rs.quadCapacity     = maxParticles;
+			rs.vertsPerParticle = vpp;
+			rs.idxPerParticle   = ipp;
+		}
+
+
+		void ParticleEmitterComponent::FillMeshEmitter(size_t emitterIndex, ParticleEmitterRenderState& rs,
+			const ParticleEmitterRuntime& rt, const EmitterData& e,
+			std::vector<aq::rendering::ParticleRenderItem>& out,
+			aq::res::RefGPUResource texRes, graphics::IShaderResourceView* srv,
+			bool textured, bool additive)
+		{
+			aq::res::RefMeshResource meshRes = (emitterIndex < meshes_.size()) ? meshes_[emitterIndex] : nullptr;
+			if (!meshRes || !meshRes->IsCompleted()) return;   // ロード中は描かない (醜い板を出さない)
+
+			const std::vector<graphics::VertexData>& mv = *meshRes->GetVertics();
+			const std::vector<uint32_t>&             mi = *meshRes->GetIndices();
+			if (mv.empty() || mi.empty()) return;
+
+			const uint32_t vpp = static_cast<uint32_t>(mv.size());
+			const uint32_t ipp = static_cast<uint32_t>(mi.size());
+			EnsureMeshBuffers(rs, vpp, ipp, mi, static_cast<uint32_t>(rt.position.size()));
+			if (!rs.vb || !rs.ib) return;
+
+			const bool world = (e.simulationSpace == SimulationSpace::World);
+
+			// エミッタのローカル回転 (度)。エフェクト根の回転は現状未適用。
+			const DirectX::XMMATRIX emitterRot = DirectX::XMMatrixRotationRollPitchYaw(
+				e.localRotationEuler.x * DEG2RAD, e.localRotationEuler.y * DEG2RAD, e.localRotationEuler.z * DEG2RAD);
+
+			std::vector<aq::rendering::ParticleVertex> verts;
+			verts.reserve(static_cast<size_t>(rt.aliveCount) * vpp);
+			for (uint32_t p = 0; p < rt.aliveCount; ++p) {
+				const Vector3 wp = world ? rt.position[p] : (lastWorldOrigin_ + rt.position[p]);
+				const float   sz = rt.size[p];
+				const DirectX::XMMATRIX roll = DirectX::XMMatrixRotationZ(rt.rotation[p] * DEG2RAD);
+				const DirectX::XMMATRIX rot  = DirectX::XMMatrixMultiply(roll, emitterRot);
+				const DirectX::XMMATRIX m =
+					DirectX::XMMatrixMultiply(
+						DirectX::XMMatrixMultiply(DirectX::XMMatrixScaling(sz, sz, sz), rot),
+						DirectX::XMMatrixTranslation(wp.x, wp.y, wp.z));
+
+				const aq::math::Vector4& col = rt.color[p];
+				for (uint32_t k = 0; k < vpp; ++k) {
+					aq::rendering::ParticleVertex vv;
+					const DirectX::XMVECTOR pp = DirectX::XMVector3TransformCoord(
+						DirectX::XMLoadFloat3(&mv[k].position.vector), m);
+					DirectX::XMStoreFloat3(&vv.position.vector, pp);
+					vv.uv    = mv[k].uv;
+					vv.color = col;
+					verts.push_back(vv);
+				}
+			}
+
+			aq::rendering::ParticleRenderItem item;
+			item.vertexBuffer = rs.vb;
+			item.indexBuffer  = rs.ib;
+			// VB への書き込みはレンダースレッド (ParticleDrawCommand) に委ねる
+			item.vertices = std::make_shared<std::vector<aq::rendering::ParticleVertex>>(std::move(verts));
+			item.vs = std::shared_ptr<graphics::IShader>(particleVs_, particleVs_->GetShader());
+			item.ps = textured
+				? std::shared_ptr<graphics::IShader>(particlePsTextured_, particlePsTextured_->GetShader())
+				: std::shared_ptr<graphics::IShader>(particlePs_, particlePs_->GetShader());
+			if (textured) {
+				item.texture      = std::shared_ptr<graphics::IShaderResourceView>(texRes, srv);
+				item.samplerState = sampler_;
+			}
+			item.indexCount = rt.aliveCount * ipp;
+			item.additive   = additive;
+			out.push_back(std::move(item));
 		}
 
 
@@ -411,6 +542,7 @@ namespace aq
 			if (state_ != State::Ready) return;
 			if (!EnsureShaders()) return;
 			EnsureTextures();
+			EnsureMeshes();
 
 			const std::vector<EmitterData>& emitters = asset_->GetEmitters();
 			if (renderStates_.size() != runtimes_.size())
@@ -436,8 +568,6 @@ namespace aq
 				const bool additive      = (e.renderer.blendMode == BlendMode::Additive);
 
 				ParticleEmitterRenderState& rs = renderStates_[i];
-				EnsureBuffers(rs, static_cast<uint32_t>(rt.position.size()));
-				if (!rs.vb || !rs.ib) continue;
 
 				// renderer.texture (ロード完了時のみ束縛。未完了なら手続き円で描く)
 				aq::res::RefGPUResource texRes = (i < textures_.size()) ? textures_[i] : nullptr;
@@ -446,6 +576,16 @@ namespace aq
 				const bool textured = (srv != nullptr)
 				                    && particlePsTextured_ && particlePsTextured_->IsCompleted()
 				                    && particlePsTextured_->GetShader();
+
+				// Mesh レンダラーはメッシュ実体を粒子ごとに変換して描く (P6)。
+				if (e.renderer.type == RendererType::Mesh) {
+					FillMeshEmitter(i, rs, rt, e, out, texRes, srv, textured, additive);
+					continue;
+				}
+
+				// --- 以降ビルボード (Billboard / StretchedBillboard) ---
+				EnsureBuffers(rs, static_cast<uint32_t>(rt.position.size()));
+				if (!rs.vb || !rs.ib) continue;
 
 				// ワールド座標を先に確定 (ソートと頂点生成で共用)
 				wpos.resize(rt.aliveCount);
@@ -532,12 +672,11 @@ namespace aq
 					v.position = wp + r + u; v.uv = aq::math::Vector2(uMax, vMin); verts.push_back(v);
 				}
 
-				rs.vb->Update(verts.data(),
-					static_cast<uint32_t>(verts.size() * sizeof(aq::rendering::ParticleVertex)));
-
 				aq::rendering::ParticleRenderItem item;
 				item.vertexBuffer = rs.vb;
 				item.indexBuffer  = rs.ib;
+				// VB への書き込みはレンダースレッド (ParticleDrawCommand) に委ねる
+				item.vertices = std::make_shared<std::vector<aq::rendering::ParticleVertex>>(std::move(verts));
 				item.vs = std::shared_ptr<graphics::IShader>(particleVs_, particleVs_->GetShader());
 				item.ps = textured
 					? std::shared_ptr<graphics::IShader>(particlePsTextured_, particlePsTextured_->GetShader())

@@ -10,7 +10,10 @@ using UnityEngine;
 namespace AqEngine.ParticleExport
 {
 	/// <summary>
-	/// 選択オブジェクト配下の ParticleSystem を aqEngine の .particle v1 へ書き出す。
+	/// 選択オブジェクト/プレハブ配下の ParticleSystem を aqEngine の .particle v1 へ書き出す。
+	/// 参照テクスチャは出力先の Textures/ へフラットコピーし、renderer.texture を
+	/// "Textures/&lt;file&gt;" (=.particle 相対) へ書き換える。バンドルをそのまま
+	/// Game/Assets 下に置けばエンジンが .particle 相対でテクスチャを解決する。
 	/// 仕様: aqEngine/Particle/particleフォーマット仕様v1.md（本書が正）。
 	/// </summary>
 	public static class AqParticleExporter
@@ -19,31 +22,85 @@ namespace AqEngine.ParticleExport
 		private const float STEP_TANGENT = 1.0e30f;
 
 		private static List<string> _warnings;
+		private static Dictionary<string, string> _texMap;    // Unity asset パス -> "Textures/<file>"
+		private static HashSet<string> _usedTexNames;         // 出力ファイル名の衝突回避
+		private static Dictionary<Mesh, string> _meshMap;     // Mesh -> "Meshes/<file>.obj"
+		private static HashSet<string> _usedMeshNames;
 
+
+		// 選択中の 1 オブジェクトを 1 ファイルへ。テクスチャは同フォルダの Textures/ へ。
 		[MenuItem("Tools/aqEngine/Export ParticleSystem")]
-		private static void Export()
+		private static void ExportSelected()
 		{
 			GameObject root = Selection.activeGameObject;
-			if (root == null)
+			if (root == null || root.GetComponentsInChildren<ParticleSystem>(true).Length == 0)
 			{
 				EditorUtility.DisplayDialog("aqEngine", "ParticleSystem を含むオブジェクトを選択してください。", "OK");
 				return;
 			}
 
-			ParticleSystem[] systems = root.GetComponentsInChildren<ParticleSystem>(true);
-			if (systems == null || systems.Length == 0)
-			{
-				EditorUtility.DisplayDialog("aqEngine", "選択階層に ParticleSystem がありません。", "OK");
-				return;
-			}
-
 			string path = EditorUtility.SaveFilePanel("Export .particle", "", root.name + ".particle", "particle");
-			if (string.IsNullOrEmpty(path))
+			if (string.IsNullOrEmpty(path)) { return; }
+			string outDir = Path.GetDirectoryName(path);
+
+			BeginExport();
+			ExportRoot(root, path);
+			int copied = CopyTextures(outDir);
+			int meshes = WriteMeshes(outDir);
+			AssetDatabase.Refresh();
+			Debug.Log($"[aqEngine] Exported '{root.name}' + {copied} texture(s) + {meshes} mesh(es) to {outDir}");
+		}
+
+
+		// 選択中の複数オブジェクト/プレハブを、指定フォルダへ一括出力。
+		// テクスチャは全効果で共有の Textures/ へまとめてコピー (重複は 1 回)。
+		[MenuItem("Tools/aqEngine/Export ParticleSystem (Batch)")]
+		private static void ExportBatch()
+		{
+			var roots = new List<GameObject>();
+			foreach (GameObject go in Selection.gameObjects)
 			{
+				if (go != null && go.GetComponentsInChildren<ParticleSystem>(true).Length > 0)
+					roots.Add(go);
+			}
+			if (roots.Count == 0)
+			{
+				EditorUtility.DisplayDialog("aqEngine", "選択に ParticleSystem を含むオブジェクトがありません。\n(Project でプレハブを複数選択してください)", "OK");
 				return;
 			}
 
+			string outDir = EditorUtility.SaveFolderPanel("Export .particle (batch) — 出力フォルダを選択", "", "");
+			if (string.IsNullOrEmpty(outDir)) { return; }
+
+			BeginExport();
+			int n = 0;
+			foreach (GameObject root in roots)
+			{
+				string file = Path.Combine(outDir, SanitizeFileName(root.name) + ".particle");
+				ExportRoot(root, file);
+				n++;
+			}
+			int copied = CopyTextures(outDir);
+			int meshes = WriteMeshes(outDir);
+			AssetDatabase.Refresh();
+			Debug.Log($"[aqEngine] Batch exported {n} effect(s) + {copied} texture(s) + {meshes} mesh(es) to {outDir} (warnings 総数: {_warnings.Count})");
+		}
+
+
+		private static void BeginExport()
+		{
 			_warnings = new List<string>();
+			_texMap = new Dictionary<string, string>();
+			_usedTexNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			_meshMap = new Dictionary<Mesh, string>();
+			_usedMeshNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		}
+
+
+		// 1 ルートを 1 .particle ファイルへ書き出す (テクスチャ登録は _texMap へ蓄積)。
+		private static void ExportRoot(GameObject root, string outPath)
+		{
+			ParticleSystem[] systems = root.GetComponentsInChildren<ParticleSystem>(true);
 
 			var emitters = new List<object>();
 			foreach (ParticleSystem ps in systems)
@@ -58,7 +115,7 @@ namespace AqEngine.ParticleExport
 				{ "exporter", new Dictionary<string, object>
 					{
 						{ "tool", "AqParticleExporter" },
-						{ "version", "1.0" },
+						{ "version", "1.1" },
 						{ "unity", Application.unityVersion },
 						{ "date", DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) },
 					}
@@ -69,10 +126,165 @@ namespace AqEngine.ParticleExport
 
 			var sb = new StringBuilder();
 			Serialize(jroot, sb, 0);
-			File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
-			AssetDatabase.Refresh();
+			File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(false));
+		}
 
-			Debug.Log($"[aqEngine] Exported {systems.Length} emitter(s) to {path} (warnings: {_warnings.Count})");
+
+		// mainTexture を _texMap へ登録し、.particle に書く相対パス "Textures/<file>" を返す。
+		private static string RegisterTexture(Texture tex)
+		{
+			string src = AssetDatabase.GetAssetPath(tex);
+			if (string.IsNullOrEmpty(src)) { return ""; }
+			if (_texMap.TryGetValue(src, out string existing)) { return existing; }
+
+			string fileName = Path.GetFileName(src);
+			string bare = Path.GetFileNameWithoutExtension(fileName);
+			string ext  = Path.GetExtension(fileName);
+			string candidate = fileName;
+			int i = 1;
+			while (_usedTexNames.Contains(candidate)) { candidate = $"{bare}_{i}{ext}"; i++; }
+			_usedTexNames.Add(candidate);
+
+			string rel = "Textures/" + candidate;
+			_texMap[src] = rel;
+			return rel;
+		}
+
+
+		// 登録済みテクスチャを <outDir>/Textures/ へコピー。コピー数を返す。
+		private static int CopyTextures(string outDir)
+		{
+			if (_texMap.Count == 0) { return 0; }
+			string texDir = Path.Combine(outDir, "Textures");
+			Directory.CreateDirectory(texDir);
+
+			int copied = 0;
+			foreach (KeyValuePair<string, string> kv in _texMap)
+			{
+				try
+				{
+					string abs = ToAbsolutePath(kv.Key);           // Unity asset -> 実ファイル
+					string dst = Path.Combine(outDir, kv.Value);    // <outDir>/Textures/<file>
+					File.Copy(abs, dst, true);
+					copied++;
+				}
+				catch (Exception e)
+				{
+					_warnings.Add($"texture copy 失敗: {kv.Key} ({e.Message})");
+					Debug.LogWarning($"[aqEngine] texture copy 失敗: {kv.Key} — {e.Message}");
+				}
+			}
+			return copied;
+		}
+
+
+		// Unity アセットパス ("Assets/..." / "Packages/...") を OS 絶対パスへ。
+		private static string ToAbsolutePath(string assetPath)
+		{
+			if (assetPath.StartsWith("Assets/"))
+				return Path.Combine(Application.dataPath, assetPath.Substring("Assets/".Length));
+			// Packages/ など: プロジェクトルート (= dataPath の親) 起点
+			string projRoot = Directory.GetParent(Application.dataPath).FullName;
+			return Path.Combine(projRoot, assetPath);
+		}
+
+
+		private static string SanitizeFileName(string name)
+		{
+			foreach (char c in Path.GetInvalidFileNameChars())
+				name = name.Replace(c, '_');
+			return name;
+		}
+
+
+		// Mesh を _meshMap へ登録し、.particle に書く相対パス "Meshes/<file>.obj" を返す。
+		private static string RegisterMesh(Mesh m)
+		{
+			if (_meshMap.TryGetValue(m, out string existing)) { return existing; }
+
+			string bare = SanitizeFileName(string.IsNullOrEmpty(m.name) ? "mesh" : m.name);
+			string candidate = bare + ".obj";
+			int i = 1;
+			while (_usedMeshNames.Contains(candidate)) { candidate = $"{bare}_{i}.obj"; i++; }
+			_usedMeshNames.Add(candidate);
+
+			string rel = "Meshes/" + candidate;
+			_meshMap[m] = rel;
+			return rel;
+		}
+
+
+		// 登録済みメッシュを <outDir>/Meshes/ へ OBJ 出力。出力数を返す。
+		private static int WriteMeshes(string outDir)
+		{
+			if (_meshMap.Count == 0) { return 0; }
+			string meshDir = Path.Combine(outDir, "Meshes");
+			Directory.CreateDirectory(meshDir);
+
+			int written = 0;
+			foreach (KeyValuePair<Mesh, string> kv in _meshMap)
+			{
+				try
+				{
+					File.WriteAllText(Path.Combine(outDir, kv.Value), MeshToObj(kv.Key), new UTF8Encoding(false));
+					written++;
+				}
+				catch (Exception e)
+				{
+					_warnings.Add($"mesh 書き出し失敗: {kv.Key.name} ({e.Message})");
+					Debug.LogWarning($"[aqEngine] mesh 書き出し失敗: {kv.Key.name} — {e.Message}");
+				}
+			}
+			return written;
+		}
+
+
+		// Unity Mesh を OBJ 文字列へ。座標系は Unity/DX とも左手 Y-up なのでそのまま。
+		// エンジン側 (.obj ローダー) で V 反転・winding を吸収する。
+		private static string MeshToObj(Mesh m)
+		{
+			var sb = new StringBuilder();
+			sb.Append("# exported by AqParticleExporter\n");
+			sb.Append("o ").Append(m.name).Append('\n');
+
+			Vector3[] verts = m.vertices;
+			Vector3[] norms = m.normals;
+			Vector2[] uvs   = m.uv;
+			bool hasN = norms != null && norms.Length == verts.Length;
+			bool hasT = uvs != null && uvs.Length == verts.Length;
+
+			var ci = CultureInfo.InvariantCulture;
+			foreach (Vector3 v in verts)
+				sb.Append("v ").Append(v.x.ToString("R", ci)).Append(' ').Append(v.y.ToString("R", ci)).Append(' ').Append(v.z.ToString("R", ci)).Append('\n');
+			if (hasT)
+				foreach (Vector2 t in uvs)
+					sb.Append("vt ").Append(t.x.ToString("R", ci)).Append(' ').Append(t.y.ToString("R", ci)).Append('\n');
+			if (hasN)
+				foreach (Vector3 n in norms)
+					sb.Append("vn ").Append(n.x.ToString("R", ci)).Append(' ').Append(n.y.ToString("R", ci)).Append(' ').Append(n.z.ToString("R", ci)).Append('\n');
+
+			// 全サブメッシュの三角形をまとめて出力 (OBJ は 1-indexed)。
+			for (int s = 0; s < m.subMeshCount; ++s)
+			{
+				int[] tris = m.GetTriangles(s);
+				for (int k = 0; k + 2 < tris.Length; k += 3)
+				{
+					int a = tris[k] + 1, b = tris[k + 1] + 1, c = tris[k + 2] + 1;
+					sb.Append('f').Append(' ').Append(FaceVert(a, hasT, hasN))
+					              .Append(' ').Append(FaceVert(b, hasT, hasN))
+					              .Append(' ').Append(FaceVert(c, hasT, hasN)).Append('\n');
+				}
+			}
+			return sb.ToString();
+		}
+
+		private static string FaceVert(int idx, bool hasT, bool hasN)
+		{
+			// v / v/vt / v//vn / v/vt/vn
+			if (hasT && hasN) { return $"{idx}/{idx}/{idx}"; }
+			if (hasT)         { return $"{idx}/{idx}"; }
+			if (hasN)         { return $"{idx}//{idx}"; }
+			return idx.ToString();
 		}
 
 
@@ -234,6 +446,7 @@ namespace AqEngine.ParticleExport
 			var r = ps.GetComponent<ParticleSystemRenderer>();
 			string type = "Billboard";
 			string texture = "";
+			string mesh = "";
 			string blend = "Alpha";
 			string sort = "None";
 			float lengthScale = 2.0f;
@@ -251,25 +464,52 @@ namespace AqEngine.ParticleExport
 				speedScale = r.velocityScale;
 				sort = r.sortMode == ParticleSystemSortMode.None ? "None" : "ByDistance";
 
+				// Mesh レンダラー: メッシュ本体を OBJ 出力し相対パスを書く (P6)。
+				if (r.renderMode == ParticleSystemRenderMode.Mesh && r.mesh != null)
+					mesh = RegisterMesh(r.mesh);
+
 				Material m = r.sharedMaterial;
 				if (m != null)
 				{
-					if (m.mainTexture != null) { texture = AssetDatabase.GetAssetPath(m.mainTexture); }
-					if (m.HasProperty("_DstBlend") && Mathf.RoundToInt(m.GetFloat("_DstBlend")) == (int)UnityEngine.Rendering.BlendMode.One)
-					{
-						blend = "Additive";
-					}
+					if (m.mainTexture != null) { texture = RegisterTexture(m.mainTexture); }
+					blend = DetectBlend(m);
 				}
 			}
 			return new Dictionary<string, object>
 			{
 				{ "type", type },
 				{ "texture", texture },
+				{ "mesh", mesh },
 				{ "blendMode", blend },
 				{ "sortMode", sort },
 				{ "lengthScale", lengthScale },
 				{ "speedScale", speedScale },
 			};
+		}
+
+
+		// マテリアルのブレンドが加算かを推定する。v1 は Alpha / Additive の 2 値。
+		// Legacy/Mobile の固定機能ブレンドは _DstBlend を持たないためシェーダ名でも判定する。
+		private static string DetectBlend(Material m)
+		{
+			if (m == null) { return "Alpha"; }
+
+			// シェーダ名ベース（"Legacy Shaders/Particles/Additive" 等）
+			string shaderName = m.shader != null ? m.shader.name.ToLowerInvariant() : "";
+			if (shaderName.Contains("additive")) { return "Additive"; }
+
+			// Built-in/URP パーティクル: _DstBlend == One
+			if (m.HasProperty("_DstBlend") &&
+			    Mathf.RoundToInt(m.GetFloat("_DstBlend")) == (int)UnityEngine.Rendering.BlendMode.One)
+			{
+				return "Additive";
+			}
+			// URP パーティクル: _Blend 2 = Additive（0=Alpha,1=Premultiply,2=Additive,3=Multiply）
+			if (m.HasProperty("_Blend") && Mathf.RoundToInt(m.GetFloat("_Blend")) == 2)
+			{
+				return "Additive";
+			}
+			return "Alpha";
 		}
 
 

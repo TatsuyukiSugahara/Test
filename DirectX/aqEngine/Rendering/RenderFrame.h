@@ -169,6 +169,11 @@ namespace aq
 		{
 			std::shared_ptr<graphics::IVertexBuffer> vertexBuffer;
 			std::shared_ptr<graphics::IIndexBuffer>  indexBuffer;
+
+			// 今フレームの CPU 頂点。vertexBuffer への書き込みは ParticleDrawCommand が
+			// レンダースレッドで行う (ゲームスレッドから Map すると D3D11 は immediate
+			// context 競合、D3D12 はフレームインデックス不一致で頂点が破れる)。
+			std::shared_ptr<std::vector<ParticleVertex>> vertices;
 			std::shared_ptr<graphics::IShader>       vs;
 			std::shared_ptr<graphics::IShader>       ps;
 

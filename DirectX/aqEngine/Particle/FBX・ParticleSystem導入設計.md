@@ -1,20 +1,20 @@
 # FBX 読み込み・ParticleSystem 導入 設計（メモ・第2版）
 
-> 対象コミット: 7c6e081 / 最終更新: 2026-07-07
+> 対象コミット: 674a35a / 最終更新: 2026-07-08
 >
 > Particle 側は [particleフォーマット仕様v1.md](particleフォーマット仕様v1.md) が一次資料（フォーマットは同書が正）。
 > 本書はそれを **どう実装に落とすか**（データ表現・ランタイム・描画・フェーズ）を決める設計メモ。
 
 > Unity で作成した **FBX モデル**と **ParticleSystem** を本エンジン（aq）で使えるようにする。
 > 既存の Sprite 描画（UIBatchRenderer）とモデル描画（StaticMesh / SkeletalMesh → RenderFrame）
-> の資産を最大限流用する。本書は方針合意時点のメモであり、実装未着手。
+> の資産を最大限流用する。
+> **進捗: FBX（§2・ufbx）と Particle P3〜P5（§7）は実装済み。残りは Particle P6（任意）。**
 
 ## 0. 決定事項
 
-- **FBX 方式**: 既存の `FbxLoader`（[../Resource/Resource.h](../Resource/Resource.h) 内）の**空スタブを埋めて
-  ランタイム直読みする**方針。ユーザー希望「既存の FBX 読み込み処理を使う」に沿う。
-  ただし出荷（Xbox/UWP）を考え、パーサライブラリは PC 限定（`#if !defined(AQ_PLATFORM_UWP)`）で
-  積み、UWP は従来どおり TKM に焼く二段構えを許容する。
+- **FBX 方式**（実装済み）: **ufbx**（単一ヘッダ・`ThirdParty/ufbx/`）でランタイム直読み。
+  静的/スキン/アニメを `MeshLoader`/`SkeletalMeshLoader`/`AnimationLoader` の `.fbx` 分岐で処理する（§2）。
+  当初案の Assimp / FBX SDK・PC 限定二段構えは不採用（ufbx は単一ヘッダで UWP でも積める）。
 - **Particle 取り込み**: **Unity から独自 JSON（`.particle`）をエクスポート**して読む。
   Unity の `.prefab` YAML 直接パースは採用しない（バージョン差・フォーマット変化に弱いため）。
 - **配置**: 新規モジュールは `aqEngine/Particle/`（本ディレクトリ）。FBX 側は既存 `aqEngine/Resource/` に追記。
@@ -23,7 +23,7 @@
 
 | 既存資産 | 場所 | 本件での役割 |
 |---|---|---|
-| `FbxLoader`（宣言のみ） | [../Resource/Resource.h:249](../Resource/Resource.h#L249) | **空スタブ**（`return true;`）。ここに FBX パースを実装 |
+| FBX ローダー（ufbx） | [../Resource/Resource.cpp](../Resource/Resource.cpp) `LoadFbxStaticMesh` 他 | **実装済み**。`MeshLoader`/`SkeletalMeshLoader`/`AnimationLoader` が `.fbx` を分岐 |
 | `MeshResource` / `MeshData` | [../Resource/Resource.h:160](../Resource/Resource.h#L160) | FBX → `VertexData`/`indices`/`MaterialTexturePaths` の受け皿（既存） |
 | `SkeletalMeshResource` / `BoneData` | [../Resource/Resource.h:295](../Resource/Resource.h#L295) | スキン FBX の bone / inverseBindPose 受け皿（既存） |
 | TKM/TKA ローダー | [../Resource/Resource.cpp](../Resource/Resource.cpp) `MeshLoader`/`SkeletalMeshLoader` | 出荷パス（変換済みバイナリ）。維持 |
@@ -39,26 +39,28 @@
 > **③`ParticleEmitterComponent` + `ParticleSystem`（CPU sim）+ ビルボード描画**の3点。
 > 生成/描画の実体は既存の Resource / RenderFrame / 動的VB を使う。
 
-## 2. FBX 対応
+## 2. FBX 対応（**実装済み**・ufbx）
 
-### 2.1 現状（重要）
+> ライブラリは **ufbx**（単一ヘッダ・`ThirdParty/ufbx/`）を採用。当初案の Assimp / FBX SDK は不採用。
+> `.fbx` は既存の各ローダの `Loading()` 内で拡張子分岐し、そのまま `SetModelPath("...fbx")` で表示できる。
+> 未使用だった `FbxLoader` スタブと旧 FBX SDK コメントは削除済み。
 
-- `FbxLoader` は**宣言だけ**存在し、実装 [../Resource/Resource.cpp:95](../Resource/Resource.cpp#L95) は `return true;` の空スタブ。
-- FBX SDK / Assimp は**リポジトリに未導入**（[../Resource/Resource.h:22](../Resource/Resource.h#L22) の `#pragma comment` はコメントアウト）。
-- `Game/Assets/` に `unityChan.fbx` 等は**置いてあるが未配線**。実ロードは `unityChan.tkm`（TKM）。
-- → 「既存の FBX 読み込みを使う」= **この空スタブに実装を入れる**作業になる。受け皿（`MeshResource`/`Reflection`/拡張子振り分け）は既に揃っている。
+### 2.1 実装マップ（すべて [../Resource/Resource.cpp](../Resource/Resource.cpp) 内）
 
-### 2.2 実装方針
+| 用途 | 関数 | 入口ローダー | 出力 |
+|---|---|---|---|
+| 静的メッシュ | `LoadFbxStaticMesh` | `MeshLoader`（`.fbx` 分岐） | `MeshData`（`VertexData`/`indices`/albedo パス） |
+| スキン（スケルタル） | `LoadFbxSkeletalMesh` | `SkeletalMeshLoader` | `SkeletalMeshData`（bone/inverseBindPose/skin weight） |
+| アニメ | `LoadFbxAnimation`（`path.fbx#index` / `#clipName` でクリップ選択） | `AnimationLoader` | `AnimationClipData` |
+| クリップ名列挙（エディタ用） | `GetFbxAnimationClipNames` | — | クリップ名配列 |
 
-1. **FBX パーサライブラリを 1 つ導入**（自前パースは非現実的）。
-   - 推奨: **Assimp**（単一ライブラリ・寛容ライセンス・FBX + glTF 対応）。`ThirdParty/` に追加。
-   - 代替: FBX SDK（`libfbxsdk` を復活）。Autodesk ライセンス + UWP ビルド難あり。
-2. `FbxLoader::Loading()` を実装:
-   - `aiMesh` → `graphics::VertexData` / `indices`
-   - `aiMaterial` → `MaterialTexturePaths`（albedo/normal/specular/emissive）
-   - スキンあり: `SkeletalMeshResource` 側に同様の loader（`aiBone` → `BoneData::inverseBindPose`、`aiAnimation` → `AnimationClipData`）
-3. `.fbx` 拡張子を `Reflection<MeshResource, FbxLoader>()` に振り分け → [StaticMeshComponent::SetModelPath](../Component/BodyComponentSystem.h#L94) からそのまま使用可。
-4. プラットフォーム: PC 限定 `#if !defined(AQ_PLATFORM_UWP)` でランタイム直読み。UWP 出荷は TKM 変換を維持。
+### 2.2 座標系・取り込みの要点（実装準拠）
+
+- `ufbx_load_opts.target_axes = ufbx_axes_left_handed_y_up` で **DirectX 左手 Y-up** へ正規化。
+- 単位変換（`target_unit_meters`）は**使わない**（手元 FBX は単位メタデータが不整合で約 1/100 に潰れるため）。
+- UV は V 反転（FBX 左下原点 → DirectX 左上）、行列式が負の geom-to-world は winding 反転。
+- 取り込み基準回転 `FbxImportBasis()` に座標系補正を集約（**ここを変えると全 FBX の向きが変わる**）。
+- テクスチャパス解決は `FbxResolveTexturePath`（ufbx 絶対 → FBX 同階層 相対 → ファイル名のみ、の順で実在を探索）。
 
 ## 3. ParticleSystem 対応（`.particle` v1 準拠）
 
@@ -154,8 +156,9 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 
 ## 4. フェーズ計画
 
-- [ ] **P1** Assimp 導入 + `FbxLoader::Loading()` 実装（static mesh）→ .fbx 表示
-- [ ] **P2** スキン/アニメの FBX 対応（`SkeletalMeshResource` / bone / anim）
+- [x] **P1**（実装済み）**ufbx** 導入 + `MeshLoader` の `.fbx` 分岐（`LoadFbxStaticMesh`）→ static mesh の .fbx 表示
+- [x] **P2**（実装済み）スキン/アニメの FBX 対応（`LoadFbxSkeletalMesh`：bone/inverseBindPose/weight、
+  `LoadFbxAnimation`：`#index`/`#clipName` クリップ選択、`GetFbxAnimationClipNames`）
 - [x] **P3**（2026-07-07 実装）`.particle` v1 の受け皿：`ParticleTypes`（ScalarValue/LUT/enum）+ `ParticleSystemData` +
   `ParticleLoader`（SimpleJson パース＋LUT 焼き込み）+ `AqParticleExporter.cs` + `Game/Assets/Particle/FX_Explosion.particle`。
   Engine.vcxproj/.filters・Application.cpp 登録済み。マイルストンの実ロード確認は P4 のインスペクタで行う
@@ -172,15 +175,24 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
   未指定/ロード失敗時は手続き円 PS へフォールバック）、**フリップブック**（§7.9 の小矩形 UV を CPU で頂点へ焼き込み）、
   **距離ソート**（Alpha かつ `sortMode=ByDistance` のみ遠い順）、**StretchedBillboard**（速度方向 × `lengthScale`/`speedScale`）を実装。
   `DirectX.sln` Debug/x64 フルビルド成功。
-- [ ] **P6**（任意）Mesh renderer + GPU compute シミュレーション
+- [~] **P6**（2026-07-08 実装・要ランタイム検証）**Mesh renderer**：
+  - **P6a**（エクスポータ）`renderMode==Mesh` のメッシュを `Meshes/<name>.obj` へ出力し `renderer.mesh` に書く + `Meshes/` へ同梱。
+  - **P6b**（engine）`MeshLoader` に `.obj` 分岐（`LoadObjMesh`：v/vt/vn/f、UV は V 反転、巻き順そのまま）。
+  - **P6c**（engine）`FillMeshEmitter`：Mesh エミッタは `renderer.mesh`（`MeshResource`）を粒子ごとに
+    `scale(size)×Rz(rotation)×R(emitter euler)×T(worldPos)` で変換し動的VBへ展開。テクスチャ/加算は billboard と共通。
+    ロード未完了のうちは描画しない（板を出さない）。
+  - **要ランタイム検証/既知の限界**：①巻き順（Unity CW前面=DX CULL_BACK 前提。裏面カリングで消えたら反転が必要）
+    ②オイラー回転順（`XMMatrixRotationRollPitchYaw` ≠ Unity ZXY で回転オーラの向きがずれ得る）
+    ③エフェクト根の回転は未適用（エミッタ `localRotationEuler` のみ）。GPU compute は未着手。
+  - **既存 .particle は要再エクスポート**（P6a 追加前は `renderer.mesh` が空でメッシュが出ない）。
 
 ## 5. 未確認・TODO
 
-- [ ] Assimp の UWP/Xbox ビルド可否（現状は PC 限定前提）。
-- [ ] TKM/TKA と FBX 直読みの座標系・スケール差（Unity は左手Y-up・cm 単位）の吸収方針。
-- [x] **テクスチャのパス解決規約**（仕様 §7.10）：**Unity の `Assets/…` をそのまま aq のリソースパスとして使う**
-  （変換なし。アーティストが同じ相対パスで `Game/Assets/…` にテクスチャを配置する）。既存の `Assets/` 相対規約と一致。
-  メッシュ（`renderer.mesh`）は P6 で同方針を適用予定。
+- [x] FBX ライブラリ選定・座標系/スケール吸収 → **ufbx で実装済み**（§2.2。単位変換は不整合のため不使用、
+  基準回転 `FbxImportBasis` に集約）。
+- [x] **テクスチャのパス解決規約**（仕様 §7.10.1）：`"Assets/…"` はコンテンツルート相対、それ以外は **`.particle` 相対**。
+  エクスポータは参照テクスチャを出力先 `Textures/` へフラットコピーし `texture` を `"Textures/<file>"` に書き換える
+  （自己完結バンドル）。engine 側は `ParticleEmitterComponent::ResolveTexturePath` で解決。メッシュ（`renderer.mesh`）は P6 で同方針。
 - [ ] LUT サンプル数 64 の妥当性（急峻カーブ）。ステップは別処理なので当面 64 で進める。
 - [ ] Gradient LUT のフォーマット（RGBA8 かハーフ float か：メモリ vs バンディング）。
 - [ ] バーストのループ折り返し発火の取りこぼし対策（仕様 §7.3）。
@@ -281,6 +293,17 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
   `Game/Assets/FX/smoke_sheet.png`（256² = 4×4 フリップブック）。サンプル `.particle` の `renderer.texture` と一致。
   差し替え自由（アーティスト素材を同じ相対パスで置けばよい）。
 - **実行時の実描画は未確認**（この環境ではゲーム描画まで走らせられないため）。ビルドは通る。
+
+### 7.3d 修正 (2026-07-08・ちらつき/頂点破れの解消)
+
+- **深度**: パーティクルは `DepthMode::ReadOnly`(テストのみ・書き込みOFF)で描き、描画後に既定へ戻す
+  (`ParticleDrawCommand`)。半透明が Z を塗って背後の粒を四角く切る問題を解消。
+- **放出順序**: `StepEmitter` を「積分・寿命死 → 放出」(Unity と同順)に変更。maxParticles 上限に
+  張り付く常駐エミッタ(リング/グロー)が死亡フレームに補充されず 1 フレーム明滅する問題を解消。
+- **VB 書き込みをレンダースレッドへ移動**(最重要): `ParticleRenderItem.vertices`(CPU 頂点、shared_ptr)を
+  運び、`ParticleDrawCommand::Execute` が描画直前に `vb->Update`。ゲームスレッドから Map していた旧実装は
+  **D3D11=immediate context 競合 / D3D12=フレームインデックス不一致**で頂点破れ・ちらつきの真因だった
+  (スレッド契約 §5「描画 API はレンダースレッドのみ」違反)。
 
 ### 7.4 未決 / 残課題
 

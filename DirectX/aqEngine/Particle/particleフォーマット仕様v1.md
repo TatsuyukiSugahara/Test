@@ -230,12 +230,21 @@ UV 計算: `frame = floor(startFrame + frameOverTime(t) * tilesX * tilesY * cycl
 | キー | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `type` | string | `"Billboard"` | `"Billboard"` / `"StretchedBillboard"` / `"Mesh"` |
-| `texture` | string | `""` | テクスチャパス(Unity の Assets/ 以下相対。**aq のリソースパスへの対応付けは運用で決める**) |
+| `texture` | string | `""` | テクスチャパス(§7.10.1 の解決規約参照) |
 | `mesh` | string | `""` | Mesh 時のメッシュパス(.tkm 等)。未指定なら Billboard に降格 |
 | `blendMode` | string | `"Alpha"` | `"Alpha"` / `"Additive"`(Additive はソート不要) |
 | `sortMode` | string | `"None"` | `"None"` / `"ByDistance"` |
 | `lengthScale` | float | 2.0 | StretchedBillboard: 長さ係数 |
 | `speedScale` | float | 0.0 | StretchedBillboard: 速度比例の伸び |
+
+#### 7.10.1 texture / mesh パスの解決規約
+
+ローダー/ランタイムは `texture` を次で解決する(`mesh` も同方針予定):
+
+- **`"Assets/…"` 始まり** → コンテンツルート(`Game/`)相対としてそのまま(Unity パス互換)。
+- **それ以外(相対)** → **その `.particle` ファイルのあるフォルダ相対**。エクスポータ(`AqParticleExporter`)は
+  参照テクスチャを出力先の `Textures/` へフラットコピーし、`texture` を `"Textures/<file>"` に書き換える。
+  よって `.particle` + `Textures/` をひとまとめに `Game/Assets/…` 下へ置けばそのまま解決される(自己完結バンドル)。
 
 Mesh の実描画は P6(それまでは Billboard 降格)だが、**データ互換のため v1 から定義**する。
 

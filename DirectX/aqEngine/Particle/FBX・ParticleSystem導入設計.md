@@ -175,7 +175,7 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
   未指定/ロード失敗時は手続き円 PS へフォールバック）、**フリップブック**（§7.9 の小矩形 UV を CPU で頂点へ焼き込み）、
   **距離ソート**（Alpha かつ `sortMode=ByDistance` のみ遠い順）、**StretchedBillboard**（速度方向 × `lengthScale`/`speedScale`）を実装。
   `DirectX.sln` Debug/x64 フルビルド成功。
-- [~] **P6**（2026-07-08 実装・要ランタイム検証）**Mesh renderer**：
+- [x] **P6**（2026-07-08 実装・実機検証済み）**Mesh renderer**（+ Unity 互換対応は §7.3e）：
   - **P6a**（エクスポータ）`renderMode==Mesh` のメッシュを `Meshes/<name>.obj` へ出力し `renderer.mesh` に書く + `Meshes/` へ同梱。
   - **P6b**（engine）`MeshLoader` に `.obj` 分岐（`LoadObjMesh`：v/vt/vn/f、UV は V 反転、巻き順そのまま）。
   - **P6c**（engine）`FillMeshEmitter`：Mesh エミッタは `renderer.mesh`（`MeshResource`）を粒子ごとに
@@ -305,9 +305,36 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
   **D3D11=immediate context 競合 / D3D12=フレームインデックス不一致**で頂点破れ・ちらつきの真因だった
   (スレッド契約 §5「描画 API はレンダースレッドのみ」違反)。
 
-### 7.4 未決 / 残課題
+### 7.3e Unity 互換対応 (2026-07-08・市販 VFX での検証で追加)
 
-- バーストのループ折り返し発火の取りこぼし（仕様 §7.3）
-- simulationSpace=Local/World の保持空間と描画変換の扱い（本書 §3.4）。現状 Local はエミッタ回転を無視。
-- `velocityOverLifetime.space` の Local/World 切り替え（現状は未使用）
-- `renderer.mesh`（Mesh renderer）は P6。パス解決はテクスチャと同方針の予定。
+Eric VFX Studio の `FX_Fireball` / `FX_LightPillar` を実機比較して潰した差分。
+**エクスポート時の `warnings` 配列が非対応機能の一覧になっている — 見た目が違うときはまず warnings を読むこと。**
+
+| 対応 | 内容 | 主なファイル |
+|---|---|---|
+| TGA テクスチャ | `.tga` → `LoadFromTGAFile` 分岐 | `Resource/Resource.cpp` |
+| 加算の検出強化 | `DetectBlend`: シェーダ名 "additive" / `_DstBlend==One` / URP `_Blend==2` | `AqParticleExporter.cs` |
+| **D3D12 Additive のα反映** | PSO を `SrcAlpha,One` に(D3D11/Vulkan と同意味論)。`One,One` だと白RGB+α形状テクスチャが**白い四角**に | `D3D12PipelineStateCache.cpp` |
+| Mesh renderer (P6) | エクスポータが `Meshes/<name>.obj` 出力 + `LoadObjMesh` + `FillMeshEmitter`。ロード完了まで描かない | エクスポータ / `Resource.cpp` / `ParticleComponentSystem.cpp` |
+| 3D Start Size | `initial.size3D {x,y,z}`。粒 size を **Vector3 化**。ビルボード=x横/y縦、メッシュ=xyz | 同上一式 |
+| Separate Axes | `sizeOverLifetime.size3D {x,y,z}`(軸別倍率カーブ)。ビーム板が寿命中に萎む | 同上 |
+| 3D Start Rotation | `initial.rotation3D {x,y,z}`(度)。粒 rotation を **Vector3 化**。メッシュは RollPitchYaw(z→x→y=**Unity Euler と同順**) | 同上 |
+| マテリアル Tiling/Offset | `renderer.uvScale/uvOffset`。**V はエクスポータで左下→左上原点へ変換**。細帯/1装飾の切り出し再現 | 同上 |
+| エミッタ回転の sim 適用 | `localRotationEuler` を shape 生成位置/初速方向と `velocityOverLifetime(space=Local)` に適用(X=270° エミッタの「ローカル+Z」=ワールド上、を再現) | `ParticleComponentSystem.cpp` |
+| localPosition 適用 | エミッタのルート相対オフセットを生成位置に加算(従来は無視) | 同上 |
+
+**検証ノウハウ(重要)**:
+- 加算エフェクトは**明るい空バックだと白飛び**して全部白く見える。**暗い背景**(夜/日陰/地形背負い)で確認する。
+- `looping=false` + burst@t=0 の**ワンショット構成**が多い。Enter(再生し直し)**直後の 0.5 秒**を見る。
+- エクスポータ変更後は「最新 .cs を Unity `Assets/Editor/` へコピー → 再エクスポート」が必要。
+  ランタイム変更のみなら再エクスポート不要。ゲーム起動中は Game.exe のリンクが失敗する(閉じてからビルド)。
+
+### 7.4 未決 / 残課題(Unity 参考画像との既知の残差)
+
+- **色味**: Unity 参考(FX_LightPillar)はオレンジの柱。うちは白っぽい → まず**暗背景で再確認**。
+  それでも白いなら `grad_lb` 等の startColor / テクスチャ RGB を追う(スキャンは輝度のみ確認済み)。
+- **エミッタ間の描画順**: `.particle` 定義順で描いている。Alpha 同士の前後や加算の重なり順が Unity と異なり得る。
+- **エンティティ(エフェクト根)回転の未適用**: エミッタ回転は適用済みだが、Entity の Transform 回転はまだ粒に効かない。
+- **lensflare(pzpl.obj)が「点の格子」に見える**: 小クアッド群メッシュの UV/向きの詰めが必要か、Unity 側の見た目と要比較。
+- rotationOverLifetime の Separate Axes(現状 z のみ)/ バーストのループ折り返し取りこぼし(仕様 §7.3)
+- GPU compute シミュレーション(任意)

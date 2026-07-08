@@ -124,14 +124,25 @@ namespace aq
 				rt.age[i]      = 0.0f;
 
 				const float speed = e.initial.speed.Evaluate(lut, normT, RandomUnit(s, RandomItem::Speed));
-				const float sz    = e.initial.size.Evaluate(lut, normT, RandomUnit(s, RandomItem::Size));
 				const float rot   = e.initial.rotation.Evaluate(lut, normT, RandomUnit(s, RandomItem::Rotation));
 				const Vector4 col = e.initial.color.Evaluate(RandomUnit(s, RandomItem::Color));
 
-				rt.initialSize[i]  = sz;
+				// サイズ: 3D Start Size なら軸別、そうでなければ一様 (xyz 同値)
+				Vector3 sz3;
+				if (e.initial.size3D) {
+					sz3 = Vector3(
+						e.initial.sizeX.Evaluate(lut, normT, RandomUnit(s, RandomItem::Size)),
+						e.initial.sizeY.Evaluate(lut, normT, RandomUnit(s, RandomItem::SizeY)),
+						e.initial.sizeZ.Evaluate(lut, normT, RandomUnit(s, RandomItem::SizeZ)));
+				} else {
+					const float sz = e.initial.size.Evaluate(lut, normT, RandomUnit(s, RandomItem::Size));
+					sz3 = Vector3(sz, sz, sz);
+				}
+
+				rt.initialSize[i]  = sz3;
 				rt.initialColor[i] = col;
 				rt.rotation[i]     = rot;
-				rt.size[i]         = sz;
+				rt.size[i]         = sz3;
 				rt.color[i]        = col;
 
 				Vector3 lpos, ldir;
@@ -195,10 +206,17 @@ namespace aq
 
 					rt.position[i] += rt.velocity[i] * dt;
 
-					// サイズの時間変化
-					float sz = rt.initialSize[i];
-					if (e.sizeOverLifetime.enabled)
-						sz *= e.sizeOverLifetime.size.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::SizeOverLifetime));
+					// サイズの時間変化 (Separate Axes 時は軸別倍率)
+					Vector3 sz = rt.initialSize[i];
+					if (e.sizeOverLifetime.enabled) {
+						if (e.sizeOverLifetime.separateAxes) {
+							sz.x *= e.sizeOverLifetime.sizeX.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::SizeOverLifetime));
+							sz.y *= e.sizeOverLifetime.sizeY.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::SizeOverLifetimeY));
+							sz.z *= e.sizeOverLifetime.sizeZ.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::SizeOverLifetimeZ));
+						} else {
+							sz = sz * e.sizeOverLifetime.size.Evaluate(lut, u, RandomUnit(rt.seed[i], RandomItem::SizeOverLifetime));
+						}
+					}
 					rt.size[i] = sz;
 
 					// カラーの時間変化
@@ -268,10 +286,10 @@ namespace aq
 			age.assign(cap, 0.0f);
 			lifetime.assign(cap, 0.0f);
 			seed.assign(cap, 0u);
-			initialSize.assign(cap, 0.0f);
+			initialSize.assign(cap, Vector3());
 			initialColor.assign(cap, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 			rotation.assign(cap, 0.0f);
-			size.assign(cap, 0.0f);
+			size.assign(cap, Vector3());
 			color.assign(cap, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 
 			aliveCount      = 0;
@@ -467,21 +485,25 @@ namespace aq
 			verts.reserve(static_cast<size_t>(rt.aliveCount) * vpp);
 			for (uint32_t p = 0; p < rt.aliveCount; ++p) {
 				const Vector3 wp = world ? rt.position[p] : (lastWorldOrigin_ + rt.position[p]);
-				const float   sz = rt.size[p];
+				const Vector3& sz = rt.size[p];   // 軸別 (3D Start Size 対応)
 				const DirectX::XMMATRIX roll = DirectX::XMMatrixRotationZ(rt.rotation[p] * DEG2RAD);
 				const DirectX::XMMATRIX rot  = DirectX::XMMatrixMultiply(roll, emitterRot);
 				const DirectX::XMMATRIX m =
 					DirectX::XMMatrixMultiply(
-						DirectX::XMMatrixMultiply(DirectX::XMMatrixScaling(sz, sz, sz), rot),
+						DirectX::XMMatrixMultiply(DirectX::XMMatrixScaling(sz.x, sz.y, sz.z), rot),
 						DirectX::XMMatrixTranslation(wp.x, wp.y, wp.z));
 
 				const aq::math::Vector4& col = rt.color[p];
+				const aq::math::Vector2& usc = e.renderer.uvScale;
+				const aq::math::Vector2& uof = e.renderer.uvOffset;
 				for (uint32_t k = 0; k < vpp; ++k) {
 					aq::rendering::ParticleVertex vv;
 					const DirectX::XMVECTOR pp = DirectX::XMVector3TransformCoord(
 						DirectX::XMLoadFloat3(&mv[k].position.vector), m);
 					DirectX::XMStoreFloat3(&vv.position.vector, pp);
-					vv.uv    = mv[k].uv;
+					// マテリアル Tiling/Offset を適用 (uv' = off + uv * scale)
+					vv.uv    = aq::math::Vector2(uof.x + mv[k].uv.x * usc.x,
+					                             uof.y + mv[k].uv.y * usc.y);
 					vv.color = col;
 					verts.push_back(vv);
 				}
@@ -618,11 +640,13 @@ namespace aq
 				for (uint32_t oi = 0; oi < rt.aliveCount; ++oi) {
 					const uint32_t p  = order[oi];
 					const Vector3& wp = wpos[p];
-					const float    h  = rt.size[p] * 0.5f;
+					const float    hx = rt.size[p].x * 0.5f;   // 横半径 (3D Start Size の x)
+					const float    hy = rt.size[p].y * 0.5f;   // 縦半径 (同 y)
 
 					// --- UV 小矩形 (左上原点・行優先。v は上が vMin) ---
 					float uMin = 0.0f, uMax = 1.0f, vMin = 0.0f, vMax = 1.0f;
 					if (flipbook) {
+						// (flipbook 矩形の算出後、下でマテリアル Tiling/Offset を重ねて適用する)
 						const float u01 = rt.lifetime[p] > 0.0f ? (rt.age[p] / rt.lifetime[p]) : 0.0f;
 						const float sf  = tsa.startFrame.Evaluate(lut, u01, RandomUnit(rt.seed[p], RandomItem::StartFrame));
 						const float fo  = tsa.frameOverTime.Evaluate(lut, u01, RandomUnit(rt.seed[p], RandomItem::Frame));
@@ -635,6 +659,14 @@ namespace aq
 						uMax = static_cast<float>(col + 1)    / static_cast<float>(tilesX);
 						vMin = static_cast<float>(row)        / static_cast<float>(tilesY);
 						vMax = static_cast<float>(row + 1)    / static_cast<float>(tilesY);
+					}
+
+					// マテリアル Tiling/Offset (uv' = off + uv * scale)。細い帯/1装飾の切り出しを再現。
+					{
+						const aq::math::Vector2& usc = e.renderer.uvScale;
+						const aq::math::Vector2& uof = e.renderer.uvOffset;
+						uMin = uof.x + uMin * usc.x;  uMax = uof.x + uMax * usc.x;
+						vMin = uof.y + vMin * usc.y;  vMax = uof.y + vMax * usc.y;
 					}
 
 					// --- クアッドの半径ベクトル ---
@@ -651,16 +683,16 @@ namespace aq
 						if (across.Length() > 1.0e-4f) across.Normalize();
 						else                           across = camRight;
 
-						const float halfLen = h * e.renderer.lengthScale
+						const float halfLen = hy * e.renderer.lengthScale
 						                    + speed * e.renderer.speedScale * 0.5f;
-						r = across * h;
+						r = across * hx;
 						u = dir * halfLen;
 					} else {
 						const float rad = rt.rotation[p] * DEG2RAD;
 						const float cs  = std::cos(rad);
 						const float sn  = std::sin(rad);
-						r = (camRight * cs + camUp * sn) * h;   // 回転後の右半径
-						u = (camUp * cs - camRight * sn) * h;   // 回転後の上半径
+						r = (camRight * cs + camUp * sn) * hx;   // 回転後の右半径
+						u = (camUp * cs - camRight * sn) * hy;   // 回転後の上半径
 					}
 
 					// 頂点 0=左下 1=右下 2=左上 3=右上 (EnsureBuffers のインデックス順に一致)

@@ -279,6 +279,15 @@ namespace aq
 					out.initial.size     = ParseScalar(j["size"],     pool, 1.0f);
 					out.initial.rotation = ParseScalar(j["rotation"], pool, 0.0f);
 					out.initial.color    = ParseColorValue(j["color"], math::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+					// 3D Start Size (任意フィールド。ビーム板/円筒の非一様スケール)
+					const JsonValue& s3 = j["size3D"];
+					if (s3.IsObject()) {
+						out.initial.size3D = true;
+						out.initial.sizeX  = ParseScalar(s3["x"], pool, 1.0f);
+						out.initial.sizeY  = ParseScalar(s3["y"], pool, 1.0f);
+						out.initial.sizeZ  = ParseScalar(s3["z"], pool, 1.0f);
+					}
 				}
 
 				// emission (§7.3)
@@ -342,6 +351,15 @@ namespace aq
 					const JsonValue& j = e["sizeOverLifetime"];
 					out.sizeOverLifetime.enabled = j["enabled"].AsBool(false);
 					out.sizeOverLifetime.size    = ParseScalar(j["size"], pool, 1.0f);
+
+					// Separate Axes (任意フィールド。軸別の倍率カーブ)
+					const JsonValue& s3 = j["size3D"];
+					if (s3.IsObject()) {
+						out.sizeOverLifetime.separateAxes = true;
+						out.sizeOverLifetime.sizeX = ParseScalar(s3["x"], pool, 1.0f);
+						out.sizeOverLifetime.sizeY = ParseScalar(s3["y"], pool, 1.0f);
+						out.sizeOverLifetime.sizeZ = ParseScalar(s3["z"], pool, 1.0f);
+					}
 				}
 
 				// rotationOverLifetime (§7.8)
@@ -377,6 +395,16 @@ namespace aq
 					                         ? SortMode::ByDistance : SortMode::None;
 					out.renderer.lengthScale = j["lengthScale"].AsFloat(2.0f);
 					out.renderer.speedScale  = j["speedScale"].AsFloat(0.0f);
+
+					// マテリアル Tiling/Offset (uv' = uvOffset + uv * uvScale)
+					const JsonValue& us = j["uvScale"];
+					if (us.IsArray() && us.Size() >= 2) {
+						out.renderer.uvScale = math::Vector2(us[0].AsFloat(1.0f), us[1].AsFloat(1.0f));
+					}
+					const JsonValue& uo = j["uvOffset"];
+					if (uo.IsArray() && uo.Size() >= 2) {
+						out.renderer.uvOffset = math::Vector2(uo[0].AsFloat(0.0f), uo[1].AsFloat(0.0f));
+					}
 				}
 			}
 		}

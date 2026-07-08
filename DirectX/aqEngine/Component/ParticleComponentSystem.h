@@ -28,10 +28,10 @@ namespace aq
 			std::vector<float>             age;
 			std::vector<float>             lifetime;
 			std::vector<uint32_t>          seed;
-			std::vector<float>             initialSize;
+			std::vector<aq::math::Vector3> initialSize;    // 軸別 (3D Start Size。一様時は xyz 同値)
 			std::vector<aq::math::Vector4> initialColor;
 			std::vector<float>             rotation;       // 現在の回転 (度, ビュー軸ロール)
-			std::vector<float>             size;           // 現在サイズ (initialSize * sizeOverLifetime)
+			std::vector<aq::math::Vector3> size;           // 現在サイズ (initialSize * sizeOverLifetime)
 			std::vector<aq::math::Vector4> color;          // 現在カラー (initialColor * colorOverLifetime)
 
 			uint32_t aliveCount = 0;

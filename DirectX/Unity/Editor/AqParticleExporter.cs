@@ -301,6 +301,25 @@ namespace AqEngine.ParticleExport
 
 			WarnUnsupported(ps);
 
+			var initial = new Dictionary<string, object>
+			{
+				{ "lifetime", Curve(main.startLifetime) },
+				{ "size",     Curve(main.startSize3D ? main.startSizeX : main.startSize) },
+				{ "speed",    Curve(main.startSpeed) },
+				{ "rotation", Curve(main.startRotation, Mathf.Rad2Deg) },   // Unity はラジアン
+				{ "color",    ColorValue(main.startColor) },
+			};
+			// 3D Start Size: 軸別サイズ (ビーム板/円筒メッシュの非一様スケールに必須)
+			if (main.startSize3D)
+			{
+				initial["size3D"] = new Dictionary<string, object>
+				{
+					{ "x", Curve(main.startSizeX) },
+					{ "y", Curve(main.startSizeY) },
+					{ "z", Curve(main.startSizeZ) },
+				};
+			}
+
 			var e = new Dictionary<string, object>
 			{
 				{ "name", ps.gameObject.name },
@@ -312,15 +331,7 @@ namespace AqEngine.ParticleExport
 				{ "maxParticles", main.maxParticles },
 				{ "simulationSpace", main.simulationSpace == ParticleSystemSimulationSpace.World ? "World" : "Local" },
 				{ "gravityModifier", Curve(main.gravityModifier) },
-				{ "initial", new Dictionary<string, object>
-					{
-						{ "lifetime", Curve(main.startLifetime) },
-						{ "speed",    Curve(main.startSpeed) },
-						{ "size",     Curve(main.startSize) },
-						{ "rotation", Curve(main.startRotation, Mathf.Rad2Deg) },   // Unity はラジアン
-						{ "color",    ColorValue(main.startColor) },
-					}
-				},
+				{ "initial", initial },
 				{ "emission", ExportEmission(ps) },
 				{ "shape", ExportShape(ps) },
 				{ "renderer", ExportRenderer(ps) },
@@ -352,12 +363,22 @@ namespace AqEngine.ParticleExport
 			ParticleSystem.SizeOverLifetimeModule siz = ps.sizeOverLifetime;
 			if (siz.enabled)
 			{
-				if (siz.separateAxes) { _warnings.Add($"{ps.name}: sizeOverLifetime Separate Axes は非対応（size 軸のみ使用）"); }
-				e["sizeOverLifetime"] = new Dictionary<string, object>
+				var sizeOL = new Dictionary<string, object>
 				{
 					{ "enabled", true },
-					{ "size", Curve(siz.size) },
+					{ "size", Curve(siz.separateAxes ? siz.x : siz.size) },
 				};
+				// Separate Axes: 軸別の倍率カーブ (ビーム板が寿命中に細く/短くなる表現に必須)
+				if (siz.separateAxes)
+				{
+					sizeOL["size3D"] = new Dictionary<string, object>
+					{
+						{ "x", Curve(siz.x) },
+						{ "y", Curve(siz.y) },
+						{ "z", Curve(siz.z) },
+					};
+				}
+				e["sizeOverLifetime"] = sizeOL;
 			}
 
 			ParticleSystem.RotationOverLifetimeModule rot = ps.rotationOverLifetime;
@@ -451,6 +472,8 @@ namespace AqEngine.ParticleExport
 			string sort = "None";
 			float lengthScale = 2.0f;
 			float speedScale = 0.0f;
+			Vector2 uvScale = Vector2.one;
+			Vector2 uvOffset = Vector2.zero;
 
 			if (r != null)
 			{
@@ -473,6 +496,13 @@ namespace AqEngine.ParticleExport
 				{
 					if (m.mainTexture != null) { texture = RegisterTexture(m.mainTexture); }
 					blend = DetectBlend(m);
+
+					// マテリアルの Tiling/Offset。細い帯や1装飾だけを切り出すマテリアルを再現する。
+					// Unity の UV は左下原点、aq (DirectX) は左上原点なので V を変換して出力する。
+					Vector2 ts = m.mainTextureScale;
+					Vector2 to = m.mainTextureOffset;
+					uvScale  = ts;
+					uvOffset = new Vector2(to.x, 1.0f - to.y - ts.y);
 				}
 			}
 			return new Dictionary<string, object>
@@ -484,6 +514,8 @@ namespace AqEngine.ParticleExport
 				{ "sortMode", sort },
 				{ "lengthScale", lengthScale },
 				{ "speedScale", speedScale },
+				{ "uvScale",  new List<object> { (float)uvScale.x, (float)uvScale.y } },
+				{ "uvOffset", new List<object> { (float)uvOffset.x, (float)uvOffset.y } },
 			};
 		}
 
@@ -656,7 +688,6 @@ namespace AqEngine.ParticleExport
 			if (ps.limitVelocityOverLifetime.enabled) { _warnings.Add($"{ps.name}: Limit Velocity は非対応"); }
 			if (ps.externalForces.enabled)            { _warnings.Add($"{ps.name}: External Forces は非対応"); }
 			if (ps.lights.enabled)                    { _warnings.Add($"{ps.name}: Lights は非対応"); }
-			if (ps.main.startSize3D)                  { _warnings.Add($"{ps.name}: 3D Start Size は非対応（size 軸のみ使用）"); }
 		}
 
 

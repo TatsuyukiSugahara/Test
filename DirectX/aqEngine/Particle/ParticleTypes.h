@@ -26,6 +26,8 @@ namespace aq
 			Lifetime = 1,   // 0 はシード自身と衝突しやすいので 1 始まり
 			Speed,
 			Size,
+			SizeY,          // 3D Start Size 用 (X は Size を共用)
+			SizeZ,
 			Rotation,
 			Color,
 			GravityModifier,
@@ -35,6 +37,8 @@ namespace aq
 			VelocityY,
 			VelocityZ,
 			SizeOverLifetime,
+			SizeOverLifetimeY,   // Separate Axes 用 (X は SizeOverLifetime を共用)
+			SizeOverLifetimeZ,
 			RotationOverLifetime,
 			Frame,
 			StartFrame,
@@ -157,9 +161,15 @@ namespace aq
 		{
 			ScalarValue lifetime;   // 既定 5.0
 			ScalarValue speed;      // 既定 5.0
-			ScalarValue size;       // 既定 1.0
+			ScalarValue size;       // 既定 1.0 (一様)
 			ScalarValue rotation;   // 既定 0.0 (度)
 			ColorValue  color;      // 既定 白
+
+			/** 3D Start Size (size3D 指定時のみ有効。ビーム板/円筒の非一様スケール用) */
+			bool        size3D = false;
+			ScalarValue sizeX;
+			ScalarValue sizeY;
+			ScalarValue sizeZ;
 		};
 
 
@@ -251,6 +261,12 @@ namespace aq
 		{
 			bool        enabled = false;
 			ScalarValue size;
+
+			/** Separate Axes (size3D 指定時のみ有効。軸別の倍率カーブ) */
+			bool        separateAxes = false;
+			ScalarValue sizeX;
+			ScalarValue sizeY;
+			ScalarValue sizeZ;
 		};
 
 
@@ -284,12 +300,16 @@ namespace aq
 		struct RendererModule
 		{
 			RendererType type        = RendererType::Billboard;
-			std::string  texture;                                // Unity Assets/ 相対 (解決は運用で決める)
+			std::string  texture;                                // 解決規約は仕様 §7.10.1
 			std::string  mesh;
 			BlendMode    blendMode   = BlendMode::Alpha;
 			SortMode     sortMode    = SortMode::None;
 			float        lengthScale = 2.0f;
 			float        speedScale  = 0.0f;
+
+			/** マテリアルの Tiling/Offset (エクスポータが左上原点へ変換済み)。uv' = uvOffset + uv * uvScale */
+			math::Vector2 uvScale  = math::Vector2(1.0f, 1.0f);
+			math::Vector2 uvOffset = math::Vector2(0.0f, 0.0f);
 		};
 
 

@@ -164,6 +164,7 @@ Transform スケールは v1 非対応(エクスポータが警告)。
 | `lifetime` | ScalarValue | 5.0 | 寿命(秒) |
 | `speed` | ScalarValue | 5.0 | 初速(m/s、shape の方向に乗算) |
 | `size` | ScalarValue | 1.0 | サイズ(m、ビルボード一辺 / メッシュスケール) |
+| `size3D` | object | — | **任意**。軸別サイズ `{ "x", "y", "z" }`(各 ScalarValue)。Unity の 3D Start Size。指定時は `size` より優先(ビルボードは x=横/y=縦、メッシュは xyz スケール)。ビーム板・円筒の非一様スケールに使う |
 | `rotation` | ScalarValue | 0.0 | ロール角(度)。ビルボードの回転 |
 | `color` | ColorValue | 白 | 初期色 |
 
@@ -207,6 +208,8 @@ orbital / radial / speedModifier は v1 非対応(警告)。
 ### 7.7 `sizeOverLifetime`
 
 `enabled`, `size`(ScalarValue)。initial.size に乗算する**倍率**。
+**任意** `size3D`:軸別の倍率カーブ `{ "x", "y", "z" }`(各 ScalarValue)。Unity の Separate Axes。
+指定時は `size` より優先(ビーム板が寿命中に細く/短くなる表現に使う)。
 
 ### 7.8 `rotationOverLifetime`
 

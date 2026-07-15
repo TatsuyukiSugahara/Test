@@ -43,6 +43,9 @@
     <Filter Include="Physics">
       <UniqueIdentifier>{c739d076-df44-472d-873f-202f105a6f6a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Particle">
+      <UniqueIdentifier>{a1b2c3d4-e5f6-4718-9a0b-1c2d3e4f5a6b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Platform">
       <UniqueIdentifier>{f1a2b3c4-d5e6-47f8-9a0b-1c2d3e4f5a6b}</UniqueIdentifier>
     </Filter>
@@ -428,6 +431,12 @@
     <ClCompile Include="Physics\CharacterController.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
+    <ClCompile Include="Component\ParticleComponentSystem.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Resource\ParticleLoader.cpp">
+      <Filter>Resource</Filter>
+    </ClCompile>
     <ClCompile Include="Resource\Resource.cpp">
       <Filter>Resource</Filter>
     </ClCompile>
@@ -561,6 +570,9 @@
       <Filter>Component</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\OceanDrawCommand.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\ParticleDrawCommand.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Util\SimpleJson.cpp">
@@ -1138,6 +1150,21 @@
     <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h">
       <Filter>Rendering\PostProcess</Filter>
     </ClInclude>
+    <ClInclude Include="Particle\ParticleTypes.h">
+      <Filter>Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Particle\ParticleRandom.h">
+      <Filter>Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\ParticleComponentSystem.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\ParticleSystemData.h">
+      <Filter>Resource</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\ParticleLoader.h">
+      <Filter>Resource</Filter>
+    </ClInclude>
     <ClInclude Include="Resource\Resource.h">
       <Filter>Resource</Filter>
     </ClInclude>
@@ -1199,6 +1226,9 @@
       <Filter>Component</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\OceanDrawCommand.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\ParticleDrawCommand.h">
       <Filter>Rendering</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h">

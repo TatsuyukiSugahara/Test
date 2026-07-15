@@ -3,7 +3,9 @@
 #include "Platform/PlatformBudget.h"
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
+#include <sstream>
 #include <filesystem>
 #include <typeinfo>   // 計測: 重いローダーの種別名 (typeid) 出力用
 #include "ufbx/ufbx.h"
@@ -17,6 +19,7 @@ namespace aq
 		{
 			std::string GetLowerExtension(const std::string& path);
 			bool LoadTkmMeshFile(const std::string& filePath, MeshData& outMesh);
+			bool LoadObjMesh(const std::string& filePath, MeshData& outMesh);
 			bool LoadTkmSkeletalMeshFile(const std::string& filePath, SkeletalMeshData& outMesh);
 			bool LoadTkaAnimationFile(const std::string& filePath, AnimationClipData& outClip);
 			bool LoadFbxStaticMesh(const std::string& filePath, MeshData& outMesh);
@@ -85,22 +88,6 @@ namespace aq
 		/*******************************************/
 
 
-		FbxLoader::FbxLoader()
-		{
-		}
-
-
-		FbxLoader::~FbxLoader()
-		{
-		}
-
-
-		bool FbxLoader::Loading()
-		{
-			return true;
-		}
-
-
 		MeshLoader::MeshLoader()
 		{
 		}
@@ -124,6 +111,9 @@ namespace aq
 			}
 			if (extension == ".fbx") {
 				return LoadFbxStaticMesh(requestPath_, *meshData);
+			}
+			if (extension == ".obj") {
+				return LoadObjMesh(requestPath_, *meshData);
 			}
 
 			return false;
@@ -1493,6 +1483,110 @@ namespace aq
 
 				return true;
 			}
+
+
+			// Wavefront OBJ を静的メッシュとして読み込む (AqParticleExporter が書き出す
+			// パーティクルメッシュ用)。v/vt/vn/f に対応。UV は V 反転 (OBJ 左下原点 →
+			// DirectX 左上)。座標系・巻き順は Unity=DX とも左手 Y-up のためそのまま。
+			bool LoadObjMesh(const std::string& filePath, MeshData& outMesh)
+			{
+				FILE* fp = nullptr;
+				fopen_s(&fp, filePath.c_str(), "rb");
+				if (fp == nullptr) {
+					return false;
+				}
+				fseek(fp, 0, SEEK_END);
+				const long fileSize = ftell(fp);
+				if (fileSize > 0 && !CheckFileBudget(static_cast<size_t>(fileSize), filePath.c_str())) {
+					fclose(fp);
+					return false;
+				}
+				fseek(fp, 0, SEEK_SET);
+				std::string text(static_cast<size_t>(fileSize > 0 ? fileSize : 0), '\0');
+				if (fileSize > 0) {
+					fread_s(&text[0], text.size(), 1, static_cast<size_t>(fileSize), fp);
+				}
+				fclose(fp);
+
+				std::vector<math::Vector3> positions;
+				std::vector<math::Vector2> uvs;
+				std::vector<math::Vector3> normals;
+
+				// "v/t/n" 組み合わせ → 出力頂点 index のキャッシュ
+				std::unordered_map<uint64_t, uint32_t> vertexCache;
+
+				auto packKey = [](int v, int t, int n) -> uint64_t {
+					// 各 21bit (最大約200万頂点) に詰める。0 = 未指定。
+					return (static_cast<uint64_t>(v & 0x1fffff))
+					     | (static_cast<uint64_t>(t & 0x1fffff) << 21)
+					     | (static_cast<uint64_t>(n & 0x1fffff) << 42);
+				};
+
+				std::istringstream stream(text);
+				std::string line;
+				std::vector<uint32_t> faceIndices;   // 1 ポリゴンぶんの出力 index (三角化用)
+				while (std::getline(stream, line)) {
+					if (line.empty() || line[0] == '#') {
+						continue;
+					}
+					std::istringstream ls(line);
+					std::string tag;
+					ls >> tag;
+					if (tag == "v") {
+						math::Vector3 p; ls >> p.x >> p.y >> p.z; positions.push_back(p);
+					} else if (tag == "vt") {
+						math::Vector2 t; ls >> t.x >> t.y; t.y = 1.0f - t.y; uvs.push_back(t);
+					} else if (tag == "vn") {
+						math::Vector3 n; ls >> n.x >> n.y >> n.z; normals.push_back(n);
+					} else if (tag == "f") {
+						faceIndices.clear();
+						std::string vtx;
+						while (ls >> vtx) {
+							// "v", "v/t", "v//n", "v/t/n"
+							int vi = 0, ti = 0, ni = 0;
+							size_t s1 = vtx.find('/');
+							if (s1 == std::string::npos) {
+								vi = std::atoi(vtx.c_str());
+							} else {
+								vi = std::atoi(vtx.substr(0, s1).c_str());
+								size_t s2 = vtx.find('/', s1 + 1);
+								if (s2 == std::string::npos) {
+									ti = std::atoi(vtx.substr(s1 + 1).c_str());
+								} else {
+									std::string tstr = vtx.substr(s1 + 1, s2 - s1 - 1);
+									if (!tstr.empty()) ti = std::atoi(tstr.c_str());
+									ni = std::atoi(vtx.substr(s2 + 1).c_str());
+								}
+							}
+							if (vi == 0) continue;   // 不正/負 index は無視
+							uint64_t key = packKey(vi, ti, ni);
+							auto it = vertexCache.find(key);
+							uint32_t outIndex;
+							if (it != vertexCache.end()) {
+								outIndex = it->second;
+							} else {
+								graphics::VertexData vd;
+								vd.position = (vi >= 1 && vi <= static_cast<int>(positions.size())) ? positions[vi - 1] : math::Vector3(0.0f, 0.0f, 0.0f);
+								vd.uv       = (ti >= 1 && ti <= static_cast<int>(uvs.size()))       ? uvs[ti - 1]       : math::Vector2(0.0f, 0.0f);
+								vd.normal   = (ni >= 1 && ni <= static_cast<int>(normals.size()))   ? normals[ni - 1]   : math::Vector3(0.0f, 1.0f, 0.0f);
+								vd.tangent  = math::Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+								outIndex = static_cast<uint32_t>(outMesh.vertics.size());
+								outMesh.vertics.push_back(vd);
+								vertexCache.emplace(key, outIndex);
+							}
+							faceIndices.push_back(outIndex);
+						}
+						// 三角形ファン化 (v0, vk, vk+1)
+						for (size_t k = 1; k + 1 < faceIndices.size(); ++k) {
+							outMesh.indices.push_back(faceIndices[0]);
+							outMesh.indices.push_back(faceIndices[k]);
+							outMesh.indices.push_back(faceIndices[k + 1]);
+						}
+					}
+				}
+
+				return !outMesh.vertics.empty() && !outMesh.indices.empty();
+			}
 		}
 
 		bool TextureLoader::Loading()
@@ -1513,11 +1607,13 @@ namespace aq
 			DirectX::TexMetadata info;
 			std::unique_ptr<DirectX::ScratchImage> image = std::make_unique<DirectX::ScratchImage>();
 
-			// DDS is common for tkm materials; other image types stay on WIC.
+			// DDS は tkm マテリアルで多用。TGA は WIC 非対応のため専用ローダ。
+			// それ以外 (.png/.jpg 等) は WIC。
 			const std::string extension = GetLowerExtension(requestPath_);
-			HRESULT hr = extension == ".dds"
-				? DirectX::LoadFromDDSFile(filePath, DirectX::DDS_FLAGS_NONE, &info, *image)
-				: DirectX::LoadFromWICFile(filePath, DirectX::WIC_FLAGS_NONE, &info, *image);
+			HRESULT hr =
+				  extension == ".dds" ? DirectX::LoadFromDDSFile(filePath, DirectX::DDS_FLAGS_NONE, &info, *image)
+				: extension == ".tga" ? DirectX::LoadFromTGAFile(filePath, DirectX::TGA_FLAGS_NONE, &info, *image)
+				:                       DirectX::LoadFromWICFile(filePath, DirectX::WIC_FLAGS_NONE, &info, *image);
 			if (FAILED(hr)) {
 				info = {};
 				return false;

@@ -296,6 +296,8 @@
     <ClCompile Include="Physics\GhostBodyManager.cpp" />
     <ClCompile Include="Physics\BulletGhostNarrowphase.cpp" />
     <ClCompile Include="Physics\CharacterController.cpp" />
+    <ClCompile Include="Component\ParticleComponentSystem.cpp" />
+    <ClCompile Include="Resource\ParticleLoader.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
     <ClCompile Include="Rendering\DrawItemCommand.cpp" />
     <ClCompile Include="Rendering\InstancedDrawItemCommand.cpp" />
@@ -341,6 +343,7 @@
     <ClCompile Include="UI\Font\TextLayout.cpp" />
     <ClCompile Include="Component\OceanComponent.cpp" />
     <ClCompile Include="Rendering\OceanDrawCommand.cpp" />
+    <ClCompile Include="Rendering\ParticleDrawCommand.cpp" />
     <ClCompile Include="Util\SimpleJson.cpp" />
     <ClCompile Include="UI\UIContext.cpp" />
     <ClCompile Include="UI\UIObject.cpp" />
@@ -556,6 +559,11 @@
     <ClInclude Include="Rendering\PostProcess\BloomPassCommand.h" />
     <ClInclude Include="Rendering\PostProcess\BloomRenderer.h" />
     <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h" />
+    <ClInclude Include="Particle\ParticleTypes.h" />
+    <ClInclude Include="Particle\ParticleRandom.h" />
+    <ClInclude Include="Component\ParticleComponentSystem.h" />
+    <ClInclude Include="Resource\ParticleSystemData.h" />
+    <ClInclude Include="Resource\ParticleLoader.h" />
     <ClInclude Include="Resource\Resource.h" />
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Terrain\HeightmapPainter.h" />
@@ -577,6 +585,7 @@
     <ClInclude Include="UI\Font\TextLayout.h" />
     <ClInclude Include="Component\OceanComponent.h" />
     <ClInclude Include="Rendering\OceanDrawCommand.h" />
+    <ClInclude Include="Rendering\ParticleDrawCommand.h" />
     <ClInclude Include="Rendering\Deferred\IDeferredRenderer.h" />
     <ClInclude Include="Rendering\Occlusion\ClusterCull.h" />
     <ClInclude Include="Rendering\Occlusion\GpuClusterCuller.h" />

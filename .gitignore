@@ -72,3 +72,9 @@ DirectX/packages/
 # パッケージ署名用のテスト証明書(秘密鍵はコミットしない)
 *.pfx
 *.cer
+
+# 市販 VFX パック由来のエクスポート産物(再配布回避のためコミットしない)
+DirectX/Game/Assets/Particle/FX_Fireball.particle
+DirectX/Game/Assets/Particle/FX_LightPillar.particle
+DirectX/Game/Assets/Particle/Textures/
+DirectX/Game/Assets/Particle/Meshes/

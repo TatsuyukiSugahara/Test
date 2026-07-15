@@ -116,6 +116,35 @@ namespace aq
 			{
 				return Vector3(x / v.x, y / v.y, z / v.z);
 			}
+			/** スカラー倍 */
+			Vector3 operator*(float s) const
+			{
+				return Vector3(x * s, y * s, z * s);
+			}
+			/** スカラー除算 */
+			Vector3 operator/(float s) const
+			{
+				const float inv = 1.0f / s;
+				return Vector3(x * inv, y * inv, z * inv);
+			}
+			/** 加算代入 */
+			Vector3& operator+=(const Vector3& v)
+			{
+				x += v.x; y += v.y; z += v.z;
+				return *this;
+			}
+			/** 減算代入 */
+			Vector3& operator-=(const Vector3& v)
+			{
+				x -= v.x; y -= v.y; z -= v.z;
+				return *this;
+			}
+			/** スカラー倍代入 */
+			Vector3& operator*=(float s)
+			{
+				x *= s; y *= s; z *= s;
+				return *this;
+			}
 			/** ゼロ判定 */
 			inline bool IsZero() const
 			{
@@ -277,6 +306,21 @@ namespace aq
 			Vector4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 			Vector4(float xyzw) : x(xyzw), y(xyzw), z(xyzw), w(xyzw) {}
 			Vector4(const Vector4& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+			/** 加算 */
+			Vector4 operator+(const Vector4& v) const
+			{
+				return Vector4(x + v.x, y + v.y, z + v.z, w + v.w);
+			}
+			/** 成分ごとの乗算 */
+			Vector4 operator*(const Vector4& v) const
+			{
+				return Vector4(x * v.x, y * v.y, z * v.z, w * v.w);
+			}
+			/** スカラー倍 */
+			Vector4 operator*(float s) const
+			{
+				return Vector4(x * s, y * s, z * s, w * s);
+			}
 			/** 設定 */
 			void Set(float x, float y, float z, float w)
 			{

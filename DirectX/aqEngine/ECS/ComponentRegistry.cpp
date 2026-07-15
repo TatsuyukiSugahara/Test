@@ -5,6 +5,7 @@
 #include "Component/TerrainComponent.h"
 #include "Component/OceanComponent.h"
 #include "Component/DecalComponent.h"
+#include "Component/ParticleComponentSystem.h"
 #include "Component/InstancedStaticMeshComponentSystem.h"
 #include "Component/InstancedPointListComponentSystem.h"
 #include "Component/AnimationComponentSystem.h"
@@ -355,6 +356,51 @@ namespace aq
 				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<StaticMeshComponent>(h); };
 				FillReflectPtrFns<StaticMeshComponent>(meta);
 				registry.Register(TypeInfo::Create<StaticMeshComponent>(), std::move(meta));
+			}
+
+			// --- ParticleEmitterComponent ---
+			{
+				ComponentMeta meta;
+				meta.displayName  = "Particle Emitter";
+				meta.typeName     = "ParticleEmitter";
+				meta.requiredWith = {};
+				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<ParticleEmitterComponent>(h) != nullptr; };
+				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<ParticleEmitterComponent>(h); };
+				meta.add  = [](EntityHandle h)
+				{
+					auto& ctx = EntityContext::Get();
+					if (!ctx.GetComponent<TransformComponent>(h))             ctx.AddComponent<TransformComponent>(h);
+					if (!ctx.GetComponent<HierarchicalTransformComponent>(h)) ctx.AddComponent<HierarchicalTransformComponent>(h);
+					if (!ctx.GetComponent<ParticleEmitterComponent>(h))       ctx.AddComponent<ParticleEmitterComponent>(h);
+				};
+#ifdef AQ_DEBUG_IMGUI
+				meta.drawInspector = [](EntityHandle h)
+				{
+					auto* comp = EntityContext::Get().GetComponent<ParticleEmitterComponent>(h);
+					if (!comp) return;
+					ImGuiFieldVisitor visitor;
+					comp->Inspect(visitor);
+				};
+#endif
+				meta.serialize = [](EntityHandle h, util::JsonValue& out)
+				{
+					auto* comp = EntityContext::Get().GetComponent<ParticleEmitterComponent>(h);
+					if (!comp) return;
+					JsonWriteVisitor visitor;
+					comp->Reflect(visitor);
+					out = std::move(visitor.obj);
+				};
+				meta.deserialize = [](EntityHandle h, const util::JsonValue& in)
+				{
+					auto* comp = EntityContext::Get().GetComponent<ParticleEmitterComponent>(h);
+					if (!comp) return;
+					JsonReadVisitor visitor(in);
+					comp->Reflect(visitor);
+					comp->OnDeserialized();   // 読み込んだパスから .particle をロード（副作用退避）
+				};
+				meta.remove = [](EntityHandle h) { EntityContext::Get().RemoveComponent<ParticleEmitterComponent>(h); };
+				FillReflectPtrFns<ParticleEmitterComponent>(meta);
+				registry.Register(TypeInfo::Create<ParticleEmitterComponent>(), std::move(meta));
 			}
 
 			// --- SkeletalMeshComponent ---

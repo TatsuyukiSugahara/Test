@@ -10,6 +10,9 @@
         { "name": "Idle", "path": "Assets/Character/Character.fbx#Idle" },
         { "name": "Happy", "path": "Assets/Character/Character.fbx#Happy" },
         { "name": "ThrowFish", "path": "Assets/Character/Character.fbx#ThrowFish" }
-      ], "current": "Happy" } } }
+      ], "current": "Happy" } } },
+    { "name": "FX_Test", "components": {
+      "Transform": { "position": [0, 14, 6] },
+      "ParticleEmitter": { "particle": "Assets/Particle/FX_Explosion.particle" } } }
   ]
 }

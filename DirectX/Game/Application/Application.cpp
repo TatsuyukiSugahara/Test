@@ -5,6 +5,8 @@
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
 #include "UI/Font/FontResource.h"
+#include "Resource/ParticleSystemData.h"
+#include "Resource/ParticleLoader.h"
 #include "Sound/SoundClip.h"
 #include "Sound/SoundEngine.h"
 #include "Sound/SoundStream.h"
@@ -148,6 +150,7 @@ namespace app
 		aq::res::ResourceManager::RegisterBank<aq::res::AnimationResource, aq::res::TResourceBank<aq::res::AnimationResource>>();
 		aq::res::ResourceManager::RegisterBank<aq::ui::FontResource, aq::res::TResourceBank<aq::ui::FontResource>>();
 		aq::res::ResourceManager::RegisterBank<aq::sound::SoundClip, aq::res::TResourceBank<aq::sound::SoundClip>>();
+		aq::res::ResourceManager::RegisterBank<aq::res::ParticleSystemData, aq::res::TResourceBank<aq::res::ParticleSystemData>>();
 
 		aq::res::ResourceManager::Reflection<aq::res::GPUResource, aq::res::TextureLoader>();
 		aq::res::ResourceManager::Reflection<aq::res::MeshResource, aq::res::MeshLoader>();
@@ -157,6 +160,7 @@ namespace app
 		aq::res::ResourceManager::Reflection<aq::res::AnimationResource, aq::res::AnimationLoader>();
 		aq::res::ResourceManager::Reflection<aq::ui::FontResource, aq::ui::FontLoader>();
 		aq::res::ResourceManager::Reflection<aq::sound::SoundClip, aq::sound::SoundClipLoader>();
+		aq::res::ResourceManager::Reflection<aq::res::ParticleSystemData, aq::res::ParticleLoader>();
 
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::ActorStateMachineSystem>();

@@ -151,6 +151,42 @@ namespace aq
 		};
 
 
+		/** パーティクルビルボード頂点 (CPU 展開・ワールド空間)。 */
+		struct ParticleVertex
+		{
+			math::Vector3 position;   // ワールド座標
+			math::Vector2 uv;         // テクスチャ UV (フリップブック時は小矩形)
+			math::Vector4 color;      // RGBA (over-lifetime 評価済み)
+		};
+
+
+		/**
+		 * パーティクル描画 1 エミッタ分。生存粒子ぶんのビルボードを 1 ドローで出す。
+		 * vertexBuffer は今フレームの頂点を書き込み済みの動的 VB、indexBuffer は
+		 * 静的なクアッドインデックス。blend は additive で切り替える。
+		 */
+		struct ParticleRenderItem
+		{
+			std::shared_ptr<graphics::IVertexBuffer> vertexBuffer;
+			std::shared_ptr<graphics::IIndexBuffer>  indexBuffer;
+
+			// 今フレームの CPU 頂点。vertexBuffer への書き込みは ParticleDrawCommand が
+			// レンダースレッドで行う (ゲームスレッドから Map すると D3D11 は immediate
+			// context 競合、D3D12 はフレームインデックス不一致で頂点が破れる)。
+			std::shared_ptr<std::vector<ParticleVertex>> vertices;
+			std::shared_ptr<graphics::IShader>       vs;
+			std::shared_ptr<graphics::IShader>       ps;
+
+			// t0 テクスチャ。nullptr なら手続き円 PS (PSMain)、非 nullptr なら PSTextured を使う。
+			// 非 nullptr のとき s0 に samplerState を積む。
+			std::shared_ptr<graphics::IShaderResourceView> texture;
+			std::shared_ptr<graphics::ISamplerState>       samplerState;
+
+			uint32_t indexCount = 0;
+			bool     additive   = false;   // true=Additive, false=AlphaBlend
+		};
+
+
 		/**
 		 * One frame's rendering snapshot.
 		 * Built by the game thread; consumed by Renderer / RenderThread.
@@ -165,8 +201,9 @@ namespace aq
 			std::vector<OceanRenderItem> oceanItems;   // 海描画用
 			std::vector<DecalRenderItem> decalItems;   // 投影デカール (GBuffer へ書き戻し)
 			std::vector<InstancedRenderItem> instancedItems;  // インスタンス描画 (forward)
+			std::vector<ParticleRenderItem>  particleItems;   // パーティクル (半透明ビルボード)
 
-			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); decalItems.clear(); instancedItems.clear(); }
+			void Clear() { items.clear(); forwardItems.clear(); oceanItems.clear(); decalItems.clear(); instancedItems.clear(); particleItems.clear(); }
 		};
 	}
 }

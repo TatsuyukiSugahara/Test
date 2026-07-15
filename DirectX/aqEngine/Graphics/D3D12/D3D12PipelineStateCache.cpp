@@ -68,9 +68,13 @@ namespace aq
 						rt.DestBlend   = D3D12_BLEND_INV_SRC_ALPHA;
 						break;
 					case BlendMode::Additive:
-						rt.BlendEnable = TRUE;
-						rt.SrcBlend    = D3D12_BLEND_ONE;
-						rt.DestBlend   = D3D12_BLEND_ONE;
+						// src.a * src + dst (D3D11/Vulkan と同意味論)。
+						// One/One だと形をアルファに持つテクスチャ (白RGB+円形α等) が四角く出る。
+						rt.BlendEnable    = TRUE;
+						rt.SrcBlend       = D3D12_BLEND_SRC_ALPHA;
+						rt.DestBlend      = D3D12_BLEND_ONE;
+						rt.SrcBlendAlpha  = D3D12_BLEND_ONE;
+						rt.DestBlendAlpha = D3D12_BLEND_ONE;
 						break;
 					case BlendMode::Premultiplied:
 						rt.BlendEnable = TRUE;

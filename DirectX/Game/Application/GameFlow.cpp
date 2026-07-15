@@ -6,6 +6,9 @@
 
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
+#include "Component/ParticleComponentSystem.h"
+#include "ECS/ECS.h"
+#include "HID/Input.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
@@ -460,6 +463,17 @@ namespace app
 		}
 
 		if (current_) current_->OnUpdate(*this, dt);
+
+		// デバッグ: Enter キーでシーン内のパーティクルを頭から再生し直す。
+		// FX_Explosion は一発 (非ループ) なので、インゲームで動作を繰り返し確認するのに使う。
+		if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Enter))
+		{
+			aq::ecs::Foreach<aq::ecs::ParticleEmitterComponent>(
+				[](const aq::ecs::Entity&, aq::ecs::ParticleEmitterComponent* emitter)
+				{
+					emitter->Restart();
+				});
+		}
 	}
 
 

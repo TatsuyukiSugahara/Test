@@ -19,11 +19,6 @@
 #include "Util/CRC32.h"
 #include "Util/ThreadPool.h"
 
-//#include <fbxsdk.h>
-//#pragma comment(lib, "libfbxsdk-md.lib")
-//#pragma comment(lib, "libxml2-md.lib")
-//#pragma comment(lib, "zlib-md.lib")
-
 
 namespace aq
 {
@@ -259,33 +254,9 @@ public:\
 
 
 		/**
-		 * FBX読み込み
+		 * メッシュ読み込み (.tkm / .fbx)。
+		 * .fbx は ufbx で静的メッシュとして取り込む (Loading() 内で拡張子分岐)。
 		 */
-		class FbxLoader : public ResourceLoaderBase
-		{
-		private:
-			struct VertexWork
-			{
-				math::Vector3 position;
-				math::Vector3 normal;
-				math::Vector2 uv;
-				bool isSetting;
-
-				VertexWork() : isSetting(false) {}
-			};
-
-		public:
-			FbxLoader();
-			~FbxLoader();
-			virtual ResourceBase* Create() override
-			{
-				return new MeshResource();
-			}
-
-		private:
-			bool Loading() override;
-		};
-
 		class MeshLoader : public ResourceLoaderBase
 		{
 		public:

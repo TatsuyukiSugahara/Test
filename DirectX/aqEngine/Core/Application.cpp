@@ -5,6 +5,7 @@
 #include "UI/Input/UIInputSystem.h"
 #include "UI/Rendering/UIBatchRenderer.h"
 #include "Component/AnimationComponentSystem.h"
+#include "Component/ParticleComponentSystem.h"
 #include "ECS/SpawnSystem.h"
 #include "Util/Profiler.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
@@ -386,10 +387,14 @@ namespace aq
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::AnimationSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::SpawnSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::level::LevelStreamSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::ParticleSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::RenderSystem>();
 
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::AnimationSystem>();
+		// パーティクルはワールド変換確定後に更新し、描画構築前に済ませる
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::ParticleSystem, aq::ecs::HierarcicalTransformSystem>();
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::ParticleSystem>();
 
 #ifdef AQ_DEBUG_IMGUI
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::SceneHierarchySystem>();

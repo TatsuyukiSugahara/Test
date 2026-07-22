@@ -3,7 +3,7 @@
 > 対象コミット: `144ae8a` / 最終更新: 2026-07-03
 
 対象: `aqEngine/ECS/`, `aqEngine/Component/`
-関連: [Prefab設計.md](../aqEngine/ECS/Prefab設計.md)
+関連: [Prefab設計.md](Prefab設計.md)
 参考: アーキタイプ ECS(https://qiita.com/harayuu10/items/e15b02e3b0f3081d729b)
 
 **アーキタイプ方式のデータ指向 ECS**。同一コンポーネント構成(Archetype)のエンティティを Chunk に SoA(Structure of Arrays)で密に並べ、System が型でクエリして並列に走査する。
@@ -93,7 +93,7 @@ EntityContext（唯一のシングルトン・統括窓口）
 
 ## 6. Prefab(データ駆動生成)
 
-詳細は [Prefab設計.md](../aqEngine/ECS/Prefab設計.md)。
+詳細は [Prefab設計.md](Prefab設計.md)。
 
 | ファイル | 責務 |
 |---|---|

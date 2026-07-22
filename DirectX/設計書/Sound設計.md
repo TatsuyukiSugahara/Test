@@ -3,7 +3,7 @@
 対象: `aqEngine/Sound/`
 前提: 既存の抽象レイヤ（Bridge パターン）の流儀に合わせ、サウンドを `ISoundBackend` / `ISoundVoice` の実装として追加する。Windows は XAudio2、Android は Oboe を **自前バックエンド**として実装する。
 本書は **設計のみ**。実装コードは含まない（シグネチャ例は方針の明確化用）。
-姉妹文書: [VulkanBackend設計.md](../Graphics/Vulkan/VulkanBackend設計.md)（同一構造の先行事例。Bridge + シングルトン + `Create<TImpl>()` をサウンドへ平行適用する）。
+姉妹文書: [VulkanBackend設計.md](VulkanBackend設計.md)（同一構造の先行事例。Bridge + シングルトン + `Create<TImpl>()` をサウンドへ平行適用する）。
 
 ---
 

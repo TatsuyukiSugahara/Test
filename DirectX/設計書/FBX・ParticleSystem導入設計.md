@@ -23,17 +23,17 @@
 
 | 既存資産 | 場所 | 本件での役割 |
 |---|---|---|
-| FBX ローダー（ufbx） | [../Resource/Resource.cpp](../Resource/Resource.cpp) `LoadFbxStaticMesh` 他 | **実装済み**。`MeshLoader`/`SkeletalMeshLoader`/`AnimationLoader` が `.fbx` を分岐 |
-| `MeshResource` / `MeshData` | [../Resource/Resource.h:160](../Resource/Resource.h#L160) | FBX → `VertexData`/`indices`/`MaterialTexturePaths` の受け皿（既存） |
-| `SkeletalMeshResource` / `BoneData` | [../Resource/Resource.h:295](../Resource/Resource.h#L295) | スキン FBX の bone / inverseBindPose 受け皿（既存） |
-| TKM/TKA ローダー | [../Resource/Resource.cpp](../Resource/Resource.cpp) `MeshLoader`/`SkeletalMeshLoader` | 出荷パス（変換済みバイナリ）。維持 |
-| 非同期ロード基盤 | [../Resource/Resource.h](../Resource/Resource.h) `ResourceLoaderBase` / `ResourceManager` | FBX/Particle 双方の Load 経路に流用 |
-| 動的頂点バッファ | [../Graphics/StaticMesh.h:70](../Graphics/StaticMesh.h#L70) `InitializeDynamic`/`UpdateVertices` | パーティクルのビルボード VB を毎フレーム更新 |
-| forward 透明パス | [../Rendering/RenderFrame.h:145](../Rendering/RenderFrame.h#L145) `forwardItems` | パーティクル（半透明）の描画キュー |
-| ブレンド切替 | [../Rendering/SetBlendModeCommand.h](../Rendering/SetBlendModeCommand.h) | Additive / Alpha の切替 |
-| スプライトバッチ | [../UI/Rendering/UIBatchRenderer.h](../UI/Rendering/UIBatchRenderer.h) | クアッド生成・アトラス処理の**実装雛形**（UI はスクリーン空間なので流用は雛形まで） |
-| JSON | [../Util/SimpleJson.h](../Util/SimpleJson.h) | `.particle` のロード |
-| カメラスナップショット | [../Rendering/RenderFrame.h:23](../Rendering/RenderFrame.h#L23) `CameraData` | ビルボード展開の right/up |
+| FBX ローダー（ufbx） | [../Resource/Resource.cpp](../aqEngine/Resource/Resource.cpp) `LoadFbxStaticMesh` 他 | **実装済み**。`MeshLoader`/`SkeletalMeshLoader`/`AnimationLoader` が `.fbx` を分岐 |
+| `MeshResource` / `MeshData` | [../Resource/Resource.h:160](../aqEngine/Resource/Resource.h#L160) | FBX → `VertexData`/`indices`/`MaterialTexturePaths` の受け皿（既存） |
+| `SkeletalMeshResource` / `BoneData` | [../Resource/Resource.h:295](../aqEngine/Resource/Resource.h#L295) | スキン FBX の bone / inverseBindPose 受け皿（既存） |
+| TKM/TKA ローダー | [../Resource/Resource.cpp](../aqEngine/Resource/Resource.cpp) `MeshLoader`/`SkeletalMeshLoader` | 出荷パス（変換済みバイナリ）。維持 |
+| 非同期ロード基盤 | [../Resource/Resource.h](../aqEngine/Resource/Resource.h) `ResourceLoaderBase` / `ResourceManager` | FBX/Particle 双方の Load 経路に流用 |
+| 動的頂点バッファ | [../Graphics/StaticMesh.h:70](../aqEngine/Graphics/StaticMesh.h#L70) `InitializeDynamic`/`UpdateVertices` | パーティクルのビルボード VB を毎フレーム更新 |
+| forward 透明パス | [../Rendering/RenderFrame.h:145](../aqEngine/Rendering/RenderFrame.h#L145) `forwardItems` | パーティクル（半透明）の描画キュー |
+| ブレンド切替 | [../Rendering/SetBlendModeCommand.h](../aqEngine/Rendering/SetBlendModeCommand.h) | Additive / Alpha の切替 |
+| スプライトバッチ | [../UI/Rendering/UIBatchRenderer.h](../aqEngine/UI/Rendering/UIBatchRenderer.h) | クアッド生成・アトラス処理の**実装雛形**（UI はスクリーン空間なので流用は雛形まで） |
+| JSON | [../Util/SimpleJson.h](../aqEngine/Util/SimpleJson.h) | `.particle` のロード |
+| カメラスナップショット | [../Rendering/RenderFrame.h:23](../aqEngine/Rendering/RenderFrame.h#L23) `CameraData` | ビルボード展開の right/up |
 
 > 新規に本当に必要なのは **①FBX パーサ結線**、**②`ParticleSystemData` + JSON ローダー**、
 > **③`ParticleEmitterComponent` + `ParticleSystem`（CPU sim）+ ビルボード描画**の3点。
@@ -45,7 +45,7 @@
 > `.fbx` は既存の各ローダの `Loading()` 内で拡張子分岐し、そのまま `SetModelPath("...fbx")` で表示できる。
 > 未使用だった `FbxLoader` スタブと旧 FBX SDK コメントは削除済み。
 
-### 2.1 実装マップ（すべて [../Resource/Resource.cpp](../Resource/Resource.cpp) 内）
+### 2.1 実装マップ（すべて [../Resource/Resource.cpp](../aqEngine/Resource/Resource.cpp) 内）
 
 | 用途 | 関数 | 入口ローダー | 出力 |
 |---|---|---|---|
@@ -139,7 +139,7 @@ ParticleSystem（ecs System）= CPU sim → ビルボード RenderItem → Rende
 - `simulationSpace`：Local = 粒子をエミッタローカルで保持し描画時にワールド変換／
   World = ワールドで保持しエミッタ移動に追従しない。gravity/velocity の適用空間もこれに従う。
 - **CPU シミュレーション先行**（既存 CPU 駆動設計に一致）。将来 compute/UAV
-  （`IsComputeSupported()` ゲート）へ。スレッド境界（[../../設計書/05_マルチスレッド設計.md](../../設計書/05_マルチスレッド設計.md)）：
+  （`IsComputeSupported()` ゲート）へ。スレッド境界（[../../設計書/05_マルチスレッド設計.md](05_マルチスレッド設計.md)）：
   sim=ゲームスレッド、GPU リソース生成=メイン、描画=レンダースレッド消費。
 
 ### 3.5 描画層（ビルボード / フリップブック / ストレッチ）

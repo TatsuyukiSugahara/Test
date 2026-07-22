@@ -24,7 +24,7 @@ namespace aq
 		 * dynamic rendering を OMSetRenderTargets/Clear/Draw/Present の流れで begin/end する。
 		 * Phase 1b はメイン (スワップチェーンプロキシ) 単一カラーターゲット + UBO バインドまで。
 		 * テクスチャ(SRV/サンプラ)=Phase2, 深度/MRT/オフスクリーン=Phase3, compute/影=Phase4。
-		 * 設計: Graphics/Vulkan/VulkanBackend設計.md §3
+		 * 設計: 設計書/VulkanBackend設計.md §3
 		 */
 		class VulkanRenderContextImpl : public IRenderContextImpl
 		{

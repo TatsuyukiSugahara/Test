@@ -8,7 +8,7 @@ namespace aq
 	{
 		// プラットフォーム別のリソース予算。
 		// Xbox Dev Mode(道A:UWP「Game」分類)の制限を設計に反映するためのコンパイル時
-		// プロファイル。参照: aqEngine/Platform/Xbox移植設計.md §1。
+		// プロファイル。参照: 設計書/Xbox移植設計.md §1。
 		struct ResourceBudget
 		{
 			// メモリ予算上限(バイト)。0 = 上限なし(OS 管理)。

@@ -12,20 +12,20 @@
 
 ## 1. 目的と背景
 
-[../Component/Prefab.h](../Component/Prefab.h) の `Prefab` はコード版スポナー（構成がコンパイル時固定・初期値ラムダ・保存/読込/参照なし）。
+`Component/Prefab.h`（旧実装） の `Prefab` はコード版スポナー（構成がコンパイル時固定・初期値ラムダ・保存/読込/参照なし）。
 これを **データ（JSON）駆動の設計図**へ作り直す。主要ユースケースは **ゲーム実行中の動的生成**（弾・敵・エフェクトを System から spawn）。
 
 ## 2. 既存資産と確認済みの制約
 
 | 資産 | 場所 | 備考 |
 |---|---|---|
-| 中央レジストリ（TypeInfo→meta） | [ComponentRegistry.h](ComponentRegistry.h) | `vector<pair<TypeInfo, meta>>`。名前→TypeInfo 解決の土台 |
-| 既存 Inspector / Add パレット | [SceneHierarchySystem.cpp:242](SceneHierarchySystem.cpp#L242) | `GetAll()`→`meta.has/add/drawInspector(handle)`。エディタで再利用 |
-| 実行時 Archetype 構築 | [Archetype.h:97](Archetype.h#L97) `AddType(const TypeInfo&)` | **重複を弾かない・上限超過は無言無視**（→ dedup/診断は呼び出し側責務） |
-| 遅延 Entity 生成 | [EntityManager.h:77](EntityManager.h#L77) `RequestCreateEntity` | コマンド実行時に「生成→**全構築 `new(...) Ts()`**→onCreated」。onCreated 内で GetComponent 有効 |
-| コンポーネント構築 | [EntityManager.h:320](EntityManager.h#L320) `NewComponent` | **triviality 無関係に常に placement-new**。Chunk は生メモリ |
-| アライン確保 | [Chunk.h:164](Chunk.h#L164) `AllocBuffer` | `operator new(bytes, align_val_t(align))`。型消去ストレージも同方式が必要 |
-| JSON | [../Util/SimpleJson.h](../Util/SimpleJson.h) | パーサ/シリアライザ + `Merge`。コメントは `//` 行のみ |
+| 中央レジストリ（TypeInfo→meta） | [ComponentRegistry.h](../aqEngine/ECS/ComponentRegistry.h) | `vector<pair<TypeInfo, meta>>`。名前→TypeInfo 解決の土台 |
+| 既存 Inspector / Add パレット | [SceneHierarchySystem.cpp:242](../aqEngine/ECS/SceneHierarchySystem.cpp#L242) | `GetAll()`→`meta.has/add/drawInspector(handle)`。エディタで再利用 |
+| 実行時 Archetype 構築 | [Archetype.h:97](../aqEngine/ECS/Archetype.h#L97) `AddType(const TypeInfo&)` | **重複を弾かない・上限超過は無言無視**（→ dedup/診断は呼び出し側責務） |
+| 遅延 Entity 生成 | [EntityManager.h:77](../aqEngine/ECS/EntityManager.h#L77) `RequestCreateEntity` | コマンド実行時に「生成→**全構築 `new(...) Ts()`**→onCreated」。onCreated 内で GetComponent 有効 |
+| コンポーネント構築 | [EntityManager.h:320](../aqEngine/ECS/EntityManager.h#L320) `NewComponent` | **triviality 無関係に常に placement-new**。Chunk は生メモリ |
+| アライン確保 | [Chunk.h:164](../aqEngine/ECS/Chunk.h#L164) `AllocBuffer` | `operator new(bytes, align_val_t(align))`。型消去ストレージも同方式が必要 |
+| JSON | [../Util/SimpleJson.h](../aqEngine/Util/SimpleJson.h) | パーサ/シリアライザ + `Merge`。コメントは `//` 行のみ |
 | リフレクション宣言 | 各コンポーネントの `Inspect<V>` | 全て `#ifdef AQ_DEBUG_IMGUI` 内・ImGui 専用ロジック混在 → `Reflect` へ書き直し |
 
 ### ⚠ 確認済みの制約
@@ -87,10 +87,10 @@ void EntityContext::RequestCreateEntityFromTypes(
 >   dedup + 上限診断 + 全構築のみを行う。
 
 > **実装状況（Phase 1 完了）**: 上記 primitive を実装済み。
-> - `TypeInfo`: `ConstructFn`（全型必須）+ `Construct()` … [TypeInfo.h](TypeInfo.h)
-> - `Chunk::GetComponentByType(loc, type)` … [Chunk.h](Chunk.h)
-> - `EntityManager::RequestCreateEntityFromTypes` / `CreateEntityFromTypesNoLock` / `DedupTypes` … [EntityManager.h](EntityManager.h)
-> - `EntityContext::RequestCreateEntityFromTypes`（DebugTag 注入）… [EntityContext.h](EntityContext.h)
+> - `TypeInfo`: `ConstructFn`（全型必須）+ `Construct()` … [TypeInfo.h](../aqEngine/ECS/TypeInfo.h)
+> - `Chunk::GetComponentByType(loc, type)` … [Chunk.h](../aqEngine/ECS/Chunk.h)
+> - `EntityManager::RequestCreateEntityFromTypes` / `CreateEntityFromTypesNoLock` / `DedupTypes` … [EntityManager.h](../aqEngine/ECS/EntityManager.h)
+> - `EntityContext::RequestCreateEntityFromTypes`（DebugTag 注入）… [EntityContext.h](../aqEngine/ECS/EntityContext.h)
 > - 検証テスト（dedup + onCreated 時点の全構築）… BattleScene 初期化ブロック内
 > - Debug|x64 ビルド成功（エラー/警告なし）。
 
@@ -116,11 +116,11 @@ void EntityContext::RequestCreateEntityFromTypes(
 ## 5. リフレクション（serialize/deserialize 基盤）
 
 > **実装状況（Phase 2 一部完了）**: 仕組みを実装し単一エンティティの JSON 往復を実証済み。
-> - `JsonWriteVisitor` / `JsonReadVisitor`（常時コンパイル）… [JsonFieldVisitor.h](JsonFieldVisitor.h)。
+> - `JsonWriteVisitor` / `JsonReadVisitor`（常時コンパイル）… [JsonFieldVisitor.h](../aqEngine/ECS/JsonFieldVisitor.h)。
 >   Vector3=`[x,y,z]`、Quaternion=`[x,y,z,w]`（ロスレス）、FieldPath は読込時のみ true→ロード副作用発火。
-> - `ImGuiFieldVisitor` を 3 引数化（`Field(persistKey, value, displayLabel=nullptr)`、2 引数呼び出しは後方互換）… [ImGuiFieldVisitor.h](ImGuiFieldVisitor.h)。
+> - `ImGuiFieldVisitor` を 3 引数化（`Field(persistKey, value, displayLabel=nullptr)`、2 引数呼び出しは後方互換）… [ImGuiFieldVisitor.h](../aqEngine/ECS/ImGuiFieldVisitor.h)。
 > - 変換済みコンポーネント（`Inspect`→`Reflect`・`#ifdef` 外・キー/ラベル分離）: **TransformComponent**, **DecalComponent**。
-> - `ComponentMeta` に `typeName` / `serialize` / `deserialize` を追加（Transform/Decal で実装）… [ComponentRegistry.h](ComponentRegistry.h) / .cpp。
+> - `ComponentMeta` に `typeName` / `serialize` / `deserialize` を追加（Transform/Decal で実装）… [ComponentRegistry.h](../aqEngine/ECS/ComponentRegistry.h) / .cpp。
 > - 往復テスト（Transform を JSON 化→文字列→パース→復元し一致確認）… BattleScene 初期化ブロック。Debug|x64 ビルド成功。
 >
 > **追加完了（Phase 2 残・対応済み）**:
@@ -207,14 +207,14 @@ struct PrefabData { PrefabNodeData root; };    // 不変
 - **初期実装は毎スポーン deserialize**。CopyFn ブループリント最適化は後段（§10）で、この JsonValue 経路の上に載せる。
 
 > **実装状況（Phase 3 完了）**: 単一 JSON プランからツリーを遅延生成し、実機（BattleScene 初期化）で検証済み。
-> - `PrefabData` / `PrefabNodeData`（JsonValue ベースの不変プラン）+ 薄いハンドル `Prefab`（`shared_ptr<const PrefabData>` 保持）… [Prefab.h](Prefab.h)。
-> - ツリー遅延生成（`Prefab::Instantiate`）… [Prefab.cpp](Prefab.cpp)。**shared_ptr を値捕獲**（§4.3 寿命ルール）。
+> - `PrefabData` / `PrefabNodeData`（JsonValue ベースの不変プラン）+ 薄いハンドル `Prefab`（`shared_ptr<const PrefabData>` 保持）… [Prefab.h](../aqEngine/ECS/Prefab.h)。
+> - ツリー遅延生成（`Prefab::Instantiate`）… [Prefab.cpp](../aqEngine/ECS/Prefab.cpp)。**shared_ptr を値捕獲**（§4.3 寿命ルール）。
 >   1 コマンド内で root→子→孫を再帰生成し、各ノードで `CollectTypes`（components キー→TypeInfo + **requiredWith 推移展開**）→生成→`deserialize`(JsonValue)→DebugTag 命名→HTC 親子付け。
 >   末尾で `onComplete(root)`。即時版 `InstantiateImmediate`（init/エディタ用・ForEach 外限定）も提供。
-> - 生成プリミティブ … [EntityManager.h](EntityManager.h)：`RequestDeferredBuild`（複数 Entity を 1 コマンドで生成する遅延フック・registry 非依存）+ `CreateEntityFromTypes`（即時・ロック版）。
->   [EntityContext.h](EntityContext.h) のラッパで EntityDebugTag を注入（`InjectDebugTag` に共通化）。
-> - JSON 層 … [PrefabSerializer.h](PrefabSerializer.h) / .cpp：`Load(path)` / `FromJson(JsonValue)`。**Phase 3 はインライン components/children のみ**（"prefab" ネスト参照・overrides・循環検出は Phase 6）。
-> - レジストリ拡張 … [ComponentRegistry.h](ComponentRegistry.h)：`Find(typeName)` / `TypeOf(typeName)`（名前→meta / 名前→TypeInfo）。
+> - 生成プリミティブ … [EntityManager.h](../aqEngine/ECS/EntityManager.h)：`RequestDeferredBuild`（複数 Entity を 1 コマンドで生成する遅延フック・registry 非依存）+ `CreateEntityFromTypes`（即時・ロック版）。
+>   [EntityContext.h](../aqEngine/ECS/EntityContext.h) のラッパで EntityDebugTag を注入（`InjectDebugTag` に共通化）。
+> - JSON 層 … [PrefabSerializer.h](../aqEngine/ECS/PrefabSerializer.h) / .cpp：`Load(path)` / `FromJson(JsonValue)`。**Phase 3 はインライン components/children のみ**（"prefab" ネスト参照・overrides・循環検出は Phase 6）。
+> - レジストリ拡張 … [ComponentRegistry.h](../aqEngine/ECS/ComponentRegistry.h)：`Find(typeName)` / `TypeOf(typeName)`（名前→meta / 名前→TypeInfo）。
 > - 検証テスト（root→child→grandchild の Transform-only ツリーを JSON から遅延生成し、`onComplete` で local position 復元と親子構造を assert）… BattleScene 初期化ブロック。Debug|x64 ビルド成功。
 > - **旧コードベース `Prefab`（`Component/Prefab.{h,cpp}` の `Prefab::Create<Cs...>`）は削除**（新データ駆動 `aq::ecs::Prefab` へ置換）。BattleScene の旧階層テストは上記 JSON ツリーテストへ移行。
 >
@@ -259,7 +259,7 @@ struct PrefabNode
 
 ### 6.3 エディタ UI（既存資産の再利用）
 
-[SceneHierarchySystem.cpp:242](SceneHierarchySystem.cpp#L242) の Inspector ループと同パターンを `void*`（`AlignedStorage::Get()`）に対して回す:
+[SceneHierarchySystem.cpp:242](../aqEngine/ECS/SceneHierarchySystem.cpp#L242) の Inspector ループと同パターンを `void*`（`AlignedStorage::Get()`）に対して回す:
 
 - 階層ツリー表示・ノード追加/削除/リネーム
 - 「Add Component」= `GetAll()` 列挙 + `meta.construct`
@@ -271,15 +271,15 @@ struct PrefabNode
 → エディタ・シリアライザ・ランタイム生成が **`Reflect` を単一の真実**として共有。
 
 > **実装状況（Phase 5 完了）**: ImGui で Prefab を作成・編集・保存・ロード・プレビュー生成可能。Debug/Release 両ビルド成功。
-> - `AlignedStorage`（型消去・`operator new(align_val_t)` でアライン確保・move-only=ヒープポインタ移譲・破棄/構築は TypeInfo 経由）… [AlignedStorage.h](AlignedStorage.h)。
+> - `AlignedStorage`（型消去・`operator new(align_val_t)` でアライン確保・move-only=ヒープポインタ移譲・破棄/構築は TypeInfo 経由）… [AlignedStorage.h](../aqEngine/ECS/AlignedStorage.h)。
 >   ※ ヒープ確保のため move はポインタ移譲で十分（`GetMover()` は不要）。`construct`/`destruct` は AlignedStorage が TypeInfo で行うため meta には持たせない。
-> - ComponentMeta に **型消去 void\* 版** `serializePtr` / `deserializePtr` / `drawInspectorPtr` を追加（`drawInspectorPtr` のみ `#ifdef AQ_DEBUG_IMGUI`）… [ComponentRegistry.h](ComponentRegistry.h)。
->   Reflect 化済みコンポーネント（Transform/StaticMesh/Decal/PrefabReference/Spawner）へ `FillReflectPtrFns<T>` で一括設定… [ComponentRegistry.cpp](ComponentRegistry.cpp)。Reflect を単一経路として共有。
-> - エディタパネル `PrefabEditorPanel`（`IDebugRenderable`）… [PrefabEditor.h](PrefabEditor.h) / .cpp：
+> - ComponentMeta に **型消去 void\* 版** `serializePtr` / `deserializePtr` / `drawInspectorPtr` を追加（`drawInspectorPtr` のみ `#ifdef AQ_DEBUG_IMGUI`）… [ComponentRegistry.h](../aqEngine/ECS/ComponentRegistry.h)。
+>   Reflect 化済みコンポーネント（Transform/StaticMesh/Decal/PrefabReference/Spawner）へ `FillReflectPtrFns<T>` で一括設定… [ComponentRegistry.cpp](../aqEngine/ECS/ComponentRegistry.cpp)。Reflect を単一経路として共有。
+> - エディタパネル `PrefabEditorPanel`（`IDebugRenderable`）… [PrefabEditor.h](../aqEngine/ECS/PrefabEditor.h) / .cpp：
 >   編集ツリー（`PrefabEditNode`=name+型消去 components+children・ポインタ安定のため children は `unique_ptr`）、
 >   階層ツリー UI（選択・Add Child・Delete は描画後に予約実行）、インスペクター（`drawInspectorPtr(void*)` で実体編集・Add Component パレットは drawInspectorPtr を持つ型のみ・重複除外・Remove）、
 >   Save（編集ツリー→JSON→`.prefab.json`）、Load（JSON→`AlignedStorage`+`deserializePtr`）、Spawn Preview（編集ツリー→JSON→`PrefabSerializer::FromJson`→`Instantiate`）。
-> - BattleScene で `DebugUI` に登録/解除… [BattleScene.cpp](../../Game/Application/Scene/BattleScene.cpp)。
+> - BattleScene で `DebugUI` に登録/解除… `BattleScene.cpp`（旧構成）。
 >
 > **未完（Phase 5 残・Phase 6 へ）**:
 > - PrefabReference のドロップダウン（登録 Prefab 一覧）は未実装（現状は文字列 path を直接編集）。
@@ -328,7 +328,7 @@ struct PrefabNode
 **展開は Load 時に完了**し、`PrefabData` には参照を残さない（ランタイムは自己完結）。
 
 > **実装状況（Phase 6 完了）**: ネスト参照展開・循環検出・overrides 意味論を実装し検証済み。Debug/Release 両ビルド成功。
-> - `PrefabSerializer` を全面拡張… [PrefabSerializer.cpp](PrefabSerializer.cpp)：
+> - `PrefabSerializer` を全面拡張… [PrefabSerializer.cpp](../aqEngine/ECS/PrefabSerializer.cpp)：
 >   `ResolveNode`（"prefab" 参照を baseDir 相対で解決→再帰展開、name/overrides 適用）、
 >   `LoadContext`（**ロードスタックで循環検出**・正規化パスで **parseCache**・**最大深度 32**）、
 >   欠落/循環/深度超過は `EnginePrintf` で診断ログを出し空ノードを返す（クラッシュせず無言フォールバックもしない）。
@@ -336,7 +336,7 @@ struct PrefabNode
 > - overrides 意味論 `ApplyPatch` / `PatchComponents`：
 >   `components`=deep merge（`JsonValue::Merge`）/ `addedComponents`=新規 / `removedComponents`=除去、
 >   `children`=name 同定（同名は再帰 `ApplyPatch`・無ければ新規解決して追加）/ `removedChildren`=name 除去、name 上書き対応。
-> - `FromJson(root, baseDir="")` オーバーロード追加（ファイルを介さない動的生成でも baseDir 相対参照を解決可能）… [PrefabSerializer.h](PrefabSerializer.h)。
+> - `FromJson(root, baseDir="")` オーバーロード追加（ファイルを介さない動的生成でも baseDir 相対参照を解決可能）… [PrefabSerializer.h](../aqEngine/ECS/PrefabSerializer.h)。
 > - 検証（インライン base + overrides で deep merge / addedComponents / removedComponents を Instantiate→onComplete で assert）… BattleScene 初期化ブロック。
 >   ファイル参照展開は同じ ApplyPatch を共有（ファイル IO を伴うためテストは意味論をインラインで検証）。
 > - **旧 API 廃止**: 旧コードベース `Prefab` は Phase 3 で削除済み。「Save as Prefab」相当はエディタの Save（Phase 5）で実現済み。
@@ -364,16 +364,16 @@ public:
 - `uint64 PrefabId` は **ランタイム専用のキャッシュキー**。Registry で衝突検出＋診断。
 
 > **実装状況（Phase 4 完了）**: データ参照→ランタイム解決→System 遅延スポーンを実機（BattleScene）で検証済み。
-> - `PrefabRegistry`（シングルトン）… [PrefabRegistry.h](PrefabRegistry.h) / .cpp：
+> - `PrefabRegistry`（シングルトン）… [PrefabRegistry.h](../aqEngine/ECS/PrefabRegistry.h) / .cpp：
 >   `Resolve(pathOrGuid)`（正規化=バックスラッシュ→スラッシュ・キャッシュ・未ロード時 `PrefabSerializer::Load`）、
 >   `Register(key, Prefab)`（ファイルを介さない in-memory 登録・動的生成/テスト用）、
 >   `Find(PrefabId)`（shared_ptr 返却・§4.3 値捕獲）、`Clear()`。
 >   uint64 キーは FNV-1a で内部生成し、**衝突は線形プローブで別キー割当 + 診断エラー**。`value==0` は無効値に予約。
 > - `PrefabReferenceComponent` / `SpawnerComponent`（正本=prefabPath 文字列、resolved/timer/spawned はランタイム・非 serialize）
->   + `SpawnSystem`（interval ごとに `Find`→`Prefab(data).Instantiate(htc->parentHandle)`・maxCount 制限）… [SpawnSystem.h](SpawnSystem.h) / .cpp。
+>   + `SpawnSystem`（interval ごとに `Find`→`Prefab(data).Instantiate(htc->parentHandle)`・maxCount 制限）… [SpawnSystem.h](../aqEngine/ECS/SpawnSystem.h) / .cpp。
 >   ForEach 中の遅延生成は commandMutex_ のみ取得のため安全。dt は `aq::Engine::GetDeltaTime()`。
-> - ComponentRegistry に PrefabReference / Spawner を登録（serialize/deserialize/drawInspector）… [ComponentRegistry.cpp](ComponentRegistry.cpp)。
-> - SpawnSystem を engine core で登録（HierarcicalTransform/Animation と並ぶ常設 System）… [Core/Application.cpp](../Core/Application.cpp)。
+> - ComponentRegistry に PrefabReference / Spawner を登録（serialize/deserialize/drawInspector）… [ComponentRegistry.cpp](../aqEngine/ECS/ComponentRegistry.cpp)。
+> - SpawnSystem を engine core で登録（HierarcicalTransform/Animation と並ぶ常設 System）… [Core/Application.cpp](../aqEngine/Core/Application.cpp)。
 > - 検証（Register/Resolve のキャッシュ一貫性・Find の有効/無効 id・Spawner エンティティ配置でランタイムスポーン起動）… BattleScene 初期化ブロック。Debug|x64 ビルド成功。
 >
 > **未完（Phase 4 残・後続へ）**:
@@ -424,7 +424,7 @@ struct SpawnerComponent : IComponent
 void SpawnSystem::Update()
 {
     Foreach<SpawnerComponent, HierarchicalTransformComponent>(
-        [&](Entity e, SpawnerComponent* s, HierarchicalTransformComponent* htc)
+        [&]()
     {
         if (s->resolved.value == 0) s->resolved = PrefabRegistry::Get().Resolve(s->prefabPath);  // 初回解決
         s->timer += dt;
@@ -566,7 +566,7 @@ if (auto data = aq::ecs::PrefabRegistry::Get().Find(comp->resolved))
 - エディタ/シリアライズに載せるには、この `MyComponent` を `ComponentRegistry::RegisterCoreComponents()` に
   他コンポーネント同様に登録し、`FillReflectPtrFns<MyComponent>(meta)` を呼ぶ（`typeName` と serialize/deserialize が付く）。
 - **既成の実例**：`SpawnerComponent`（`prefabPath` + `interval` で間欠スポーン）と `SpawnSystem`
-  （[SpawnSystem.cpp](SpawnSystem.cpp)）。`SpawnSystem` は `AddSystem` 済みなので、エンティティに
+  （[SpawnSystem.cpp](../aqEngine/ECS/SpawnSystem.cpp)）。`SpawnSystem` は `AddSystem` 済みなので、エンティティに
   `Spawner` コンポーネントを付けて `prefab` に path を入れるだけで自動スポーンが動く。
 
 ### ファイルを介さない動的 Prefab

@@ -14,7 +14,7 @@ namespace AqEngine.ParticleExport
 	/// 参照テクスチャは出力先の Textures/ へフラットコピーし、renderer.texture を
 	/// "Textures/&lt;file&gt;" (=.particle 相対) へ書き換える。バンドルをそのまま
 	/// Game/Assets 下に置けばエンジンが .particle 相対でテクスチャを解決する。
-	/// 仕様: aqEngine/Particle/particleフォーマット仕様v1.md（本書が正）。
+	/// 仕様: 設計書/particleフォーマット仕様v1.md（本書が正）。
 	/// </summary>
 	public static class AqParticleExporter
 	{

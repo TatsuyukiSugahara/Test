@@ -3,7 +3,7 @@
 対象: `aqEngine/Graphics/Vulkan/`
 前提: 既存の抽象レイヤ（Bridge パターン）を変更せず、Vulkan を `IGraphicsDeviceImpl` / `IRenderContextImpl` の実装として追加する。
 本書は **設計のみ**。実装コードは含まない。
-姉妹文書: [D3D12Backend設計.md](../D3D12/D3D12Backend設計.md)（同一構造の先行実装。Vulkan は本書の多くを D3D12 実装から平行移植する）。
+姉妹文書: [D3D12Backend設計.md](D3D12Backend設計.md)（同一構造の先行実装。Vulkan は本書の多くを D3D12 実装から平行移植する）。
 
 ---
 

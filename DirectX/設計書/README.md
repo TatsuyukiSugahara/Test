@@ -1,50 +1,69 @@
-# aqEngine 機能別設計書(レビュー用)
+# aqEngine 設計ドキュメント
 
-> 対象コミット: `b52a933` / 最終更新: 2026-07-03
+aqEngine の概要設計、バックエンド詳細、データ仕様、移植記録を集約しています。
+実装コードから設計資料を分離し、技術レビュー時に分野別で追える構成にしています。
 
-ハイブリッドゲームエンジン(DirectX 11 / DirectX 12 / Vulkan / Xbox / UWP 対応)の機能別設計書。
-各ファイルが何をしているかをレビューできる粒度でまとめている。
+## 推奨読順
 
-> 運用ルール: 設計に影響するコミットでは、該当設計書の対象コミットを更新すること。
+1. [ゲームアプリケーションコア設計](06_ゲームアプリケーションコア設計.md)
+2. [レンダリング設計](01_レンダリング設計.md)
+3. [ECS設計](04_ECS設計.md)
+4. [マルチスレッド設計](05_マルチスレッド設計.md)
+5. [リソース管理設計](07_リソース管理設計.md)
+6. 興味のある分野の詳細設計
 
-| # | ドキュメント | 対象 |
-|---|---|---|
-| 01 | [レンダリング設計](01_レンダリング設計.md) | `Graphics/`(API 抽象・Bridge)、`Rendering/`(フレーム/コマンド/ディファード/シャドウ/ポストプロセス/カリング) |
-| 02 | [HID設計](02_HID設計.md) | `HID/`(キーボード/マウス/パッド抽象・ActionMap) |
-| 03 | [サウンド設計](03_サウンド設計.md) | `Sound/`(SoundEngine・XAudio2 バックエンド・3D・デコーダ・ECS 統合) |
-| 04 | [ECS設計](04_ECS設計.md) | `ECS/`・`Component/`(アーキタイプ ECS・System 並列・Prefab) |
-| 05 | [マルチスレッド設計](05_マルチスレッド設計.md) | `Util/`(ThreadPool/JobSystem/Profiler)、`RenderThread`、非同期ロード |
-| 06 | [ゲームアプリケーションコア設計](06_ゲームアプリケーションコア設計.md) | `Engine`・`Core/`・`Platform/`・`Game/Application/` |
-| 07 | [リソース管理設計](07_リソース管理設計.md) | `Resource/`(非同期ロード・共有キャッシュ・ローダ) |
+## 概要設計
 
-初見のレビュアーは 06 → 01 → 04 → 05 → 07 → 02 → 03 の順を推奨。
+| 資料 | 対象 |
+| --- | --- |
+| [01 レンダリング設計](01_レンダリング設計.md) | 描画抽象、フレーム構築、Deferred、Shadow、PostProcess、カリング |
+| [02 HID設計](02_HID設計.md) | キーボード、マウス、パッド抽象、ActionMap |
+| [03 サウンド設計](03_サウンド設計.md) | SoundEngine、XAudio2、3D音響、デコーダ、ECS統合 |
+| [04 ECS設計](04_ECS設計.md) | Archetype、Chunk、System並列、Prefab |
+| [05 マルチスレッド設計](05_マルチスレッド設計.md) | ThreadPool、RenderThread、非同期ロード、Profiler |
+| [06 ゲームアプリケーションコア設計](06_ゲームアプリケーションコア設計.md) | Engine、Application、Platform、GameFlow |
+| [07 リソース管理設計](07_リソース管理設計.md) | 非同期ロード、共有キャッシュ、解放、メモリ予算 |
 
-## ハイブリッド構成の共通思想
+## グラフィックス
 
-全システムが **Bridge パターン + `#define` バックエンド選択**で API/プラットフォーム差を吸収する:
+| 資料 | 内容 |
+| --- | --- |
+| [D3D12バックエンド設計](D3D12Backend設計.md) | Device、CommandList、Descriptor、PSO、同期、実装フェーズ |
+| [Vulkanバックエンド設計](VulkanBackend設計.md) | Vulkan 1.3、Dynamic Rendering、Descriptor、同期、実装フェーズ |
+| [カリング設計](カリング設計.md) | Frustum、Hi-Z、Cluster、GPU駆動カリング、間接描画 |
 
-| 系統 | 抽象 IF | バックエンド | 選択 |
-|---|---|---|---|
-| グラフィックス | `IGraphicsDeviceImpl` / `IRenderContextImpl` | D3D11 / D3D12 / Vulkan | `ENGINE_GRAPHICS_*`(aq.h) |
-| サウンド | `ISoundBackend` / `ISoundVoice` | XAudio2 / (Oboe) | `SoundBackend.h` |
-| パッド入力 | `IPadBackend` | XInput / WinRT | `PadBackend.h` |
-| プラットフォーム | `IPlatform` | Win32 / UWP | エントリで注入 |
+## ECS / ゲーム構築
 
-上位レイヤー(`aq::rendering` / `aq::sound` コア / ECS / ゲーム)は API・プラットフォームを知らず、
-差し替えても呼び出し側は無改修 —— これが移植コストを抑える設計の核。
+| 資料 | 内容 |
+| --- | --- |
+| [Prefab設計](Prefab設計.md) | JSON Prefab、Reflection、override、遅延生成、エディタ |
+| [Level設計](Level設計.md) | Level階層、非同期ロード、ストリーミング、エディタ |
 
-## 既存の詳細設計書(サブシステム内)
+## パーティクル / アセット
 
-- [カリング設計](../aqEngine/Rendering/カリング設計.md)
-- [D3D12Backend設計](../aqEngine/Graphics/D3D12/D3D12Backend設計.md) / [VulkanBackend設計](../aqEngine/Graphics/Vulkan/VulkanBackend設計.md)
-- [Sound設計](../aqEngine/Sound/Sound設計.md) / [AudioAuthoring設計](../aqEngine/Sound/AudioAuthoring設計.md)
-- [Prefab設計](../aqEngine/ECS/Prefab設計.md)
-- [Xbox移植設計](../aqEngine/Platform/Xbox移植設計.md)
+| 資料 | 内容 |
+| --- | --- |
+| [FBX・ParticleSystem導入設計](FBX・ParticleSystem導入設計.md) | ufbx、Unityエクスポータ、CPU simulation、描画実装 |
+| [.particleフォーマット仕様 v1](particleフォーマット仕様v1.md) | Unityから受け渡す独自JSON形式の正本 |
 
-## 既知の課題
+## サウンド
 
-- [x] `ComponentArray.h`: `begin_()` / `eng()` の綴り(→ `begin()` / `end()`。挙動影響なし)→ タスクB-1で対応済み(`144ae8a`)
-- [x] `MAX_COMPONENT_SIZE` は実態が「個数」(→ `MAX_COMPONENT_COUNT` へ改名)→ タスクB-2で対応済み(`144ae8a`)
-- [x] `ThreadPool` / `JobSystem` の併存を解消(`b52a933`)。未使用の `JobSystem` を撤去し `ThreadPool` に一本化。→ [05 §1](05_マルチスレッド設計.md)
-- [x] リソース管理の unload / 未使用解放 API を追加(`8f16111`)。`UnloadUnused()` / `Unload<T>()` でシーン切替時にメモリ解放可。世代カウンタは shared_ptr 所有のため不採用。→ [07 §3](07_リソース管理設計.md)
-- [x] `PlatformBudget` の予算チェックを実装(`700699e`)。`maxSingleFileBytes` はロード時に強制(超過拒否)、`memoryBudgetBytes` は `MemoryManager::IsOverMemoryBudget()` で観測(非強制)。→ [07 §6](07_リソース管理設計.md)
+| 資料 | 内容 |
+| --- | --- |
+| [Sound設計](Sound設計.md) | Backend / Voice、寿命、リアルタイム契約、3D音響、ストリーミング |
+| [Audio Authoring設計](AudioAuthoring設計.md) | Event、Bank、Bus、Snapshot、ECS連携、編集UI |
+| [サウンド残作業](サウンド残作業.md) | 現在の残作業と次の実装候補 |
+
+## プラットフォーム / Xbox
+
+| 資料 | 内容 |
+| --- | --- |
+| [Xbox移植設計](Xbox移植設計.md) | UWP / GDK方針、リソース制限、抽象化、移植計画 |
+| [Xbox UWP移植変更まとめ](Xbox_UWP移植_変更まとめ.md) | Xbox One実機描画までの変更、調査結果、配置手順、制約 |
+
+## 文書管理方針
+
+- aqEngine 固有の Markdown 設計資料はこのフォルダへ集約します。
+- ソースコードへのリンクはリポジトリルートから追跡可能な相対リンクにします。
+- 実装状況や制約が変わった場合は、概要設計と該当する詳細設計を同時に更新します。
+- `ThirdParty` 配下の README は外部ライブラリの原文であるため集約対象外です。

@@ -21,7 +21,7 @@ namespace aq
 		 * D3D12GraphicsDeviceImpl と同じ役割を Vulkan オブジェクトで担う。
 		 * Phase 0 は「クリア画面が出る」までを目標とし、リソースファクトリは未実装スタブ。
 		 *
-		 * 設計: Graphics/Vulkan/VulkanBackend設計.md (§2 フレーム, §8 スワップチェーン)
+		 * 設計: 設計書/VulkanBackend設計.md (§2 フレーム, §8 スワップチェーン)
 		 * - Vulkan 1.3 + dynamic rendering (VkRenderPass/Framebuffer を作らない)。
 		 * - フレーム境界は最初の記録呼び出しで BeginFrameIfNeeded()、Present() で確定 (D3D12 と同方式)。
 		 */

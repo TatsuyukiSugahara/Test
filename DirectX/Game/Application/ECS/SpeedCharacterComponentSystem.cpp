@@ -33,53 +33,23 @@ namespace app
 		 */
 		void PlayerInputSystem::Update()
 		{
-			auto& context = GameFlow::Get().Context();
-			if (context.gameplayPaused) { return; }
+			if (GameFlow::Get().Context().gameplayPaused) { return; }
 
-			const bool cloneAll = context.inputCloneAll;
-
-			aq::ecs::Foreach<PlayerInputComponent>([cloneAll](const aq::ecs::Entity& /*entity*/, PlayerInputComponent* input)
+			aq::ecs::Foreach<PlayerInputComponent>([](const aq::ecs::Entity& /*entity*/, PlayerInputComponent* input)
 				{
-					// パッド 0 のプレイヤー (と共用モード時の全員) はキーボードでも遊べるよう
-					// GameInput 経由。パッド 1 以降は専用機を直接読む。
-					if (cloneAll || input->padIndex == 0) {
-						auto& gameInput = GameInput::Get();
+					// 一人プレイ専用: キーボードとパッド 0 を GameInput 経由で合成して読む。
+					auto& gameInput = GameInput::Get();
 
-						float moveX = gameInput.GetStick(GameAction::Move).x;
-						float moveY = gameInput.GetStick(GameAction::Move).y;
-						if (gameInput.IsPressed(GameAction::MoveRight))    { moveX += 1.0f; }
-						if (gameInput.IsPressed(GameAction::MoveLeft))     { moveX -= 1.0f; }
-						if (gameInput.IsPressed(GameAction::MoveForward))  { moveY += 1.0f; }
-						if (gameInput.IsPressed(GameAction::MoveBackward)) { moveY -= 1.0f; }
-
-						input->moveX = moveX < -1.0f ? -1.0f : (moveX > 1.0f ? 1.0f : moveX);
-						input->moveY = moveY < -1.0f ? -1.0f : (moveY > 1.0f ? 1.0f : moveY);
-						input->jumpTriggered = gameInput.IsTriggered(GameAction::Confirm);
-						return;
-					}
-
-					const uint32_t padIndex = input->padIndex;
-
-					// 未接続のパッドに割り当てられたプレイヤーは入力なし (前フレームの値を残さない)。
-					if (!aq::hid::IsPadConnected(padIndex)) {
-						input->moveX         = 0.0f;
-						input->moveY         = 0.0f;
-						input->jumpTriggered = false;
-						return;
-					}
-
-					// LY はバックエンドが「上 = +1」で正規化済み。GameInput の GetStick も
-					// GetPadAxis の値を無変換で返すため、こちらも反転しないで向きが揃う。
-					float moveX = aq::hid::GetPadAxis(padIndex, aq::hid::PadAxis::LX);
-					float moveY = aq::hid::GetPadAxis(padIndex, aq::hid::PadAxis::LY);
-					if (aq::hid::IsPadPressed(padIndex, aq::hid::PadButton::DRight)) { moveX += 1.0f; }
-					if (aq::hid::IsPadPressed(padIndex, aq::hid::PadButton::DLeft))  { moveX -= 1.0f; }
-					if (aq::hid::IsPadPressed(padIndex, aq::hid::PadButton::DUp))    { moveY += 1.0f; }
-					if (aq::hid::IsPadPressed(padIndex, aq::hid::PadButton::DDown))  { moveY -= 1.0f; }
+					float moveX = gameInput.GetStick(GameAction::Move).x;
+					float moveY = gameInput.GetStick(GameAction::Move).y;
+					if (gameInput.IsPressed(GameAction::MoveRight))    { moveX += 1.0f; }
+					if (gameInput.IsPressed(GameAction::MoveLeft))     { moveX -= 1.0f; }
+					if (gameInput.IsPressed(GameAction::MoveForward))  { moveY += 1.0f; }
+					if (gameInput.IsPressed(GameAction::MoveBackward)) { moveY -= 1.0f; }
 
 					input->moveX = moveX < -1.0f ? -1.0f : (moveX > 1.0f ? 1.0f : moveX);
 					input->moveY = moveY < -1.0f ? -1.0f : (moveY > 1.0f ? 1.0f : moveY);
-					input->jumpTriggered = aq::hid::IsPadTriggered(padIndex, aq::hid::PadButton::A);
+					input->jumpTriggered = gameInput.IsTriggered(GameAction::Confirm);
 				});
 		}
 

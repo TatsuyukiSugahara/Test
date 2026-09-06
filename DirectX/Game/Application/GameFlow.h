@@ -3,7 +3,6 @@
 #include "Level/LevelManager.h"   // aq::level::LevelLoadHandle
 #include "Math/Vector.h"
 #include "UI/Screen/UIScreen.h"
-#include "Graphics/Camera.h"
 #include "Flow/GameContext.h"
 #include <memory>
 
@@ -105,7 +104,6 @@ namespace app
 		aq::ecs::EntityHandle       playerHandle_;
 		aq::level::LevelLoadHandle  loadHandle_;
 		aquadash::GameContext       context_;             // AquaDash のゲーム進行データ (選択ステージ / プレイ結果)
-		aq::Camera                  viewCameras_[aquadash::MAX_PLAYER_COUNT];   // 分割画面用ビューカメラ (2 人以上で使用)
 		bool                        preloaded_ = false;   // UI テクスチャの事前ロードを一度だけ行う
 
 		static GameFlow* instance_;
@@ -128,12 +126,6 @@ namespace app
 		void SetLoadHandle(const aq::level::LevelLoadHandle& handle) { loadHandle_ = handle; }
 
 		aquadash::GameContext& Context() { return context_; }
-
-		// 分割画面用のビューカメラ (AutoCameraSystem が書き、Application が SetSplitViews へ渡す)。
-		aq::Camera* ViewCamera(const uint32_t index)
-		{
-			return index < aquadash::MAX_PLAYER_COUNT ? &viewCameras_[index] : nullptr;
-		}
 
 		// 影の注視点 (GetFocusPosition) の対象を差し替える。
 		void SetPlayerHandle(const aq::ecs::EntityHandle& handle) { playerHandle_ = handle; }

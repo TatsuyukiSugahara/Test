@@ -36,15 +36,12 @@ namespace app
 			}
 
 
-			// 取得エフェクトを撃つ。エミッタはプレイヤー毎の常駐エンティティなので、
+			// 取得エフェクトを撃つ。エミッタは常駐エンティティなので、
 			// 生成せずコイン位置へ移してから Restart する。
-			void PlayCollectEffect(
-				const aquadash::GameContext& context, const uint32_t playerIndex, const aq::math::Vector3& position)
+			void PlayCollectEffect(const aquadash::GameContext& context, const aq::math::Vector3& position)
 			{
-				if (playerIndex >= aquadash::MAX_PLAYER_COUNT) { return; }
-
 				auto& ctx = aq::ecs::EntityContext::Get();
-				const aq::ecs::EntityHandle& handle = context.collectFxHandles[playerIndex];
+				const aq::ecs::EntityHandle& handle = context.collectFxHandle;
 				if (!ctx.IsValid(handle)) { return; }
 
 				auto* tc      = ctx.GetComponent<aq::ecs::TransformComponent>(handle);
@@ -98,7 +95,6 @@ namespace app
 
 					const aq::math::Vector3 playerPosition = playerTc->position;
 					const float             playerDistance = character->distance;
-					const uint32_t          playerIndex    = character->playerIndex;
 
 					aq::ecs::Foreach<CoinComponent>([&](const aq::ecs::Entity& coinEntity, CoinComponent* coin)
 						{
@@ -122,7 +118,7 @@ namespace app
 							score->coinCount++;
 
 							PlayCollectSE();
-							PlayCollectEffect(context, playerIndex, coinTc->position);
+							PlayCollectEffect(context, coinTc->position);
 						});
 				});
 		}

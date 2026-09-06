@@ -140,30 +140,6 @@ namespace app
 			pos.y += 2.0f;
 			renderer_.GetShadowRenderer()->SetSceneCenter(pos);
 		}
-
-		// 分割画面: ステージ中で 2 人以上ならビューカメラ+矩形をエンジンへ渡す
-		// (カメラの中身は AutoCameraSystem が毎フレーム更新している)。
-		{
-			auto& context = app::GameFlow::Get().Context();
-			if (context.playerCount >= 2 && context.activeStage)
-			{
-				const float screenW = static_cast<float>(aq::Engine::Get().GetRenderWidth());
-				const float screenH = static_cast<float>(aq::Engine::Get().GetRenderHeight());
-
-				std::vector<aq::Application::SplitView> views(context.playerCount);
-				for (uint32_t i = 0; i < context.playerCount; ++i)
-				{
-					views[i].camera = app::GameFlow::Get().ViewCamera(i);
-					app::aquadash::GetSplitViewRect(context.playerCount, i, screenW, screenH,
-						views[i].rect.x, views[i].rect.y, views[i].rect.w, views[i].rect.h);
-				}
-				SetSplitViews(views);
-			}
-			else
-			{
-				ClearSplitViews();
-			}
-		}
 	}
 
 

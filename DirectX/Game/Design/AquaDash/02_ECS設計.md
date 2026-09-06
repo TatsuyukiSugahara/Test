@@ -26,7 +26,7 @@
 | Component | 主データ | 用途 |
 |---|---|---|
 | `SpeedCharacterComponent` | distance / lateral / height、速度、接地フラグ、状態(走行/ジャンプ/落下/ゴール済) | プレイヤー 1 人分の走行状態 |
-| `PlayerInputComponent` | padIndex、移動入力、ジャンプ入力 | パッド → キャラの対応付け(R-07)。既存 `GameInput` から書き込む |
+| `PlayerInputComponent` | 移動入力、ジャンプ入力 | 既存 `GameInput`(キーボード+パッド0)から書き込む(R-07 変更で一人プレイ専用) |
 | `CoinComponent` | 取得済みフラグ、回転位相 | コイン 1 枚。位置は Transform が持つ |
 | `GoalComponent` | 発火済みフラグ | ゴールトリガー |
 | `PlayerScoreComponent` | コイン枚数、落下回数 | リザルト評価の集計元(R-11) |

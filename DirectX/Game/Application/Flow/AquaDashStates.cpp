@@ -9,7 +9,6 @@
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
-#include "HID/Input.h"
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
 #include "Sound/SoundClip.h"
@@ -121,8 +120,7 @@ namespace app
 						static_cast<float>(aq::Engine::Get().GetRenderHeight()));
 				}
 
-				// プレイヤー (P1 は 1 人)。
-				for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i)
+				// プレイヤー。
 				{
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent,
@@ -134,11 +132,8 @@ namespace app
 						app::ecs::PlayerScoreComponent>();
 
 					auto* character = entity.GetComponent<app::ecs::SpeedCharacterComponent>();
-					character->playerIndex = i;
-					character->distance    = stageData->spawnDistance;
-					character->lateral     = i < stageData->spawnLanes.size() ? stageData->spawnLanes[i] : 0.0f;
-
-					entity.GetComponent<app::ecs::PlayerInputComponent>()->padIndex = i;
+					character->distance = stageData->spawnDistance;
+					character->lateral  = stageData->spawnLanes.empty() ? 0.0f : stageData->spawnLanes[0];
 
 					const auto spawnFrame = stageData->spline.Evaluate(character->distance);
 					auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
@@ -158,19 +153,17 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("SpeedPlayer");
 #endif
-					context.playerHandles[i] = entity.GetHandle();
+					context.playerHandle = entity.GetHandle();
 					context.stageEntities.push_back(entity.GetHandle());
 				}
-				flow.SetPlayerHandle(context.playerHandles[0]);   // 影の注視点用
+				flow.SetPlayerHandle(context.playerHandle);   // 影の注視点用
 
-				// 自動カメラ (プレイヤー毎。分割画面のビュー番号 = playerIndex)。
-				for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i)
+				// 自動カメラ。
 				{
 					auto entity = ctx.CreateEntity<app::ecs::AutoCameraComponent>();
 					auto* autoCam = entity.GetComponent<app::ecs::AutoCameraComponent>();
-					autoCam->targetHandle = context.playerHandles[i];
-					autoCam->viewIndex    = i;
-					autoCam->cameraType   = aq::CameraType::Main;   // 1 人時のみ使用
+					autoCam->targetHandle = context.playerHandle;
+					autoCam->cameraType   = aq::CameraType::Main;
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("AutoCamera");
 #endif
@@ -200,8 +193,7 @@ namespace app
 					context.stageEntities.push_back(entity.GetHandle());
 				}
 
-				// コイン取得エフェクトの常駐エミッタ (プレイヤー毎。取得時に移動して Restart する)。
-				for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i)
+				// コイン取得エフェクトの常駐エミッタ (取得時に移動して Restart する)。
 				{
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent,
@@ -213,7 +205,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CollectFX");
 #endif
-					context.collectFxHandles[i] = entity.GetHandle();
+					context.collectFxHandle = entity.GetHandle();
 					context.stageEntities.push_back(entity.GetHandle());
 				}
 			}
@@ -227,11 +219,10 @@ namespace app
 				if (!stageData) { return; }
 
 				auto& ctx = aq::ecs::EntityContext::Get();
-				for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i) {
-					if (!ctx.IsValid(context.playerHandles[i])) { continue; }
-					if (auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandles[i])) {
+				if (ctx.IsValid(context.playerHandle)) {
+					if (auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle)) {
 						character->distance         = stageData->spawnDistance;
-						character->lateral          = i < stageData->spawnLanes.size() ? stageData->spawnLanes[i] : 0.0f;
+						character->lateral          = stageData->spawnLanes.empty() ? 0.0f : stageData->spawnLanes[0];
 						character->height           = 0.0f;
 						character->speed            = 0.0f;
 						character->verticalVelocity = 0.0f;
@@ -239,7 +230,7 @@ namespace app
 						character->fallen           = false;
 						character->worldVelocity    = aq::math::Vector3(0.0f, 0.0f, 0.0f);
 					}
-					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandles[i])) {
+					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle)) {
 						score->coinCount = 0;
 						score->fallCount = 0;
 					}
@@ -269,12 +260,8 @@ namespace app
 					}
 				}
 				context.stageEntities.clear();
-				for (auto& handle : context.playerHandles) {
-					handle = aq::ecs::EntityHandle();
-				}
-				for (auto& handle : context.collectFxHandles) {
-					handle = aq::ecs::EntityHandle();
-				}
+				context.playerHandle    = aq::ecs::EntityHandle();
+				context.collectFxHandle = aq::ecs::EntityHandle();
 				context.activeStage.reset();
 
 				if (flow.LoadHandle().IsValid()) {
@@ -299,31 +286,12 @@ namespace app
 
 		void TitleState::OnUpdate(GameFlow& flow, const float /*dt*/)
 		{
-			auto& context = flow.Context();
-
-			// 参加人数の擬似切替 (パッド無しで分割画面を試すためのデバッグ操作)。
-			// 数字キー 2-4 = その人数で入力共有 / 1 = 解除 (接続パッド数に従う)。
-			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num1)) { context.playerCount = 1; context.inputCloneAll = false; }
-			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num2)) { context.playerCount = 2; context.inputCloneAll = true; }
-			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num3)) { context.playerCount = 3; context.inputCloneAll = true; }
-			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num4)) { context.playerCount = 4; context.inputCloneAll = true; }
-
 			if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
-			if (context.stageList.empty()) { return; }   // 一覧が無ければ開始できない
-
-			// 擬似人数未指定なら接続パッド数から参加人数を決める (0 台 = キーボード 1 人)。
-			if (!context.inputCloneAll)
-			{
-				uint32_t connected = 0;
-				for (uint32_t i = 0; i < MAX_PLAYER_COUNT; ++i) {
-					if (aq::hid::IsPadConnected(i)) { ++connected; }
-				}
-				context.playerCount = connected >= 2 ? connected : 1;
-			}
+			if (flow.Context().stageList.empty()) { return; }   // 一覧が無ければ開始できない
 
 			PlayDecisionSE();
 
-			context.playResult = PlayResult();
+			flow.Context().playResult = PlayResult();
 			aq::ui::UIContext::Get().Screens().Replace("Loading");
 			flow.ChangeState(std::make_unique<LoadingState>());
 		}
@@ -432,19 +400,19 @@ namespace app
 			if (!stageData) { return; }
 
 			auto& ctx = aq::ecs::EntityContext::Get();
-			if (!ctx.IsValid(context.playerHandles[0])) { return; }
-			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandles[0]);
+			if (!ctx.IsValid(context.playerHandle)) { return; }
+			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle);
 			if (!character) { return; }
 
-			// HUD 更新 (時間 / コイン / 速度)。分割画面時のビュー毎 HUD は P5 で対応。
+			// HUD 更新 (時間 / コイン / 速度)。
+			const auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle);
 			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
-				const auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandles[0]);
 				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f);
 			}
 
-			// ゴール / 落下判定 (P1 はプレイヤー 0 のみ。全員分の集計は P5)。
+			// ゴール / 落下判定。
 			// 落下は「路面相対 height がしきい値未満」または「ループ脱落後に地面高さまで落ちた」。
-			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(context.playerHandles[0]);
+			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(context.playerHandle);
 			const bool  goal     = character->distance >= stageData->goalDistance;
 			const bool  fall     = character->height < stageData->fallHeight
 			                    || (character->fallen && playerTc && playerTc->position.y < 0.5f);
@@ -453,12 +421,7 @@ namespace app
 			PlayResult& result  = context.playResult;
 			result.cleared      = goal;
 			result.clearTimeSec = elapsed_;
-			for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i) {
-				if (!ctx.IsValid(context.playerHandles[i])) { continue; }
-				if (const auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandles[i])) {
-					result.coinCounts[i] = score->coinCount;
-				}
-			}
+			result.coinCount    = score ? score->coinCount : 0;
 
 			aq::ui::UIContext::Get().Screens().Replace("AquaDashResult");
 			flow.ChangeState(std::make_unique<ResultState>());
@@ -489,9 +452,9 @@ namespace app
 				// ランクはクリア時のみ (設計 03: ゲームオーバーはランクなし)。
 				std::string rank;
 				if (result.cleared && context.activeStage) {
-					rank = context.activeStage->CalcRank(result.coinCounts[0], result.clearTimeSec);
+					rank = context.activeStage->CalcRank(result.coinCount, result.clearTimeSec);
 				}
-				screen->SetResult(result.cleared, result.clearTimeSec, result.coinCounts[0], rank.c_str());
+				screen->SetResult(result.cleared, result.clearTimeSec, result.coinCount, rank.c_str());
 				screen->SetCursor(cursor_);
 			}
 		}

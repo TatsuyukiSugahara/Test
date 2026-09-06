@@ -6,15 +6,12 @@ namespace app
 	namespace ecs
 	{
 		/**
-		 * プレイヤー 1 人分の入力状態。PlayerInputSystem が毎フレーム書き込む。
-		 * padIndex 0 はキーボードとも共用、1 以降は該当パッドを直接読む
-		 * (GameContext::inputCloneAll が true なら全員がパッド 0 / キーボードを共用)。
+		 * プレイヤーの入力状態。PlayerInputSystem が毎フレーム書き込む
+		 * (一人プレイ専用: キーボードとパッド 0 を合成して読む)。
 		 */
 		struct PlayerInputComponent : public aq::ecs::IComponent
 		{
 			ecsComponent(app::ecs::PlayerInputComponent);
-
-			uint32_t padIndex = 0;
 
 			/** 入力値 (System が書き込む) */
 			float moveX         = 0.0f;   // レーン移動 (-1..1)
@@ -40,10 +37,9 @@ namespace app
 			float height   = 0.0f;
 
 			/** 走行状態 */
-			float    speed            = 0.0f;   // 前進速度 [m/s]
-			float    verticalVelocity = 0.0f;
-			bool     grounded         = true;
-			uint32_t playerIndex      = 0;
+			float speed            = 0.0f;   // 前進速度 [m/s]
+			float verticalVelocity = 0.0f;
+			bool  grounded         = true;
 
 			/** 脱落状態 (ループで速度不足になった等。スプライン制御を離れワールド自由落下) */
 			bool              fallen        = false;

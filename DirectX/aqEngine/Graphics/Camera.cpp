@@ -50,7 +50,7 @@ namespace aq
 		projectionMatrix_.MakeProjectionMatrix(viewAngle_, aspect_, near_, far_);
 
 		// ビュー行列計算
-		viewMatrix_.MakeLookAt(position_, targetPosition_, math::Vector3::Up);
+		viewMatrix_.MakeLookAt(position_, targetPosition_, up_);
 		// ビュープロジェクション行列計算
 		viewProjectionMatrix_.Mull(viewMatrix_, projectionMatrix_);
 		// ビュー行列の逆行列計算

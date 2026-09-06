@@ -15,6 +15,7 @@ namespace aq
 	private:
 		math::Vector3 position_;
 		math::Vector3 targetPosition_;
+		math::Vector3 up_ = math::Vector3::Up;   // ビューの上方向 (ループ走行などロールが必要なカメラ用)
 		math::Matrix4x4 viewMatrix_;
 		math::Matrix4x4 projectionMatrix_;
 		math::Matrix4x4 viewProjectionMatrix_;
@@ -45,6 +46,11 @@ namespace aq
 		void SetTarget(const math::Vector3& target)
 		{
 			targetPosition_.Set(target);
+		}
+		/** ビューの上方向設定 (正規化済みであること。既定は +Y) */
+		void SetUp(const math::Vector3& up)
+		{
+			up_.Set(up);
 		}
 		/** 近平面設定 */
 		void SetNear(const float n)

@@ -1,0 +1,79 @@
+{
+    "name": "AquaDashTitleRoot",
+    "components": {
+        "transform": { "active": true, "sizeDelta": [1920, 1080] },
+        "canvas": { "resolution": [1920, 1080] }
+    },
+    "children": [
+        {
+            "name": "BG",
+            "components": {
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.03, 0.08, 0.2, 1.0] }
+            }
+        },
+        {
+            "name": "HorizonBand",
+            "components": {
+                "transform": { "position": [0, 320, 0], "sizeDelta": [1920, 8] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.35, 0.85, 1.0, 0.6] }
+            }
+        },
+        {
+            "name": "Logo",
+            "components": {
+                "transform": { "position": [0, -160, 0], "sizeDelta": [1600, 220] },
+                "text": {
+                    "content": "A Q U A   D A S H",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 150,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.35, 0.85, 1.0, 1.0]
+                }
+            }
+        },
+        {
+            "name": "Sub",
+            "components": {
+                "transform": { "position": [0, -30, 0], "sizeDelta": [1200, 50] },
+                "text": {
+                    "content": "S O N I C - S T Y L E   E N G I N E   T E S T",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 26,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.6, 0.7, 0.8, 0.8]
+                }
+            }
+        },
+        {
+            "name": "StageLabel",
+            "components": {
+                "transform": { "position": [0, 250, 0], "sizeDelta": [1200, 70] },
+                "text": {
+                    "content": "STAGE 01    GREEN COAST",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 42,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 0.95]
+                }
+            }
+        },
+        {
+            "name": "Press",
+            "components": {
+                "transform": { "position": [0, 430, 0], "sizeDelta": [1200, 50] },
+                "text": {
+                    "content": "P R E S S   S P A C E   /   A   B U T T O N",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 26,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 1.0]
+                }
+            }
+        }
+    ]
+}

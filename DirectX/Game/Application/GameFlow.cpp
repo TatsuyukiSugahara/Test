@@ -3,6 +3,8 @@
 #include "GameInput.h"
 #include "GameAction.h"
 #include "Actor/StateMachine.h"
+#include "AquaDash/Flow/AquaDashStates.h"
+#include "AquaDash/UI/AquaDashScreens.h"
 
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
@@ -200,11 +202,12 @@ namespace app
 			void OnUpdate(GameFlow& flow, const float dt) override
 			{
 				timer_ += dt;
-				// タイトルは筆文字が主役。ASCII とタイトル用フォントの両方が整うまで待つ(安全上限あり)。
+				// AquaDash のタイトルは ASCII のみだが、フォント準備待ちは従来どおり両方を待つ
+				// (残刃タイトルへ戻す可能性を残すため。不要になったら P7 で整理する)。
 				if ((IsUIFontReady() && IsTitleFontReady()) || timer_ >= FONT_WAIT_MAX)
 				{
-					aq::ui::UIContext::Get().Screens().Replace("Title");
-					flow.ChangeState(std::make_unique<TitleState>());
+					aq::ui::UIContext::Get().Screens().Replace("AquaDashTitle");
+					flow.ChangeState(std::make_unique<aquadash::TitleState>());
 				}
 			}
 
@@ -421,6 +424,11 @@ namespace app
 		auto& screens = aq::ui::UIContext::Get().Screens();
 		screens.Register<TitleScreen>("Title",     "Assets/UI/Title.screen.json");
 		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
+
+		// AquaDash (ソニックライク検証ゲーム) の画面群。設計は Game/Design/AquaDash/ 参照。
+		screens.Register<aquadash::TitleScreen> ("AquaDashTitle",  "Assets/UI/AquaDash/Title.screen.json");
+		screens.Register<aquadash::InGameScreen>("AquaDashInGame", "Assets/UI/AquaDash/InGame.screen.json");
+		screens.Register<aquadash::ResultScreen>("AquaDashResult", "Assets/UI/AquaDash/Result.screen.json");
 
 		// フォント準備を待ってからタイトルを出す(BootState)。テキストを確実に表示するため。
 		current_ = std::make_unique<BootState>();

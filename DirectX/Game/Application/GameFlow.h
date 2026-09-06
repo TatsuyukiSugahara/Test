@@ -3,6 +3,7 @@
 #include "Level/LevelManager.h"   // aq::level::LevelLoadHandle
 #include "Math/Vector.h"
 #include "UI/Screen/UIScreen.h"
+#include "AquaDash/Flow/GameContext.h"
 #include <memory>
 
 namespace app
@@ -102,6 +103,7 @@ namespace app
 		/** 状態間共有データ */
 		aq::ecs::EntityHandle       playerHandle_;
 		aq::level::LevelLoadHandle  loadHandle_;
+		aquadash::GameContext       context_;             // AquaDash のゲーム進行データ (選択ステージ / プレイ結果)
 		bool                        preloaded_ = false;   // UI テクスチャの事前ロードを一度だけ行う
 
 		static GameFlow* instance_;
@@ -122,6 +124,8 @@ namespace app
 
 		aq::level::LevelLoadHandle&       LoadHandle()       { return loadHandle_; }
 		void SetLoadHandle(const aq::level::LevelLoadHandle& handle) { loadHandle_ = handle; }
+
+		aquadash::GameContext& Context() { return context_; }
 
 	private:
 		GameFlow() {}

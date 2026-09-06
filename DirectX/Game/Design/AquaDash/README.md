@@ -36,3 +36,12 @@ Game/
   各設計書に「エンジン側作業」として明記し、`DirectX/設計書/` の該当設計書と重複記述しない。
 - 設計書の運用ルール(対象コミット表記・責務表・チェックポイント)は
   `.claude/skills/cpp-gamedev/references/architecture.md` §6 に従う。
+
+## 既知の課題
+
+- 旧「残刃」フロー(GameFlow.cpp 内の TitleState / LoadingState / PlayingState と Title 画面)が
+  未接続のまま残存。BootState も残刃用 CorporateLogo フォントの準備完了を待ち続けている。
+  残すか削除するか P7 で判断する。
+- 新規アセット(`Assets/UI/AquaDash/*.screen.json` 等)の UWP パッケージ登録は未対応。
+  動作確認はデスクトップ(Win32)のみ。
+- P0 の「NEXT STAGE」は同一ステージの再プレイ(StageRegistry 導入後に次ステージへ)。

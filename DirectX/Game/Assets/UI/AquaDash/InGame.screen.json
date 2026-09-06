@@ -1,0 +1,37 @@
+{
+    "name": "AquaDashInGameRoot",
+    "components": {
+        "transform": { "active": true, "sizeDelta": [1920, 1080] },
+        "canvas": { "resolution": [1920, 1080] }
+    },
+    "children": [
+        {
+            "name": "PhaseLabel",
+            "components": {
+                "transform": { "position": [0, -470, 0], "sizeDelta": [1200, 50] },
+                "text": {
+                    "content": "IN-GAME (P0 SKELETON)",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 34,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 0.9]
+                }
+            }
+        },
+        {
+            "name": "Help",
+            "components": {
+                "transform": { "position": [0, -415, 0], "sizeDelta": [1400, 40] },
+                "text": {
+                    "content": "SPACE / A : GOAL        S / DPAD DOWN : FALL",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 22,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.7, 0.8, 0.9, 0.8]
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,86 @@
+{
+    "name": "AquaDashResultRoot",
+    "components": {
+        "transform": { "active": true, "sizeDelta": [1920, 1080] },
+        "canvas": { "resolution": [1920, 1080] }
+    },
+    "children": [
+        {
+            "name": "Dim",
+            "components": {
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.0, 0.0, 0.0, 0.45] }
+            }
+        },
+        {
+            "name": "Header",
+            "components": {
+                "transform": { "position": [0, -260, 0], "sizeDelta": [1600, 160] },
+                "text": {
+                    "content": "STAGE CLEAR",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 110,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 0.85, 0.3, 1.0]
+                }
+            }
+        },
+        {
+            "name": "Time",
+            "components": {
+                "transform": { "position": [0, -110, 0], "sizeDelta": [1200, 70] },
+                "text": {
+                    "content": "TIME  00:00.00",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 44,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 0.95]
+                }
+            }
+        },
+        {
+            "name": "MenuRetry",
+            "components": {
+                "transform": { "position": [0, 110, 0], "sizeDelta": [800, 60] },
+                "text": {
+                    "content": "RETRY",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 40,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 1.0]
+                }
+            }
+        },
+        {
+            "name": "MenuNext",
+            "components": {
+                "transform": { "position": [0, 195, 0], "sizeDelta": [800, 60] },
+                "text": {
+                    "content": "NEXT STAGE",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 40,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.6, 0.6, 0.6, 0.45]
+                }
+            }
+        },
+        {
+            "name": "MenuTitle",
+            "components": {
+                "transform": { "position": [0, 280, 0], "sizeDelta": [800, 60] },
+                "text": {
+                    "content": "BACK TO TITLE",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 40,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.6, 0.6, 0.6, 0.45]
+                }
+            }
+        }
+    ]
+}

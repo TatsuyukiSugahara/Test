@@ -95,6 +95,19 @@ namespace app
 		}
 
 
+		aq::math::Quaternion CourseSpline::Frame::ToRotation() const
+		{
+			const DirectX::XMMATRIX m(
+				right.x,   right.y,   right.z,   0.0f,
+				up.x,      up.y,      up.z,      0.0f,
+				tangent.x, tangent.y, tangent.z, 0.0f,
+				0.0f,      0.0f,      0.0f,      1.0f);
+			aq::math::Quaternion result;
+			DirectX::XMStoreFloat4(&result.vector, DirectX::XMQuaternionRotationMatrix(m));
+			return result;
+		}
+
+
 		CourseSpline::Frame CourseSpline::Evaluate(const float distance) const
 		{
 			Frame frame;
@@ -138,6 +151,23 @@ namespace app
 		/**
 		 * ステージ定義
 		 */
+		std::string StageData::CalcRank(const uint32_t coinCount, const float timeSec) const
+		{
+			const float coinRate = coins.empty()
+				? 1.0f
+				: static_cast<float>(coinCount) / static_cast<float>(coins.size());
+			const float timeRate = timeSec > 0.0001f
+				? (parTimeSec / timeSec < 1.0f ? parTimeSec / timeSec : 1.0f)
+				: 1.0f;
+			const float score = 0.6f * coinRate + 0.4f * timeRate;
+
+			for (const auto& threshold : ranks) {
+				if (score >= threshold.score) { return threshold.rank; }
+			}
+			return ranks.empty() ? std::string("C") : ranks.back().rank;
+		}
+
+
 		std::shared_ptr<StageData> StageData::LoadFromFile(const char* path)
 		{
 			const aq::util::JsonValue root = aq::util::JsonParser::ParseFile(path);

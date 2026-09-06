@@ -49,19 +49,69 @@ namespace app
 
 
 		/**
+		 * インゲーム HUD
+		 */
+		void InGameScreen::OnEnter()
+		{
+			timeText_  = Resolve(FindHandle("TimeText"));
+			coinText_  = Resolve(FindHandle("CoinText"));
+			speedText_ = Resolve(FindHandle("SpeedText"));
+		}
+
+
+		void InGameScreen::SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh)
+		{
+			if (timeText_) {
+				if (auto* text = timeText_->GetComponent<aq::ui::UITextComponent>()) {
+					const int   minutes = static_cast<int>(timeSec) / 60;
+					const float sec     = timeSec - static_cast<float>(minutes) * 60.0f;
+					char buf[32];
+					std::snprintf(buf, sizeof(buf), "TIME %02d:%05.2f", minutes, sec);
+					text->content = buf;
+				}
+			}
+
+			if (coinText_) {
+				if (auto* text = coinText_->GetComponent<aq::ui::UITextComponent>()) {
+					char buf[32];
+					std::snprintf(buf, sizeof(buf), "COIN %02u", coinCount);
+					text->content = buf;
+				}
+			}
+
+			if (speedText_) {
+				if (auto* text = speedText_->GetComponent<aq::ui::UITextComponent>()) {
+					// 後退中に "-0" と表示されないよう 0 でクランプする。
+					const int kmh = static_cast<int>(speedKmh > 0.0f ? speedKmh : 0.0f);
+					char buf[32];
+					std::snprintf(buf, sizeof(buf), "%d", kmh);
+					text->content = buf;
+				}
+			}
+		}
+
+
+		/************************************/
+
+
+
+
+		/**
 		 * リザルト画面 (P0 仮)
 		 */
 		void ResultScreen::OnEnter()
 		{
 			header_   = Resolve(FindHandle("Header"));
 			time_     = Resolve(FindHandle("Time"));
+			coin_     = Resolve(FindHandle("ResultCoin"));
+			rank_     = Resolve(FindHandle("Rank"));
 			items_[0] = Resolve(FindHandle("MenuRetry"));
 			items_[1] = Resolve(FindHandle("MenuNext"));
 			items_[2] = Resolve(FindHandle("MenuTitle"));
 		}
 
 
-		void ResultScreen::SetResult(const bool cleared, const float timeSec)
+		void ResultScreen::SetResult(const bool cleared, const float timeSec, const uint32_t coinCount, const char* rank)
 		{
 			if (header_) {
 				if (auto* text = header_->GetComponent<aq::ui::UITextComponent>()) {
@@ -83,6 +133,23 @@ namespace app
 					text->content = buf;
 				}
 			}
+
+			if (coin_) {
+				if (auto* text = coin_->GetComponent<aq::ui::UITextComponent>()) {
+					char buf[32];
+					std::snprintf(buf, sizeof(buf), "COIN  %02u", coinCount);
+					text->content = buf;
+				}
+			}
+
+			// ランクはクリア時のみ表示する。ゲームオーバー時は最小 alpha で実質非表示にする。
+			const bool showRank = cleared && rank && rank[0] != '\0';
+			if (rank_ && showRank) {
+				if (auto* text = rank_->GetComponent<aq::ui::UITextComponent>()) {
+					text->content = rank;
+				}
+			}
+			SetTextAlpha(rank_, showRank ? 1.0f : 0.0f);
 		}
 
 

@@ -6,6 +6,7 @@
 #include "ECS/CameraSteeringComponentSystem.h"
 #include "ECS/SpeedCharacterComponentSystem.h"
 #include "ECS/AutoCameraComponentSystem.h"
+#include "ECS/CoinComponentSystem.h"
 #include "UI/Font/FontResource.h"
 #include "Resource/ParticleSystemData.h"
 #include "Resource/ParticleLoader.h"
@@ -175,6 +176,11 @@ namespace app
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::SpeedCharacterSystem,
 			app::ecs::PlayerInputSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::HierarcicalTransformSystem, app::ecs::SpeedCharacterSystem>();
+
+		// AquaDash: コイン判定は走行結果の位置を使うため SpeedCharacterSystem の後、ワールド変換の前。
+		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CoinSystem,
+			app::ecs::SpeedCharacterSystem>();
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::HierarcicalTransformSystem, app::ecs::CoinSystem>();
 
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CameraSteeringSystem,
 			aq::ecs::HierarcicalTransformSystem>();

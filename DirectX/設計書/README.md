@@ -61,6 +61,12 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 | [Xbox移植設計](Xbox移植設計.md) | UWP / GDK方針、リソース制限、抽象化、移植計画 |
 | [Xbox UWP移植変更まとめ](Xbox_UWP移植_変更まとめ.md) | Xbox One実機描画までの変更、調査結果、配置手順、制約 |
 
+## 既知の課題
+
+- `aq::math::Quaternion::SetRotation`([Math/Vector.h](../aqEngine/Math/Vector.h) 425行付近)に代入ミスがあり、
+  `y = axis.z * s;` となっていて z が未設定のまま(任意軸回転が壊れている)。
+  現状の利用箇所は要確認。ゲーム側(CoinSystem 等)は回避して自前計算している。(2026-09-06 発見)
+
 ## 文書管理方針
 
 - aqEngine 固有の Markdown 設計資料はこのフォルダへ集約します。

@@ -6,30 +6,72 @@
     },
     "children": [
         {
-            "name": "PhaseLabel",
+            "name": "Help",
             "components": {
-                "transform": { "position": [0, -470, 0], "sizeDelta": [1200, 50] },
+                "transform": { "position": [0, -500, 0], "sizeDelta": [1400, 34] },
                 "text": {
-                    "content": "IN-GAME (P1)",
+                    "content": "W:ACCEL  S:BRAKE  A/D:LANE  SPACE:JUMP",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
-                    "fontSize": 34,
+                    "fontSize": 18,
                     "alignH": "Center",
                     "alignV": "Middle",
-                    "color": [1.0, 1.0, 1.0, 0.9]
+                    "color": [0.7, 0.8, 0.9, 0.55]
                 }
             }
         },
         {
-            "name": "Help",
+            "name": "TimeText",
             "components": {
-                "transform": { "position": [0, -415, 0], "sizeDelta": [1400, 40] },
+                "transform": { "position": [700, -470, 0], "sizeDelta": [400, 60] },
                 "text": {
-                    "content": "W : ACCEL    S : BRAKE    A / D : LANE    SPACE : JUMP",
+                    "content": "TIME 00:00.00",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
-                    "fontSize": 22,
-                    "alignH": "Center",
+                    "fontSize": 40,
+                    "alignH": "Right",
                     "alignV": "Middle",
-                    "color": [0.7, 0.8, 0.9, 0.8]
+                    "color": [1.0, 1.0, 1.0, 0.95]
+                }
+            }
+        },
+        {
+            "name": "CoinText",
+            "components": {
+                "transform": { "position": [-700, 470, 0], "sizeDelta": [400, 60] },
+                "text": {
+                    "content": "COIN 00",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 40,
+                    "alignH": "Left",
+                    "alignV": "Middle",
+                    "color": [1.0, 0.9, 0.4, 1.0]
+                }
+            }
+        },
+        {
+            "name": "SpeedText",
+            "components": {
+                "transform": { "position": [600, 460, 0], "sizeDelta": [400, 90] },
+                "text": {
+                    "content": "0",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 64,
+                    "alignH": "Right",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 1.0]
+                }
+            }
+        },
+        {
+            "name": "SpeedUnit",
+            "components": {
+                "transform": { "position": [890, 480, 0], "sizeDelta": [140, 40] },
+                "text": {
+                    "content": "km/h",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 24,
+                    "alignH": "Left",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 0.8]
                 }
             }
         }

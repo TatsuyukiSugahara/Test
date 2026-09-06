@@ -5,8 +5,10 @@
 #include "GameAction.h"
 #include "ECS/SpeedCharacterComponentSystem.h"
 #include "ECS/AutoCameraComponentSystem.h"
+#include "ECS/CoinComponentSystem.h"
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
+#include "Component/ParticleComponentSystem.h"
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
 #include "Sound/SoundClip.h"
@@ -43,6 +45,9 @@ namespace app
 
 			// unityChan.tkm はメートル基準でない (素のままだと約 6m)。世界は 1m=1.0 なので縮めて使う。
 			static constexpr float PLAYER_MODEL_SCALE = 0.25f;
+
+			// コイン取得エフェクト (常駐エミッタを移動+Restart で使い回す)。
+			static const char* COLLECT_FX_PATH = "Assets/Particle/FX_Explosion.particle";
 
 
 			// 決定 SE を再生する (クリップは GameFlow::Update で先読み済み)。
@@ -124,7 +129,8 @@ namespace app
 						aq::ecs::SkeletalMeshComponent,
 						aq::ecs::AnimationComponent,
 						app::ecs::SpeedCharacterComponent,
-						app::ecs::PlayerInputComponent>();
+						app::ecs::PlayerInputComponent,
+						app::ecs::PlayerScoreComponent>();
 
 					auto* character = entity.GetComponent<app::ecs::SpeedCharacterComponent>();
 					character->playerIndex = i;
@@ -167,6 +173,46 @@ namespace app
 #endif
 					context.stageEntities.push_back(entity.GetHandle());
 				}
+
+				// コイン (スプライン座標 → ワールドへ焼き込み。判定と回転は CoinSystem)。
+				for (const auto& placement : stageData->coins)
+				{
+					auto entity = ctx.CreateEntity<
+						aq::ecs::TransformComponent,
+						aq::ecs::HierarchicalTransformComponent,
+						aq::ecs::BoxStaticMeshComponent,
+						app::ecs::CoinComponent>();
+
+					const auto frame = stageData->spline.Evaluate(placement.distance);
+					auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+					tc->position = frame.position + frame.right * placement.lateral + frame.up * placement.height;
+					tc->scale.Set(0.8f, 0.8f, 0.15f);   // 薄い箱をコインに見立てる (専用モデルは未導入)
+
+					auto* coin = entity.GetComponent<app::ecs::CoinComponent>();
+					coin->distance     = placement.distance;
+					coin->baseRotation = frame.ToRotation();
+#ifdef AQ_DEBUG_IMGUI
+					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coin");
+#endif
+					context.stageEntities.push_back(entity.GetHandle());
+				}
+
+				// コイン取得エフェクトの常駐エミッタ (プレイヤー毎。取得時に移動して Restart する)。
+				for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i)
+				{
+					auto entity = ctx.CreateEntity<
+						aq::ecs::TransformComponent,
+						aq::ecs::HierarchicalTransformComponent,
+						aq::ecs::ParticleEmitterComponent>();
+					auto* emitter = entity.GetComponent<aq::ecs::ParticleEmitterComponent>();
+					emitter->SetAsset(COLLECT_FX_PATH);
+					emitter->SetPlaying(false);   // 生成直後に鳴らない
+#ifdef AQ_DEBUG_IMGUI
+					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CollectFX");
+#endif
+					context.collectFxHandles[i] = entity.GetHandle();
+					context.stageEntities.push_back(entity.GetHandle());
+				}
 			}
 
 
@@ -188,8 +234,15 @@ namespace app
 						character->verticalVelocity = 0.0f;
 						character->grounded         = true;
 					}
+					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandles[i])) {
+						score->coinCount = 0;
+						score->fallCount = 0;
+					}
 				}
 				context.playResult = PlayResult();
+
+				// コインを全復活させる (取得済みフラグと表示を戻す)。
+				app::ecs::CoinSystem::ReactivateAll();
 
 				// カメラは次フレームでスナップし直す。
 				aq::ecs::Foreach<app::ecs::AutoCameraComponent>(
@@ -212,6 +265,9 @@ namespace app
 				}
 				context.stageEntities.clear();
 				for (auto& handle : context.playerHandles) {
+					handle = aq::ecs::EntityHandle();
+				}
+				for (auto& handle : context.collectFxHandles) {
 					handle = aq::ecs::EntityHandle();
 				}
 				context.activeStage.reset();
@@ -351,12 +407,18 @@ namespace app
 			const auto stageData = context.activeStage;
 			if (!stageData) { return; }
 
-			// ゴール / 落下判定 (P1 はプレイヤー 0 のみ。全員分の集計は P5)。
 			auto& ctx = aq::ecs::EntityContext::Get();
 			if (!ctx.IsValid(context.playerHandles[0])) { return; }
 			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandles[0]);
 			if (!character) { return; }
 
+			// HUD 更新 (時間 / コイン / 速度)。分割画面時のビュー毎 HUD は P5 で対応。
+			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
+				const auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandles[0]);
+				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f);
+			}
+
+			// ゴール / 落下判定 (P1 はプレイヤー 0 のみ。全員分の集計は P5)。
 			const bool goal = character->distance >= stageData->goalDistance;
 			const bool fall = character->height   <  stageData->fallHeight;
 			if (!goal && !fall) { return; }
@@ -364,6 +426,12 @@ namespace app
 			PlayResult& result  = context.playResult;
 			result.cleared      = goal;
 			result.clearTimeSec = elapsed_;
+			for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i) {
+				if (!ctx.IsValid(context.playerHandles[i])) { continue; }
+				if (const auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandles[i])) {
+					result.coinCounts[i] = score->coinCount;
+				}
+			}
 
 			aq::ui::UIContext::Get().Screens().Replace("AquaDashResult");
 			flow.ChangeState(std::make_unique<ResultState>());
@@ -388,8 +456,15 @@ namespace app
 
 			// Replace 済みの最前面がリザルト画面。結果と初期カーソルを反映する。
 			if (auto* screen = static_cast<ResultScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
-				const PlayResult& result = flow.Context().playResult;
-				screen->SetResult(result.cleared, result.clearTimeSec);
+				const auto&       context = flow.Context();
+				const PlayResult& result  = context.playResult;
+
+				// ランクはクリア時のみ (設計 03: ゲームオーバーはランクなし)。
+				std::string rank;
+				if (result.cleared && context.activeStage) {
+					rank = context.activeStage->CalcRank(result.coinCounts[0], result.clearTimeSec);
+				}
+				screen->SetResult(result.cleared, result.clearTimeSec, result.coinCounts[0], rank.c_str());
 				screen->SetCursor(cursor_);
 			}
 		}

@@ -42,6 +42,9 @@
     <ClCompile Include="Application\ECS\AutoCameraComponentSystem.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
+    <ClCompile Include="Application\ECS\CoinComponentSystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
     <ClCompile Include="Application\Stage\StageData.cpp">
       <Filter>Stage</Filter>
     </ClCompile>
@@ -75,6 +78,9 @@
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="Application\ECS\AutoCameraComponentSystem.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\ECS\CoinComponentSystem.h">
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="Application\Stage\StageData.h">

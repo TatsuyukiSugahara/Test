@@ -39,6 +39,7 @@ namespace app
 			/** ワールド */
 			bool  gameplayPaused = false;   // true でゲーム System (走行/判定) を停止 (リザルト用)
 			aq::ecs::EntityHandle              playerHandles[MAX_PLAYER_COUNT];
+			aq::ecs::EntityHandle              collectFxHandles[MAX_PLAYER_COUNT];   // コイン取得エフェクトの常駐エミッタ
 			std::vector<aq::ecs::EntityHandle> stageEntities;   // タイトル復帰時に破棄する生成物
 		};
 	}

@@ -21,6 +21,9 @@ namespace app
 				aq::math::Vector3 tangent;
 				aq::math::Vector3 up;
 				aq::math::Vector3 right;
+
+				/** この基底に沿った回転クォータニオン (forward=tangent, up=up) */
+				aq::math::Quaternion ToRotation() const;
 			};
 
 
@@ -89,6 +92,12 @@ namespace app
 			std::vector<CoinPlacement> coins;
 			float                      parTimeSec = 180.0f;
 			std::vector<RankThreshold> ranks;
+
+			/**
+			 * ランク判定。score = 0.6×コイン取得率 + 0.4×min(1, parTime/クリアタイム) を
+			 * thresholds の上から判定する (設計 03 §3)。該当なしは末尾ランク。
+			 */
+			std::string CalcRank(const uint32_t coinCount, const float timeSec) const;
 
 			/**
 			 * ファイルから読み込む (CPU 処理のみ。ワーカースレッドから呼んでよい)。

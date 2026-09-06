@@ -22,19 +22,6 @@ namespace app
 			static constexpr float JUMP_SPEED        = 13.0f;   // [m/s]
 			static constexpr float GRAVITY           = 30.0f;   // [m/s^2]
 
-			// tangent/up/right の正規直交基底から回転クォータニオンを作る。
-			aq::math::Quaternion RotationFromBasis(
-				const aq::math::Vector3& right, const aq::math::Vector3& up, const aq::math::Vector3& forward)
-			{
-				const DirectX::XMMATRIX m(
-					right.x,   right.y,   right.z,   0.0f,
-					up.x,      up.y,      up.z,      0.0f,
-					forward.x, forward.y, forward.z, 0.0f,
-					0.0f,      0.0f,      0.0f,      1.0f);
-				aq::math::Quaternion result;
-				DirectX::XMStoreFloat4(&result.vector, DirectX::XMQuaternionRotationMatrix(m));
-				return result;
-			}
 		}
 
 
@@ -127,7 +114,7 @@ namespace app
 					// スプライン評価 → ワールド Transform 書き出し。
 					const stage::CourseSpline::Frame frame = stageData->spline.Evaluate(character->distance);
 					tc->position = frame.position + frame.right * character->lateral + frame.up * character->height;
-					tc->rotation = RotationFromBasis(frame.right, frame.up, frame.tangent);
+					tc->rotation = frame.ToRotation();
 				});
 		}
 	}

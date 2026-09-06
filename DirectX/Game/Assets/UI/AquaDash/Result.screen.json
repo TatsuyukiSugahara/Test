@@ -15,7 +15,7 @@
         {
             "name": "Header",
             "components": {
-                "transform": { "position": [0, -260, 0], "sizeDelta": [1600, 160] },
+                "transform": { "position": [0, -320, 0], "sizeDelta": [1600, 160] },
                 "text": {
                     "content": "STAGE CLEAR",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -29,7 +29,7 @@
         {
             "name": "Time",
             "components": {
-                "transform": { "position": [0, -110, 0], "sizeDelta": [1200, 70] },
+                "transform": { "position": [0, -170, 0], "sizeDelta": [1200, 70] },
                 "text": {
                     "content": "TIME  00:00.00",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -41,9 +41,37 @@
             }
         },
         {
+            "name": "ResultCoin",
+            "components": {
+                "transform": { "position": [0, -90, 0], "sizeDelta": [1200, 70] },
+                "text": {
+                    "content": "COIN  00",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 44,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 0.9, 0.4, 1.0]
+                }
+            }
+        },
+        {
+            "name": "Rank",
+            "components": {
+                "transform": { "position": [0, 30, 0], "sizeDelta": [600, 170] },
+                "text": {
+                    "content": "S",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 140,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 0.92, 0.6, 1.0]
+                }
+            }
+        },
+        {
             "name": "MenuRetry",
             "components": {
-                "transform": { "position": [0, 110, 0], "sizeDelta": [800, 60] },
+                "transform": { "position": [0, 175, 0], "sizeDelta": [800, 60] },
                 "text": {
                     "content": "RETRY",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -57,7 +85,7 @@
         {
             "name": "MenuNext",
             "components": {
-                "transform": { "position": [0, 195, 0], "sizeDelta": [800, 60] },
+                "transform": { "position": [0, 260, 0], "sizeDelta": [800, 60] },
                 "text": {
                     "content": "NEXT STAGE",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -71,7 +99,7 @@
         {
             "name": "MenuTitle",
             "components": {
-                "transform": { "position": [0, 280, 0], "sizeDelta": [800, 60] },
+                "transform": { "position": [0, 345, 0], "sizeDelta": [800, 60] },
                 "text": {
                     "content": "BACK TO TITLE",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",

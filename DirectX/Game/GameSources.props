@@ -17,6 +17,7 @@
     <ClCompile Include="Application\ECS\CameraSteeringComponentSystem.cpp" />
     <ClCompile Include="Application\ECS\SpeedCharacterComponentSystem.cpp" />
     <ClCompile Include="Application\ECS\AutoCameraComponentSystem.cpp" />
+    <ClCompile Include="Application\ECS\CoinComponentSystem.cpp" />
     <ClCompile Include="Application\Flow\AquaDashStates.cpp" />
     <ClCompile Include="Application\Stage\StageData.cpp" />
     <ClCompile Include="Application\UI\AquaDashScreens.cpp" />
@@ -34,6 +35,7 @@
     <ClInclude Include="Application\ECS\CameraSteeringComponentSystem.h" />
     <ClInclude Include="Application\ECS\SpeedCharacterComponentSystem.h" />
     <ClInclude Include="Application\ECS\AutoCameraComponentSystem.h" />
+    <ClInclude Include="Application\ECS\CoinComponentSystem.h" />
     <ClInclude Include="Application\Flow\GameContext.h" />
     <ClInclude Include="Application\Flow\AquaDashStates.h" />
     <ClInclude Include="Application\Stage\StageData.h" />

@@ -53,3 +53,6 @@ Game/
 - 走行アニメが無く idle 固定(unityChan の走りモーション未導入)。スピード感演出の一部として P6 で検討。
 - 路面の見た目が無い(平坦地形の上を見えないスプラインで走る P1 最小構成)。路面メッシュ生成は後続フェーズで検討。
 - unityChan.tkm はメートル基準でないため `PLAYER_MODEL_SCALE = 0.25` で縮小している。
+- コインの見た目は仮(薄い箱 `BoxStaticMeshComponent`、無着色で視認性が低い)。専用モデル/発光は P6-P7 で検討。
+  取得 SE も Decision.wav 流用の仮。専用アセット導入時に `CoinComponentSystem.cpp` のパスを差し替える。
+- エンジンの `Quaternion::SetRotation` に代入バグあり(詳細は `DirectX/設計書/README.md` 既知の課題)。ゲーム側は回避済み。

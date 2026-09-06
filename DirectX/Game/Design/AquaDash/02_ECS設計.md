@@ -42,7 +42,7 @@
 |---|---|---|
 | `PlayerInputSystem` | `GameInput`(パッド N 台)→ `PlayerInputComponent` へ転写 | 常時 |
 | `SpeedCharacterSystem` | 入力から加減速・レーン移動・ジャンプ・重力を積分し、スプライン評価で Transform(位置 + 姿勢)を書き出す | Pause 中は停止 |
-| `CoinCollectSystem` | プレイヤーとコインの距離判定(スプライン座標で distance を粗く絞ってから 3D 距離)。取得でスコア加算 + 取得エフェクト/SE、コインは非表示化(破棄しない: 「もう一度」の再活性化用) | Pause 中は停止 |
+| `CoinSystem`(実装名。旧称 CoinCollectSystem) | コインの回転演出 + プレイヤーとの距離判定(スプライン座標で distance を粗く絞ってから 3D 距離)。取得でスコア加算 + 取得エフェクト/SE、コインは非表示化(破棄しない: `ReactivateAll` で「もう一度」時に復活) | Pause 中は停止 |
 | `GoalFallJudgeSystem` | ゴール distance 通過判定 / 落下しきい値判定。結果を `GameContext.playResult` へ | Pause 中は停止 |
 | `AutoCameraSystem` | モード別にカメラ位置を平滑追従(後述)。ビュー行列を分割画面ビューへ出力 | 常時(Result 周回もここ) |
 

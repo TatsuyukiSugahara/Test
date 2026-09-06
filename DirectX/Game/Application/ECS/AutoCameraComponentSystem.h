@@ -23,7 +23,8 @@ namespace app
 
 			/** 追従対象 (SpeedCharacterComponent を持つエンティティ) */
 			aq::ecs::EntityHandle targetHandle;
-			AutoCameraMode        mode = AutoCameraMode::Follow;
+			AutoCameraMode        mode      = AutoCameraMode::Follow;
+			uint32_t              viewIndex = 0;   // 分割画面のビュー番号 (= playerIndex)
 
 			/** 配置パラメータ (スプライン距離/up 方向オフセット) */
 			float backDistance  = 7.0f;    // 対象の何 m 後方に置くか

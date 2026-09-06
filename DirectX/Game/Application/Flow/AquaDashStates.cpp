@@ -9,6 +9,7 @@
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
+#include "HID/Input.h"
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
 #include "Sound/SoundClip.h"
@@ -162,12 +163,14 @@ namespace app
 				}
 				flow.SetPlayerHandle(context.playerHandles[0]);   // 影の注視点用
 
-				// 自動カメラ。
+				// 自動カメラ (プレイヤー毎。分割画面のビュー番号 = playerIndex)。
+				for (uint32_t i = 0; i < context.playerCount && i < MAX_PLAYER_COUNT; ++i)
 				{
 					auto entity = ctx.CreateEntity<app::ecs::AutoCameraComponent>();
 					auto* autoCam = entity.GetComponent<app::ecs::AutoCameraComponent>();
-					autoCam->targetHandle = context.playerHandles[0];
-					autoCam->cameraType   = aq::CameraType::Main;
+					autoCam->targetHandle = context.playerHandles[i];
+					autoCam->viewIndex    = i;
+					autoCam->cameraType   = aq::CameraType::Main;   // 1 人時のみ使用
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("AutoCamera");
 #endif
@@ -296,12 +299,31 @@ namespace app
 
 		void TitleState::OnUpdate(GameFlow& flow, const float /*dt*/)
 		{
+			auto& context = flow.Context();
+
+			// 参加人数の擬似切替 (パッド無しで分割画面を試すためのデバッグ操作)。
+			// 数字キー 2-4 = その人数で入力共有 / 1 = 解除 (接続パッド数に従う)。
+			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num1)) { context.playerCount = 1; context.inputCloneAll = false; }
+			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num2)) { context.playerCount = 2; context.inputCloneAll = true; }
+			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num3)) { context.playerCount = 3; context.inputCloneAll = true; }
+			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::Num4)) { context.playerCount = 4; context.inputCloneAll = true; }
+
 			if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
-			if (flow.Context().stageList.empty()) { return; }   // 一覧が無ければ開始できない
+			if (context.stageList.empty()) { return; }   // 一覧が無ければ開始できない
+
+			// 擬似人数未指定なら接続パッド数から参加人数を決める (0 台 = キーボード 1 人)。
+			if (!context.inputCloneAll)
+			{
+				uint32_t connected = 0;
+				for (uint32_t i = 0; i < MAX_PLAYER_COUNT; ++i) {
+					if (aq::hid::IsPadConnected(i)) { ++connected; }
+				}
+				context.playerCount = connected >= 2 ? connected : 1;
+			}
 
 			PlayDecisionSE();
 
-			flow.Context().playResult = PlayResult();
+			context.playResult = PlayResult();
 			aq::ui::UIContext::Get().Screens().Replace("Loading");
 			flow.ChangeState(std::make_unique<LoadingState>());
 		}

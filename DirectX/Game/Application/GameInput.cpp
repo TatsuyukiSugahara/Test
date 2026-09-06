@@ -46,6 +46,8 @@ namespace app
 		keyboardMap_.Bind(GameAction::LookUp,       BindKey(KeyBoardType::Up));
 		keyboardMap_.Bind(GameAction::LookDown,     BindKey(KeyBoardType::Down));
 		keyboardMap_.Bind(GameAction::Confirm,      BindKey(KeyBoardType::Space));
+		// キーボードマップ使用時 (デスクトップ既定) でもパッド 0 の左スティックを効かせる。
+		keyboardMap_.BindStick(GameAction::Move,    BindLStick());
 
 		gamepadMap_.Bind(GameAction::MoveLeft,     BindPad(PadButton::DLeft));
 		gamepadMap_.Bind(GameAction::MoveRight,    BindPad(PadButton::DRight));

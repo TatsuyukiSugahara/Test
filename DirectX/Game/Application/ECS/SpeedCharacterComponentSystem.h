@@ -7,7 +7,8 @@ namespace app
 	{
 		/**
 		 * プレイヤー 1 人分の入力状態。PlayerInputSystem が毎フレーム書き込む。
-		 * P1 はパッド 0 (またはキーボード) のみ。P5 で padIndex 毎の実パッド読取に拡張する。
+		 * padIndex 0 はキーボードとも共用、1 以降は該当パッドを直接読む
+		 * (GameContext::inputCloneAll が true なら全員がパッド 0 / キーボードを共用)。
 		 */
 		struct PlayerInputComponent : public aq::ecs::IComponent
 		{

@@ -73,11 +73,34 @@ namespace app
 						}
 					}
 
-					aq::Camera* const camera = aq::CameraManager::Get().GetCamera(autoCam->cameraType);
-					if (camera) {
-						camera->SetPosition(autoCam->smoothedPosition);
-						camera->SetTarget(autoCam->smoothedTarget);
-						camera->SetUp(autoCam->smoothedUp);
+					// 出力先: 1 人ならエンジンのメインカメラ、分割時はビュー毎のカメラ
+					// (Main は CameraManager が Update するが、ビューカメラはここで Update まで行う)。
+					const auto& context = GameFlow::Get().Context();
+					if (context.playerCount >= 2)
+					{
+						aq::Camera* const camera = GameFlow::Get().ViewCamera(autoCam->viewIndex);
+						if (camera) {
+							float rx, ry, rw, rh;
+							aquadash::GetSplitViewRect(context.playerCount, autoCam->viewIndex,
+								static_cast<float>(aq::Engine::Get().GetRenderWidth()),
+								static_cast<float>(aq::Engine::Get().GetRenderHeight()),
+								rx, ry, rw, rh);
+							camera->SetViewportSize(rw, rh);   // ビュー矩形のアスペクトを反映
+							camera->SetNear(0.1f);
+							camera->SetPosition(autoCam->smoothedPosition);
+							camera->SetTarget(autoCam->smoothedTarget);
+							camera->SetUp(autoCam->smoothedUp);
+							camera->Update();
+						}
+					}
+					else
+					{
+						aq::Camera* const camera = aq::CameraManager::Get().GetCamera(autoCam->cameraType);
+						if (camera) {
+							camera->SetPosition(autoCam->smoothedPosition);
+							camera->SetTarget(autoCam->smoothedTarget);
+							camera->SetUp(autoCam->smoothedUp);
+						}
 					}
 				});
 		}

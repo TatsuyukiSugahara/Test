@@ -12,6 +12,31 @@ namespace app
 
 
 		/**
+		 * 分割画面のビュー矩形 (ピクセル)。2 人=上下、3-4 人=田の字 (3 人時の右下は空き)
+		 */
+		inline void GetSplitViewRect(const uint32_t playerCount, const uint32_t index,
+		                             const float screenW, const float screenH,
+		                             float& outX, float& outY, float& outW, float& outH)
+		{
+			if (playerCount <= 1) {
+				outX = 0.0f; outY = 0.0f; outW = screenW; outH = screenH;
+				return;
+			}
+			if (playerCount == 2) {
+				outW = screenW;
+				outH = screenH * 0.5f;
+				outX = 0.0f;
+				outY = index == 0 ? 0.0f : outH;
+				return;
+			}
+			outW = screenW * 0.5f;
+			outH = screenH * 0.5f;
+			outX = (index % 2 == 0) ? 0.0f : outW;
+			outY = (index / 2 == 0) ? 0.0f : outH;
+		}
+
+
+		/**
 		 * 1 プレイの結果。InGame が書き込み、Result が評価に使う
 		 */
 		struct PlayResult
@@ -29,7 +54,8 @@ namespace app
 		{
 			int        selectedStageIndex = 0;   // タイトルで選んだステージ (StageList の並び順)
 			uint32_t   joinedPadMask      = 1;   // 参加プレイヤーのパッド番号ビットマスク
-			uint32_t   playerCount        = 1;   // 参加人数 (P1 は 1 固定。P5 で複数化)
+			uint32_t   playerCount        = 1;   // 参加人数 (タイトルで確定。分割画面のビュー数)
+			bool       inputCloneAll      = false;   // true で全プレイヤーがパッド0/キーボード入力を共有 (パッド無しの分割テスト用)
 			PlayResult playResult;
 
 			/** ステージ */

@@ -1,6 +1,7 @@
 #pragma once
 #include "Rendering/IRenderCommand.h"
 #include "Rendering/RenderTargetHandle.h"
+#include "Math/Matrix.h"
 #include "BloomRenderer.h"
 
 namespace aq
@@ -86,6 +87,51 @@ namespace aq
 			uint32_t tonemapMode_;
 			float    whitePoint_;
 			uint32_t applyGamma_;
+		};
+
+
+
+
+		// MotionBlur.fx の cbuffer レイアウトと一致させること。
+		struct MotionBlurCBData
+		{
+			math::Matrix4x4 prevViewProj;   // 前フレームの view * projection (列ベクトル規約)
+			float           screenWidth;
+			float           screenHeight;
+			float           strength;       // ブラー長スケール
+			float           padding;
+		};
+		static_assert(sizeof(MotionBlurCBData) == 80, "MotionBlurCBData must be 80 bytes (16B aligned)");
+
+
+		/**
+		 * カメラモーションブラーの CS パス (Bloom の前段)。
+		 * GBuffer2 (worldPos) と前フレームの viewProj からスクリーン空間速度を再構成し、
+		 * シーン RT を速度方向にぼかして出力 RT へ書く。
+		 * 前フレーム行列はゲームスレッドのコマンド構築時に値で確定させる (パイプライン時の競合防止)。
+		 */
+		class MotionBlurPassCommand final : public IRenderCommand
+		{
+		public:
+			MotionBlurPassCommand(
+				graphics::IShader*         shader,
+				graphics::IConstantBuffer* constantBuffer,
+				RenderTargetHandle         sceneRT,
+				RenderTargetHandle         worldPosRT,
+				RenderTargetHandle         outputRT,
+				const MotionBlurCBData&    cbData);
+
+			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;
+
+		private:
+			graphics::IShader*         shader_;
+			graphics::IConstantBuffer* constantBuffer_;
+
+			RenderTargetHandle sceneRTHandle_;
+			RenderTargetHandle worldPosRTHandle_;
+			RenderTargetHandle outputRTHandle_;
+
+			MotionBlurCBData cbData_;
 		};
 	}
 }

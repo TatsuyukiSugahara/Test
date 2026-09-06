@@ -145,6 +145,9 @@ namespace aq
 
 			// Pass 5: ポストプロセス (compute 非対応では Bloom が動かないのでスキップ)
 			if (postProcessRenderer_ && applyPostProcess && graphics::IsComputeSupported()) {
+				// モーションブラー等のカメラ依存パス用に今フレームのカメラを渡す
+				// (オフスクリーンパスは applyPostProcess=false なのでここへ来ない)。
+				postProcessRenderer_->SetFrameCamera(frame.camera);
 				postProcessRenderer_->BuildPostProcessCommandList(
 					outList, rtHandle,
 					static_cast<uint32_t>(viewportW),

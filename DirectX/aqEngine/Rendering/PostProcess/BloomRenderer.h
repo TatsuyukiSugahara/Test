@@ -5,6 +5,7 @@
 #include "Graphics/IShader.h"
 #include "Graphics/IBuffer.h"
 #include "Graphics/ISamplerState.h"
+#include "Math/Matrix.h"
 
 namespace aq
 {
@@ -70,6 +71,17 @@ namespace aq
 			/** 輝度抽出後テクスチャのハンドル（デバッグ表示用）。 */
 			RenderTargetHandle GetBrightRTHandle() const { return brightRTHandle_; }
 
+			// --- カメラモーションブラー (Bloom 前段の CS パス) ---
+			// SetFrameCamera が呼ばれ、強度 > 0、worldPos RT 設定済みのフレームだけパスを積む。
+			// 前フレーム viewProj はここで確定させ、コマンドへ値コピーで渡す (パイプライン時の競合防止)。
+			void SetFrameCamera(const CameraData& camera) override;
+			void SetMotionBlurStrength(const float strength) override
+			{
+				motionBlurStrength_ = strength < 0.0f ? 0.0f : strength;
+			}
+			void SetWorldPosRT(RenderTargetHandle handle) override { worldPosRTHandle_ = handle; }
+			float GetMotionBlurStrength() const { return motionBlurStrength_; }
+
 #ifdef AQ_DEBUG_IMGUI
 			std::unique_ptr<IDebugRenderable> CreateDebugPanel() override;
 #endif
@@ -98,6 +110,17 @@ namespace aq
 			float       exposure_    = 1.0f;   // 露出倍率 (トーンマップ前に乗算)
 			float       whitePoint_  = 4.0f;   // ReinhardExt 用の白飛びポイント
 			bool        applyGamma_  = false;  // ガンマ空間パイプラインのため既定 off
+
+			/** カメラモーションブラー */
+			std::unique_ptr<graphics::IShader>         motionBlurShader_;
+			std::unique_ptr<graphics::IConstantBuffer> motionBlurCB_;
+			RenderTargetHandle motionBlurRTHandle_;                     // ブラー出力 (Bloom の入力に差し替える)
+			RenderTargetHandle worldPosRTHandle_;                       // GBuffer2 (SetWorldPosRT で注入)
+			math::Matrix4x4    motionBlurPrevViewProj_;                 // このフレームの CB に使う「前フレーム viewProj」
+			math::Matrix4x4    motionBlurLastViewProj_;                 // 次フレームの prev になる値
+			float              motionBlurStrength_  = 0.0f;
+			bool               motionBlurPrevValid_ = false;
+			mutable bool       motionBlurArmed_     = false;            // SetFrameCamera 済みフレームのみ true (const な Build 内で消費)
 		};
 	}
 }

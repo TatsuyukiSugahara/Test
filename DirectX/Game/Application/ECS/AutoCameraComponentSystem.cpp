@@ -44,25 +44,40 @@ namespace app
 					const aq::math::Vector3 desiredPosition =
 						backFrame.position + backFrame.up * autoCam->cameraHeight
 						+ backFrame.right * (character->lateral * 0.5f);
-					const aq::math::Vector3 desiredTarget =
+					aq::math::Vector3 desiredTarget =
 						aheadFrame.position + aheadFrame.up * autoCam->lookHeight;
+
+					// ループ脱落中は distance が止まりカメラも脱落地点に残る。
+					// 位置はそのままに注視点だけ落ちていくキャラへ向け、落下を見送る画にする。
+					if (character->fallen) {
+						if (const auto* targetTc =
+								ctx.GetComponent<aq::ecs::TransformComponent>(autoCam->targetHandle)) {
+							desiredTarget = targetTc->position;
+						}
+					}
 
 					if (!autoCam->initialized) {
 						autoCam->smoothedPosition = desiredPosition;
 						autoCam->smoothedTarget   = desiredTarget;
+						autoCam->smoothedUp       = backFrame.up;
 						autoCam->initialized      = true;
 					} else {
 						const float factor = SmoothFactor(autoCam->sharpness, dt);
 						autoCam->smoothedPosition += (desiredPosition - autoCam->smoothedPosition) * factor;
 						autoCam->smoothedTarget   += (desiredTarget   - autoCam->smoothedTarget)   * factor;
+
+						// up も平滑してループ中のロールを滑らかにする (補間後は正規化して長さを保つ)。
+						autoCam->smoothedUp += (backFrame.up - autoCam->smoothedUp) * factor;
+						if (!autoCam->smoothedUp.TryNormalize()) {
+							autoCam->smoothedUp = backFrame.up;
+						}
 					}
 
-					// 注: Camera に up 指定 API が無いため、ループ中のロール (up 反映) は
-					//     P4 でエンジン側に SetUp を足してから対応する。P1 は平坦コースなので影響なし。
 					aq::Camera* const camera = aq::CameraManager::Get().GetCamera(autoCam->cameraType);
 					if (camera) {
 						camera->SetPosition(autoCam->smoothedPosition);
 						camera->SetTarget(autoCam->smoothedTarget);
+						camera->SetUp(autoCam->smoothedUp);
 					}
 				});
 		}

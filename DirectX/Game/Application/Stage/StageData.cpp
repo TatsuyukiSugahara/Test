@@ -199,6 +199,10 @@ namespace app
 			data->goalDistance = root["goal"]["distance"].AsFloat(data->spline.GetTotalLength());
 			data->fallHeight   = root["fall"]["heightThreshold"].AsFloat(-30.0f);
 
+			// ゴールが弧長より先にあると到達不能になるため、コース末端の少し手前へクランプする。
+			const float maxGoal = data->spline.GetTotalLength() - 5.0f;
+			if (data->goalDistance > maxGoal) { data->goalDistance = maxGoal; }
+
 			// コイン (判定は P2)
 			for (const auto& coin : root["coins"].GetArray()) {
 				CoinPlacement placement;

@@ -5,31 +5,46 @@
 		"points": [
 			{ "position": [0, 0, 0],     "up": [0, 1, 0] },
 			{ "position": [0, 0, 150],   "up": [0, 1, 0] },
-			{ "position": [30, 0, 280],  "up": [0, 1, 0] },
-			{ "position": [110, 0, 380], "up": [0, 1, 0] },
-			{ "position": [110, 0, 540], "up": [0, 1, 0] },
-			{ "position": [40, 0, 660],  "up": [0, 1, 0] },
-			{ "position": [0, 0, 780],   "up": [0, 1, 0] },
-			{ "position": [0, 0, 920],   "up": [0, 1, 0] }
+
+			{ "position": [0, 0, 180],        "up": [0, 1, 0] },
+			{ "position": [0.63, 5.86, 194.14],  "up": [0, 0.707, -0.707] },
+			{ "position": [1.25, 20, 200],       "up": [0, 0, -1] },
+			{ "position": [1.88, 34.14, 194.14], "up": [0, -0.707, -0.707] },
+			{ "position": [2.5, 40, 180],        "up": [0, -1, 0] },
+			{ "position": [3.13, 34.14, 165.86], "up": [0, -0.707, 0.707] },
+			{ "position": [3.75, 20, 160],       "up": [0, 0, 1] },
+			{ "position": [4.38, 5.86, 174.14],  "up": [0, 0.707, 0.707] },
+			{ "position": [5, 0, 180],           "up": [0, 1, 0] },
+
+			{ "position": [5, 0, 260],   "up": [0, 1, 0] },
+			{ "position": [35, 0, 380],  "up": [0, 1, 0] },
+			{ "position": [115, 0, 480], "up": [0, 1, 0] },
+			{ "position": [115, 0, 640], "up": [0, 1, 0] },
+			{ "position": [45, 0, 760],  "up": [0, 1, 0] },
+			{ "position": [5, 0, 880],   "up": [0, 1, 0] },
+			{ "position": [5, 0, 1020],  "up": [0, 1, 0] }
 		]
 	},
 	"spawn": { "distance": 5.0, "lanes": [-4.5, -1.5, 1.5, 4.5] },
-	"goal":  { "distance": 900.0 },
+	"goal":  { "distance": 1100.0 },
 	"fall":  { "heightThreshold": -30.0 },
 	"coins": [
 		{ "distance": 100.0, "lateral": 0.0, "height": 1.0 },
 		{ "distance": 105.0, "lateral": 0.0, "height": 1.0 },
 		{ "distance": 110.0, "lateral": 0.0, "height": 1.0 },
-		{ "distance": 300.0, "lateral": -3.0, "height": 1.0 },
-		{ "distance": 305.0, "lateral": -3.0, "height": 1.0 },
-		{ "distance": 500.0, "lateral": 3.0, "height": 1.0 },
-		{ "distance": 505.0, "lateral": 3.0, "height": 1.0 },
-		{ "distance": 700.0, "lateral": 0.0, "height": 1.0 },
-		{ "distance": 705.0, "lateral": 0.0, "height": 1.0 },
-		{ "distance": 710.0, "lateral": 0.0, "height": 1.0 }
+		{ "distance": 200.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 215.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 230.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 245.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 500.0, "lateral": -3.0, "height": 1.0 },
+		{ "distance": 505.0, "lateral": -3.0, "height": 1.0 },
+		{ "distance": 700.0, "lateral": 3.0, "height": 1.0 },
+		{ "distance": 705.0, "lateral": 3.0, "height": 1.0 },
+		{ "distance": 900.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 905.0, "lateral": 0.0, "height": 1.0 }
 	],
 	"rank": {
-		"parTimeSec": 30.0,
+		"parTimeSec": 35.0,
 		"thresholds": [
 			{ "rank": "S", "score": 0.90 },
 			{ "rank": "A", "score": 0.70 },

@@ -22,6 +22,9 @@ namespace app
 			static constexpr float JUMP_SPEED        = 13.0f;   // [m/s]
 			static constexpr float GRAVITY           = 30.0f;   // [m/s^2]
 
+			/** ループ脱落判定 */
+			static constexpr float INVERTED_UP_Y     = 0.25f;   // 路面 up がこれ未満なら「上下逆さ寄り」
+			static constexpr float LOOP_MIN_SPEED    = 35.0f;   // [m/s] 逆さ路面に張り付いていられる下限速度
 		}
 
 
@@ -79,6 +82,15 @@ namespace app
 					auto* tc    = ctx.GetComponent<aq::ecs::TransformComponent>(handle);
 					if (!input || !tc) { return; }
 
+					// 脱落中はコース追従を離れ、ワールド重力だけで落ちる。
+					// 姿勢は剥がれた瞬間のまま (回転を上書きすると落下方向と食い違って見えるため)。
+					// 入力も効かない: 復帰手段はリスポーンのみ。
+					if (character->fallen) {
+						character->worldVelocity.y -= GRAVITY * dt;
+						tc->position += character->worldVelocity * dt;
+						return;
+					}
+
 					// 加減速 (前入力で加速、後入力でブレーキ、入力なしは緩やかに減速)。
 					if (input->moveY > 0.01f) {
 						character->speed += input->moveY * ACCELERATION * dt;
@@ -115,6 +127,15 @@ namespace app
 					const stage::CourseSpline::Frame frame = stageData->spline.Evaluate(character->distance);
 					tc->position = frame.position + frame.right * character->lateral + frame.up * character->height;
 					tc->rotation = frame.ToRotation();
+
+					// ループ頂点付近 (路面 up が下向き) で速度が足りなければ、遠心力で
+					// 張り付いていられず重力に負けて剥がれる、という表現。
+					// 剥がれた地点の進行方向をそのまま初速にして自由落下へ移す。
+					if (character->grounded && frame.up.y < INVERTED_UP_Y && character->speed < LOOP_MIN_SPEED) {
+						character->fallen        = true;
+						character->grounded      = false;
+						character->worldVelocity = frame.tangent * character->speed;
+					}
 				});
 		}
 	}

@@ -142,11 +142,12 @@ namespace app
 				}
 			}
 
-			// ランクはクリア時のみ表示する。ゲームオーバー時は最小 alpha で実質非表示にする。
+			// ランクはクリア時のみ表示する。非表示は content を空にする
+			// (SetTextAlpha は最小 0.02 にクランプされ、明るい背景ではうっすら見えてしまうため)。
 			const bool showRank = cleared && rank && rank[0] != '\0';
-			if (rank_ && showRank) {
+			if (rank_) {
 				if (auto* text = rank_->GetComponent<aq::ui::UITextComponent>()) {
-					text->content = rank;
+					text->content = showRank ? rank : "";
 				}
 			}
 			SetTextAlpha(rank_, showRank ? 1.0f : 0.0f);

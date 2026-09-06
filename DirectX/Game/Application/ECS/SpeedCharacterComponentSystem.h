@@ -43,6 +43,10 @@ namespace app
 			float    verticalVelocity = 0.0f;
 			bool     grounded         = true;
 			uint32_t playerIndex      = 0;
+
+			/** 脱落状態 (ループで速度不足になった等。スプライン制御を離れワールド自由落下) */
+			bool              fallen        = false;
+			aq::math::Vector3 worldVelocity = {};   // fallen 中のワールド速度
 		};
 
 

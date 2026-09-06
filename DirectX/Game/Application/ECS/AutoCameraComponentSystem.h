@@ -40,6 +40,7 @@ namespace app
 			/** スムージング状態 (System が書き込む) */
 			aq::math::Vector3 smoothedPosition = {};
 			aq::math::Vector3 smoothedTarget   = {};
+			aq::math::Vector3 smoothedUp       = { 0.0f, 1.0f, 0.0f };
 			bool              initialized      = false;
 		};
 

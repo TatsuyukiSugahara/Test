@@ -233,6 +233,8 @@ namespace app
 						character->speed            = 0.0f;
 						character->verticalVelocity = 0.0f;
 						character->grounded         = true;
+						character->fallen           = false;
+						character->worldVelocity    = aq::math::Vector3(0.0f, 0.0f, 0.0f);
 					}
 					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandles[i])) {
 						score->coinCount = 0;
@@ -419,8 +421,11 @@ namespace app
 			}
 
 			// ゴール / 落下判定 (P1 はプレイヤー 0 のみ。全員分の集計は P5)。
-			const bool goal = character->distance >= stageData->goalDistance;
-			const bool fall = character->height   <  stageData->fallHeight;
+			// 落下は「路面相対 height がしきい値未満」または「ループ脱落後に地面高さまで落ちた」。
+			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(context.playerHandles[0]);
+			const bool  goal     = character->distance >= stageData->goalDistance;
+			const bool  fall     = character->height < stageData->fallHeight
+			                    || (character->fallen && playerTc && playerTc->position.y < 0.5f);
 			if (!goal && !fall) { return; }
 
 			PlayResult& result  = context.playResult;

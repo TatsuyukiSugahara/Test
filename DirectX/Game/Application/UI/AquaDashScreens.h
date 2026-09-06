@@ -1,5 +1,6 @@
 #pragma once
 #include "UI/Screen/UIScreen.h"
+#include "Math/Vector.h"
 
 
 namespace app
@@ -11,28 +12,31 @@ namespace app
 
 
 		/**
-		 * タイトル画面 (P0 仮)。PRESS テキストの点滅のみ行う。
-		 * 本デザイン (ステージ選択リスト / 参加プレイヤー表示) は P7 で差し替える。
+		 * タイトル画面 (R-14)。ロゴ / ステージ名 / PRESS 点滅を表示する。
+		 * ステージ名の内容は StageDefinition 側から SetStageName で流し込む。
 		 */
 		class TitleScreen : public aq::ui::UIScreen
 		{
 		private:
-			float             elapsed_ = 0.0f;
-			aq::ui::UIObject* press_   = nullptr;
+			float             elapsed_    = 0.0f;
+			aq::ui::UIObject* press_      = nullptr;
+			aq::ui::UIObject* stageLabel_ = nullptr;
 
 
 		public:
 			void OnEnter()          override;
 			void OnUpdate(float dt) override;
+
+			/** ステージ表示ラベルの内容を差し替える (例: "STAGE 01    GREEN COAST") */
+			void SetStageName(const char* text);
 		};
 
 
 
 
 		/**
-		 * インゲーム HUD (R-14)。右上=経過時間 / 左下=コイン枚数 / 右下=速度を表示する。
+		 * インゲーム HUD (R-14)。右上=経過時間 / 左下=コイン枚数 / 右下=速度 / 左上=ミニマップを表示する。
 		 * 値の計算は InGameState 側が行い、本クラスは見た目の反映のみ担当する。
-		 * 左上のミニマップは P7 で追加する。
 		 */
 		class InGameScreen : public aq::ui::UIScreen
 		{
@@ -41,6 +45,12 @@ namespace app
 			aq::ui::UIObject* timeText_  = nullptr;
 			aq::ui::UIObject* coinText_  = nullptr;
 			aq::ui::UIObject* speedText_ = nullptr;
+
+			/** ミニマップ (枠 / 下地 / プレイヤーマーカー / コース点列プール) */
+			aq::ui::UIObject*              minimapFrame_  = nullptr;
+			aq::ui::UIObject*              minimap_       = nullptr;
+			aq::ui::UIObject*              minimapMarker_ = nullptr;
+			std::vector<aq::ui::UIObject*> minimapDots_;
 
 
 		public:
@@ -53,6 +63,15 @@ namespace app
 			 * @param speedKmh  表示用に km/h 換算済みの速度
 			 */
 			void SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh);
+
+			/**
+			 * ミニマップのコース形状を設定する (uv は 0-1。u=右+, v=下+)。
+			 * 点列はドットの UIObject プールとして生成・再利用する。空を渡すとミニマップ全体を隠す。
+			 */
+			void SetMinimapCourse(const std::vector<aq::math::Vector2>& uvPoints);
+
+			/** ミニマップ上のプレイヤーマーカー位置。u,v は 0-1 (ミニマップ矩形ローカル。u=右+, v=下+) */
+			void SetMinimapMarker(const float u, const float v);
 		};
 
 

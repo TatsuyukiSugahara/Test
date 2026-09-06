@@ -74,6 +74,31 @@
                     "color": [1.0, 1.0, 1.0, 0.8]
                 }
             }
+        },
+        {
+            "name": "MinimapFrame",
+            "components": {
+                "transform": { "position": [-800, -340, 0], "sizeDelta": [272, 272] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.0, 0.0, 0.0, 0.55] }
+            },
+            "children": [
+                {
+                    "name": "Minimap",
+                    "components": {
+                        "transform": { "position": [0, 0, 0], "sizeDelta": [256, 256] },
+                        "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.02, 0.08, 0.16, 0.85] }
+                    },
+                    "children": [
+                        {
+                            "name": "MinimapMarker",
+                            "components": {
+                                "transform": { "position": [0, 0, 0], "sizeDelta": [12, 12] },
+                                "image": { "texture": "Assets/UI/Textures/white.png", "color": [1.0, 0.3, 0.2, 1.0] }
+                            }
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }

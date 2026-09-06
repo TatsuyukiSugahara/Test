@@ -231,6 +231,12 @@ namespace app
 
 	void Application::OnPreRender()
 	{
+		// オフスクリーンパスは現在未使用のため停止する (シーン全体をもう一度描くため
+		// 路面タイル追加後は約2倍の描画コストになっていた)。
+		// なおディファード経路では 512²RTV と GBuffer 深度の寸法不一致で描けない既知の課題もある
+		// (設計書/README.md)。用途復活時はそこを直してから戻すこと。
+		return;
+
 		if (!offscreenRTHandle_.IsValid()) return;
 
 		const float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };

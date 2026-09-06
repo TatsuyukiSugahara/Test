@@ -9,6 +9,7 @@
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
+#include <cstdio>
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
 #include "Sound/SoundClip.h"
@@ -115,9 +116,42 @@ namespace app
 				{
 					aq::Camera* const mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);
 					mainCamera->SetNear(0.1f);
+					mainCamera->SetFar(3000.0f);   // 長距離コースの見通し (既定 1000 だと途中で切れる)
 					mainCamera->SetViewportSize(
 						static_cast<float>(aq::Engine::Get().GetRenderWidth()),
 						static_cast<float>(aq::Engine::Get().GetRenderHeight()));
+				}
+
+				// ミニマップの正規化パラメータ (コース XZ 範囲 → 0-1 への変換に使う)。
+				{
+					const float extentX = maxX - minX;
+					const float extentZ = maxZ - minZ;
+					context.minimapCenterXZ   = aq::math::Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
+					context.minimapHalfExtent = (extentX > extentZ ? extentX : extentZ) * 0.5f + 40.0f;
+				}
+
+				// 路面タイル (スプラインに沿った薄い箱)。走行時の路面の見た目と、
+				// ミニマップ (俯瞰) に映るコース形状を兼ねる。ループでもタイル姿勢が路面に追従する。
+				{
+					// 箱はバウンディング無しでフラスタムカリングされないため、枚数が描画コストに直結する。
+					// 20m 間隔 (約360枚) が 60fps を保てる妥協点。
+					constexpr float TILE_SPACING = 20.0f;
+					const float total = stageData->spline.GetTotalLength();
+					for (float d = 0.0f; d < total; d += TILE_SPACING)
+					{
+						const auto frame = stageData->spline.Evaluate(d);
+						auto entity = ctx.CreateEntity<
+							aq::ecs::TransformComponent,
+							aq::ecs::HierarchicalTransformComponent,
+							aq::ecs::BoxStaticMeshComponent>();
+						auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+						// 地形面 (y=0) より上面がわずかに出るよう -0.10 (厚み 0.3 → 上面 +0.05)。
+						// 深く沈めると平坦地形に埋まって見えなくなる。
+						tc->position = frame.position - frame.up * 0.1f;
+						tc->scale.Set(stageData->width, 0.3f, TILE_SPACING * 1.02f);
+						tc->rotation = frame.ToRotation();
+						context.stageEntities.push_back(entity.GetHandle());
+					}
 				}
 
 				// プレイヤー。
@@ -281,6 +315,17 @@ namespace app
 			if (flow.Context().stageList.empty()) {
 				flow.Context().stageList = stage::StageRegistry::LoadList(STAGE_LIST_PATH);
 			}
+
+			// 選択中ステージ名をタイトルへ反映する。
+			const auto& list = flow.Context().stageList;
+			if (!list.empty()) {
+				const int index = aq::math::Clamp(flow.Context().selectedStageIndex, 0, static_cast<int>(list.size()) - 1);
+				if (auto* screen = static_cast<TitleScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
+					char buf[64];
+					std::snprintf(buf, sizeof(buf), "STAGE %02d    %s", index + 1, list[index].name.c_str());
+					screen->SetStageName(buf);
+				}
+			}
 		}
 
 
@@ -388,6 +433,29 @@ namespace app
 			elapsed_ = 0.0f;
 			flow.Context().gameplayPaused = false;
 			ResetPlayers(flow);
+
+			// ミニマップ: コース形状をスプラインから等間隔サンプリングし、UI の点列として描く。
+			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
+				std::vector<aq::math::Vector2> uvPoints;
+				const auto& context   = flow.Context();
+				const auto  stageData = context.activeStage;
+				if (stageData && stageData->spline.IsValid() && context.minimapHalfExtent > 1.0f)
+				{
+					constexpr int SAMPLE_COUNT = 160;
+					const float span  = context.minimapHalfExtent * 2.0f;
+					const float total = stageData->spline.GetTotalLength();
+					uvPoints.reserve(SAMPLE_COUNT + 1);
+					for (int i = 0; i <= SAMPLE_COUNT; ++i)
+					{
+						const auto position =
+							stageData->spline.Evaluate(total * static_cast<float>(i) / SAMPLE_COUNT).position;
+						uvPoints.push_back(aq::math::Vector2(
+							0.5f + (position.x - context.minimapCenterXZ.x) / span,
+							0.5f - (position.z - context.minimapCenterXZ.y) / span));
+					}
+				}
+				screen->SetMinimapCourse(uvPoints);
+			}
 		}
 
 
@@ -404,15 +472,23 @@ namespace app
 			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle);
 			if (!character) { return; }
 
-			// HUD 更新 (時間 / コイン / 速度)。
-			const auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle);
+			// HUD 更新 (時間 / コイン / 速度 / ミニマップマーカー)。
+			const auto* score    = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle);
+			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(context.playerHandle);
 			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
 				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f);
+
+				// 俯瞰カメラは 画面右=+X / 画面上=+Z。UI の v は下+なので Z を反転する。
+				if (playerTc && context.minimapHalfExtent > 1.0f) {
+					const float span = context.minimapHalfExtent * 2.0f;
+					const float u = 0.5f + (playerTc->position.x - context.minimapCenterXZ.x) / span;
+					const float v = 0.5f - (playerTc->position.z - context.minimapCenterXZ.y) / span;
+					screen->SetMinimapMarker(u, v);
+				}
 			}
 
 			// ゴール / 落下判定。
 			// 落下は「路面相対 height がしきい値未満」または「ループ脱落後に地面高さまで落ちた」。
-			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(context.playerHandle);
 			const bool  goal     = character->distance >= stageData->goalDistance;
 			const bool  fall     = character->height < stageData->fallHeight
 			                    || (character->fallen && playerTc && playerTc->position.y < 0.5f);

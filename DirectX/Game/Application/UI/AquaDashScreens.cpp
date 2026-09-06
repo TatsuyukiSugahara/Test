@@ -2,6 +2,9 @@
 #include "AquaDashScreens.h"
 #include "UI/UIObject.h"
 #include "UI/Component/UITextComponent.h"
+#include "UI/Component/UIImageComponent.h"
+#include "UI/Component/UITransformComponent.h"
+#include "Graphics/IShaderResourceView.h"
 #include <cstdio>
 
 
@@ -11,6 +14,13 @@ namespace app
 	{
 		namespace
 		{
+			/** ミニマップ描画面の一辺 (px)。InGame.screen.json の Minimap.sizeDelta と一致させる */
+			static constexpr float MINIMAP_SIZE_PX = 256.0f;
+
+			/** ミニマップ枠の不透明度。InGame.screen.json の MinimapFrame.color.a と一致させる */
+			static constexpr float MINIMAP_FRAME_ALPHA = 0.55f;
+
+
 			// テキストの不透明度。a==0 はスタイル既定色扱い (不可視にできない) になるため最小値でクランプ。
 			void SetTextAlpha(aq::ui::UIObject* obj, const float a)
 			{
@@ -19,16 +29,27 @@ namespace app
 					text->color.w = a < 0.02f ? 0.02f : a;
 				}
 			}
+
+
+			// 画像の不透明度 (a==0 は完全透明で問題なし)。
+			void SetImageAlpha(aq::ui::UIObject* obj, const float a)
+			{
+				if (!obj) { return; }
+				if (auto* image = obj->GetComponent<aq::ui::UIImageComponent>()) {
+					image->color.w = a;
+				}
+			}
 		}
 
 
 		/**
-		 * タイトル画面 (P0 仮)
+		 * タイトル画面
 		 */
 		void TitleScreen::OnEnter()
 		{
-			elapsed_ = 0.0f;
-			press_   = Resolve(FindHandle("Press"));
+			elapsed_    = 0.0f;
+			press_      = Resolve(FindHandle("Press"));
+			stageLabel_ = Resolve(FindHandle("StageLabel"));
 		}
 
 
@@ -40,6 +61,15 @@ namespace app
 			const int   n  = static_cast<int>(elapsed_ / 1.2f);
 			const float ph = (elapsed_ - static_cast<float>(n) * 1.2f) / 1.2f;
 			SetTextAlpha(press_, ph < 0.5f ? 1.0f : 0.15f);
+		}
+
+
+		void TitleScreen::SetStageName(const char* text)
+		{
+			if (!stageLabel_) { return; }
+			if (auto* label = stageLabel_->GetComponent<aq::ui::UITextComponent>()) {
+				label->content = text ? text : "";
+			}
 		}
 
 
@@ -56,6 +86,18 @@ namespace app
 			timeText_  = Resolve(FindHandle("TimeText"));
 			coinText_  = Resolve(FindHandle("CoinText"));
 			speedText_ = Resolve(FindHandle("SpeedText"));
+
+			minimapFrame_  = Resolve(FindHandle("MinimapFrame"));
+			minimap_       = Resolve(FindHandle("Minimap"));
+			minimapMarker_ = Resolve(FindHandle("MinimapMarker"));
+
+			// SetMinimapCourse が来るまでは隠した状態で始める (プールのドットも含む)。
+			SetImageAlpha(minimapFrame_,  0.0f);
+			SetImageAlpha(minimap_,       0.0f);
+			SetImageAlpha(minimapMarker_, 0.0f);
+			for (auto* dot : minimapDots_) {
+				SetImageAlpha(dot, 0.0f);
+			}
 		}
 
 
@@ -88,6 +130,61 @@ namespace app
 					text->content = buf;
 				}
 			}
+		}
+
+
+		void InGameScreen::SetMinimapCourse(const std::vector<aq::math::Vector2>& uvPoints)
+		{
+			const bool visible = minimap_ && !uvPoints.empty();
+			SetImageAlpha(minimapFrame_,  visible ? MINIMAP_FRAME_ALPHA : 0.0f);
+			SetImageAlpha(minimap_,       visible ? 1.0f : 0.0f);
+			SetImageAlpha(minimapMarker_, visible ? 1.0f : 0.0f);
+			if (!minimap_) { return; }
+
+			// ドットは白テクスチャを下地画像と共有する (実行時に SRV をパスから引かずに済む)。
+			std::shared_ptr<aq::graphics::IShaderResourceView> whiteTexture;
+			if (auto* baseImage = minimap_->GetComponent<aq::ui::UIImageComponent>()) {
+				whiteTexture = baseImage->texture;
+			}
+
+			// プール再利用: 足りない分だけ生成し、余った分は透明化する。
+			auto& uiContext = aq::ui::UIContext::Get();
+			for (size_t i = 0; i < uvPoints.size(); ++i)
+			{
+				if (i >= minimapDots_.size())
+				{
+					aq::ui::UIObject* dot = uiContext.CreateObject("MinimapDot");
+					auto* transform = dot->AddComponent<aq::ui::UITransformComponent>();
+					transform->sizeDelta = { 4.0f, 4.0f };
+					auto* image = dot->AddComponent<aq::ui::UIImageComponent>();
+					image->texture = whiteTexture;
+					image->color   = { 0.35f, 0.85f, 1.0f, 0.9f };
+					minimap_->AddChild(dot);
+					minimapDots_.push_back(dot);
+				}
+
+				auto* dot = minimapDots_[i];
+				if (auto* transform = dot->GetComponent<aq::ui::UITransformComponent>()) {
+					transform->localPosition.x = (aq::math::Clamp01(uvPoints[i].x) - 0.5f) * MINIMAP_SIZE_PX;
+					transform->localPosition.y = (aq::math::Clamp01(uvPoints[i].y) - 0.5f) * MINIMAP_SIZE_PX;
+				}
+				SetImageAlpha(dot, visible ? 0.9f : 0.0f);
+			}
+			for (size_t i = uvPoints.size(); i < minimapDots_.size(); ++i) {
+				SetImageAlpha(minimapDots_[i], 0.0f);
+			}
+		}
+
+
+		void InGameScreen::SetMinimapMarker(const float u, const float v)
+		{
+			if (!minimapMarker_) { return; }
+			auto* transform = minimapMarker_->GetComponent<aq::ui::UITransformComponent>();
+			if (!transform) { return; }
+
+			// マーカーがミニマップ矩形の外へ飛び出さないよう、中心基準へ変換する前に丸める。
+			transform->localPosition.x = (aq::math::Clamp01(u) - 0.5f) * MINIMAP_SIZE_PX;
+			transform->localPosition.y = (aq::math::Clamp01(v) - 0.5f) * MINIMAP_SIZE_PX;
 		}
 
 

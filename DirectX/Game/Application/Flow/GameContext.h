@@ -37,6 +37,10 @@ namespace app
 			aq::ecs::EntityHandle              playerHandle;      // プレイヤー
 			aq::ecs::EntityHandle              collectFxHandle;   // コイン取得エフェクトの常駐エミッタ
 			std::vector<aq::ecs::EntityHandle> stageEntities;     // タイトル復帰時に破棄する生成物
+
+			/** ミニマップ (コース XZ 範囲 → 0-1 正規化のパラメータ) */
+			aq::math::Vector2 minimapCenterXZ;            // コース範囲の中心 (XZ)
+			float             minimapHalfExtent = 1.0f;   // 正方形マップに収める半径 [m]
 		};
 	}
 }

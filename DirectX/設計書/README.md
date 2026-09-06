@@ -63,9 +63,8 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 
 ## 既知の課題
 
-- `aq::math::Quaternion::SetRotation`([Math/Vector.h](../aqEngine/Math/Vector.h) 425行付近)に代入ミスがあり、
-  `y = axis.z * s;` となっていて z が未設定のまま(任意軸回転が壊れている)。
-  現状の利用箇所は要確認。ゲーム側(CoinSystem 等)は回避して自前計算している。(2026-09-06 発見)
+- (解決済 2026-09-06) `aq::math::Quaternion::SetRotation` の代入ミス(`z` に入れるべき値を `y` へ二重代入)を修正。
+  利用箇所ゼロのまま壊れていた。ゲーム側の回避実装(CoinSystem の自前 Y 軸回転)も削除し本 API 使用に統一。
 
 ## 文書管理方針
 

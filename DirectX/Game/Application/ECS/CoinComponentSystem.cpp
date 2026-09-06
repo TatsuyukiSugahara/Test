@@ -26,15 +26,6 @@ namespace app
 			static const char* COLLECT_SE_PATH = "Assets/Sound/Decision.wav";
 
 
-			// Y 軸まわり angle [rad] の回転クォータニオン。
-			// aq::math::Quaternion::SetRotation は任意軸用だが Y 軸限定ならこの成分計算で足りる。
-			aq::math::Quaternion RotationAroundY(const float angle)
-			{
-				const float half = angle * 0.5f;
-				return aq::math::Quaternion(0.0f, sinf(half), 0.0f, cosf(half));
-			}
-
-
 			// 取得 SE を鳴らす (サウンド無効環境では何もしない)。
 			void PlayCollectSE()
 			{
@@ -89,7 +80,9 @@ namespace app
 					if (coin->spinPhase > TWO_PI) { coin->spinPhase -= TWO_PI; }
 
 					// operator* は local * parent 合成。路面姿勢の上に Y 軸スピンを載せる。
-					tc->rotation = RotationAroundY(coin->spinPhase) * coin->baseRotation;
+					aq::math::Quaternion spin;
+					spin.SetRotation(aq::math::Vector3(0.0f, 1.0f, 0.0f), coin->spinPhase);
+					tc->rotation = spin * coin->baseRotation;
 				});
 
 			// 取得判定。コイン数十枚 × プレイヤー数なので総当たりで足りる。

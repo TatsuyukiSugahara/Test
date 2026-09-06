@@ -421,7 +421,7 @@ namespace aq
 			Quaternion() {}
 			Quaternion(float x, float y, float z, float w) : Vector4(x, y, z, w) {}
 
-			/** 任意軸の回転クォータニオンを作成 */
+			/** 任意軸の回転クォータニオンを作成(axis は正規化済みであること) */
 			void SetRotation(const Vector3& axis, float angle)
 			{
 				float s;
@@ -430,7 +430,7 @@ namespace aq
 				w = cosf(halfAngle);
 				x = axis.x * s;
 				y = axis.y * s;
-				y = axis.z * s;
+				z = axis.z * s;
 			}
 
 			void SetEuler(const aq::math::Vector3& rot);

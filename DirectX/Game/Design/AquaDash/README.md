@@ -55,4 +55,4 @@ Game/
 - unityChan.tkm はメートル基準でないため `PLAYER_MODEL_SCALE = 0.25` で縮小している。
 - コインの見た目は仮(薄い箱 `BoxStaticMeshComponent`、無着色で視認性が低い)。専用モデル/発光は P6-P7 で検討。
   取得 SE も Decision.wav 流用の仮。専用アセット導入時に `CoinComponentSystem.cpp` のパスを差し替える。
-- エンジンの `Quaternion::SetRotation` に代入バグあり(詳細は `DirectX/設計書/README.md` 既知の課題)。ゲーム側は回避済み。
+- (解決済) エンジンの `Quaternion::SetRotation` 代入バグは修正し、ゲーム側の回避実装も削除した。

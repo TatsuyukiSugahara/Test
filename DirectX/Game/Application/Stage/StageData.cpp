@@ -73,7 +73,7 @@ namespace app
 					}
 
 					// up は制御点間の線形補間 → 接線と直交化。
-					aq::math::Vector3 up = ups[seg] * (1.0f - t) + ups[seg + 1] * t;
+					aq::math::Vector3 up = aq::math::Lerp(ups[seg], ups[seg + 1], t);
 					aq::math::Vector3 right;
 					right.Cross(up, sample.tangent);
 					if (!right.TryNormalize()) {
@@ -131,10 +131,10 @@ namespace app
 			const float span = s1.distance - s0.distance;
 			const float f    = span > 0.0001f ? (d - s0.distance) / span : 0.0f;
 
-			frame.position = s0.position + (s1.position - s0.position) * f;
-			frame.tangent  = s0.tangent  + (s1.tangent  - s0.tangent)  * f;
+			frame.position = aq::math::Lerp(s0.position, s1.position, f);
+			frame.tangent  = aq::math::Lerp(s0.tangent,  s1.tangent,  f);
 			if (!frame.tangent.TryNormalize()) { frame.tangent = s0.tangent; }
-			frame.up = s0.up + (s1.up - s0.up) * f;
+			frame.up = aq::math::Lerp(s0.up, s1.up, f);
 			frame.right.Cross(frame.up, frame.tangent);
 			if (!frame.right.TryNormalize()) { frame.right.Set(1.0f, 0.0f, 0.0f); }
 			frame.up.Cross(frame.tangent, frame.right);

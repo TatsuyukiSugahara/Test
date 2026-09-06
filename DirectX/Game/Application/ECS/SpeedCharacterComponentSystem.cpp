@@ -47,8 +47,8 @@ namespace app
 					if (gameInput.IsPressed(GameAction::MoveForward))  { moveY += 1.0f; }
 					if (gameInput.IsPressed(GameAction::MoveBackward)) { moveY -= 1.0f; }
 
-					input->moveX = moveX < -1.0f ? -1.0f : (moveX > 1.0f ? 1.0f : moveX);
-					input->moveY = moveY < -1.0f ? -1.0f : (moveY > 1.0f ? 1.0f : moveY);
+					input->moveX = aq::math::Clamp(moveX, -1.0f, 1.0f);
+					input->moveY = aq::math::Clamp(moveY, -1.0f, 1.0f);
 					input->jumpTriggered = gameInput.IsTriggered(GameAction::Confirm);
 				});
 		}
@@ -99,14 +99,12 @@ namespace app
 					} else {
 						character->speed -= DRAG_DECEL * dt;
 					}
-					if (character->speed < 0.0f)      { character->speed = 0.0f; }
-					if (character->speed > MAX_SPEED) { character->speed = MAX_SPEED; }
+					character->speed = aq::math::Clamp(character->speed, 0.0f, MAX_SPEED);
 
 					// 前進 + レーン移動。
 					character->distance += character->speed * dt;
 					character->lateral  += input->moveX * LATERAL_SPEED * dt;
-					if (character->lateral < -lateralLimit) { character->lateral = -lateralLimit; }
-					if (character->lateral >  lateralLimit) { character->lateral =  lateralLimit; }
+					character->lateral   = aq::math::Clamp(character->lateral, -lateralLimit, lateralLimit);
 
 					// ジャンプ / 重力 (height は路面相対)。
 					if (character->grounded && input->jumpTriggered) {

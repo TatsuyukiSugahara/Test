@@ -70,11 +70,11 @@ namespace app
 						autoCam->initialized      = true;
 					} else {
 						const float factor = SmoothFactor(autoCam->sharpness, dt);
-						autoCam->smoothedPosition += (desiredPosition - autoCam->smoothedPosition) * factor;
-						autoCam->smoothedTarget   += (desiredTarget   - autoCam->smoothedTarget)   * factor;
+						autoCam->smoothedPosition = aq::math::Lerp(autoCam->smoothedPosition, desiredPosition, factor);
+						autoCam->smoothedTarget   = aq::math::Lerp(autoCam->smoothedTarget,   desiredTarget,   factor);
 
 						// up も平滑してループ中のロールを滑らかにする (補間後は正規化して長さを保つ)。
-						autoCam->smoothedUp += (backFrame.up - autoCam->smoothedUp) * factor;
+						autoCam->smoothedUp = aq::math::Lerp(autoCam->smoothedUp, backFrame.up, factor);
 						if (!autoCam->smoothedUp.TryNormalize()) {
 							autoCam->smoothedUp = backFrame.up;
 						}
@@ -84,11 +84,12 @@ namespace app
 					{
 						float speedRate = 0.0f;
 						if (!GameFlow::Get().Context().gameplayPaused) {
-							speedRate = (character->speed - FOV_SPEED_MIN) / (FOV_SPEED_MAX - FOV_SPEED_MIN);
-							speedRate = speedRate < 0.0f ? 0.0f : (speedRate > 1.0f ? 1.0f : speedRate);
+							speedRate = aq::math::Clamp01(
+								aq::math::InverseLerp(FOV_SPEED_MIN, FOV_SPEED_MAX, character->speed));
 						}
 						const float targetFov = BASE_FOV_DEG + MAX_FOV_ADD_DEG * speedRate;
-						autoCam->smoothedFovDeg += (targetFov - autoCam->smoothedFovDeg) * SmoothFactor(6.0f, dt);
+						autoCam->smoothedFovDeg =
+							aq::math::Lerp(autoCam->smoothedFovDeg, targetFov, SmoothFactor(6.0f, dt));
 					}
 
 					aq::Camera* const camera = aq::CameraManager::Get().GetCamera(autoCam->cameraType);

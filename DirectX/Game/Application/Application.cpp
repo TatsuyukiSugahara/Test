@@ -160,8 +160,8 @@ namespace app
 				if (ctx.IsValid(context.playerHandle)) {
 					if (const auto* character =
 							ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle)) {
-						float rate = (character->speed - BLUR_SPEED_MIN) / (BLUR_SPEED_MAX - BLUR_SPEED_MIN);
-						rate = rate < 0.0f ? 0.0f : (rate > 1.0f ? 1.0f : rate);
+						const float rate = aq::math::Clamp01(
+							aq::math::InverseLerp(BLUR_SPEED_MIN, BLUR_SPEED_MAX, character->speed));
 						strength = rate * BLUR_MAX_STRENGTH;
 					}
 				}

@@ -31,7 +31,7 @@
 | `GoalComponent` | 発火済みフラグ | ゴールトリガー |
 | `PlayerScoreComponent` | コイン枚数、落下回数 | リザルト評価の集計元(R-11) |
 | `AutoCameraComponent` | 追従対象 EntityHandle、モード(追走/リザルト周回)、現在位置・注視点(平滑化用) | プレイヤー毎の自動カメラ(R-09)。ビュー番号を持ち分割画面と対応 |
-| `GameplayPauseComponent` | (タグのみ) | シングルトンに付与してゲーム System を停止(Result 用) |
+| (GameplayPause) | `GameContext.gameplayPaused` フラグ | ゲーム System の停止(Result 用)。P1 実装時にエンティティタグではなく GameFlow 保持のフラグへ変更(シングルトンエンティティより単純なため。並列化で問題が出たら再検討) |
 
 - コインとゴールの判定はスプライン座標で行うため、コイン側にも
   ロード時に `(distance, lateral, height)` を焼いておく(毎フレームの逆変換を避ける)。

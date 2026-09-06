@@ -15,7 +15,10 @@
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
     <ClCompile Include="Application\ECS\ActorSteeringComponentSystem.cpp" />
     <ClCompile Include="Application\ECS\CameraSteeringComponentSystem.cpp" />
+    <ClCompile Include="Application\ECS\SpeedCharacterComponentSystem.cpp" />
+    <ClCompile Include="Application\ECS\AutoCameraComponentSystem.cpp" />
     <ClCompile Include="Application\Flow\AquaDashStates.cpp" />
+    <ClCompile Include="Application\Stage\StageData.cpp" />
     <ClCompile Include="Application\UI\AquaDashScreens.cpp" />
     <ClCompile Include="Application\Main.cpp" />
     <ClCompile Include="Application\UWPMain.cpp" />
@@ -29,8 +32,11 @@
     <ClInclude Include="Application\ECS\ActorComponentSystem.h" />
     <ClInclude Include="Application\ECS\ActorSteeringComponentSystem.h" />
     <ClInclude Include="Application\ECS\CameraSteeringComponentSystem.h" />
+    <ClInclude Include="Application\ECS\SpeedCharacterComponentSystem.h" />
+    <ClInclude Include="Application\ECS\AutoCameraComponentSystem.h" />
     <ClInclude Include="Application\Flow\GameContext.h" />
     <ClInclude Include="Application\Flow\AquaDashStates.h" />
+    <ClInclude Include="Application\Stage\StageData.h" />
     <ClInclude Include="Application\UI\AquaDashScreens.h" />
     <ClInclude Include="Application\stdafx.h" />
     <ClInclude Include="Application\Utility.h" />

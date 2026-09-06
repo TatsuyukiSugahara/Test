@@ -10,7 +10,7 @@
             "components": {
                 "transform": { "position": [0, -470, 0], "sizeDelta": [1200, 50] },
                 "text": {
-                    "content": "IN-GAME (P0 SKELETON)",
+                    "content": "IN-GAME (P1)",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
                     "fontSize": 34,
                     "alignH": "Center",
@@ -24,7 +24,7 @@
             "components": {
                 "transform": { "position": [0, -415, 0], "sizeDelta": [1400, 40] },
                 "text": {
-                    "content": "SPACE / A : GOAL        S / DPAD DOWN : FALL",
+                    "content": "W : ACCEL    S : BRAKE    A / D : LANE    SPACE : JUMP",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
                     "fontSize": 22,
                     "alignH": "Center",

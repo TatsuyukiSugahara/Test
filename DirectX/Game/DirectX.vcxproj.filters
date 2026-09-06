@@ -13,6 +13,9 @@
     <Filter Include="UI">
       <UniqueIdentifier>{f1f5c0a6-a6f6-4b7f-9e0b-50035f3dabdf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Stage">
+      <UniqueIdentifier>{c4a07b46-184b-402f-ad0a-dbfc52d2c061}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Application\stdafx.cpp" />
@@ -32,6 +35,15 @@
     </ClCompile>
     <ClCompile Include="Application\Actor\StateMachine.cpp">
       <Filter>Actor</Filter>
+    </ClCompile>
+    <ClCompile Include="Application\ECS\SpeedCharacterComponentSystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Application\ECS\AutoCameraComponentSystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Application\Stage\StageData.cpp">
+      <Filter>Stage</Filter>
     </ClCompile>
     <ClCompile Include="Application\Flow\AquaDashStates.cpp">
       <Filter>Flow</Filter>
@@ -58,6 +70,15 @@
     </ClInclude>
     <ClInclude Include="Application\Actor\StateMachine.h">
       <Filter>Actor</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\ECS\SpeedCharacterComponentSystem.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\ECS\AutoCameraComponentSystem.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\Stage\StageData.h">
+      <Filter>Stage</Filter>
     </ClInclude>
     <ClInclude Include="Application\Flow\GameContext.h">
       <Filter>Flow</Filter>

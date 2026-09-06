@@ -4,6 +4,8 @@
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
+#include "ECS/SpeedCharacterComponentSystem.h"
+#include "ECS/AutoCameraComponentSystem.h"
 #include "UI/Font/FontResource.h"
 #include "Resource/ParticleSystemData.h"
 #include "Resource/ParticleLoader.h"
@@ -168,10 +170,20 @@ namespace app
 		aq::ecs::EntityContext::Get().AddDependency<app::ecs::ActorStateMachineSystem, app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::HierarcicalTransformSystem, app::ecs::ActorStateMachineSystem>();
 
+		// AquaDash: 入力転写 → スプライン走行 → ワールド変換の順で流す。
+		aq::ecs::EntityContext::Get().AddSystem<app::ecs::PlayerInputSystem>();
+		aq::ecs::EntityContext::Get().AddSystem<app::ecs::SpeedCharacterSystem,
+			app::ecs::PlayerInputSystem>();
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::HierarcicalTransformSystem, app::ecs::SpeedCharacterSystem>();
+
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CameraSteeringSystem,
 			aq::ecs::HierarcicalTransformSystem>();
+		// AquaDash: 自動カメラは走行結果の distance を使うため SpeedCharacterSystem の後。
+		aq::ecs::EntityContext::Get().AddSystem<app::ecs::AutoCameraSystem,
+			app::ecs::SpeedCharacterSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CameraEffectSystem,
 			app::ecs::CameraSteeringSystem>();
+		aq::ecs::EntityContext::Get().AddDependency<app::ecs::CameraEffectSystem, app::ecs::AutoCameraSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, app::ecs::CameraEffectSystem>();
 
 		// サウンド: ワールド変換確定後に 3D を反映する（HierarcicalTransformSystem に依存）。

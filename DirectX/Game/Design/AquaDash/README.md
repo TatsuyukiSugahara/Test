@@ -48,3 +48,8 @@ Game/
 - 新規アセット(`Assets/UI/AquaDash/*.screen.json` 等)の UWP パッケージ登録は未対応。
   動作確認はデスクトップ(Win32)のみ。
 - P0 の「NEXT STAGE」は同一ステージの再プレイ(StageRegistry 導入後に次ステージへ)。
+- エンジンの `Camera` に up ベクトル指定 API が無く、ループ中のカメラロールは不可。
+  P4 で `SetUp` をエンジン側へ追加してから対応する(AutoCameraComponentSystem.cpp 参照)。
+- 走行アニメが無く idle 固定(unityChan の走りモーション未導入)。スピード感演出の一部として P6 で検討。
+- 路面の見た目が無い(平坦地形の上を見えないスプラインで走る P1 最小構成)。路面メッシュ生成は後続フェーズで検討。
+- unityChan.tkm はメートル基準でないため `PLAYER_MODEL_SCALE = 0.25` で縮小している。

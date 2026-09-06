@@ -1,0 +1,10 @@
+{
+	"stages": [
+		{
+			"id": "Stage01",
+			"name": "GREEN COAST",
+			"stage": "Assets/Stages/Stage01.stage.json",
+			"thumbnail": ""
+		}
+	]
+}

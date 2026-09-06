@@ -1,0 +1,11 @@
+// Stage01 の見た目 Level。P1 は非同期ロード経路の確認用に最小構成 (マーカーのみ)。
+// 地形/プレイヤー/カメラはステージロード時にコード生成する (AquaDashStates.cpp CreateStageWorld)。
+{
+	"name": "Stage01",
+	"entities": [
+		{ "name": "StageRoot", "components": { "Transform": { "position": [0, 0, 0] } }, "children": [
+			{ "name": "StartMarker", "components": { "Transform": { "position": [0, 0, 5] } } },
+			{ "name": "GoalMarker",  "components": { "Transform": { "position": [0, 0, 900] } } }
+		] }
+	]
+}

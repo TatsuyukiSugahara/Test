@@ -1,4 +1,6 @@
 #pragma once
+#include "ECS/Entity.h"
+#include "Stage/StageData.h"
 
 
 namespace app
@@ -27,7 +29,17 @@ namespace app
 		{
 			int        selectedStageIndex = 0;   // タイトルで選んだステージ (StageList の並び順)
 			uint32_t   joinedPadMask      = 1;   // 参加プレイヤーのパッド番号ビットマスク
+			uint32_t   playerCount        = 1;   // 参加人数 (P1 は 1 固定。P5 で複数化)
 			PlayResult playResult;
+
+			/** ステージ */
+			std::vector<stage::StageListEntry> stageList;     // タイトルで読む一覧
+			std::shared_ptr<stage::StageData>  activeStage;   // ロード済みステージ定義 (不変)
+
+			/** ワールド */
+			bool  gameplayPaused = false;   // true でゲーム System (走行/判定) を停止 (リザルト用)
+			aq::ecs::EntityHandle              playerHandles[MAX_PLAYER_COUNT];
+			std::vector<aq::ecs::EntityHandle> stageEntities;   // タイトル復帰時に破棄する生成物
 		};
 	}
 }

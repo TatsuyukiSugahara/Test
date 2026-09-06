@@ -1,0 +1,40 @@
+{
+	"level": "Assets/Stages/Stage01.level.json",
+	"course": {
+		"width": 12.0,
+		"points": [
+			{ "position": [0, 0, 0],     "up": [0, 1, 0] },
+			{ "position": [0, 0, 150],   "up": [0, 1, 0] },
+			{ "position": [30, 0, 280],  "up": [0, 1, 0] },
+			{ "position": [110, 0, 380], "up": [0, 1, 0] },
+			{ "position": [110, 0, 540], "up": [0, 1, 0] },
+			{ "position": [40, 0, 660],  "up": [0, 1, 0] },
+			{ "position": [0, 0, 780],   "up": [0, 1, 0] },
+			{ "position": [0, 0, 920],   "up": [0, 1, 0] }
+		]
+	},
+	"spawn": { "distance": 5.0, "lanes": [-4.5, -1.5, 1.5, 4.5] },
+	"goal":  { "distance": 900.0 },
+	"fall":  { "heightThreshold": -30.0 },
+	"coins": [
+		{ "distance": 100.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 105.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 110.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 300.0, "lateral": -3.0, "height": 1.0 },
+		{ "distance": 305.0, "lateral": -3.0, "height": 1.0 },
+		{ "distance": 500.0, "lateral": 3.0, "height": 1.0 },
+		{ "distance": 505.0, "lateral": 3.0, "height": 1.0 },
+		{ "distance": 700.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 705.0, "lateral": 0.0, "height": 1.0 },
+		{ "distance": 710.0, "lateral": 0.0, "height": 1.0 }
+	],
+	"rank": {
+		"parTimeSec": 30.0,
+		"thresholds": [
+			{ "rank": "S", "score": 0.90 },
+			{ "rank": "A", "score": 0.70 },
+			{ "rank": "B", "score": 0.50 },
+			{ "rank": "C", "score": 0.00 }
+		]
+	}
+}

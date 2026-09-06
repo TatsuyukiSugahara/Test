@@ -127,6 +127,9 @@ namespace app
 
 		aquadash::GameContext& Context() { return context_; }
 
+		// 影の注視点 (GetFocusPosition) の対象を差し替える。
+		void SetPlayerHandle(const aq::ecs::EntityHandle& handle) { playerHandle_ = handle; }
+
 	private:
 		GameFlow() {}
 

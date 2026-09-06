@@ -83,6 +83,26 @@ namespace aq
 			                      float viewportW, float viewportH,
 			                      bool applyPostProcess = true) const;
 
+			/** 分割画面のビュー矩形 (ピクセル単位) */
+			struct ViewRect
+			{
+				float x = 0.0f;
+				float y = 0.0f;
+				float w = 0.0f;
+				float h = 0.0f;
+			};
+
+			/**
+			 * 分割画面用: 複数ビュー (カメラ毎に構築済みの RenderFrame + ビューポート矩形) を
+			 * 1 本のコマンドリストへ記録する。シャドウは frames[0] で 1 回だけ描き全ビューで共有、
+			 * G-Buffer のクリアは先頭ビューのみ、ポストプロセスと UI はビューループ後に全画面で 1 回行う。
+			 * パーティクルはエミッタ共有の動的 VB への多重書き込みを避けるため先頭ビューにのみ描く。
+			 * ビュー数 1 の分岐は設けない (その場合は従来の BuildCommandList を使うこと)。
+			 */
+			void BuildCommandListViews(RenderFrame* frames, const ViewRect* rects, const uint32_t viewCount,
+			                           RenderCommandList& outList, RenderTargetHandle rtHandle,
+			                           float viewportW, float viewportH) const;
+
 #if _DEBUG
 			/**
 			 * 同期実行（デバッグ専用）。BuildCommandList + Execute を 1 呼び出しで行う。

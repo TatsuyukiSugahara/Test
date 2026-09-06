@@ -158,6 +158,90 @@ namespace aq
 		}
 
 
+		void Renderer::BuildCommandListViews(RenderFrame* frames, const ViewRect* rects, const uint32_t viewCount,
+		                                     RenderCommandList& outList, RenderTargetHandle rtHandle,
+		                                     float viewportW, float viewportH) const
+		{
+			// Pass 1: シャドウパス (全ビュー共有。b3 はカメラ非依存なので 1 回でよい)。
+			// パス末尾のビューポート復元は全画面値になるが、直後にビュー毎へ設定し直す。
+			if (shadowRenderer_) {
+				shadowRenderer_->FillShadowCBData(frames[0].lighting, frames[0].shadow);
+				shadowRenderer_->BuildShadowCommandList(frames[0], outList, rtHandle, viewportW, viewportH);
+			}
+
+			// GPU クラスタカリングと Hi-Z は単一カメラ前提のため分割画面では使わない
+			// (フラスタムカリングは BuildRenderFrame 側でビュー毎に済んでいる)。
+
+			for (uint32_t v = 0; v < viewCount; ++v)
+			{
+				RenderFrame&    frame = frames[v];
+				const ViewRect& rect  = rects[v];
+				outList.Enqueue<SetViewportCommand>(rect.x, rect.y, rect.w, rect.h);
+
+				if (deferredRenderer_)
+				{
+					// クリアはビューポートを無視して全面に効くため、先頭ビューのみ行う。
+					deferredRenderer_->BuildGBufferCommandList(frame, outList, v == 0);
+					deferredRenderer_->BuildDecalCommandList(frame, outList);
+
+					// ライティングはフルスクリーントライアングルだが、ビューポートで領域制限され、
+					// PS は SV_POSITION 絶対座標で GBuffer を Load するため分割でも正しい。
+					deferredRenderer_->BuildLightingCommandList(frame, outList, rtHandle);
+
+					const RenderTargetHandle gbuffer0 = deferredRenderer_->GetGBuffer0Handle();
+					outList.Enqueue<SetRenderTargetWithDepthCommand>(rtHandle, gbuffer0);
+					for (const RenderItem& item : frame.forwardItems) {
+						RecordDrawItem(item, frame.camera, outList);
+					}
+					for (const InstancedRenderItem& item : frame.instancedItems) {
+						outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
+					}
+				}
+				else
+				{
+					for (const RenderItem& item : frame.items) {
+						RecordDrawItem(item, frame.camera, outList);
+					}
+					for (const RenderItem& item : frame.forwardItems) {
+						RecordDrawItem(item, frame.camera, outList);
+					}
+					for (const InstancedRenderItem& item : frame.instancedItems) {
+						outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
+					}
+				}
+
+				if (graphics::IsComputeSupported()) {
+					for (const OceanRenderItem& item : frame.oceanItems) {
+						outList.Enqueue<OceanDrawCommand>(item, frame.camera);
+					}
+				}
+
+				// パーティクルはエミッタ共有の動的 VB へ Execute 時に書き込むため、
+				// 多重書き込みを避けて先頭ビューにのみ描く (既知の制限)。
+				if (v == 0) {
+					for (const ParticleRenderItem& item : frame.particleItems) {
+						outList.Enqueue<ParticleDrawCommand>(item, frame.camera);
+					}
+					if (!frame.particleItems.empty()) {
+						outList.Enqueue<SetBlendModeCommand>(graphics::BlendMode::Opaque);
+					}
+				}
+			}
+
+			// 全画面に戻してポストプロセスと UI (どちらも画面全体を 1 回で処理する)。
+			outList.Enqueue<SetViewportCommand>(0.0f, 0.0f, viewportW, viewportH);
+			if (postProcessRenderer_ && graphics::IsComputeSupported()) {
+				postProcessRenderer_->BuildPostProcessCommandList(
+					outList, rtHandle,
+					static_cast<uint32_t>(viewportW),
+					static_cast<uint32_t>(viewportH));
+			}
+			if (uiRenderCallback_) {
+				uiRenderCallback_(outList);
+			}
+		}
+
+
 #if _DEBUG
 		void Renderer::RenderDebugSync(graphics::RenderContext& context, RenderFrame& frame)
 		{

@@ -35,6 +35,11 @@ namespace aq
 			Space  = DIK_SPACE,
 			Enter  = DIK_RETURN,
 			Escape = DIK_ESCAPE,
+
+			Num1 = DIK_1,
+			Num2 = DIK_2,
+			Num3 = DIK_3,
+			Num4 = DIK_4,
 		};
 #else
 		// UWP: DIK_ が無いため中立値。now_[256] のインデックスとして安全なら値は任意。
@@ -43,6 +48,7 @@ namespace aq
 			Left, Right, Up, Down,
 			W, A, S, D,
 			Space, Enter, Escape,
+			Num1, Num2, Num3, Num4,
 		};
 #endif
 

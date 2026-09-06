@@ -28,7 +28,8 @@ namespace aq
 			bool Create(uint32_t width, uint32_t height) override;
 
 			void BuildGBufferCommandList(const RenderFrame& frame,
-			                             RenderCommandList& outList) const override;
+			                             RenderCommandList& outList,
+			                             const bool clearTargets = true) const override;
 
 			void BuildDecalCommandList(const RenderFrame& frame,
 			                           RenderCommandList& outList) const override;

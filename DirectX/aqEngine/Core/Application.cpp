@@ -508,14 +508,42 @@ namespace aq
 		mainCmdList->Enqueue<aq::rendering::SetViewportCommand>(0.0f, 0.0f, renderW, renderH);
 		aq::rendering::RenderFrame mainFrame;
 		mainFrame.lighting = aq::graphics::LightManager::Get().GetLightingData();
+		if (splitViews_.size() >= 2)
 		{
-			AQ_PROFILE_SCOPE("BuildRenderFrame");
-			aq::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
+			// 分割画面: ビュー毎に RenderFrame を構築し、1 本のリストへマルチビュー記録する。
+			// Hi-Z オクリュージョンは単一カメラ前提のため無効、統計は先頭ビューのみ更新。
+			AQ_PROFILE_SCOPE("BuildRenderFrameViews");
+			constexpr uint32_t MAX_VIEW_COUNT = 4;
+			const uint32_t viewCount = splitViews_.size() < MAX_VIEW_COUNT
+				? static_cast<uint32_t>(splitViews_.size()) : MAX_VIEW_COUNT;
+
+			aq::rendering::RenderFrame           viewFrames[MAX_VIEW_COUNT];
+			aq::rendering::Renderer::ViewRect    viewRects[MAX_VIEW_COUNT];
+			for (uint32_t v = 0; v < viewCount; ++v)
+			{
+				viewFrames[v].lighting = mainFrame.lighting;
+				aq::ecs::RenderSystem::Get().BuildRenderFrame(
+					viewFrames[v], *splitViews_[v].camera,
+					true /*frustum*/, false /*occlusion*/, v == 0 /*stats*/);
+				viewRects[v] = splitViews_[v].rect;
+			}
+			renderer_.BuildCommandListViews(viewFrames, viewRects, viewCount, *mainCmdList,
+			                                Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+
+			// Submit に渡す per-frame CB (b1/b3) はビュー共有 (シャドウは view0 で確定)。
+			mainFrame.shadow = viewFrames[0].shadow;
 		}
+		else
 		{
-			AQ_PROFILE_SCOPE("BuildCommandList");
-			renderer_.BuildCommandList(mainFrame, *mainCmdList,
-			                          Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+			{
+				AQ_PROFILE_SCOPE("BuildRenderFrame");
+				aq::ecs::RenderSystem::Get().BuildRenderFrame(mainFrame);
+			}
+			{
+				AQ_PROFILE_SCOPE("BuildCommandList");
+				renderer_.BuildCommandList(mainFrame, *mainCmdList,
+				                          Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+			}
 		}
 #ifdef AQ_IMGUI
 		if (imguiDrawData)

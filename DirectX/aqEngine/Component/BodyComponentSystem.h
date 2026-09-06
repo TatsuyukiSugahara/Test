@@ -317,6 +317,16 @@ namespace aq
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame);
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame, aq::CameraType cameraType);
 
+			/**
+			 * カメラ直指定版 (分割画面のビュー毎構築用)。
+			 * @param enableFrustumCulling ビュー視錐台でのフラスタムカリングを行うか
+			 * @param enableOcclusion      Hi-Z オクリュージョンを行うか (複数ビューでは単一カメラ前提が崩れるため false 推奨)
+			 * @param updateStats          カリング統計 (デバッグ表示) を更新するか (1 ビューのみ true にする)
+			 */
+			void BuildRenderFrame(aq::rendering::RenderFrame& frame, const aq::Camera& viewCamera,
+			                      const bool enableFrustumCulling, const bool enableOcclusion,
+			                      const bool updateStats);
+
 			// --- フラスタムカリング ---
 			static void SetFrustumCullingEnabled(bool enabled) { frustumCullingEnabled_ = enabled; }
 			static bool IsFrustumCullingEnabled()              { return frustumCullingEnabled_; }

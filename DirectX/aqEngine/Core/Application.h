@@ -19,12 +19,24 @@
 
 namespace aq
 {
+	class Camera;
+
+
 	/**
 	 * エンジンサブシステムの初期化・更新・終了を担うアプリケーション基底クラス。
 	 * ゲーム側は OnInitialize / OnFinalize / OnUpdate / OnRegister / OnPreRender を override する。
 	 */
 	class Application : public IApplication
 	{
+	public:
+		/** 分割画面の 1 ビュー (カメラ + ビューポート矩形)。camera の寿命は設定側が保証する */
+		struct SplitView
+		{
+			const Camera*                 camera = nullptr;
+			rendering::Renderer::ViewRect rect;
+		};
+
+
 	protected:
 		aq::rendering::Renderer     renderer_;
 		aq::rendering::RenderThread renderThread_;
@@ -32,6 +44,15 @@ namespace aq
 	private:
 		bool renderThreadReady_ = false;
 		std::unique_ptr<aq::rendering::HiZRenderer> hiZRenderer_;  // オクリュージョン基盤 (Hi-Z)
+
+		/** 分割画面ビュー (2 個以上でマルチビュー描画。空 or 1 個は従来の単一ビュー経路) */
+		std::vector<SplitView> splitViews_;
+
+
+	public:
+		/** 分割画面ビューを設定する (次フレームから有効。ステージ退出時などは Clear すること) */
+		void SetSplitViews(const std::vector<SplitView>& views) { splitViews_ = views; }
+		void ClearSplitViews() { splitViews_.clear(); }
 
 	public:
 		bool Initialize(aq::graphics::RenderContext& renderContext) override;

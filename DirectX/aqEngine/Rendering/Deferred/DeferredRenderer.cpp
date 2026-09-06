@@ -92,7 +92,8 @@ namespace aq
 
 		void DeferredRenderer::BuildGBufferCommandList(
 			const RenderFrame& frame,
-			RenderCommandList& outList) const
+			RenderCommandList& outList,
+			const bool clearTargets) const
 		{
 			// MRT バインド（GBuffer0-3）
 			const RenderTargetHandle handles[4] = {
@@ -101,11 +102,15 @@ namespace aq
 			};
 			outList.Enqueue<SetRenderTargetCommand>(4u, handles);
 
-			// カラー × 4 クリア
-			static const float kClearBlack[4] = { 0.f, 0.f, 0.f, 0.f };
-			for (uint32_t i = 0; i < 4; ++i)
-				outList.Enqueue<ClearRenderTargetCommand>(i, kClearBlack);
-			outList.Enqueue<ClearDepthCommand>();
+			// カラー × 4 クリア。クリアはビューポートを無視して全面に効くため、
+			// 分割画面の 2 ビュー目以降では省略する（前ビューの結果を消さない）。
+			if (clearTargets)
+			{
+				static const float kClearBlack[4] = { 0.f, 0.f, 0.f, 0.f };
+				for (uint32_t i = 0; i < 4; ++i)
+					outList.Enqueue<ClearRenderTargetCommand>(i, kClearBlack);
+				outList.Enqueue<ClearDepthCommand>();
+			}
 
 			// G-Buffer ドローコール（gbufferPS を持つアイテムのみ）
 			for (const RenderItem& item : frame.items)

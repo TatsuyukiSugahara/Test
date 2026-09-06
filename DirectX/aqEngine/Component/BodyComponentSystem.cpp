@@ -509,31 +509,41 @@ namespace aq
 
 		void RenderSystem::BuildRenderFrame(aq::rendering::RenderFrame& frame, aq::CameraType cameraType)
 		{
-			const auto* camera = CameraManager::Get().GetCamera(cameraType);
+			// Main のときだけカリングと統計を有効にする従来挙動を維持する。
+			const bool isMain = (cameraType == CameraType::Main);
+			BuildRenderFrame(frame, *CameraManager::Get().GetCamera(cameraType), isMain, isMain, isMain);
+		}
+
+
+		void RenderSystem::BuildRenderFrame(aq::rendering::RenderFrame& frame, const aq::Camera& viewCamera,
+		                                    const bool enableFrustumCulling, const bool enableOcclusion,
+		                                    const bool updateStats)
+		{
+			const auto* camera = &viewCamera;
 			frame.camera.viewMatrix       = camera->GetViewMatrix();
 			frame.camera.projectionMatrix = camera->GetProjectionMatrix();
 			frame.camera.position         = camera->GetPosition();
 			frame.camera.nearZ            = camera->GetNear();
 			frame.camera.farZ             = camera->GetFar();
 
-			// 現在の方針: 同じ描画対象を cameraType で指定した別カメラから映す。
+			// 現在の方針: 同じ描画対象を指定カメラから映す。
 			// カメラごとに描画対象を絞りたい場合は RenderItem / Component 側に
 			// RenderLayer 等を追加して検討する。
 
 			// --- フラスタムカリング 準備 ---
-			// メインカメラの視錐台でアイテムを絞る。バウンディング未確定 (hasBounds==false)
+			// 指定カメラの視錐台でアイテムを絞る。バウンディング未確定 (hasBounds==false)
 			// のアイテムは保守的に常に可視とする。影 (castShadow) はライト視錐台で別途
-			// 判定すべきため、ここではメインカメラ視錐台で切らない。
+			// 判定すべきため、ここではカメラ視錐台で切らない。
 			math::Frustum frustum;
 			frustum.FromViewProjection(camera->GetViewProjectionMatrix());
-			const bool cullEnabled = frustumCullingEnabled_ && (cameraType == CameraType::Main);
+			const bool cullEnabled = frustumCullingEnabled_ && enableFrustumCulling;
 
 			// オクリュージョン用 viewProj (= view * projection) と near/far
 			const math::Matrix4x4 viewProj = camera->GetViewProjectionMatrix();
 			const float occNear = camera->GetNear();
 			const float occFar  = camera->GetFar();
 			const bool occEnabled = occlusionCullingEnabled_ && (occlusionTester_ != nullptr)
-			                      && (cameraType == CameraType::Main);
+			                      && enableOcclusion;
 
 			uint32_t cullTotal   = 0;
 			uint32_t cullVisible = 0;
@@ -559,7 +569,7 @@ namespace aq
 			// 可視アイテムのクラスタを集計し、フラスタム+バックフェース錐で削減可能な
 			// 三角形量を計測する (まだ描画は減らさない・潜在効果の可視化)。
 			const math::Vector3 camPos = camera->GetPosition();
-			const bool clusterStats = clusterStatsEnabled_ && (cameraType == CameraType::Main);
+			const bool clusterStats = clusterStatsEnabled_ && updateStats;
 			uint32_t clTotal = 0, clVis = 0, triTotal = 0, triVis = 0;
 			uint32_t coneUsable = 0, backfaceCulled = 0;
 			auto accumClusters = [&](const aq::rendering::RenderItem& item,
@@ -734,8 +744,8 @@ namespace aq
 					});
 			}
 
-			// メインカメラのカリング統計を記録 (デバッグ表示用)
-			if (cameraType == CameraType::Main)
+			// カリング統計を記録 (デバッグ表示用。従来どおりメイン相当のビューのみ)
+			if (updateStats)
 			{
 				cullingTotalCount_   = cullTotal;
 				cullingVisibleCount_ = cullVisible;

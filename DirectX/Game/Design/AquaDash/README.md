@@ -42,6 +42,12 @@ Game/
 
 ## 既知の課題
 
+- **[設計メモ 2026-09-06] System からの `GameFlow::Get().Context()` 参照はサービスロケータ的で ECS の依存管理から見えない。**
+  現状は「EntityContext::Update(ワーカー並列)完了後に GameFlow::Update(メイン)」の順序と
+  「System は Context を読み取り専用」という契約(GameContext.h に明記)で安全だが、コードで強制されない。
+  あるべき形はシングルトンエンティティ+`SessionComponent` 化(共有状態を ECS に載せ、依存をスケジューラに見せる)。
+  リファクタは保留中 — 着手時は CoinSystem / SpeedCharacterSystem / AutoCameraSystem / 状態クラスが対象。
+
 - 旧「残刃」フロー(GameFlow.cpp 内の TitleState / LoadingState / PlayingState と Title 画面)が
   未接続のまま残存。BootState も残刃用 CorporateLogo フォントの準備完了を待ち続けている。
   残すか削除するか P7 で判断する。

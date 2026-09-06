@@ -97,6 +97,10 @@ namespace app
 			auto bloom = std::make_unique<aq::rendering::BloomRenderer>();
 			if (bloom->Initialize(renderW, renderH))
 			{
+				// カメラモーションブラー用に GBuffer2 (worldPos) を渡す (ディファード有効時のみ)。
+				if (auto* dr = dynamic_cast<aq::rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer())) {
+					bloom->SetWorldPosRT(dr->GetGBuffer2Handle());
+				}
 				renderer_.SetPostProcessRenderer(std::move(bloom));
 			}
 		}
@@ -139,6 +143,30 @@ namespace app
 			auto pos = app::GameFlow::Get().GetFocusPosition();
 			pos.y += 2.0f;
 			renderer_.GetShadowRenderer()->SetSceneCenter(pos);
+		}
+
+		// スピード感演出: 速度に応じたカメラモーションブラー強度 (タイトル/リザルトでは 0 で無効)。
+		if (auto* postProcess = renderer_.GetPostProcessRenderer())
+		{
+			constexpr float BLUR_SPEED_MIN     = 30.0f;   // [m/s] これ以下はブラーなし
+			constexpr float BLUR_SPEED_MAX     = 83.0f;   // [m/s] 最高速
+			constexpr float BLUR_MAX_STRENGTH  = 0.6f;    // 速度ベクトル (px) に掛けるスケール
+
+			float strength = 0.0f;
+			const auto& context = app::GameFlow::Get().Context();
+			if (context.activeStage && !context.gameplayPaused)
+			{
+				auto& ctx = aq::ecs::EntityContext::Get();
+				if (ctx.IsValid(context.playerHandle)) {
+					if (const auto* character =
+							ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle)) {
+						float rate = (character->speed - BLUR_SPEED_MIN) / (BLUR_SPEED_MAX - BLUR_SPEED_MIN);
+						rate = rate < 0.0f ? 0.0f : (rate > 1.0f ? 1.0f : rate);
+						strength = rate * BLUR_MAX_STRENGTH;
+					}
+				}
+			}
+			postProcess->SetMotionBlurStrength(strength);
 		}
 	}
 

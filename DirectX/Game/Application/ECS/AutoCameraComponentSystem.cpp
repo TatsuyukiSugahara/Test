@@ -11,6 +11,13 @@ namespace app
 	{
 		namespace
 		{
+			/** 速度連動 FOV (スピード感演出)。エンジンのカメラ既定は 90° */
+			static constexpr float BASE_FOV_DEG    = 90.0f;
+			static constexpr float MAX_FOV_ADD_DEG = 13.0f;   // 最高速時の加算量
+			static constexpr float FOV_SPEED_MIN   = 30.0f;   // [m/s] これ以下は基準 FOV
+			static constexpr float FOV_SPEED_MAX   = 83.0f;   // [m/s] 最高速
+
+
 			// 指数平滑の補間係数 (フレームレート非依存)。
 			float SmoothFactor(const float sharpness, const float dt)
 			{
@@ -73,11 +80,23 @@ namespace app
 						}
 					}
 
+					// 速度連動 FOV (リザルト中は基準へ戻す)。急変を避けて平滑する。
+					{
+						float speedRate = 0.0f;
+						if (!GameFlow::Get().Context().gameplayPaused) {
+							speedRate = (character->speed - FOV_SPEED_MIN) / (FOV_SPEED_MAX - FOV_SPEED_MIN);
+							speedRate = speedRate < 0.0f ? 0.0f : (speedRate > 1.0f ? 1.0f : speedRate);
+						}
+						const float targetFov = BASE_FOV_DEG + MAX_FOV_ADD_DEG * speedRate;
+						autoCam->smoothedFovDeg += (targetFov - autoCam->smoothedFovDeg) * SmoothFactor(6.0f, dt);
+					}
+
 					aq::Camera* const camera = aq::CameraManager::Get().GetCamera(autoCam->cameraType);
 					if (camera) {
 						camera->SetPosition(autoCam->smoothedPosition);
 						camera->SetTarget(autoCam->smoothedTarget);
 						camera->SetUp(autoCam->smoothedUp);
+						camera->SetViewAngle(aq::math::DegToRadian(autoCam->smoothedFovDeg));
 					}
 				});
 		}

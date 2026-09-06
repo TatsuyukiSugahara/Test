@@ -41,6 +41,7 @@ namespace app
 			aq::math::Vector3 smoothedPosition = {};
 			aq::math::Vector3 smoothedTarget   = {};
 			aq::math::Vector3 smoothedUp       = { 0.0f, 1.0f, 0.0f };
+			float             smoothedFovDeg   = 90.0f;   // 速度連動 FOV (基準 90°)
 			bool              initialized      = false;
 		};
 

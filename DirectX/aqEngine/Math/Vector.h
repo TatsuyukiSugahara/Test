@@ -35,6 +35,34 @@ namespace aq
 				return *this;
 			}
 
+			/** 加算 */
+			Vector2 operator+(const Vector2& v) const
+			{
+				return Vector2(x + v.x, y + v.y);
+			}
+			/** 減算 */
+			Vector2 operator-(const Vector2& v) const
+			{
+				return Vector2(x - v.x, y - v.y);
+			}
+			/** スカラー倍 */
+			Vector2 operator*(float s) const
+			{
+				return Vector2(x * s, y * s);
+			}
+			Vector2& operator+=(const Vector2& v)
+			{
+				x += v.x;
+				y += v.y;
+				return *this;
+			}
+			Vector2& operator-=(const Vector2& v)
+			{
+				x -= v.x;
+				y -= v.y;
+				return *this;
+			}
+
 			/** 一致するか */
 			inline bool IsEquals(const Vector2& v, const float value = FLT_EPSILON) const
 			{

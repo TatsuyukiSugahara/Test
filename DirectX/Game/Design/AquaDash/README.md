@@ -17,19 +17,22 @@ AI 駆動開発の題材として「設計 → 実装 → 評価」のサイク�
 | [04_描画_分割画面_UI設計.md](04_描画_分割画面_UI設計.md) | 4 人分割画面、モーションブラー、HUD / ミニマップ |
 | [05_実装フェーズ計画.md](05_実装フェーズ計画.md) | フェーズ分割と各フェーズの評価チェックリスト |
 
-## 予定フォルダ構成(実装開始時に作成)
+## フォルダ構成
+
+AquaDash 専用フォルダは作らず、**Game 直下の既存構成に統合**する
+(エンジンだけ流用する際は Game フォルダごと差し替える方針のため、Game 内での二重の名前空間は不要)。
 
 ```
 Game/
 ├── Design/AquaDash/          … 本設計書一式(このフォルダ)
 ├── Application/
-│   └── AquaDash/             … ゲーム固有コード(状態 / Component / System)
-│       ├── Flow/             … TitleState / InGameState / ResultState 等
-│       ├── ECS/              … SpeedCharacter / Coin / Goal / SplitCamera 等
-│       └── UI/               … HUD / ミニマップ / リザルト画面
+│   ├── Flow/                 … GameContext / TitleState / InGameState / ResultState 等
+│   ├── ECS/                  … SpeedCharacter / Coin / Goal / AutoCamera 等(既存 Actor 系と同居)
+│   ├── Stage/                … ステージデータ(スプライン / StageRegistry)
+│   └── UI/                   … 画面クラス(タイトル / HUD / リザルト)
 └── Assets/
     ├── Stages/               … *.stage.json + 参照する *.level.json
-    └── UI/AquaDash/          … タイトル / HUD 用テクスチャ
+    └── UI/AquaDash/          … 画面レイアウト JSON(既存 Title.screen.json との名前衝突回避のためサブフォルダ維持)
 ```
 
 - エンジン側に手を入れる項目(分割画面ビュー、モーションブラー、ゲームパッド 4 台)は

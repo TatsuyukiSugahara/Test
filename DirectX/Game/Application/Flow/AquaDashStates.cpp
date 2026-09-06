@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "AquaDashStates.h"
-#include "AquaDash/UI/AquaDashScreens.h"
+#include "UI/AquaDashScreens.h"
 #include "GameInput.h"
 #include "GameAction.h"
 #include "Sound/SoundClip.h"

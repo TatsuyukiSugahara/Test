@@ -3,8 +3,8 @@
 #include "GameInput.h"
 #include "GameAction.h"
 #include "Actor/StateMachine.h"
-#include "AquaDash/Flow/AquaDashStates.h"
-#include "AquaDash/UI/AquaDashScreens.h"
+#include "Flow/AquaDashStates.h"
+#include "UI/AquaDashScreens.h"
 
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"

@@ -3,7 +3,7 @@
 > 対象コミット: ccfce22 / 最終更新: 2026-09-06
 > 対応要求: R-05, R-07〜R-11, R-13, R-15([00_企画概要.md](00_企画概要.md))
 
-ゲーム固有の Component / System を定義する。配置は `Game/Application/AquaDash/ECS/`、
+ゲーム固有の Component / System を定義する。配置は `Game/Application/ECS/`(既存 Actor 系と同居)、
 名前空間は `app::ecs`。既存の `ActorComponentSystem` / `CameraSteeringComponentSystem` の
 流儀(Component にデータ、System に処理、`aq::ecs::Foreach<T>`)に合わせる。
 

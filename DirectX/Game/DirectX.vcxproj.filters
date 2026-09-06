@@ -7,13 +7,10 @@
     <Filter Include="Actor">
       <UniqueIdentifier>{6ca76a0e-faaa-433d-8b01-adf2ccafc9d2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="AquaDash">
-      <UniqueIdentifier>{c4a07b46-184b-402f-ad0a-dbfc52d2c061}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="AquaDash\Flow">
+    <Filter Include="Flow">
       <UniqueIdentifier>{e39ecd30-5990-473a-9b16-1691c0fd1ba2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="AquaDash\UI">
+    <Filter Include="UI">
       <UniqueIdentifier>{f1f5c0a6-a6f6-4b7f-9e0b-50035f3dabdf}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -36,11 +33,11 @@
     <ClCompile Include="Application\Actor\StateMachine.cpp">
       <Filter>Actor</Filter>
     </ClCompile>
-    <ClCompile Include="Application\AquaDash\Flow\AquaDashStates.cpp">
-      <Filter>AquaDash\Flow</Filter>
+    <ClCompile Include="Application\Flow\AquaDashStates.cpp">
+      <Filter>Flow</Filter>
     </ClCompile>
-    <ClCompile Include="Application\AquaDash\UI\AquaDashScreens.cpp">
-      <Filter>AquaDash\UI</Filter>
+    <ClCompile Include="Application\UI\AquaDashScreens.cpp">
+      <Filter>UI</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -62,14 +59,14 @@
     <ClInclude Include="Application\Actor\StateMachine.h">
       <Filter>Actor</Filter>
     </ClInclude>
-    <ClInclude Include="Application\AquaDash\Flow\GameContext.h">
-      <Filter>AquaDash\Flow</Filter>
+    <ClInclude Include="Application\Flow\GameContext.h">
+      <Filter>Flow</Filter>
     </ClInclude>
-    <ClInclude Include="Application\AquaDash\Flow\AquaDashStates.h">
-      <Filter>AquaDash\Flow</Filter>
+    <ClInclude Include="Application\Flow\AquaDashStates.h">
+      <Filter>Flow</Filter>
     </ClInclude>
-    <ClInclude Include="Application\AquaDash\UI\AquaDashScreens.h">
-      <Filter>AquaDash\UI</Filter>
+    <ClInclude Include="Application\UI\AquaDashScreens.h">
+      <Filter>UI</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -512,6 +512,8 @@ namespace aq
 		{
 			// 分割画面: ビュー毎に RenderFrame を構築し、1 本のリストへマルチビュー記録する。
 			// Hi-Z オクリュージョンは単一カメラ前提のため無効、統計は先頭ビューのみ更新。
+			// インスタンス gather + Flush も 1 フレーム 1 回に保つため先頭ビューのみで行い、
+			// 他ビューはビュー0 の視錐台で切った結果を共有する(パーティクルと同じ制限)。
 			AQ_PROFILE_SCOPE("BuildRenderFrameViews");
 			constexpr uint32_t MAX_VIEW_COUNT = 4;
 			const uint32_t viewCount = splitViews_.size() < MAX_VIEW_COUNT
@@ -524,7 +526,7 @@ namespace aq
 				viewFrames[v].lighting = mainFrame.lighting;
 				aq::ecs::RenderSystem::Get().BuildRenderFrame(
 					viewFrames[v], *splitViews_[v].camera,
-					true /*frustum*/, false /*occlusion*/, v == 0 /*stats*/);
+					true /*frustum*/, false /*occlusion*/, v == 0 /*stats*/, v == 0 /*gather*/);
 				viewRects[v] = splitViews_[v].rect;
 			}
 			renderer_.BuildCommandListViews(viewFrames, viewRects, viewCount, *mainCmdList,

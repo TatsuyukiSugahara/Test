@@ -9,6 +9,7 @@
 #include "Component/OceanComponent.h"
 
 namespace aq { namespace rendering { class IOcclusionTester; } }
+namespace aq { namespace graphics { class InstancedStaticMesh; } }
 
 
 namespace aq
@@ -70,6 +71,17 @@ namespace aq
 			// Prefab の構成要素として追加・生成できるよう空の Reflect を提供する。
 			template <typename V>
 			void Reflect(V&) {}
+
+
+		public:
+			/**
+			 * 箱ジオメトリをインスタンス描画用の共有メッシュとして名前登録する。
+			 * 単位キューブのローカル AABB まで設定するので per-instance フラスタムカリングが効く。
+			 * 既に同名が登録済みならそれを返す。デバイス準備後・ForEach 外の安全点で呼ぶこと。
+			 * @param name InstancedStaticMeshComponent::SetMesh に渡す登録名
+			 * @return 登録された (or 既存の) 共有メッシュ。寿命は名前レジストリが持つ
+			 */
+			static aq::graphics::InstancedStaticMesh* RegisterInstancedMesh(const char* name);
 		};
 
 		class StaticMeshComponent : public aq::ecs::IComponent
@@ -330,10 +342,13 @@ namespace aq
 			 * @param enableFrustumCulling ビュー視錐台でのフラスタムカリングを行うか
 			 * @param enableOcclusion      Hi-Z オクリュージョンを行うか (複数ビューでは単一カメラ前提が崩れるため false 推奨)
 			 * @param updateStats          カリング統計 (デバッグ表示) を更新するか (1 ビューのみ true にする)
+			 * @param gatherInstances      インスタンス描画の gather + Flush を行うか
+			 *                             (Flush は 1 フレーム 1 回。分割画面では先頭ビューのみ true にし、
+			 *                              以降のビューはビュー0 の視錐台で切った結果を共有する)
 			 */
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame, const aq::Camera& viewCamera,
 			                      const bool enableFrustumCulling, const bool enableOcclusion,
-			                      const bool updateStats);
+			                      const bool updateStats, const bool gatherInstances = true);
 
 			// --- フラスタムカリング ---
 			static void SetFrustumCullingEnabled(bool enabled) { frustumCullingEnabled_ = enabled; }

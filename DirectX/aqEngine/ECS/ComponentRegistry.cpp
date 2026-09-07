@@ -284,6 +284,10 @@ namespace aq
 					auto& points = comp->Points();
 					ImGui::Text("points: %d", static_cast<int>(points.size()));
 
+					// 姿勢・色付きの点(コード生成専用)は点数のみ表示する。非空ならこちらが優先される。
+					ImGui::Text("instance points: %d (used if > 0)",
+						static_cast<int>(comp->InstancePointCount()));
+
 					int removeIndex = -1;
 					for (int i = 0; i < static_cast<int>(points.size()); ++i)
 					{

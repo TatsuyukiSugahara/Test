@@ -130,6 +130,25 @@ namespace aq
 			}
 		}
 
+
+		aq::graphics::InstancedStaticMesh* BoxStaticMeshComponent::RegisterInstancedMesh(const char* name)
+		{
+			// 箱ジオメトリはこの翻訳単位の無名 namespace にあるため、ゲーム側からは
+			// このヘルパ経由でしかインスタンス用の共有メッシュを作れない。
+			auto* mesh = aq::graphics::InstancedStaticMesh::RegisterFromData(
+				name,
+				BOX_VERTEX_BUFFER, ArraySize(BOX_VERTEX_BUFFER), sizeof(aq::graphics::VertexData),
+				BOX_INDEX_BUFFER,  ArraySize(BOX_INDEX_BUFFER),
+				aq::graphics::StaticMesh::ShaderType::InstancedSimple);
+			if (mesh == nullptr) { return nullptr; }
+
+			// ±0.5 の単位キューブ。per-instance フラスタムカリングの対象にするため明示指定する。
+			mesh->SetLocalBounds(aq::math::AABB(
+				aq::math::Vector3(0.0f, 0.0f, 0.0f),
+				aq::math::Vector3(0.5f, 0.5f, 0.5f)));
+			return mesh;
+		}
+
 		/*******************************************/
 		StaticMeshComponent::StaticMeshComponent()
 			: componentState_(ComponentState::Invalid)
@@ -481,41 +500,6 @@ namespace aq
 				{
 					decalComponent->Update();
 				});
-
-			// 点群インスタンス gather: InstancedStaticMeshComponent の mesh を PointList の各座標へ
-			// 配置する(1エンティティが多数インスタンスを表す)。座標はエンティティローカルとして扱い、
-			// エンティティのワールド変換を掛ける(エンティティを回せば群全体が周回する)。この Update は
-			// 単一走査なので競合しない。登録メッシュは最後に一括 Flush する(毎フレーム必ず)。
-			aq::ecs::Foreach<HierarchicalTransformComponent, InstancedStaticMeshComponent, InstancedPointListComponent>(
-				[](const aq::ecs::Entity&, HierarchicalTransformComponent* hierarchicalTransformComponent,
-				   InstancedStaticMeshComponent* meshComponent, InstancedPointListComponent* pointList)
-				{
-					auto* mesh = meshComponent->GetMesh();
-					if (mesh == nullptr) { return; }
-
-					// エンティティのワールド行列(S·R·T)。群全体の位置・向き・スケールを与える。
-					aq::math::Matrix4x4 es, er, et, esr, entityWorld;
-					es.MakeScaling(hierarchicalTransformComponent->transform.scale);
-					er.MakeRotationFromQuaternion(hierarchicalTransformComponent->transform.rotation);
-					et.MakeTranslation(hierarchicalTransformComponent->transform.position);
-					esr.Mull(es, er);
-					entityWorld.Mull(esr, et);
-
-					const float s = pointList->GetScale();
-					for (const aq::math::Vector3& p : pointList->GetPoints())
-					{
-						// ローカル: メッシュを scale して座標 p へ。世界: local · entityWorld。
-						aq::math::Matrix4x4 local, world;
-						local.MakeScaling(aq::math::Vector3(s));
-						local._41 = p.x;   // 平行移動(行優先: 並進は第4行)
-						local._42 = p.y;
-						local._43 = p.z;
-						world.Mull(local, entityWorld);
-						mesh->AddInstance(world);
-					}
-				});
-
-			aq::graphics::InstancedStaticMesh::FlushAllRegistered();
 		}
 
 
@@ -535,7 +519,7 @@ namespace aq
 
 		void RenderSystem::BuildRenderFrame(aq::rendering::RenderFrame& frame, const aq::Camera& viewCamera,
 		                                    const bool enableFrustumCulling, const bool enableOcclusion,
-		                                    const bool updateStats)
+		                                    const bool updateStats, const bool gatherInstances)
 		{
 			const auto* camera = &viewCamera;
 			frame.camera.viewMatrix       = camera->GetViewMatrix();
@@ -635,6 +619,74 @@ namespace aq
 						frame.forwardItems.push_back(item);
 					}
 				});
+
+			// 点群インスタンス gather: InstancedStaticMeshComponent の mesh を PointList の各点へ
+			// 配置する(1エンティティが多数インスタンスを表す)。点はエンティティローカルとして扱い、
+			// エンティティのワールド変換を掛ける(エンティティを回せば群全体が周回する)。
+			// ここで積むのは、確定済みの視錐台で per-instance 判定するため。登録メッシュは
+			// 最後に一括 Flush する(毎フレーム必ず1回)。
+			if (gatherInstances)
+			{
+				aq::ecs::Foreach<HierarchicalTransformComponent, InstancedStaticMeshComponent, InstancedPointListComponent>(
+					[&frustum, cullEnabled](const aq::ecs::Entity&, HierarchicalTransformComponent* hierarchicalTransformComponent,
+					   InstancedStaticMeshComponent* meshComponent, InstancedPointListComponent* pointList)
+					{
+						auto* mesh = meshComponent->GetMesh();
+						if (mesh == nullptr) { return; }
+
+						// エンティティのワールド行列(S·R·T)。群全体の位置・向き・スケールを与える。
+						aq::math::Matrix4x4 es, er, et, esr, entityWorld;
+						es.MakeScaling(hierarchicalTransformComponent->transform.scale);
+						er.MakeRotationFromQuaternion(hierarchicalTransformComponent->transform.rotation);
+						et.MakeTranslation(hierarchicalTransformComponent->transform.position);
+						esr.Mull(es, er);
+						entityWorld.Mull(esr, et);
+
+						// 明示ローカル AABB がある場合のみ per-instance フラスタム判定を行う
+						// (未設定のメッシュは従来どおり常に積む)。
+						const bool instanceCull = cullEnabled && mesh->HasLocalBounds();
+						auto isInstanceVisible = [&](const aq::math::Matrix4x4& world) -> bool
+						{
+							if (!instanceCull) { return true; }
+							return frustum.Intersects(mesh->GetLocalBounds().Transformed(world));
+						};
+
+						// 姿勢・非一様スケール・色付きの点があればそちらを使う。
+						if (!pointList->GetInstancePoints().empty())
+						{
+							for (const InstancePoint& p : pointList->GetInstancePoints())
+							{
+								aq::math::Matrix4x4 ls, lr, lt, lsr, local, world;
+								ls.MakeScaling(p.scale);
+								lr.MakeRotationFromQuaternion(p.rotation);
+								lt.MakeTranslation(p.position);
+								lsr.Mull(ls, lr);
+								local.Mull(lsr, lt);
+								world.Mull(local, entityWorld);
+								if (!isInstanceVisible(world)) { continue; }
+								mesh->AddInstance(world, p.color);
+							}
+							return;
+						}
+
+						// 従来互換: 位置のみ + 全点共通の一様スケール(色は白)。
+						const float s = pointList->GetScale();
+						for (const aq::math::Vector3& p : pointList->GetPoints())
+						{
+							// ローカル: メッシュを scale して座標 p へ。世界: local · entityWorld。
+							aq::math::Matrix4x4 local, world;
+							local.MakeScaling(aq::math::Vector3(s));
+							local._41 = p.x;   // 平行移動(行優先: 並進は第4行)
+							local._42 = p.y;
+							local._43 = p.z;
+							world.Mull(local, entityWorld);
+							if (!isInstanceVisible(world)) { continue; }
+							mesh->AddInstance(world);
+						}
+					});
+
+				aq::graphics::InstancedStaticMesh::FlushAllRegistered();
+			}
 
 			// インスタンス描画アイテム(1メッシュ=1ドロー)。Flush 済みの登録メッシュから収集する。
 			aq::graphics::InstancedStaticMesh::CollectRenderItems(frame.instancedItems);

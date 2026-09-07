@@ -64,10 +64,18 @@ namespace aq
 
 		void InstancedStaticMesh::AddInstance(const math::Matrix4x4& world)
 		{
-			// float4x4(iWorld0..3) が CB 経路と同姿勢になるよう転置して格納する。
+			// 色指定なしは白。既存呼び出しの互換のため色付き版へ委譲する。
+			AddInstance(world, math::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+		}
+
+
+		void InstancedStaticMesh::AddInstance(const math::Matrix4x4& world, const math::Vector4& color)
+		{
+			// float4x4(iWorld0..3) が CB 経路と同姿勢になるよう転置して格納する。色は非転置でそのまま。
 			InstanceData data;
 			data.world = world;
 			data.world.Transpose();
+			data.color = color;
 			pendingInstances_.push_back(data);
 		}
 

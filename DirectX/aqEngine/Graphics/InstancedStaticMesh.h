@@ -27,13 +27,15 @@ namespace aq
 		class InstancedStaticMesh
 		{
 		public:
-			// per-instance データ(slot1 頂点ストリーム。InstancedSimple.fx の I_WORLD0..3 と一致)。
+			// per-instance データ(slot1 頂点ストリーム。InstancedSimple.fx の I_WORLD0..3 / I_COLOR と一致)。
 			// world は「転置済み」で格納する(float4x4(行) が CB 経路と同姿勢になるため)。
+			// color はそのまま格納する(RGBA)。
 			struct InstanceData
 			{
 				math::Matrix4x4 world;
+				math::Vector4   color;
 			};
-			static_assert(sizeof(InstanceData) == 64, "InstanceData は 64B(float4x4)であること");
+			static_assert(sizeof(InstanceData) == 80, "InstanceData は 80B(float4x4 + float4)であること");
 
 		private:
 			// 再確保した旧インスタンスVBを in-flight ぶん保持してから解放する(局所遅延破棄)。
@@ -63,6 +65,10 @@ namespace aq
 			std::vector<InstanceData>      pendingInstances_;       // gather 中の積み先(capacity 維持)
 			std::vector<RetiredBuffer>     retiredBuffers_;         // 遅延破棄待ちの旧VB
 
+			/** 共有ジオメトリのローカル AABB(明示指定時のみ。per-instance カリングに使う) */
+			math::AABB                     localBounds_;
+			bool                           hasLocalBounds_ = false;
+
 
 		public:
 			InstancedStaticMesh()  = default;
@@ -78,8 +84,25 @@ namespace aq
 			void Initialize(aq::res::RefMeshResource meshResource, aq::res::RefGPUResource albedo,
 			                StaticMesh::ShaderType shaderType);
 
-			/** gather: この mesh のインスタンスを1件積む(world は非転置で渡す。内部で転置格納)。 */
+			/** gather: この mesh のインスタンスを1件積む(world は非転置で渡す。内部で転置格納)。色は白。 */
 			void AddInstance(const math::Matrix4x4& world);
+
+			/** gather: 色付きでインスタンスを1件積む(world は非転置で渡す。内部で転置格納)。 */
+			void AddInstance(const math::Matrix4x4& world, const math::Vector4& color);
+
+			/**
+			 * 共有ジオメトリの明示ローカル AABB を設定する。
+			 * 空間は per-instance のワールド行列を掛ける前のメッシュローカル空間
+			 * (StaticMesh::SetLocalBounds と同一契約)。設定すると per-instance
+			 * フラスタムカリングの対象になる。
+			 */
+			inline void SetLocalBounds(const math::AABB& aabb) { localBounds_ = aabb; hasLocalBounds_ = true; }
+
+			/** 明示ローカル AABB。未設定なら既定値(潰れた AABB)。 */
+			inline const math::AABB& GetLocalBounds() const { return localBounds_; }
+
+			/** 明示ローカル AABB が設定済みか */
+			inline bool HasLocalBounds() const { return hasLocalBounds_; }
 
 			/** 毎フレーム必ず呼ぶ。pending を動的VBへ書込み instanceCount_ を確定し、retired を計時する。 */
 			void FlushInstances();

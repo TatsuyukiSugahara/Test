@@ -22,6 +22,7 @@ struct VSInput
     float4 iWorld1  : I_WORLD1;
     float4 iWorld2  : I_WORLD2;
     float4 iWorld3  : I_WORLD3;
+    float4 iColor   : I_COLOR;       // slot1(per-instance・RGBA)
 };
 /**
  * ピクセルシェーダーの入力
@@ -30,6 +31,7 @@ struct PSInput
 {
     float4 position : SV_Position;
     float2 tex      : TEXCOORD0;
+    float4 color    : COLOR0;
 };
 
 /**
@@ -45,6 +47,7 @@ PSInput VSMain(VSInput input)
     position = mul(project, position);
     o.position = position;
     o.tex = input.tex;
+    o.color = input.iColor;
     return o;
 }
 
@@ -53,5 +56,5 @@ PSInput VSMain(VSInput input)
  */
 float4 PSMain(PSInput input) : SV_Target0
 {
-    return float4(1.0f, 0.0f, 0.0f, 1.0f);
+    return input.color;
 }

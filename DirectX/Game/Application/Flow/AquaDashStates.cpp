@@ -9,6 +9,8 @@
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
+#include "Component/InstancedStaticMeshComponentSystem.h"
+#include "Component/InstancedPointListComponentSystem.h"
 #include <cstdio>
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
@@ -133,28 +135,39 @@ namespace app
 				// 路面タイル (スプラインに沿った薄い箱)。走行時の路面の見た目と、
 				// ミニマップ (俯瞰) に映るコース形状を兼ねる。ループでもタイル姿勢が路面に追従する。
 				{
-					// 箱はフラスタムカリング対象 (P8 でバウンディング付与)。画面外タイルは描画されない。
-					// 20m 間隔 (約360枚) は生成コストとミニマップ形状のバランスで維持。
+					// 全タイルを 1 エンティティのインスタンス描画にまとめる (約360枚=1ドロー)。
+					// per-instance フラスタムカリングは gather 側 (RenderSystem) が行う。
+					// 20m 間隔 (約360枚) はミニマップ形状とのバランスで維持。
 					constexpr float TILE_SPACING = 20.0f;
+					aq::ecs::BoxStaticMeshComponent::RegisterInstancedMesh("RoadTile");
+
+					auto entity = ctx.CreateEntity<
+						aq::ecs::TransformComponent,
+						aq::ecs::HierarchicalTransformComponent,
+						aq::ecs::InstancedStaticMeshComponent,
+						aq::ecs::InstancedPointListComponent>();
+					entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh("RoadTile");
+
+					auto* pointList = entity.GetComponent<aq::ecs::InstancedPointListComponent>();
 					const float total = stageData->spline.GetTotalLength();
+					pointList->ReserveInstancePoints(static_cast<size_t>(total / TILE_SPACING) + 1);
 					for (float d = 0.0f; d < total; d += TILE_SPACING)
 					{
 						const auto frame = stageData->spline.Evaluate(d);
-						auto entity = ctx.CreateEntity<
-							aq::ecs::TransformComponent,
-							aq::ecs::HierarchicalTransformComponent,
-							aq::ecs::BoxStaticMeshComponent>();
-						auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+						aq::ecs::InstancePoint p;
 						// 地形面 (y=0) より上面がわずかに出るよう -0.10 (厚み 0.3 → 上面 +0.05)。
 						// 深く沈めると平坦地形に埋まって見えなくなる。
-						tc->position = frame.position - frame.up * 0.1f;
-						tc->scale.Set(stageData->width, 0.3f, TILE_SPACING * 1.02f);
-						tc->rotation = frame.ToRotation();
+						p.position = frame.position - frame.up * 0.1f;
+						p.rotation = frame.ToRotation();
+						p.scale.Set(stageData->width, 0.3f, TILE_SPACING * 1.02f);
 						// 路面は青みグレー (仮アセット。専用モデル導入までの色分け)。
-						entity.GetComponent<aq::ecs::BoxStaticMeshComponent>()->SetColor(
-							aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f));
-						context.stageEntities.push_back(entity.GetHandle());
+						p.color = aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f);
+						pointList->AddInstancePoint(p);
 					}
+#ifdef AQ_DEBUG_IMGUI
+					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("RoadTiles");
+#endif
+					context.stageEntities.push_back(entity.GetHandle());
 				}
 
 				// プレイヤー。

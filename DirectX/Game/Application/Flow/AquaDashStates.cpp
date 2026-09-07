@@ -221,21 +221,17 @@ namespace app
 				}
 
 				// コイン (スプライン座標 → ワールドへ焼き込み。判定と回転は CoinSystem)。
+				// メッシュは持たせず、描画は下の Coins エンティティのインスタンス点として出す。
 				for (const auto& placement : stageData->coins)
 				{
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent,
 						aq::ecs::HierarchicalTransformComponent,
-						aq::ecs::BoxStaticMeshComponent,
 						app::ecs::CoinComponent>();
 
 					const auto frame = stageData->spline.Evaluate(placement.distance);
 					auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
 					tc->position = frame.position + frame.right * placement.lateral + frame.up * placement.height;
-					tc->scale.Set(0.8f, 0.8f, 0.15f);   // 薄い箱をコインに見立てる (専用モデルは未導入)
-					// コインはゴールド (仮アセット)。
-					entity.GetComponent<aq::ecs::BoxStaticMeshComponent>()->SetColor(
-						aq::math::Vector4(1.00f, 0.82f, 0.15f, 1.0f));
 
 					auto* coin = entity.GetComponent<app::ecs::CoinComponent>();
 					coin->distance     = placement.distance;
@@ -243,6 +239,24 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coin");
 #endif
+					context.stageEntities.push_back(entity.GetHandle());
+				}
+
+				// コインの描画をまとめる 1 エンティティ。点の中身は CoinSystem が毎フレーム再構築する
+				// (取得済みを除いたぶんだけ積むので、取得すれば次の再構築で消える)。
+				{
+					aq::ecs::BoxStaticMeshComponent::RegisterInstancedMesh("CoinBox");
+
+					auto entity = ctx.CreateEntity<
+						aq::ecs::TransformComponent,
+						aq::ecs::HierarchicalTransformComponent,
+						aq::ecs::InstancedStaticMeshComponent,
+						aq::ecs::InstancedPointListComponent>();
+					entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh("CoinBox");
+#ifdef AQ_DEBUG_IMGUI
+					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coins");
+#endif
+					context.coinInstancesHandle = entity.GetHandle();
 					context.stageEntities.push_back(entity.GetHandle());
 				}
 
@@ -313,8 +327,9 @@ namespace app
 					}
 				}
 				context.stageEntities.clear();
-				context.playerHandle    = aq::ecs::EntityHandle();
-				context.collectFxHandle = aq::ecs::EntityHandle();
+				context.playerHandle        = aq::ecs::EntityHandle();
+				context.collectFxHandle     = aq::ecs::EntityHandle();
+				context.coinInstancesHandle = aq::ecs::EntityHandle();
 				context.activeStage.reset();
 
 				if (flow.LoadHandle().IsValid()) {

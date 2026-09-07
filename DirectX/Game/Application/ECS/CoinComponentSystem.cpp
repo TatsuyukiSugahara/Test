@@ -2,6 +2,7 @@
 #include "CoinComponentSystem.h"
 #include "GameFlow.h"
 #include "SpeedCharacterComponentSystem.h"
+#include "Component/InstancedPointListComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
 #include "Sound/SoundClip.h"
 #include "Sound/SoundEngine.h"
@@ -20,6 +21,13 @@ namespace app
 			/** 取得判定 */
 			static constexpr float COARSE_WINDOW  = 4.0f;   // スプライン距離での粗い絞り込み幅 [m]
 			static constexpr float COLLECT_RADIUS = 1.5f;   // 3D 距離での取得半径 [m]
+
+			/** インスタンス描画の見た目 (薄い箱をコインに見立てた仮アセット) */
+			static constexpr float COIN_SIDE      = 0.8f;    // 箱の縦横 [m]
+			static constexpr float COIN_THICKNESS = 0.15f;   // 箱の厚み [m]
+			static constexpr float COIN_COLOR_R   = 1.00f;   // ゴールド
+			static constexpr float COIN_COLOR_G   = 0.82f;
+			static constexpr float COIN_COLOR_B   = 0.15f;
 
 			// 専用のコイン SE がまだ無いため、暫定で決定音を流用する。
 			// 専用アセットが用意でき次第このパスを差し替える。
@@ -51,6 +59,40 @@ namespace app
 				tc->position = position;
 				emitter->Restart();
 			}
+
+
+			// 未取得のコインだけを Coins エンティティのインスタンス点として積み直す。
+			// 取得済みは積まれないので、取得の見た目はこの再構築だけで消える。
+			void RebuildCoinInstances(const aquadash::GameContext& context)
+			{
+				auto& ctx = aq::ecs::EntityContext::Get();
+				const aq::ecs::EntityHandle& handle = context.coinInstancesHandle;
+				if (!ctx.IsValid(handle)) { return; }
+
+				auto* pointList = ctx.GetComponent<aq::ecs::InstancedPointListComponent>(handle);
+				if (!pointList) { return; }
+
+				pointList->ClearInstancePoints();
+
+				aq::ecs::Foreach<CoinComponent>([&ctx, pointList](const aq::ecs::Entity& entity, CoinComponent* coin)
+					{
+						if (coin->collected) { return; }
+
+						auto* tc = ctx.GetComponent<aq::ecs::TransformComponent>(entity.GetHandle());
+						if (!tc) { return; }
+
+						// operator* は local * parent 合成。路面姿勢の上に Y 軸スピンを載せる。
+						aq::math::Quaternion spin;
+						spin.SetRotation(aq::math::Vector3(0.0f, 1.0f, 0.0f), coin->spinPhase);
+
+						aq::ecs::InstancePoint p;
+						p.position = tc->position;
+						p.rotation = spin * coin->baseRotation;
+						p.scale.Set(COIN_SIDE, COIN_SIDE, COIN_THICKNESS);
+						p.color = aq::math::Vector4(COIN_COLOR_R, COIN_COLOR_G, COIN_COLOR_B, 1.0f);
+						pointList->AddInstancePoint(p);
+					});
+			}
 		}
 
 
@@ -64,22 +106,15 @@ namespace app
 
 			const float dt = aq::Engine::GetDeltaTime();
 
-			// 回転演出。取得済みは非表示なので更新しない。
-			aq::ecs::Foreach<CoinComponent>([dt](const aq::ecs::Entity& entity, CoinComponent* coin)
+			// 回転演出。位相だけを進め、姿勢への反映は末尾の再構築が行う。
+			// 取得済みは描画されないので更新しない。
+			aq::ecs::Foreach<CoinComponent>([dt](const aq::ecs::Entity&, CoinComponent* coin)
 				{
 					if (coin->collected) { return; }
-
-					auto* tc = aq::ecs::EntityContext::Get().GetComponent<aq::ecs::TransformComponent>(entity.GetHandle());
-					if (!tc) { return; }
 
 					// 位相は 1 周ごとに巻き戻す (長時間プレイで float の精度が落ちるため)。
 					coin->spinPhase += SPIN_SPEED * dt;
 					if (coin->spinPhase > TWO_PI) { coin->spinPhase -= TWO_PI; }
-
-					// operator* は local * parent 合成。路面姿勢の上に Y 軸スピンを載せる。
-					aq::math::Quaternion spin;
-					spin.SetRotation(aq::math::Vector3(0.0f, 1.0f, 0.0f), coin->spinPhase);
-					tc->rotation = spin * coin->baseRotation;
 				});
 
 			// 取得判定。コイン数十枚 × プレイヤー数なので総当たりで足りる。
@@ -110,33 +145,31 @@ namespace app
 							const aq::math::Vector3 diff = coinTc->position - playerPosition;
 							if (diff.LengthSq() >= COLLECT_RADIUS * COLLECT_RADIUS) { return; }
 
-							// 取得。破棄はせず表示だけ落とす (ReactivateAll で戻せるようにするため)。
+							// 取得。破棄はせずフラグだけ立てる (ReactivateAll で戻せるようにするため)。
+							// 見た目は末尾の再構築でインスタンスから外れて消える。
 							coin->collected = true;
-							if (auto* mesh = ctx.GetComponent<aq::ecs::BoxStaticMeshComponent>(coinEntity.GetHandle())) {
-								mesh->SetVisible(false);
-							}
 							score->coinCount++;
 
 							PlayCollectSE();
 							PlayCollectEffect(context, coinTc->position);
 						});
 				});
+
+			// 位相と取得結果を反映したインスタンス点へ組み直す。
+			RebuildCoinInstances(context);
 		}
 
 
 		void CoinSystem::ReactivateAll()
 		{
-			auto& ctx = aq::ecs::EntityContext::Get();
-
-			aq::ecs::Foreach<CoinComponent>([&ctx](const aq::ecs::Entity& entity, CoinComponent* coin)
+			aq::ecs::Foreach<CoinComponent>([](const aq::ecs::Entity&, CoinComponent* coin)
 				{
 					// spinPhase は維持する (復活時に回転が飛ばないように)。
 					coin->collected = false;
-
-					if (auto* mesh = ctx.GetComponent<aq::ecs::BoxStaticMeshComponent>(entity.GetHandle())) {
-						mesh->SetVisible(true);
-					}
 				});
+
+			// リザルト中 (Update が止まっている間) の呼び出しでも見た目が戻るように即時再構築する。
+			RebuildCoinInstances(GameFlow::Get().Context());
 		}
 	}
 }

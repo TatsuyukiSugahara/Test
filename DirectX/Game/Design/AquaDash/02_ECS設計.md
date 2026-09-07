@@ -1,6 +1,6 @@
 # 02. ECS 設計
 
-> 対象コミット: ccfce22 / 最終更新: 2026-09-06
+> 対象コミット: e796de8 / 最終更新: 2026-09-07
 > 対応要求: R-05, R-07〜R-11, R-13, R-15([00_企画概要.md](00_企画概要.md))
 
 ゲーム固有の Component / System を定義する。配置は `Game/Application/ECS/`(既存 Actor 系と同居)、
@@ -42,7 +42,7 @@
 |---|---|---|
 | `PlayerInputSystem` | `GameInput`(パッド N 台)→ `PlayerInputComponent` へ転写 | 常時 |
 | `SpeedCharacterSystem` | 入力から加減速・レーン移動・ジャンプ・重力を積分し、スプライン評価で Transform(位置 + 姿勢)を書き出す | Pause 中は停止 |
-| `CoinSystem`(実装名。旧称 CoinCollectSystem) | コインの回転演出 + プレイヤーとの距離判定(スプライン座標で distance を粗く絞ってから 3D 距離)。取得でスコア加算 + 取得エフェクト/SE、コインは非表示化(破棄しない: `ReactivateAll` で「もう一度」時に復活) | Pause 中は停止 |
+| `CoinSystem`(実装名。旧称 CoinCollectSystem) | コインの回転演出 + プレイヤーとの距離判定(スプライン座標で distance を粗く絞ってから 3D 距離)。取得でスコア加算 + 取得エフェクト/SE。描画は P10 でインスタンス化: 毎フレーム非取得コインだけを Coins エンティティの `InstancePoints` へ再構築する(取得=リストから消える、`ReactivateAll`=全数再構築で復活。破棄はしない) | Pause 中は停止 |
 | `GoalFallJudgeSystem` | ゴール distance 通過判定 / 落下しきい値判定。結果を `GameContext.playResult` へ | Pause 中は停止 |
 | `AutoCameraSystem` | モード別にカメラ位置を平滑追従(後述)。ビュー行列を分割画面ビューへ出力 | 常時(Result 周回もここ) |
 

@@ -34,9 +34,10 @@ namespace app
 
 			/** ワールド */
 			bool  gameplayPaused = false;   // true でゲーム System (走行/判定) を停止 (リザルト用)
-			aq::ecs::EntityHandle              playerHandle;      // プレイヤー
-			aq::ecs::EntityHandle              collectFxHandle;   // コイン取得エフェクトの常駐エミッタ
-			std::vector<aq::ecs::EntityHandle> stageEntities;     // タイトル復帰時に破棄する生成物
+			aq::ecs::EntityHandle              playerHandle;          // プレイヤー
+			aq::ecs::EntityHandle              collectFxHandle;       // コイン取得エフェクトの常駐エミッタ
+			aq::ecs::EntityHandle              coinInstancesHandle;   // コインのインスタンス描画エンティティ
+			std::vector<aq::ecs::EntityHandle> stageEntities;         // タイトル復帰時に破棄する生成物
 
 			/** ミニマップ (コース XZ 範囲 → 0-1 正規化のパラメータ) */
 			aq::math::Vector2 minimapCenterXZ;            // コース範囲の中心 (XZ)

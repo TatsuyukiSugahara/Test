@@ -177,7 +177,9 @@ namespace app
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent, aq::ecs::HierarchicalTransformComponent, aq::ecs::TerrainComponent>();
 					auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
-					tc->position.Set(minX - MARGIN, 0.0f, minZ - MARGIN);
+					// Y はステージ指定のオフセット (R=0 の高さ)。ベイク済みハイトマップは
+					// 路面の沈み (スプラインの y<0) を offset 起点の正値で表現している。
+					tc->position.Set(minX - MARGIN, stageData->terrainHeightOffset, minZ - MARGIN);
 					auto* terrain = entity.GetComponent<aq::ecs::TerrainComponent>();
 					terrain->SetDesc(desc);
 					terrain->GetChunk()->SetReceiveShadow(true);

@@ -3,7 +3,8 @@
  "terrain": {
   "heightmap": "Assets/Terrain/Stage01_heightmap.png",
   "splatmap": "Assets/Terrain/Stage01_splatmap.png",
-  "heightScale": 22.0,
+  "heightScale": 34.0,
+  "heightOffset": -3.0,
   "resolution": 256
  },
  "course": {

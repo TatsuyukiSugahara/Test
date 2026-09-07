@@ -12,7 +12,9 @@
   - 地形原点 / terrainSize は CreateStageWorld (AquaDashStates.cpp) と同一式:
       コース XZ AABB (スプラインを弧長 10m 刻みでサンプリング、min/max は 0 初期化)
       + マージン 60m、terrainSize = max(extentX, extentZ)。
-  - コース回廊 (中心線 ±FLAT_RADIUS) は R=0 の完全平坦にして走行系と整合させる。
+  - コース回廊 (中心線 ±FLAT_RADIUS) は「最寄り路面 y - CORRIDOR_DROP」へ追従させる。
+    Catmull-Rom のアンダーシュートで路面が y<0 に沈む区間でも地形が一緒に下がるので
+    路面が地面へ埋まらない。負の高さは terrain.heightOffset (地形エンティティの Y) で表現する。
 
 使い方:
   python bake_stage_terrain.py ../Assets/Stages/Stage01.stage.json
@@ -30,16 +32,23 @@ import zlib
 IMAGE_SIZE    = 512     # heightmap / splatmap とも 512x512
 MARGIN        = 60.0    # CreateStageWorld と同じ地形マージン [m]
 SAMPLE_STEP   = 10.0    # CreateStageWorld と同じ AABB サンプリング間隔 [m]
-FLAT_RADIUS   = 35.0    # コース回廊 (完全平坦) の半幅 [m]
+FLAT_RADIUS   = 35.0    # コース回廊 (路面追従) の半幅 [m]
 RAMP_LENGTH   = 80.0    # 回廊端から丘への立ち上がり距離 [m]
-HEIGHT_SCALE  = 22.0    # 丘の最大高さ [m] (.stage.json の terrain.heightScale と一致させる)
+# 回廊の地形は「最寄りの路面 y - CORRIDOR_DROP」に追従する。スプラインのアンダーシュート
+# (y<0 の沈み) でも路面が地形に埋まらないよう、負の高さは HEIGHT_OFFSET で表現する。
+# HEIGHT_OFFSET / HEIGHT_SCALE は .stage.json の terrain.heightOffset / heightScale と一致させること。
+CORRIDOR_DROP = 0.70    # 路面 (スプライン y) から地形面までの下げ幅 [m]
+                        # (急勾配区間はバイリニア平滑で地形が路面へ寄るため余裕を持たせる)
+HEIGHT_OFFSET = -3.0    # 地形エンティティの Y オフセット [m] (R=0 がこの高さになる)
+HEIGHT_SCALE  = 34.0    # R=255 のときの高さ [m] (offset 起点。丘の最大 HILL_HEIGHT を包含)
+HILL_HEIGHT   = 22.0    # 丘の最大高さ [m] (ワールド絶対値)
 NOISE_CELL    = 420.0   # 丘のうねりの基本波長 [m] (小さくすると砂嵐状になる)
 HILL_EXPONENT = 1.6     # ノイズの累乗 (>1 で谷を広く・峰を尖らせる)
 BLUR_RADIUS   = 2       # 8bit バンディング抑制のガウスぼかし半径 [px]
 ROCK_SLOPE_LO = 0.10    # 岩が混ざり始める勾配 (dh/dx)
 ROCK_SLOPE_HI = 0.32    # 岩が支配的になる勾配
-SNOW_H_LO     = 0.55    # 雪が現れ始める正規化高さ
-SNOW_H_HI     = 0.80    # 雪が支配的になる正規化高さ
+SNOW_M_LO     = 12.0    # 雪が現れ始めるワールド高さ [m]
+SNOW_M_HI     = 18.0    # 雪が支配的になるワールド高さ [m]
 SEED          = 1234
 
 
@@ -133,38 +142,44 @@ def smoothstep(lo, hi, v):
 # ---------------------------------------------------------------- 距離場 / ぼかし
 
 def chamfer_distance(seeds, size):
-    """コース画素からの近似距離 [px] (2 パス チャンファー法。斜め=1.4)。"""
+    """コース画素からの近似距離 [px] と、最寄りコース点の路面 y [m] を返す
+    (2 パス チャンファー法。斜め=1.4。y は距離更新と一緒に伝播させる)。"""
     inf = 1.0e9
     dist = [inf] * (size * size)
-    for (px, pz) in seeds:
+    road = [0.0] * (size * size)
+    for (px, pz), y in seeds.items():
         dist[pz * size + px] = 0.0
+        road[pz * size + px] = y
+
+    def relax(i, j, add):
+        d = dist[j] + add
+        if d < dist[i]:
+            dist[i] = d
+            road[i] = road[j]
+
     for z in range(size):
         for x in range(size):
             i = z * size + x
-            d = dist[i]
             if x > 0:
-                d = min(d, dist[i - 1] + 1.0)
+                relax(i, i - 1, 1.0)
             if z > 0:
-                d = min(d, dist[i - size] + 1.0)
+                relax(i, i - size, 1.0)
                 if x > 0:
-                    d = min(d, dist[i - size - 1] + 1.4)
+                    relax(i, i - size - 1, 1.4)
                 if x < size - 1:
-                    d = min(d, dist[i - size + 1] + 1.4)
-            dist[i] = d
+                    relax(i, i - size + 1, 1.4)
     for z in range(size - 1, -1, -1):
         for x in range(size - 1, -1, -1):
             i = z * size + x
-            d = dist[i]
             if x < size - 1:
-                d = min(d, dist[i + 1] + 1.0)
+                relax(i, i + 1, 1.0)
             if z < size - 1:
-                d = min(d, dist[i + size] + 1.0)
+                relax(i, i + size, 1.0)
                 if x < size - 1:
-                    d = min(d, dist[i + size + 1] + 1.4)
+                    relax(i, i + size + 1, 1.4)
                 if x > 0:
-                    d = min(d, dist[i + size - 1] + 1.4)
-            dist[i] = d
-    return dist
+                    relax(i, i + size - 1, 1.4)
+    return dist, road
 
 
 def gaussian_blur(values, size, radius):
@@ -246,36 +261,53 @@ def main():
     print(f"{stage_id}: total={total:.1f}m origin=({origin_x:.1f},{origin_z:.1f}) size={terrain_size:.1f}m "
           f"({1.0 / px_per_m:.2f} m/px)")
 
-    # コース中心線を 1m 刻みで画素へ落とし、距離場を作る。
-    seeds = set()
+    # コース中心線を 1m 刻みで画素へ落とし、距離場と「最寄り路面 y」を作る。
+    # ループなど同一画素を複数回通る場合は最小 y を採用する (地面はループの根本に合わせる)。
+    seeds = {}
     d = 0.0
     while d <= total:
         p = evaluate_at(positions, lengths, d)
         px = round((p[0] - origin_x) * px_per_m)
         pz = round((p[2] - origin_z) * px_per_m)
         if 0 <= px < IMAGE_SIZE and 0 <= pz < IMAGE_SIZE:
-            seeds.add((px, pz))
+            key = (px, pz)
+            seeds[key] = min(seeds.get(key, 1.0e9), p[1])
         d += 1.0
-    dist_px = chamfer_distance(sorted(seeds), IMAGE_SIZE)
+    dist_px, road_y = chamfer_distance(seeds, IMAGE_SIZE)
 
-    # 高さ: 回廊は 0、外側は smoothstep 立ち上げ x バリューノイズの丘。
+    # 高さ [m・ワールド絶対値]:
+    #   回廊 = 最寄り路面 y - CORRIDOR_DROP (スプラインの沈み・丘・ループ根本に追従)
+    #   外側 = smoothstep で丘 (バリューノイズ) へブレンド
+    def corridor_y(i):
+        return road_y[i] - CORRIDOR_DROP
+
     height = [0.0] * (IMAGE_SIZE * IMAGE_SIZE)
     for z in range(IMAGE_SIZE):
         wz = origin_z + z / px_per_m
         for x in range(IMAGE_SIZE):
-            d_m = dist_px[z * IMAGE_SIZE + x] / px_per_m
+            i = z * IMAGE_SIZE + x
+            d_m = dist_px[i] / px_per_m
             ramp = smoothstep(FLAT_RADIUS, FLAT_RADIUS + RAMP_LENGTH, d_m)
+            base = corridor_y(i)
             if ramp <= 0.0:
+                height[i] = base
                 continue
             wx = origin_x + x / px_per_m
             n = fbm(wx / NOISE_CELL, wz / NOISE_CELL)
-            height[z * IMAGE_SIZE + x] = ramp * (n ** HILL_EXPONENT)
+            hill = HILL_HEIGHT * (n ** HILL_EXPONENT)
+            height[i] = base + (hill - base) * ramp
 
     height = gaussian_blur(height, IMAGE_SIZE, BLUR_RADIUS)
-    # ぼかしで回廊へ滲んだ分を切り戻す (立ち上がりが 0 始まりなので段差は出ない)。
+    # ぼかしで回廊へ滲んだ分を正確な路面追従値へ戻す (路面の視認性を最優先)。
     for i in range(IMAGE_SIZE * IMAGE_SIZE):
         if dist_px[i] / px_per_m < FLAT_RADIUS:
-            height[i] = 0.0
+            height[i] = corridor_y(i)
+
+    lo = min(height)
+    hi = max(height)
+    if lo < HEIGHT_OFFSET or hi > HEIGHT_OFFSET + HEIGHT_SCALE:
+        print(f"WARNING: height range [{lo:.2f}, {hi:.2f}] exceeds "
+              f"[{HEIGHT_OFFSET}, {HEIGHT_OFFSET + HEIGHT_SCALE}] and will be clamped")
 
     # スプラット: 平地=草 (低周波ノイズで岩を少し混ぜる)、斜面=岩、高所=雪。
     m_per_px = 1.0 / px_per_m
@@ -287,16 +319,16 @@ def main():
         wz = origin_z + z * m_per_px
         for x in range(IMAGE_SIZE):
             i = z * IMAGE_SIZE + x
-            h = height[i]
-            hv = min(255, max(0, round(h * 255.0)))
+            h = height[i]   # ワールド高さ [m]
+            hv = min(255, max(0, round((h - HEIGHT_OFFSET) / HEIGHT_SCALE * 255.0)))
             hrow += bytes((hv, hv, hv))
 
             xl = height[i - 1] if x > 0 else h
             xr = height[i + 1] if x < IMAGE_SIZE - 1 else h
             zu = height[i - IMAGE_SIZE] if z > 0 else h
             zd = height[i + IMAGE_SIZE] if z < IMAGE_SIZE - 1 else h
-            slope = math.hypot((xr - xl) * HEIGHT_SCALE / (2.0 * m_per_px),
-                               (zd - zu) * HEIGHT_SCALE / (2.0 * m_per_px))
+            slope = math.hypot((xr - xl) / (2.0 * m_per_px),
+                               (zd - zu) / (2.0 * m_per_px))
             wx = origin_x + x * m_per_px
             # 勾配ベースの岩は、コース縁の立ち上がり帯では出さず (均一な帯になって不自然)、
             # ランプの外の丘斜面だけに、ノイズでまだらに割って乗せる。
@@ -304,8 +336,12 @@ def main():
             ring_fade = smoothstep(FLAT_RADIUS + RAMP_LENGTH, FLAT_RADIUS + RAMP_LENGTH + 60.0, d_m)
             patchy = 0.35 + 0.65 * fbm(wx / 150.0, wz / 150.0, 2)
             rock = smoothstep(ROCK_SLOPE_LO, ROCK_SLOPE_HI, slope) * patchy * ring_fade
-            snow = smoothstep(SNOW_H_LO, SNOW_H_HI, h) * (1.0 - 0.6 * rock)
-            if h < 0.05:
+            # 雪は丘 (回廊の外) 限定。回廊が路面追従で高所になる区間 (丘越えの路肩) に
+            # 雪が出ると灰色の帯に見えるため、コース近傍では抑制する。
+            hill_only = smoothstep(FLAT_RADIUS + RAMP_LENGTH * 0.5,
+                                   FLAT_RADIUS + RAMP_LENGTH, d_m)
+            snow = smoothstep(SNOW_M_LO, SNOW_M_HI, h) * (1.0 - 0.6 * rock) * hill_only
+            if slope < 0.08 and rock < 0.05:
                 rock = max(rock, 0.15 * fbm(wx / 47.0, wz / 47.0, 2))
             grass = max(0.0, 1.0 - rock - snow)
             srow += bytes((min(255, round(grass * 255.0)),

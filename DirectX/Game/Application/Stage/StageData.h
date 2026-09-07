@@ -91,8 +91,9 @@ namespace app
 			/** 地形の見た目 (省略可。パスが空 / heightScale 0 なら従来どおりの平坦 grass) */
 			std::string terrainHeightmapPath;
 			std::string terrainSplatmapPath;
-			float       terrainHeightScale = 0.0f;
-			uint32_t    terrainResolution  = 128;
+			float       terrainHeightScale  = 0.0f;
+			float       terrainHeightOffset = 0.0f;   // 地形エンティティの Y (R=0 の高さ)
+			uint32_t    terrainResolution   = 128;
 
 			/** 評価 */
 			std::vector<CoinPlacement> coins;

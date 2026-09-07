@@ -209,6 +209,7 @@ namespace app
 				data->terrainHeightmapPath = terrain["heightmap"].AsString();
 				data->terrainSplatmapPath  = terrain["splatmap"].AsString();
 				data->terrainHeightScale   = terrain["heightScale"].AsFloat(0.0f);
+				data->terrainHeightOffset  = terrain["heightOffset"].AsFloat(0.0f);
 				data->terrainResolution    = static_cast<uint32_t>(terrain["resolution"].AsInt(128));
 			}
 

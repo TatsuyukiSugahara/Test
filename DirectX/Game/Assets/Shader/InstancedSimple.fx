@@ -30,6 +30,7 @@ struct VSInput
 struct PSInput
 {
     float4 position : SV_Position;
+    float3 normal   : NORMAL0;
     float2 tex      : TEXCOORD0;
     float4 color    : COLOR0;
 };
@@ -46,6 +47,7 @@ PSInput VSMain(VSInput input)
     position = mul(view, position);
     position = mul(project, position);
     o.position = position;
+    o.normal = normalize(mul((float3x3) iworld, input.normal));
     o.tex = input.tex;
     o.color = input.iColor;
     return o;
@@ -56,5 +58,9 @@ PSInput VSMain(VSInput input)
  */
 float4 PSMain(PSInput input) : SV_Target0
 {
-    return input.color;
+    // ライトは InstancedModelTex と同じハードコード方向。環境項 + 拡散で立体感だけを付ける。
+    float3 n = normalize(input.normal);
+    float3 lightDir = normalize(float3(0.3f, 1.0f, 0.4f));
+    float shade = 0.6f + 0.4f * saturate(dot(n, lightDir));
+    return float4(input.color.rgb * shade, input.color.a);
 }

@@ -25,26 +25,52 @@ namespace aq
 			//	aq::math::Vector3(-0.5f, -0.5f, -0.5f),
 			//};
 
+			// 面ごとに頂点を複製し、面法線を持たせた 24 頂点。頂点を 8 個で共有すると
+			// 面法線が作れず、ランバート陰影を使う InstancedSimple で立体感が出ないため。
+			// 各面の 4 頂点は「巻き順そのままの並び」で置いてあるので、
+			// インデックスは面ごとに (0,1,2)(0,2,3) の固定パターンでよい。
 			const aq::graphics::VertexData BOX_VERTEX_BUFFER[] = {
-				{ aq::math::Vector3(0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
-				{ aq::math::Vector3(0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
-				{ aq::math::Vector3(0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
-				{ aq::math::Vector3(0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
-				{ aq::math::Vector3(-0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
-				{ aq::math::Vector3(-0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
-				{ aq::math::Vector3(-0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
-				{ aq::math::Vector3(-0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				// +X 面 (x=+0.5)
+				{ aq::math::Vector3(0.5f, -0.5f, 0.5f), aq::math::Vector3(1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, -0.5f, -0.5f), aq::math::Vector3(1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, 0.5f, -0.5f), aq::math::Vector3(1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, 0.5f, 0.5f), aq::math::Vector3(1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				// -X 面 (x=-0.5)
+				{ aq::math::Vector3(-0.5f, 0.5f, 0.5f), aq::math::Vector3(-1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, 0.5f, -0.5f), aq::math::Vector3(-1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, -0.5f), aq::math::Vector3(-1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, 0.5f), aq::math::Vector3(-1.0f, 0.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				// +Y 面 (y=+0.5)
+				{ aq::math::Vector3(0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				// -Y 面 (y=-0.5)
+				{ aq::math::Vector3(0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, -1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, -1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, -1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, -1.0f, 0.0f), aq::math::Vector2(0.0f, 0.0f) },
+				// +Z 面 (z=+0.5)
+				{ aq::math::Vector3(0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 1.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, 0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 1.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 1.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, -0.5f, 0.5f), aq::math::Vector3(0.0f, 0.0f, 1.0f), aq::math::Vector2(0.0f, 0.0f) },
+				// -Z 面 (z=-0.5)
+				{ aq::math::Vector3(0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, -1.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, -1.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, -0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, -1.0f), aq::math::Vector2(0.0f, 0.0f) },
+				{ aq::math::Vector3(-0.5f, 0.5f, -0.5f), aq::math::Vector3(0.0f, 0.0f, -1.0f), aq::math::Vector2(0.0f, 0.0f) },
 			};
 
-			// 頂点 0..7 は (x,y,z) の符号ビット。全面を外向き（CCW/右手系＝このエンジンの表面）に統一する。
-			// 旧データは 6 面中 2 面（+X / -Y）の巻き順が逆でカリングされ、箱が欠けて見えていた。
+			// 全面を外向き（CCW/右手系＝このエンジンの表面）に統一する。
+			// 巻き順は 8 頂点版と同一。壊すと箱の一部の面がカリングされて欠けて見える。
 			constexpr uint32_t BOX_INDEX_BUFFER[] = {
-				2,3,1, 2,1,0,	// +X 面 (x=+0.5)
-				4,5,7, 4,7,6,	// -X 面 (x=-0.5)
-				0,1,5, 0,5,4,	// +Y 面 (y=+0.5)
-				2,6,7, 2,7,3,	// -Y 面 (y=-0.5)
-				0,4,6, 0,6,2,	// +Z 面 (z=+0.5)
-				1,3,7, 1,7,5,	// -Z 面 (z=-0.5)
+				0,1,2,     0,2,3,		// +X 面 (x=+0.5)
+				4,5,6,     4,6,7,		// -X 面 (x=-0.5)
+				8,9,10,    8,10,11,		// +Y 面 (y=+0.5)
+				12,13,14,  12,14,15,	// -Y 面 (y=-0.5)
+				16,17,18,  16,18,19,	// +Z 面 (z=+0.5)
+				20,21,22,  20,22,23,	// -Z 面 (z=-0.5)
 			};
 
 			aq::math::Matrix4x4 MakeZUpModelLocalMatrix(float modelScale)

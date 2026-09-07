@@ -215,6 +215,14 @@ namespace aq
 			textureOverrides_[static_cast<uint32_t>(slot)].reset();
 		}
 
+
+		void StaticMesh::SetLocalBounds(const math::AABB& aabb)
+		{
+			localBounds_    = aabb;
+			hasLocalBounds_ = true;
+		}
+
+
 		bool StaticMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
 			// PBR 系は pbrMaterialCB_ を GPU に送る（memcpy で型安全に転送）
@@ -241,9 +249,10 @@ namespace aq
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
 
-			// カリング用ローカル AABB (MeshResource 経由でロードした場合のみ)。
-			// 生バッファ初期化 (InitializeDynamic 等) では meshResource_ が無いため
-			// hasBounds = false のままとし、フラスタムカリングの対象外とする。
+			// カリング用ローカル AABB。MeshResource 経由ならリソースが持つ AABB を使う。
+			// 生バッファ初期化 (InitializeShared / InitializeDynamic 等) では meshResource_ が
+			// 無いため、SetLocalBounds で明示指定された場合のみバウンディングを渡す。
+			// 未指定なら従来どおり hasBounds = false のままでフラスタムカリングの対象外となる。
 			if (meshResource_)
 			{
 				item.localBounds = meshResource_->GetLocalAABB();
@@ -267,6 +276,11 @@ namespace aq
 					item.gpuArgs       = gpuClusterBuffers_.args;
 					item.clusterCount  = gpuClusterBuffers_.clusterCount;
 				}
+			}
+			else if (hasLocalBounds_)
+			{
+				item.localBounds = localBounds_;
+				item.hasBounds   = true;
 			}
 
 			// ディファード対象なら G-Buffer PS をセット（エイリアシングで寿命を繋げる）

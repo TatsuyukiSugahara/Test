@@ -1,3 +1,4 @@
+#include "MaterialCB.h"
 
 cbuffer VSPSCb : register(b0)
 {
@@ -45,5 +46,6 @@ PSInput VSMain(VSInput input)
  */
 float4 PSMain(PSInput input) : SV_Target0
 {
-	return float4(1.0f, 0.0f, 0.0f, 1.0f);
+    // 箱の単色は MaterialCB (b2) の params[0] で指定する
+    return params[0];
 }

@@ -102,6 +102,13 @@ namespace aq
 					GetSharedBoxMesh(vb, ib);
 					staticMesh_.InitializeShared(vb, ib, ArraySize(BOX_INDEX_BUFFER),
 						aq::graphics::StaticMesh::ShaderType::SimpleBox);
+					// 共有箱は ±0.5 の単位キューブ。MeshResource 経由ではないので明示指定する
+					// (これでフラスタムカリングの対象になる)。
+					staticMesh_.SetLocalBounds(aq::math::AABB(
+						aq::math::Vector3(0.0f, 0.0f, 0.0f),
+						aq::math::Vector3(0.5f, 0.5f, 0.5f)));
+					// 初期化前に SetColor された値もここで初めてマテリアルへ反映される。
+					staticMesh_.SetParameter(0, color_);
 					componentState_ = ComponentState::Completed;
 					break;
 				}
@@ -109,6 +116,17 @@ namespace aq
 				{
 					break;
 				}
+			}
+		}
+
+
+		void BoxStaticMeshComponent::SetColor(const aq::math::Vector4& color)
+		{
+			color_ = color;
+			// 初期化前は保持のみ。Update の初期化完了時にまとめて反映する。
+			if (componentState_ == ComponentState::Completed)
+			{
+				staticMesh_.SetParameter(0, color_);
 			}
 		}
 

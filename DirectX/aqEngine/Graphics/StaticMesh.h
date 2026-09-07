@@ -56,6 +56,10 @@ namespace aq
 			bool              castShadow_    = false;
 			bool              receiveShadow_ = false;
 
+			/** 明示ローカル AABB (meshResource_ を持たない生バッファ初期化メッシュ用) */
+			math::AABB        localBounds_;
+			bool              hasLocalBounds_ = false;
+
 			aq::res::RefShaderResource gbufferPSShaderResource_;
 
 		public:
@@ -139,6 +143,13 @@ namespace aq
 			}
 
 			ShaderType GetShaderType() const { return shaderType_; }
+
+			/**
+			 * 生バッファ初期化メッシュ用の明示ローカル AABB を設定する。
+			 * 空間は worldMatrix を掛ける前のメッシュローカル空間 (MeshResource の AABB と同一契約)。
+			 * 設定するとフラスタムカリングの対象になる。
+			 */
+			void SetLocalBounds(const math::AABB& aabb);
 
 			/** トライアングルカリング用クラスタ (MeshResource 経由のみ)。無ければ nullptr。 */
 			const std::vector<graphics::MeshCluster>* GetClusters() const

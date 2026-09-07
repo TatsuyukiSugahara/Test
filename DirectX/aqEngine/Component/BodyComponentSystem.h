@@ -32,18 +32,26 @@ namespace aq
 
 			aq::graphics::StaticMesh staticMesh_;
 
+			/** 箱の単色 (SimpleBox.fx の params[0])。既定は赤 */
+			aq::math::Vector4 color_ = aq::math::Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+
 
 		public:
 			BoxStaticMeshComponent();
 			~BoxStaticMeshComponent();
 			void Update();
 
+			/** 箱の単色を設定する。初期化前に呼んだ場合は初期化完了時にまとめて反映される */
+			void SetColor(const aq::math::Vector4& color);
+
 
 		public:
 			inline bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
 
-			// 描画対象から外す/戻す。箱はバウンディングを持たずフラスタムカリングされないため、
-			// 位置退避では描画を止められない。確実に描画をスキップさせる手段として使う。
+			inline const aq::math::Vector4& GetColor() const { return color_; }
+
+			// 描画対象から外す/戻す。フラスタム外の箱はカリングされるが、視界内でも
+			// 確実に描画をスキップさせたい場合(退避・遅延破棄など)の手段として使う。
 			inline void SetVisible(bool v) { visible_ = v; }
 			inline bool IsVisible() const  { return visible_; }
 

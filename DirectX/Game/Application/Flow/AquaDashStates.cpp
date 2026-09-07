@@ -133,8 +133,8 @@ namespace app
 				// 路面タイル (スプラインに沿った薄い箱)。走行時の路面の見た目と、
 				// ミニマップ (俯瞰) に映るコース形状を兼ねる。ループでもタイル姿勢が路面に追従する。
 				{
-					// 箱はバウンディング無しでフラスタムカリングされないため、枚数が描画コストに直結する。
-					// 20m 間隔 (約360枚) が 60fps を保てる妥協点。
+					// 箱はフラスタムカリング対象 (P8 でバウンディング付与)。画面外タイルは描画されない。
+					// 20m 間隔 (約360枚) は生成コストとミニマップ形状のバランスで維持。
 					constexpr float TILE_SPACING = 20.0f;
 					const float total = stageData->spline.GetTotalLength();
 					for (float d = 0.0f; d < total; d += TILE_SPACING)
@@ -150,6 +150,9 @@ namespace app
 						tc->position = frame.position - frame.up * 0.1f;
 						tc->scale.Set(stageData->width, 0.3f, TILE_SPACING * 1.02f);
 						tc->rotation = frame.ToRotation();
+						// 路面は青みグレー (仮アセット。専用モデル導入までの色分け)。
+						entity.GetComponent<aq::ecs::BoxStaticMeshComponent>()->SetColor(
+							aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f));
 						context.stageEntities.push_back(entity.GetHandle());
 					}
 				}
@@ -217,6 +220,9 @@ namespace app
 					auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
 					tc->position = frame.position + frame.right * placement.lateral + frame.up * placement.height;
 					tc->scale.Set(0.8f, 0.8f, 0.15f);   // 薄い箱をコインに見立てる (専用モデルは未導入)
+					// コインはゴールド (仮アセット)。
+					entity.GetComponent<aq::ecs::BoxStaticMeshComponent>()->SetColor(
+						aq::math::Vector4(1.00f, 0.82f, 0.15f, 1.0f));
 
 					auto* coin = entity.GetComponent<app::ecs::CoinComponent>();
 					coin->distance     = placement.distance;

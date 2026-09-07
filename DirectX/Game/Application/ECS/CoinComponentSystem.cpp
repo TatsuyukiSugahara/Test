@@ -22,9 +22,9 @@ namespace app
 			static constexpr float COARSE_WINDOW  = 4.0f;   // スプライン距離での粗い絞り込み幅 [m]
 			static constexpr float COLLECT_RADIUS = 1.5f;   // 3D 距離での取得半径 [m]
 
-			/** インスタンス描画の見た目 (薄い箱をコインに見立てた仮アセット) */
-			static constexpr float COIN_SIDE      = 0.8f;    // 箱の縦横 [m]
-			static constexpr float COIN_THICKNESS = 0.15f;   // 箱の厚み [m]
+			// 寸法 (外径 0.9m) は CoinRing メッシュへ焼き込み済みなので、
+			// インスタンス点は等倍で置き、ここでは色だけを与える。
+			/** インスタンス描画の見た目 */
 			static constexpr float COIN_COLOR_R   = 1.00f;   // ゴールド
 			static constexpr float COIN_COLOR_G   = 0.82f;
 			static constexpr float COIN_COLOR_B   = 0.15f;
@@ -88,7 +88,7 @@ namespace app
 						aq::ecs::InstancePoint p;
 						p.position = tc->position;
 						p.rotation = spin * coin->baseRotation;
-						p.scale.Set(COIN_SIDE, COIN_SIDE, COIN_THICKNESS);
+						p.scale.Set(1.0f, 1.0f, 1.0f);
 						p.color = aq::math::Vector4(COIN_COLOR_R, COIN_COLOR_G, COIN_COLOR_B, 1.0f);
 						pointList->AddInstancePoint(p);
 					});

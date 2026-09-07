@@ -1,5 +1,11 @@
 {
  "level": "Assets/Stages/Stage01.level.json",
+ "terrain": {
+  "heightmap": "Assets/Terrain/Stage01_heightmap.png",
+  "splatmap": "Assets/Terrain/Stage01_splatmap.png",
+  "heightScale": 22.0,
+  "resolution": 256
+ },
  "course": {
   "width": 12.0,
   "points": [

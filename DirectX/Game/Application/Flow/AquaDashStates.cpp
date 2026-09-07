@@ -52,6 +52,14 @@ namespace app
 			// コイン取得エフェクト (常駐エミッタを移動+Restart で使い回す)。
 			static const char* COLLECT_FX_PATH = "Assets/Particle/FX_Explosion.particle";
 
+			// リングコイン (トーラス) の寸法。外径 0.9m = (中心半径 + 管半径) × 2。
+			// 寸法はメッシュへ焼き込むので、インスタンス点の scale は等倍で使う。
+			static constexpr float COIN_RING_CENTER_RADIUS = 0.36f;   // 中心円の半径 [m]
+			static constexpr float COIN_RING_TUBE_RADIUS   = 0.09f;   // 管の半径 [m]
+			static constexpr int   COIN_RING_SEGMENT_COUNT = 24;      // 中心円まわりの分割数
+			static constexpr int   COIN_RING_SIDE_COUNT    = 12;      // 管断面の分割数
+			static constexpr float COIN_RING_TWO_PI        = 6.28318530718f;
+
 
 			// 決定 SE を再生する (クリップは GameFlow::Update で先読み済み)。
 			void PlayDecisionSE()
@@ -63,7 +71,62 @@ namespace app
 			}
 
 
-			// 平坦地形 + プレイヤー + 自動カメラを生成する (ロード完了時に一度だけ)。
+			// リングコインのトーラスメッシュを生成する。XY 平面のリングで穴が Z を向く
+			// (旧・箱コインと同じ姿勢なので、CoinComponent の baseRotation をそのまま使える)。
+			// UV は使わないため、シームは頂点を複製した (24+1)x(12+1) 格子で単純に作る。
+			void BuildCoinRingMesh(std::vector<aq::graphics::VertexData>& outVertices,
+			                       std::vector<uint32_t>& outIndices)
+			{
+				const int ringCount = COIN_RING_SEGMENT_COUNT + 1;
+				const int sideCount = COIN_RING_SIDE_COUNT + 1;
+
+				outVertices.clear();
+				outVertices.reserve(static_cast<size_t>(ringCount) * static_cast<size_t>(sideCount));
+				for (int i = 0; i < ringCount; ++i)
+				{
+					const float theta    = COIN_RING_TWO_PI * static_cast<float>(i) / static_cast<float>(COIN_RING_SEGMENT_COUNT);
+					const float cosTheta = cosf(theta);
+					const float sinTheta = sinf(theta);
+					for (int j = 0; j < sideCount; ++j)
+					{
+						const float phi    = COIN_RING_TWO_PI * static_cast<float>(j) / static_cast<float>(COIN_RING_SIDE_COUNT);
+						const float cosPhi = cosf(phi);
+						const float sinPhi = sinf(phi);
+						const float radius = COIN_RING_CENTER_RADIUS + COIN_RING_TUBE_RADIUS * cosPhi;
+
+						aq::graphics::VertexData vertex;
+						vertex.position.Set(radius * cosTheta, radius * sinTheta, COIN_RING_TUBE_RADIUS * sinPhi);
+						vertex.normal.Set(cosPhi * cosTheta, cosPhi * sinTheta, sinPhi);
+						vertex.uv.Set(0.0f, 0.0f);
+						vertex.tangent.Set(0.0f, 0.0f, 0.0f, 0.0f);
+						outVertices.push_back(vertex);
+					}
+				}
+
+				// 巻き順は (中心円方向, 管断面方向) の外積が外向き法線と同符号になる並び = 表面。
+				outIndices.clear();
+				outIndices.reserve(static_cast<size_t>(COIN_RING_SEGMENT_COUNT) * static_cast<size_t>(COIN_RING_SIDE_COUNT) * 6);
+				for (int i = 0; i < COIN_RING_SEGMENT_COUNT; ++i)
+				{
+					for (int j = 0; j < COIN_RING_SIDE_COUNT; ++j)
+					{
+						const uint32_t v00 = static_cast<uint32_t>(i * sideCount + j);
+						const uint32_t v10 = static_cast<uint32_t>((i + 1) * sideCount + j);
+						const uint32_t v11 = static_cast<uint32_t>((i + 1) * sideCount + j + 1);
+						const uint32_t v01 = static_cast<uint32_t>(i * sideCount + j + 1);
+
+						outIndices.push_back(v00);
+						outIndices.push_back(v10);
+						outIndices.push_back(v01);
+						outIndices.push_back(v10);
+						outIndices.push_back(v11);
+						outIndices.push_back(v01);
+					}
+				}
+			}
+
+
+			// 地形 + プレイヤー + 自動カメラを生成する (ロード完了時に一度だけ)。
 			// 生成した Entity はタイトル復帰時の破棄用に context.stageEntities へ積む。
 			void CreateStageWorld(GameFlow& flow, const std::shared_ptr<stage::StageData>& stageData)
 			{
@@ -84,7 +147,9 @@ namespace app
 					}
 				}
 
-				// 地面 (平坦地形)。P1 は「平坦な地形 + スプライン走行」の最小構成。路面メッシュは後続フェーズ。
+				// 地面。ステージが terrain を指定していればベイク済みのハイトマップ地形、
+				// 未指定なら従来どおりの平坦 grass になる。
+				// 原点と terrainSize の式はベイク画像の座標系と対になっているので変えないこと。
 				{
 					constexpr float MARGIN = 60.0f;
 					const float extentX = maxX - minX + MARGIN * 2.0f;
@@ -96,10 +161,18 @@ namespace app
 					desc.layerPaths[0] = "Assets/Terrain/grass.DDS";
 					desc.layerPaths[1] = "Assets/Terrain/snow.DDS";
 					desc.layerPaths[2] = "Assets/Terrain/rock.DDS";
-					desc.resolution    = 128;
-					desc.heightScale   = 0.0f;   // 平坦
+					desc.resolution    = stageData->terrainResolution;
+					desc.heightScale   = stageData->terrainHeightScale;   // 0 なら平坦
 					desc.terrainSize   = extentX > extentZ ? extentX : extentZ;
 					desc.layerTiling   = desc.terrainSize / 5.0f;
+
+					// SetDesc は同期処理なので、stageData の文字列を c_str() のまま渡してよい。
+					if (!stageData->terrainHeightmapPath.empty()) {
+						desc.heightmapPath = stageData->terrainHeightmapPath.c_str();
+					}
+					if (!stageData->terrainSplatmapPath.empty()) {
+						desc.splatmapPath = stageData->terrainSplatmapPath.c_str();
+					}
 
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent, aq::ecs::HierarchicalTransformComponent, aq::ecs::TerrainComponent>();
@@ -245,14 +318,30 @@ namespace app
 				// コインの描画をまとめる 1 エンティティ。点の中身は CoinSystem が毎フレーム再構築する
 				// (取得済みを除いたぶんだけ積むので、取得すれば次の再構築で消える)。
 				{
-					aq::ecs::BoxStaticMeshComponent::RegisterInstancedMesh("CoinBox");
+					// リング形状はここで一度だけ生成する。同名が登録済みならそれが返るので、
+					// RETRY やステージ再入場で作り直しにはならない。
+					std::vector<aq::graphics::VertexData> ringVertices;
+					std::vector<uint32_t>                 ringIndices;
+					BuildCoinRingMesh(ringVertices, ringIndices);
+
+					auto* ringMesh = aq::graphics::InstancedStaticMesh::RegisterFromData(
+						"CoinRing",
+						ringVertices.data(), static_cast<uint32_t>(ringVertices.size()), sizeof(aq::graphics::VertexData),
+						ringIndices.data(),  static_cast<uint32_t>(ringIndices.size()),
+						aq::graphics::StaticMesh::ShaderType::InstancedSimple);
+					if (ringMesh != nullptr) {
+						// 寸法をメッシュへ焼き込んでいるので、カリング用 AABB も実寸で持たせる。
+						ringMesh->SetLocalBounds(aq::math::AABB(
+							aq::math::Vector3(0.0f, 0.0f, 0.0f),
+							aq::math::Vector3(0.45f, 0.45f, 0.09f)));
+					}
 
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent,
 						aq::ecs::HierarchicalTransformComponent,
 						aq::ecs::InstancedStaticMeshComponent,
 						aq::ecs::InstancedPointListComponent>();
-					entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh("CoinBox");
+					entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh("CoinRing");
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coins");
 #endif

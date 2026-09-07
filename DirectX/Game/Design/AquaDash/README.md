@@ -59,11 +59,16 @@ Game/
 - 走行アニメが無く idle 固定(unityChan の走りモーション未導入)。スピード感演出の一部として P6 で検討。
 - 路面の見た目が無い(平坦地形の上を見えないスプラインで走る P1 最小構成)。路面メッシュ生成は後続フェーズで検討。
 - unityChan.tkm はメートル基準でないため `PLAYER_MODEL_SCALE = 0.25` で縮小している。
-- コイン/路面タイルの見た目は仮(箱に見立てたボックス。専用モデルは今後の課題)。
-  取得 SE も Decision.wav 流用の仮。専用アセット導入時に `CoinComponentSystem.cpp` のパスを差し替える。
-  (P8 で `BoxStaticMeshComponent::SetColor` を追加し赤単色は解消: 路面=青みグレー/コイン=ゴールド。
-   ただし色の `Reflect` 登録は反射 Visitor に `Vector4` 対応が無く見送り — 箱色はコード設定専用で
-   Prefab JSON へ永続化できない)
+- コインは P11 でリング(コード生成トーラス+ランバート陰影)になった。路面タイルは箱のまま
+  (専用路面メッシュは今後の課題)。取得 SE は Decision.wav 流用の仮のままで、
+  専用アセット導入時に `CoinComponentSystem.cpp` のパスを差し替える。
+  (P8 の補足: 箱色の `Reflect` 登録は反射 Visitor に `Vector4` 対応が無く見送り —
+   箱色はコード設定専用で Prefab JSON へ永続化できない)
+- 地面は P11 でベイク済みハイトマップ地形になった(コース回廊は平坦、外周はなだらかな丘。
+  `Game/Tools/bake_stage_terrain.py` で .stage.json から生成、`.stage.json` の terrain ブロックで
+  データ駆動)。岩/雪のスプラット出現は控えめ — 強調はベイクパラメータの再調整で。
+  なお **DirectXTex Convert の同一フォーマット失敗により heightmap/splatmap ロードが
+  従来ずっと無効だったエンジンバグを P11 で修正**(HeightmapChunk.cpp)。
 - (P8〜P10 で改善) 箱は `StaticMesh::SetLocalBounds` の明示 AABB でフラスタムカリング対象になり
   (カリング設計.md §13)、P9 で路面タイル・P10 でコインを 1 ドローのインスタンス描画 +
   per-instance フラスタムカリングへ移行(同 §14。コインは CoinSystem が毎フレーム

@@ -88,6 +88,12 @@ namespace app
 			float              goalDistance  = 0.0f;
 			float              fallHeight    = -30.0f;   // 路面相対でこれを下回ったら落下
 
+			/** 地形の見た目 (省略可。パスが空 / heightScale 0 なら従来どおりの平坦 grass) */
+			std::string terrainHeightmapPath;
+			std::string terrainSplatmapPath;
+			float       terrainHeightScale = 0.0f;
+			uint32_t    terrainResolution  = 128;
+
 			/** 評価 */
 			std::vector<CoinPlacement> coins;
 			float                      parTimeSec = 180.0f;

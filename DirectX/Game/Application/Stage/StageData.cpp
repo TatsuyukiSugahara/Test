@@ -203,6 +203,15 @@ namespace app
 			const float maxGoal = data->spline.GetTotalLength() - 5.0f;
 			if (data->goalDistance > maxGoal) { data->goalDistance = maxGoal; }
 
+			// 地形 (省略可。ブロックごと無ければ既定値のまま = 平坦 grass)
+			if (root.Contains("terrain")) {
+				const auto& terrain = root["terrain"];
+				data->terrainHeightmapPath = terrain["heightmap"].AsString();
+				data->terrainSplatmapPath  = terrain["splatmap"].AsString();
+				data->terrainHeightScale   = terrain["heightScale"].AsFloat(0.0f);
+				data->terrainResolution    = static_cast<uint32_t>(terrain["resolution"].AsInt(128));
+			}
+
 			// コイン (判定は P2)
 			for (const auto& coin : root["coins"].GetArray()) {
 				CoinPlacement placement;

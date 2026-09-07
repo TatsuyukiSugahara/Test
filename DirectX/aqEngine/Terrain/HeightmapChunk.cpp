@@ -60,16 +60,21 @@ namespace aq
 					: DirectX::LoadFromWICFile(wpath, DirectX::WIC_FLAGS_NONE, &meta, raw);
 				if (FAILED(hr)) return false;
 
-				// RGBA8 に統一してRチャンネルだけ取り出す
+				// RGBA8 に統一してRチャンネルだけ取り出す。
+				// DirectXTex の Convert は変換元と変換先が同一フォーマットだと失敗するため、
+				// WIC が既に R8G8B8A8 で返した場合は変換を挟まずそのまま使う。
 				DirectX::ScratchImage rgba;
-				hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
-				                      DXGI_FORMAT_R8G8B8A8_UNORM,
-				                      DirectX::TEX_FILTER_DEFAULT,
-				                      DirectX::TEX_THRESHOLD_DEFAULT,
-				                      rgba);
-				if (FAILED(hr)) return false;
-
-				const DirectX::Image* img = rgba.GetImage(0, 0, 0);
+				const DirectX::Image* img = raw.GetImage(0, 0, 0);
+				if (meta.format != DXGI_FORMAT_R8G8B8A8_UNORM)
+				{
+					hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
+					                      DXGI_FORMAT_R8G8B8A8_UNORM,
+					                      DirectX::TEX_FILTER_DEFAULT,
+					                      DirectX::TEX_THRESHOLD_DEFAULT,
+					                      rgba);
+					if (FAILED(hr)) return false;
+					img = rgba.GetImage(0, 0, 0);
+				}
 				if (!img || !img->pixels) return false;
 
 				outW = static_cast<uint32_t>(img->width);
@@ -116,15 +121,20 @@ namespace aq
 					: DirectX::LoadFromWICFile(wpath, DirectX::WIC_FLAGS_NONE, &meta, raw);
 				if (FAILED(hr)) return false;
 
+				// 同一フォーマットへの Convert は失敗するため、必要なときだけ変換する
+				// (LoadHeightValues と同じ理由)。
 				DirectX::ScratchImage rgba;
-				hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
-				                      DXGI_FORMAT_R8G8B8A8_UNORM,
-				                      DirectX::TEX_FILTER_DEFAULT,
-				                      DirectX::TEX_THRESHOLD_DEFAULT,
-				                      rgba);
-				if (FAILED(hr)) return false;
-
-				const DirectX::Image* img = rgba.GetImage(0, 0, 0);
+				const DirectX::Image* img = raw.GetImage(0, 0, 0);
+				if (meta.format != DXGI_FORMAT_R8G8B8A8_UNORM)
+				{
+					hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
+					                      DXGI_FORMAT_R8G8B8A8_UNORM,
+					                      DirectX::TEX_FILTER_DEFAULT,
+					                      DirectX::TEX_THRESHOLD_DEFAULT,
+					                      rgba);
+					if (FAILED(hr)) return false;
+					img = rgba.GetImage(0, 0, 0);
+				}
 				if (!img || !img->pixels) return false;
 
 				outW = static_cast<uint32_t>(img->width);

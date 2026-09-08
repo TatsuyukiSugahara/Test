@@ -7,7 +7,13 @@ namespace aq
 	{
 		void TerrainComponent::SetDesc(const terrain::HeightmapChunk::Desc& desc)
 		{
-			chunk_.Initialize(desc);
+			SetDesc(desc, terrain::HeightmapChunk::PrepareCpuData(desc));
+		}
+
+
+		void TerrainComponent::SetDesc(const terrain::HeightmapChunk::Desc& desc, terrain::HeightmapChunk::CpuData&& cpu)
+		{
+			chunk_.Initialize(desc, std::move(cpu));
 			state_ = State::Completed;
 #ifdef AQ_DEBUG_IMGUI
 			heightmapPath_ = desc.heightmapPath ? desc.heightmapPath : "";

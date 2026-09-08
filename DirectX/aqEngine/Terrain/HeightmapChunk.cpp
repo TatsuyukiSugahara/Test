@@ -236,33 +236,120 @@ namespace aq
 		}
 
 
+		namespace
+		{
+			// グリッド N×N のインデックス列(地形変更時も変わらない)
+			void BuildIndices(uint32_t N, std::vector<uint32_t>& indices)
+			{
+				const uint32_t vN = N + 1;
+				indices.clear();
+				indices.reserve(static_cast<size_t>(N) * N * 6);
+				for (uint32_t zi = 0; zi < N; ++zi)
+				{
+					for (uint32_t xi = 0; xi < N; ++xi)
+					{
+						const uint32_t i00 =  zi      * vN + xi;
+						const uint32_t i10 =  zi      * vN + (xi + 1);
+						const uint32_t i01 = (zi + 1) * vN + xi;
+						const uint32_t i11 = (zi + 1) * vN + (xi + 1);
+
+						indices.push_back(i00); indices.push_back(i01); indices.push_back(i10);
+						indices.push_back(i10); indices.push_back(i01); indices.push_back(i11);
+					}
+				}
+			}
+
+			// レイヤー重み → RGBA8 画素列(スプラットテクスチャの元データ)
+			void BuildSplatPixels(const std::vector<math::Vector4>& splat, uint32_t w, uint32_t h,
+			                      std::vector<uint8_t>& pixels)
+			{
+				pixels.resize(static_cast<size_t>(w) * h * 4);
+				for (uint32_t y = 0; y < h; ++y)
+				{
+					for (uint32_t x = 0; x < w; ++x)
+					{
+						math::Vector4 wt = splat[static_cast<size_t>(y) * w + x];
+						NormalizeSplatWeight(wt);
+						const size_t idx = (static_cast<size_t>(y) * w + x) * 4;
+						pixels[idx + 0] = static_cast<uint8_t>(std::clamp(wt.x, 0.0f, 1.0f) * 255.0f + 0.5f);
+						pixels[idx + 1] = static_cast<uint8_t>(std::clamp(wt.y, 0.0f, 1.0f) * 255.0f + 0.5f);
+						pixels[idx + 2] = static_cast<uint8_t>(std::clamp(wt.z, 0.0f, 1.0f) * 255.0f + 0.5f);
+						pixels[idx + 3] = 255u;
+					}
+				}
+			}
+		}
+
+
+		HeightmapChunk::CpuData HeightmapChunk::PrepareCpuData(const Desc& desc)
+		{
+			CpuData cpu;
+
+			// ハイトマップを CPU で読み込む (DirectXTex 直接使用)。読めなければ平坦。
+			if (!LoadHeightValues(desc.heightmapPath, cpu.heights, cpu.hmapW, cpu.hmapH))
+			{
+				cpu.hmapW = cpu.hmapH = desc.resolution + 1;
+				cpu.heights.assign(static_cast<size_t>(cpu.hmapW) * cpu.hmapH, 0.0f);
+			}
+
+			// スプラットマップ。読めなければ layer0 のみ。
+			if (!LoadSplatValues(desc.splatmapPath, cpu.splat, cpu.splatW, cpu.splatH))
+			{
+				cpu.splatW = cpu.hmapW;
+				cpu.splatH = cpu.hmapH;
+				cpu.splat.assign(static_cast<size_t>(cpu.splatW) * cpu.splatH,
+				                 math::Vector4(1.0f, 0.0f, 0.0f, 1.0f));
+			}
+
+			ComputeVertices(cpu.heights, cpu.hmapW, cpu.hmapH, desc, cpu.vertices);
+			BuildIndices(desc.resolution, cpu.indices);
+			BuildSplatPixels(cpu.splat, cpu.splatW, cpu.splatH, cpu.splatPixels);
+			return cpu;
+		}
+
+
 		void HeightmapChunk::Initialize(const Desc& desc)
+		{
+			Initialize(desc, PrepareCpuData(desc));
+		}
+
+
+		void HeightmapChunk::Initialize(const Desc& desc, CpuData&& cpu)
 		{
 			desc_        = desc;
 			terrainSize_ = desc.terrainSize;
 			heightScale_ = desc.heightScale;
 
-			// ハイトマップを CPU で読み込む (DirectXTex 直接使用)
-			if (!LoadHeightValues(desc.heightmapPath, heightData_, hmapWidth_, hmapHeight_))
+			heightData_     = std::move(cpu.heights);
+			hmapWidth_      = cpu.hmapW;
+			hmapHeight_     = cpu.hmapH;
+			splatData_      = std::move(cpu.splat);
+			splatMapWidth_  = cpu.splatW;
+			splatMapHeight_ = cpu.splatH;
+
+			// 前計算が欠けている項目だけここで補う(別 desc で作られたデータが渡された場合の保険)。
+			vertCache_ = std::move(cpu.vertices);
+			if (vertCache_.size() != static_cast<size_t>(desc.resolution + 1) * (desc.resolution + 1))
 			{
-				hmapWidth_ = hmapHeight_ = desc.resolution + 1;
-				heightData_.assign(static_cast<size_t>(hmapWidth_) * hmapHeight_, 0.0f);
+				ComputeVertices(heightData_, hmapWidth_, hmapHeight_, desc, vertCache_);
+			}
+			if (cpu.indices.size() != static_cast<size_t>(desc.resolution) * desc.resolution * 6)
+			{
+				BuildIndices(desc.resolution, cpu.indices);
+			}
+			if (cpu.splatPixels.size() != static_cast<size_t>(splatMapWidth_) * splatMapHeight_ * 4)
+			{
+				BuildSplatPixels(splatData_, splatMapWidth_, splatMapHeight_, cpu.splatPixels);
 			}
 
-			if (!LoadSplatValues(desc.splatmapPath, splatData_, splatMapWidth_, splatMapHeight_))
-			{
-				splatMapWidth_  = hmapWidth_;
-				splatMapHeight_ = hmapHeight_;
-				splatData_.assign(static_cast<size_t>(splatMapWidth_) * splatMapHeight_,
-				                  math::Vector4(1.0f, 0.0f, 0.0f, 1.0f));
-			}
-
-			BuildMesh(heightData_, hmapWidth_, hmapHeight_, desc);
+			UploadMesh(cpu.indices);
+			aq::StartupMarkf("[load]     terrain: VB/IB uploaded (%u^2 verts)", desc.resolution + 1);
 
 			auto& rm = res::ResourceManager::Get();
 
 			// t0: runtime splat map generated from CPU weights.
-			RebuildSplatTexture();
+			UploadSplatTexture(cpu.splatPixels);
+			aq::StartupMark("[load]     terrain: splat texture uploaded");
 
 			// t1-t3: レイヤーテクスチャ (Normal/Specular/Emissive スロットを流用)
 			static constexpr rendering::TextureSlot kLayerSlots[3] = {
@@ -294,33 +381,8 @@ namespace aq
 		}
 
 
-		void HeightmapChunk::BuildMesh(const std::vector<float>& heights,
-		                               uint32_t mapW, uint32_t mapH,
-		                               const Desc& desc)
+		void HeightmapChunk::UploadMesh(const std::vector<uint32_t>& indices)
 		{
-			const uint32_t N  = desc.resolution;
-			const uint32_t vN = N + 1;
-
-			// 頂点生成 (vertCache_ に保持して RebuildFromHeights でも再利用)
-			ComputeVertices(heights, mapW, mapH, desc, vertCache_);
-
-			// インデックス生成 (地形変更時は変わらないため1回のみ)
-			std::vector<uint32_t> indices;
-			indices.reserve(static_cast<size_t>(N) * N * 6);
-			for (uint32_t zi = 0; zi < N; ++zi)
-			{
-				for (uint32_t xi = 0; xi < N; ++xi)
-				{
-					const uint32_t i00 =  zi      * vN + xi;
-					const uint32_t i10 =  zi      * vN + (xi + 1);
-					const uint32_t i01 = (zi + 1) * vN + xi;
-					const uint32_t i11 = (zi + 1) * vN + (xi + 1);
-
-					indices.push_back(i00); indices.push_back(i01); indices.push_back(i10);
-					indices.push_back(i10); indices.push_back(i01); indices.push_back(i11);
-				}
-			}
-
 			// 動的VBで初期化: ペイント時に Map/Unmap で頂点を書き換える
 			mesh_.InitializeDynamic(vertCache_.data(),  static_cast<uint32_t>(vertCache_.size()),
 			                        indices.data(),      static_cast<uint32_t>(indices.size()),
@@ -340,21 +402,14 @@ namespace aq
 				return;
 			}
 
-			std::vector<uint8_t> pixels(static_cast<size_t>(splatMapWidth_) * splatMapHeight_ * 4);
-			for (uint32_t y = 0; y < splatMapHeight_; ++y)
-			{
-				for (uint32_t x = 0; x < splatMapWidth_; ++x)
-				{
-					math::Vector4 w = splatData_[static_cast<size_t>(y) * splatMapWidth_ + x];
-					NormalizeSplatWeight(w);
-					const size_t idx = (static_cast<size_t>(y) * splatMapWidth_ + x) * 4;
-					pixels[idx + 0] = static_cast<uint8_t>(std::clamp(w.x, 0.0f, 1.0f) * 255.0f + 0.5f);
-					pixels[idx + 1] = static_cast<uint8_t>(std::clamp(w.y, 0.0f, 1.0f) * 255.0f + 0.5f);
-					pixels[idx + 2] = static_cast<uint8_t>(std::clamp(w.z, 0.0f, 1.0f) * 255.0f + 0.5f);
-					pixels[idx + 3] = 255u;
-				}
-			}
+			std::vector<uint8_t> pixels;
+			BuildSplatPixels(splatData_, splatMapWidth_, splatMapHeight_, pixels);
+			UploadSplatTexture(pixels);
+		}
 
+
+		void HeightmapChunk::UploadSplatTexture(const std::vector<uint8_t>& pixels)
+		{
 			graphics::Texture2DDesc texDesc;
 			texDesc.width     = splatMapWidth_;
 			texDesc.height    = splatMapHeight_;

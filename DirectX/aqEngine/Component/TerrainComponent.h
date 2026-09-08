@@ -16,6 +16,8 @@ namespace aq
 
 		public:
 			void SetDesc(const terrain::HeightmapChunk::Desc& desc);
+			/** ワーカースレッドで PrepareCpuData 済みのデータを使う版(メインスレッドは GPU 生成のみ) */
+			void SetDesc(const terrain::HeightmapChunk::Desc& desc, terrain::HeightmapChunk::CpuData&& cpu);
 
 			bool IsCompleted() const { return state_ == State::Completed; }
 

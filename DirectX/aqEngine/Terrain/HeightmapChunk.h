@@ -48,7 +48,32 @@ namespace aq
 				float       layerTiling   = 10.0f;     // レイヤーテクスチャのUV倍率
 			};
 
+			/**
+			 * ワーカースレッドで前計算できる CPU 側データ(GPU リソースを含まない)。
+			 * PrepareCpuData(desc) で作り、Initialize(desc, std::move(cpu)) に渡すと
+			 * メインスレッドの仕事は VB/IB とスプラットテクスチャの生成だけになる。
+			 * 実測(Debug)では画像デコード+頂点生成+画素変換で 200ms 超がメインスレッドから消える。
+			 */
+			struct CpuData
+			{
+				std::vector<float>                heights;       // ハイトマップ R チャンネル [0,1]
+				uint32_t                          hmapW = 0;
+				uint32_t                          hmapH = 0;
+				std::vector<math::Vector4>        splat;         // レイヤー重み(正規化済み)
+				uint32_t                          splatW = 0;
+				uint32_t                          splatH = 0;
+				std::vector<graphics::VertexData> vertices;      // ComputeVertices の結果
+				std::vector<uint32_t>             indices;
+				std::vector<uint8_t>              splatPixels;   // RGBA8 化したスプラットマップ
+			};
+
+			/** desc から CpuData を作る。ファイル I/O と CPU 計算のみでスレッド安全(GPU/ECS に触れない) */
+			static CpuData PrepareCpuData(const Desc& desc);
+
+			/** PrepareCpuData + Initialize(desc, cpu) を同期で行う(従来の入口) */
 			void Initialize(const Desc& desc);
+			/** 前計算済みデータから GPU リソースだけを生成する(メインスレッド) */
+			void Initialize(const Desc& desc, CpuData&& cpu);
 			void Update(const math::Vector3& position,
 			            const math::Quaternion& rotation,
 			            const math::Vector3& scale);
@@ -86,9 +111,10 @@ namespace aq
 			void SetHeightScale(float scale);
 
 		private:
-			void BuildMesh(const std::vector<float>& heights,
-			               uint32_t mapW, uint32_t mapH,
-			               const Desc& desc);
+			/** vertCache_ と indices から動的 VB/IB を生成する */
+			void UploadMesh(const std::vector<uint32_t>& indices);
+			/** RGBA8 画素列からスプラットテクスチャを生成してマテリアルに差す */
+			void UploadSplatTexture(const std::vector<uint8_t>& pixels);
 			/** vertCache_ からローカル AABB を再計算しキャッシュする (カリング用) */
 			void RecomputeBounds() const;
 

@@ -275,3 +275,45 @@ DX11 の `UpdateSubresource`（DEFAULT ヒープ即時更新）と DYNAMIC バ�
 
 **変更不要（抽象越しに DX12 へ追従）**
 - `UIRenderPipeline` / `UIBatchRenderCommand` / 各 `*Command` / `GraphicsDevice` / `RenderContext`
+
+
+
+
+## 15. アダプタ選択（高性能 GPU 優先）
+
+### 15.1 問題
+
+`D3D12CreateDevice` に渡すアダプタを `IDXGIFactory1::EnumAdapters1` の**列挙順**に試し、
+最初にデバイス作成が成功したものを採用していた。ハイブリッド構成（内蔵 GPU +
+ディスクリート GPU）では 0 番が内蔵 GPU になるため、**ディスクリート GPU が一度も試されない**。
+
+実測（2026-09-08・RTX 4060 Laptop 搭載機）: 起動ログに
+`adapter 0: … desc=Intel(R) UHD Graphics` が出て、そのままデバイス作成に成功していた。
+
+### 15.2 方式（確定）
+
+1. `IDXGIFactory6` を QueryInterface できる場合は
+   `EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, …)` で列挙する。
+2. `DXGI_ADAPTER_FLAG_SOFTWARE` のアダプタは飛ばす（WARP へ落ちるのを防ぐ）。
+3. `IDXGIFactory6` が取れない環境では従来の `EnumAdapters1` へフォールバックする。
+4. 採用したアダプタ名は従来どおり `StartupLog` へ出す（`Game/startup_timing.log` で確認できる）。
+
+`dxgi1_6.h` は `aq.h` / `D3D12Common.h` で既にインクルード済みのため、追加の依存はない。
+本節はスワップチェーン作成側のファクトリ（§2）には手を入れない。
+
+### 15.3 チェックポイント
+
+- [x] 起動ログの採用アダプタがディスクリート GPU になる
+  (2026-09-08 実測: `adapter 0: … vram=7956MB desc=NVIDIA GeForce RTX 4060 Laptop GPU`。
+   従来は `vram=128MB desc=Intel(R) UHD Graphics` だった)
+- [ ] 内蔵 GPU のみの環境・ソフトウェアアダプタしかない環境でも起動する
+  (該当機材が無く未検証。`IDXGIFactory6` が取れない場合と、ハードウェアアダプタが
+   見つからない場合のフォールバック経路はコード上で担保)
+
+### 15.4 副作用: 起動時間
+
+ディスクリート GPU はドライバ初期化が重く、`D3D12CreateDevice` の所要が伸びる。
+実測(2026-09-08・同一機): 内蔵 GPU 約 80ms → RTX 4060 は**ウォーム 554ms / コールド 2103ms**。
+タイトル表示までは約 0.5 秒 → **ウォーム 0.94 秒 / コールド 2.5 秒**になる。
+描画性能(実測 1.51ms/フレーム)と引き換えの許容範囲と判断する。気になる場合は
+起動オプション等でアダプタ選択を切り替えられるようにするのが次の手。

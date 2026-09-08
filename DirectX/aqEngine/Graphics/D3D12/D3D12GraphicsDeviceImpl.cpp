@@ -205,9 +205,24 @@ namespace aq
 						D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0,
 						D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
 					};
+
+					// ハイブリッド構成(内蔵 GPU + ディスクリート GPU)では EnumAdapters1 の 0 番が
+					// 内蔵 GPU になり、そこで生成が成功してディスクリート GPU が試されない。
+					// IDXGIFactory6 が使えるときは高性能 GPU 優先の列挙を使う(設計書 D3D12Backend設計.md §15)。
+					IDXGIFactory6* factory6 = nullptr;
+					if (FAILED(devFactory->QueryInterface(IID_PPV_ARGS(&factory6)))) {
+						factory6 = nullptr;
+						aq::StartupLog("    [dev] IDXGIFactory6 unavailable -> enumerate in default order");
+					}
+
 					IDXGIAdapter1* adapter = nullptr;
-					for (UINT i = 0; devFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+					for (UINT i = 0; ; ++i)
 					{
+						const HRESULT ehr = factory6
+							? factory6->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter))
+							: devFactory->EnumAdapters1(i, &adapter);
+						if (ehr == DXGI_ERROR_NOT_FOUND || FAILED(ehr)) { break; }
+
 						DXGI_ADAPTER_DESC1 ad = {};
 						adapter->GetDesc1(&ad);
 						{
@@ -218,6 +233,16 @@ namespace aq
 							          ad.Description);
 							aq::StartupLog(nm);
 						}
+
+						// ソフトウェアアダプタ(WARP)は最後の手段。ハードウェアがある限り選ばない。
+						if ((ad.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0)
+						{
+							aq::StartupLog("    [dev]   skip (software adapter)");
+							adapter->Release();
+							adapter = nullptr;
+							continue;
+						}
+
 						for (D3D_FEATURE_LEVEL fl : levels)
 						{
 							HRESULT h2 = D3D12CreateDevice(adapter, fl, IID_PPV_ARGS(&device_));
@@ -230,6 +255,8 @@ namespace aq
 						adapter = nullptr;
 						if (SUCCEEDED(hr)) break;
 					}
+
+					if (factory6) { factory6->Release(); }
 					devFactory->Release();
 				}
 			}

@@ -48,6 +48,13 @@ namespace aq
 
 			// 振動。left=低周波(重い) right=高周波(細かい)。各 [0, 1]。
 			virtual void SetVibration(uint32_t index, float left, float right) = 0;
+
+			// アダプティブトリガー(L2 / R2)の抵抗。trigger は PadAxis::LTrigger / RTrigger のみ有効。
+			// startPos: 抵抗が効き始めるトリガー位置 [0, 1]。strength: 抵抗の強さ [0, 1]。
+			// strength = 0 は「解除」(抵抗なし)を意味する。
+			// 既定は no-op。ハードが対応しないバックエンド(XInput / WinRT)は実装しない。
+			virtual void SetTriggerResistance(uint32_t /*index*/, PadAxis /*trigger*/,
+			                                  float /*startPos*/, float /*strength*/) {}
 		};
 	}
 }

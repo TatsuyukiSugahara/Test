@@ -341,6 +341,12 @@
     <ClCompile Include="HID\XInputPadBackend.cpp">
       <Filter>HID</Filter>
     </ClCompile>
+    <ClCompile Include="HID\DualSensePadBackend.cpp">
+      <Filter>HID</Filter>
+    </ClCompile>
+    <ClCompile Include="HID\Win32PadBackend.cpp">
+      <Filter>HID</Filter>
+    </ClCompile>
     <ClCompile Include="HID\WinRTGamepadBackend.cpp">
       <Filter>HID</Filter>
     </ClCompile>
@@ -1004,6 +1010,12 @@
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\XInputPadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\DualSensePadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\Win32PadBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\WinRTGamepadBackend.h">

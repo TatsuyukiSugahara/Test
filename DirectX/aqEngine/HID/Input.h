@@ -8,6 +8,7 @@
 #endif
 #include <memory>
 #include <chrono>
+#include <atomic>
 #include "Math/Vector.h"
 #include "HID/IPadBackend.h"   // PadButton / PadAxis / PadState / IPadBackend
 
@@ -163,17 +164,48 @@ namespace aq
 			float GetAxis    (PadAxis axis) const;
 
 			// left: 低周波モーター (重い振動)  right: 高周波モーター (細かい振動)  各 [0, 1]
+			// バックエンドを直接叩く旧 API。互換のために残すが、新規の呼び出しは Rumble を使う。
 			void Vibrate     (float left, float right);
 			void StopVibration() { Vibrate(0.0f, 0.0f); }
 
+			// ---- 出力バッファ API (ワーカースレッドから呼んでよい) ----
+			// ゲーム側のシステムはワーカースレッドで走るため、ここでは値を積むだけにして、
+			// バックエンドへの送信はメインスレッドの Update がフレームに 1 回まとめて行う。
+
+			// 振動。durationSec 経過で自動停止する (0 以下なら次の指定まで持続)。
+			void Rumble(float left, float right, float durationSec);
+
+			// アダプティブトリガー(L2 / R2)の抵抗。strength = 0 で解除。
+			void SetTriggerResistance(PadAxis trigger, float startPos, float strength);
+
 		private:
-			static constexpr uint32_t BTN_COUNT = PadState::BUTTON_COUNT;
+			// 出力バッファをバックエンドへ適用する (メインスレッド専用)。
+			void ApplyOutput(float dt);
+
+		private:
+			static constexpr uint32_t BTN_COUNT     = PadState::BUTTON_COUNT;
+			static constexpr uint32_t TRIGGER_COUNT = 2;   // 0 = L2 / 1 = R2
 
 			IPadBackend* backend_ = nullptr;
 			PadState     now_{};
 			PadState     old_{};
 			float        holdTimers_[BTN_COUNT]{};
 			uint32_t     index_   = 0;
+
+			// 出力バッファ。書き手はワーカースレッド、読み手はメインスレッドの Update だけなので、
+			// 値ごとの atomic で足りる (取り違えても 1 フレーム分ずれるだけで破綻しない)。
+			// 複数値の整合を厳密に取る必要は無く、ロックは掛けない。
+			std::atomic<float> rumbleLeft_      { 0.0f };
+			std::atomic<float> rumbleRight_     { 0.0f };
+			std::atomic<float> rumbleRemainSec_ { 0.0f };
+			std::atomic<float> triggerStartPos_[TRIGGER_COUNT]{};
+			std::atomic<float> triggerStrength_[TRIGGER_COUNT]{};
+
+			// 直近にバックエンドへ送った値。差分が出たときだけ送る。
+			float appliedRumbleLeft_  = 0.0f;
+			float appliedRumbleRight_ = 0.0f;
+			float appliedStartPos_[TRIGGER_COUNT]{};
+			float appliedStrength_[TRIGGER_COUNT]{};
 		};
 
 

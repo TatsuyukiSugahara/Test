@@ -249,6 +249,8 @@
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
     <ClCompile Include="HID\XInputPadBackend.cpp" />
+    <ClCompile Include="HID\DualSensePadBackend.cpp" />
+    <ClCompile Include="HID\Win32PadBackend.cpp" />
     <ClCompile Include="HID\WinRTGamepadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
@@ -511,6 +513,8 @@
     <ClInclude Include="HID\InputBinding.h" />
     <ClInclude Include="HID\PadBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />
+    <ClInclude Include="HID\DualSensePadBackend.h" />
+    <ClInclude Include="HID\Win32PadBackend.h" />
     <ClInclude Include="HID\WinRTGamepadBackend.h" />
     <ClInclude Include="Math\Bounds.h" />
     <ClInclude Include="Math\Matrix.h" />

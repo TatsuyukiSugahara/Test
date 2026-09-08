@@ -229,6 +229,10 @@ namespace aq
 				now_ = {};
 			}
 
+			// 出力の適用はここ (メインスレッド) だけで行う。
+			// 未接続時も呼んで、再接続したときに送り直せるようにしておく。
+			ApplyOutput(dt);
+
 			if (!now_.connected)
 			{
 				old_ = {};
@@ -283,6 +287,77 @@ namespace aq
 		{
 			if (!now_.connected || !backend_) return;
 			backend_->SetVibration(index_, left, right);
+		}
+
+
+		void Pad::Rumble(float left, float right, float durationSec)
+		{
+			// ワーカースレッドから呼ばれる想定。値を積むだけで、送信も残時間の減衰も
+			// メインスレッドの Update に任せる (ここでタイマーを持たない)。
+			rumbleLeft_ .store(math::Clamp01(left));
+			rumbleRight_.store(math::Clamp01(right));
+			rumbleRemainSec_.store(durationSec > 0.0f ? durationSec : 0.0f);
+		}
+
+
+		void Pad::SetTriggerResistance(PadAxis trigger, float startPos, float strength)
+		{
+			if (trigger != PadAxis::LTrigger && trigger != PadAxis::RTrigger) return;
+
+			const uint32_t i = (trigger == PadAxis::LTrigger) ? 0 : 1;
+			triggerStartPos_[i].store(math::Clamp01(startPos));
+			triggerStrength_[i].store(math::Clamp01(strength));
+		}
+
+
+		void Pad::ApplyOutput(float dt)
+		{
+			if (!backend_) return;
+
+			// 未接続なら送信済みの記録を捨てる。再接続時に必ず送り直される。
+			if (!now_.connected)
+			{
+				appliedRumbleLeft_  = 0.0f;
+				appliedRumbleRight_ = 0.0f;
+				aq::memory::Clear(appliedStartPos_, sizeof(appliedStartPos_));
+				aq::memory::Clear(appliedStrength_, sizeof(appliedStrength_));
+				return;
+			}
+
+			// 振動の残時間。0 になったら自動で止める。
+			// 減衰中にワーカーが Rumble を呼ぶと 1 フレーム分ずれるが、体感差は無いので許容する。
+			float remain = rumbleRemainSec_.load();
+			if (remain > 0.0f)
+			{
+				remain -= dt;
+				if (remain <= 0.0f)
+				{
+					remain = 0.0f;
+					rumbleLeft_ .store(0.0f);
+					rumbleRight_.store(0.0f);
+				}
+				rumbleRemainSec_.store(remain);
+			}
+
+			const float left  = rumbleLeft_ .load();
+			const float right = rumbleRight_.load();
+			if (left != appliedRumbleLeft_ || right != appliedRumbleRight_)
+			{
+				backend_->SetVibration(index_, left, right);
+				appliedRumbleLeft_  = left;
+				appliedRumbleRight_ = right;
+			}
+
+			for (uint32_t i = 0; i < TRIGGER_COUNT; ++i)
+			{
+				const float startPos = triggerStartPos_[i].load();
+				const float strength = triggerStrength_[i].load();
+				if (startPos == appliedStartPos_[i] && strength == appliedStrength_[i]) continue;
+
+				backend_->SetTriggerResistance(index_, (i == 0) ? PadAxis::LTrigger : PadAxis::RTrigger, startPos, strength);
+				appliedStartPos_[i] = startPos;
+				appliedStrength_[i] = strength;
+			}
 		}
 
 

@@ -38,20 +38,11 @@ namespace app
 
 		GameInput::Initialize();
 
-		// BGM: 起動時から常時ループ再生する。SoundEngine は Engine 側で本 OnInitialize より前に
-		// 初期化済みのため、ここで直接ストリームを開けばよい(バンク登録に依存しない wav 直読み)。
-		if (aq::sound::SoundEngine::IsAvailable()) {
-			bgmStream_ = aq::sound::SoundEngine::Get().OpenStream(
-				"Assets/Sound/AllBGM.wav", aq::sound::SoundBusId::BGM);
-			if (bgmStream_) {
-				bgmStream_->Play(aq::sound::LoopRegion{ 0, 1, 0 });   // frameCount!=0 で無限ループ
-			}
-		}
-
 		// タイトル/ローディング/プレイのゲームフロー(旧 Scene を置換)。UI 画面(タイトル/ローディング)を登録し
 		// タイトルを表示する。決定入力で箱 Level を非同期ロードし、完了後にプレイへ遷移する。
 		app::GameFlow::Create();
 		app::GameFlow::Get().Initialize();
+		aq::StartupMark("    [game] GameFlow ok");
 
 		// Shadow renderer
 		{
@@ -76,6 +67,7 @@ namespace app
 				                            renderW, renderH);
 			}
 		}
+		aq::StartupMark("    [game] Shadow ok (VS x1)");
 
 		// Deferred Renderer
 		{
@@ -88,6 +80,7 @@ namespace app
 				renderer_.SetDeferredRenderer(std::move(deferred));
 			}
 		}
+		aq::StartupMark("    [game] Deferred ok (shaders x4 + GBuffer)");
 
 		// Bloom
 		{
@@ -104,6 +97,19 @@ namespace app
 				renderer_.SetPostProcessRenderer(std::move(bloom));
 			}
 		}
+		aq::StartupMark("    [game] Bloom ok (CS x6)");
+
+		// BGM: 起動時から常時ループ再生する(バンク登録に依存しない wav 直読み)。
+		// SoundEngine の初期化は Engine が別スレッドで進めているので、ここで合流してから開く。
+		// レンダラ初期化(シェーダコンパイル)の後ろに置くことで、その間もサウンド初期化が並走する。
+		if (aq::Engine::Get().EnsureSoundInitialized() && aq::sound::SoundEngine::IsAvailable()) {
+			bgmStream_ = aq::sound::SoundEngine::Get().OpenStream(
+				"Assets/Sound/AllBGM.wav", aq::sound::SoundBusId::BGM);
+			if (bgmStream_) {
+				bgmStream_->Play(aq::sound::LoopRegion{ 0, 1, 0 });   // frameCount!=0 で無限ループ
+			}
+		}
+		aq::StartupMark("    [game] BGM stream opened (sound joined)");
 
 #ifdef AQ_DEBUG_IMGUI
 		// オーディオ オーサリング/デバッグパネルを DebugUI に登録する。

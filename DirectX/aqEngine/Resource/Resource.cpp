@@ -1610,6 +1610,7 @@ namespace aq
 			// DDS は tkm マテリアルで多用。TGA は WIC 非対応のため専用ローダ。
 			// それ以外 (.png/.jpg 等) は WIC。
 			const std::string extension = GetLowerExtension(requestPath_);
+			const auto decodeStart = std::chrono::steady_clock::now();
 			HRESULT hr =
 				  extension == ".dds" ? DirectX::LoadFromDDSFile(filePath, DirectX::DDS_FLAGS_NONE, &info, *image)
 				: extension == ".tga" ? DirectX::LoadFromTGAFile(filePath, DirectX::TGA_FLAGS_NONE, &info, *image)
@@ -1618,11 +1619,21 @@ namespace aq
 				info = {};
 				return false;
 			}
+			const auto mipStart = std::chrono::steady_clock::now();
 			if (info.mipLevels == 1) {
 				std::unique_ptr<DirectX::ScratchImage> mipImage = std::make_unique<DirectX::ScratchImage>();
 				hr = DirectX::GenerateMipMaps(image->GetImages(), image->GetImageCount(), image->GetMetadata(), DirectX::TEX_FILTER_DEFAULT, 0, *mipImage);
 				if (SUCCEEDED(hr)) {
 					image = std::move(mipImage);
+				}
+			}
+			// 起動計測: ワーカー側のデコード/ミップ生成が重いテクスチャを記録する(20ms 超のみ)。
+			{
+				const auto now = std::chrono::steady_clock::now();
+				const double decodeMs = std::chrono::duration<double, std::milli>(mipStart - decodeStart).count();
+				const double mipMs    = std::chrono::duration<double, std::milli>(now - mipStart).count();
+				if (decodeMs + mipMs > 20.0) {
+					aq::StartupMarkf("      [res] decode %7.2f ms + mips %7.2f ms  %s", decodeMs, mipMs, requestPath_.c_str());
 				}
 			}
 			info = image->GetMetadata();

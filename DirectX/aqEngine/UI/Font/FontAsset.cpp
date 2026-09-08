@@ -38,8 +38,17 @@ namespace aq
 
 		bool FontAsset::LoadFromJson(const char* jsonPath)
 		{
+			const auto parseStart = std::chrono::steady_clock::now();
 			util::JsonValue root = util::JsonParser::ParseFile(jsonPath);
 			if (root.IsNull()) return false;
+			// 起動計測: アトラス JSON の解析が重いフォントを記録する(20ms 超のみ)。
+			{
+				const double parseMs = std::chrono::duration<double, std::milli>(
+					std::chrono::steady_clock::now() - parseStart).count();
+				if (parseMs > 20.0) {
+					aq::StartupMarkf("      [font] json parse %7.2f ms  %s", parseMs, jsonPath ? jsonPath : "");
+				}
+			}
 
 			// --- atlas セクション ---
 			const auto& atlasJ = root["atlas"];

@@ -1,6 +1,7 @@
 #pragma once
 #include "GameFlow.h"
 #include "Terrain/HeightmapChunk.h"
+#include "Component/InstancedPointListComponentSystem.h"   // ワーカーで作る草のベイク済み配置
 
 
 namespace app
@@ -30,11 +31,12 @@ namespace app
 		private:
 			enum class Phase { WarmUp, ParseStage, WaitStage, Streaming };
 
-			/** ワーカータスクの成果物。ステージ定義と、それから作った地形の CPU 側データ */
+			/** ワーカータスクの成果物。ステージ定義と、それから作った地形の CPU 側データ + 草のベイク結果 */
 			struct StageLoadResult
 			{
 				std::shared_ptr<stage::StageData>     stage;
 				aq::terrain::HeightmapChunk::CpuData  terrainCpu;
+				aq::ecs::BakedData                    grassBaked;
 			};
 
 			/** 進行状態 */

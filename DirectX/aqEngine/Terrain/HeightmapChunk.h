@@ -70,6 +70,12 @@ namespace aq
 			/** desc から CpuData を作る。ファイル I/O と CPU 計算のみでスレッド安全(GPU/ECS に触れない) */
 			static CpuData PrepareCpuData(const Desc& desc);
 
+			/** CpuData から地形ローカル XZ の高さを取る (チャンク生成前・ワーカースレッドから使える) */
+			static float SampleHeight(const CpuData& cpu, const Desc& desc, const float localX, const float localZ);
+
+			/** CpuData から地形ローカル XZ のレイヤー重みを取る (x=layer0/草, y=layer1, z=layer2) */
+			static math::Vector4 SampleSplat(const CpuData& cpu, const Desc& desc, const float localX, const float localZ);
+
 			/** PrepareCpuData + Initialize(desc, cpu) を同期で行う(従来の入口) */
 			void Initialize(const Desc& desc);
 			/** 前計算済みデータから GPU リソースだけを生成する(メインスレッド) */

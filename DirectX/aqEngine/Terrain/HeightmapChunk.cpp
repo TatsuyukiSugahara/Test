@@ -308,6 +308,31 @@ namespace aq
 		}
 
 
+		float HeightmapChunk::SampleHeight(const CpuData& cpu, const Desc& desc, const float localX, const float localZ)
+		{
+			// GetHeight と同じ式。チャンク生成前 (= メンバがまだ空) でも引けるよう CpuData を直接見る。
+			if (cpu.heights.empty() || cpu.hmapW == 0 || cpu.hmapH == 0 || desc.terrainSize <= 0.0f) return 0.0f;
+			return BilinearSample(cpu.heights, cpu.hmapW, cpu.hmapH,
+			                      localX / desc.terrainSize,
+			                      localZ / desc.terrainSize) * desc.heightScale;
+		}
+
+
+		math::Vector4 HeightmapChunk::SampleSplat(const CpuData& cpu, const Desc& desc, const float localX, const float localZ)
+		{
+			// スプラットにバイリニアサンプラは無いので最近傍で引く (エンジン内の他の参照箇所と同じ texel 対応)。
+			if (cpu.splat.empty() || cpu.splatW == 0 || cpu.splatH == 0 || desc.terrainSize <= 0.0f)
+			{
+				return math::Vector4(1.0f, 0.0f, 0.0f, 1.0f);   // 読めていないときは layer0 のみ
+			}
+			const float u = std::clamp(localX / desc.terrainSize, 0.0f, 1.0f);
+			const float v = std::clamp(localZ / desc.terrainSize, 0.0f, 1.0f);
+			const uint32_t x = static_cast<uint32_t>(u * (cpu.splatW - 1) + 0.5f);
+			const uint32_t y = static_cast<uint32_t>(v * (cpu.splatH - 1) + 0.5f);
+			return cpu.splat[static_cast<size_t>(y) * cpu.splatW + x];
+		}
+
+
 		void HeightmapChunk::Initialize(const Desc& desc)
 		{
 			Initialize(desc, PrepareCpuData(desc));

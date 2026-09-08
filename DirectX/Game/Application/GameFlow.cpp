@@ -40,9 +40,10 @@ namespace app
 		// UI 文字は英数字のみ。ASCII 専用の小さな MSDF アトラス(512²/約74KB)を使い、
 		// 起動時に即ロードできるようにする(全文字版 CorporateLogo は 8411 グリフ・4096²/12MB で重い)。
 		static const char*        UI_FONT_PATH    = "Assets/Font/UI/atlas.json";
-		// タイトルの筆文字「残刃 / 侍」用。日本語グリフ全部入りの重いアトラス(4096²)。
-		// タイトルはこのフォントが主役なので、BootState で準備完了を待ってから表示する。
-		static const char*        TITLE_FONT_PATH = "Assets/Font/CorporateLogo/atlas.json";
+		// 注: 旧「残刃」タイトルの筆文字フォント(Assets/Font/CorporateLogo/atlas.json, 4096²/12MB)は
+		// 起動時に先読み+準備完了待ちをしていたが、AquaDash の画面は UI.textstyle しか使わないため撤去した。
+		// 実測(startup_timing.log)では Debug でこの待ちが上限 15 秒に達し、タイトル表示を丸ごと遅らせていた。
+		// 旧 Title.screen.json(Sumi スタイル)を出す場合は TextStyleCache 経由で遅延ロードされる。
 		// タイトルで決定(Space / パッド A)した瞬間に鳴らす SE。
 		static const char*        DECISION_SE_PATH = "Assets/Sound/Decision.wav";
 		static constexpr uint32_t LOAD_PER_FRAME  = 20;     // 1 フレームあたり生成数(ローディングを見せるため小さめ)
@@ -55,18 +56,6 @@ namespace app
 		bool IsUIFontReady()
 		{
 			auto fontRes = aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
-			if (!fontRes || !fontRes->IsCompleted()) return false;
-			const aq::ui::FontAsset* fa = fontRes->GetFontAsset();
-			if (!fa) return false;
-			auto srv = fa->GetAtlasSRV();
-			return srv && srv->GetNativeHandle() != nullptr;
-		}
-
-
-		// タイトル筆文字用フォント(CorporateLogo)が描画可能かを返す。IsUIFontReady と同様。
-		bool IsTitleFontReady()
-		{
-			auto fontRes = aq::ui::FontAssetCache::Get().Load(TITLE_FONT_PATH);
 			if (!fontRes || !fontRes->IsCompleted()) return false;
 			const aq::ui::FontAsset* fa = fontRes->GetFontAsset();
 			if (!fa) return false;
@@ -202,17 +191,26 @@ namespace app
 			void OnUpdate(GameFlow& flow, const float dt) override
 			{
 				timer_ += dt;
-				// AquaDash のタイトルは ASCII のみだが、フォント準備待ちは従来どおり両方を待つ
-				// (残刃タイトルへ戻す可能性を残すため。不要になったら P7 で整理する)。
-				if ((IsUIFontReady() && IsTitleFontReady()) || timer_ >= FONT_WAIT_MAX)
+				++frames_;
+				if (frames_ == 1) { aq::StartupMark("[boot] first Update (preload issued)"); }
+
+				// 計測: UI フォントが描画可能になった時刻を初回だけ記録する。
+				const bool uiReady = IsUIFontReady();
+				if (uiReady && !uiReadyLogged_) { uiReadyLogged_ = true; aq::StartupMark("[boot] UI font ready (Font/UI/atlas)"); }
+
+				// AquaDash の画面は ASCII 専用の UI フォントのみ使うため、待つのはこれだけでよい。
+				if (uiReady || timer_ >= FONT_WAIT_MAX)
 				{
+					aq::StartupMarkf("[boot] -> Title shown (boot wait %.2f s, %d frames)", timer_, frames_);
 					aq::ui::UIContext::Get().Screens().Replace("AquaDashTitle");
 					flow.ChangeState(std::make_unique<aquadash::TitleState>());
 				}
 			}
 
 		private:
-			float timer_ = 0.0f;
+			float timer_         = 0.0f;
+			int   frames_        = 0;
+			bool  uiReadyLogged_ = false;
 		};
 	}
 
@@ -452,9 +450,8 @@ namespace app
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Terrain/rock.png");
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
 			// UI フォント(小さな ASCII アトラス)を先読み。テキストはアトラス完了まで描画されないため。
+			// (CorporateLogo の先読みは撤去。上の UI_FONT_PATH の注を参照)
 			aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
-			// タイトル筆文字用フォント(CorporateLogo)も先読み。BootState が準備完了を待つ。
-			aq::ui::FontAssetCache::Get().Load(TITLE_FONT_PATH);
 			// タイトルの単色塗り(和紙/落款/フラッシュ)に使う白テクスチャ。
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/UI/Textures/white.png");
 			// 決定 SE を先読み(タイトルで押した瞬間に即鳴らせるように)。

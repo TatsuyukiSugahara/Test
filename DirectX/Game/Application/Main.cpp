@@ -14,6 +14,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	// 道A(UWP) では PlatformUWP に差し替えるブートストラップになる。
 	aq::platform::PlatformWin32 platform(hInstance, nCmdShow);
 
+	aq::StartupMark("WinMain");
 	aq::Engine::Create();
 	aq::Engine& engineInstance = aq::Engine::Get();
 	engineInstance.CreateApplication<app::Application>();

@@ -33,6 +33,7 @@ namespace app
 			Phase phase_        = Phase::WarmUp;
 			int   warmupFrames_ = 0;
 			float timer_        = 0.0f;
+			bool  levelDoneLogged_ = false;   // 起動計測: Level ロード完了を 1 回だけ記録
 
 			/** 非同期ロード */
 			std::string                                     stagePath_;

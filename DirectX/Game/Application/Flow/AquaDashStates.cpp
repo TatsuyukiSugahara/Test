@@ -484,6 +484,7 @@ namespace app
 			const auto& context = flow.Context();
 			const int index = context.selectedStageIndex;
 			stagePath_ = context.stageList[index >= 0 && index < static_cast<int>(context.stageList.size()) ? index : 0].stagePath;
+			aq::StartupMarkf("[load] LoadingState enter (%s)", stagePath_.c_str());
 		}
 
 
@@ -524,7 +525,9 @@ namespace app
 				}
 
 				flow.Context().activeStage = stageData;
+				aq::StartupMark("[load] stage json parsed");
 				CreateStageWorld(flow, stageData);   // 重い同期処理 (1 フレームだけヒッチ)
+				aq::StartupMark("[load] CreateStageWorld done (terrain/road/player/coins, sync)");
 
 				// 見た目 Level の非同期ロードを開始する。
 				if (!stageData->levelPath.empty()) {
@@ -535,8 +538,14 @@ namespace app
 			}
 
 			case Phase::Streaming:
+				if (flow.LoadHandle().IsDone() && !levelDoneLogged_)
+				{
+					levelDoneLogged_ = true;
+					aq::StartupMark("[load] level LoadAsync done");
+				}
 				if (flow.LoadHandle().IsDone() && timer_ >= MIN_LOADING_SEC)
 				{
+					aq::StartupMarkf("[load] -> InGame (loading %.2f s)", timer_);
 					aq::ui::UIContext::Get().Screens().Replace("AquaDashInGame");
 					flow.ChangeState(std::make_unique<InGameState>());
 				}

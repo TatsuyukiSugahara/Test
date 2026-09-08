@@ -17,6 +17,10 @@ namespace aq
 			, playSpeed_(1.0f)
 			, isPlaying_(false)
 			, isLooping_(true)
+			, blendFromHashKey_(0)
+			, blendFromTime_(0.0f)
+			, blendRemaining_(0.0f)
+			, blendDuration_(0.0f)
 		{
 		}
 
@@ -180,10 +184,22 @@ namespace aq
 #endif
 
 
-		void AnimationComponent::Play(uint32_t nameHash, bool looping)
+		void AnimationComponent::Play(uint32_t nameHash, bool looping, float blendSec)
 		{
 			auto it = slots_.find(nameHash);
 			if (it == slots_.end()) return;
+
+			// 別クリップからの切替なら、切替元のポーズを凍結してクロスフェードする
+			// (再生停止後の最終フレームからの切替も同様に滑らかになる)。
+			if (blendSec > 0.0f && currentHashKey_ != 0 && currentHashKey_ != nameHash
+			    && slots_.find(currentHashKey_) != slots_.end())
+			{
+				blendFromHashKey_ = currentHashKey_;
+				blendFromTime_    = currentTime_;
+				blendRemaining_   = blendSec;
+				blendDuration_    = blendSec;
+			}
+
 			currentHashKey_ = nameHash;
 			isLooping_      = looping;
 			isPlaying_      = true;
@@ -226,6 +242,35 @@ namespace aq
 
 			auto boneMatrices = std::make_shared<std::vector<aq::math::Matrix4x4>>();
 			slot.clip.CalcBoneMatrices(currentTime_, *bones, *boneMatrices);
+
+			// クロスフェード中は切替元の凍結ポーズとスキニング行列を線形補間する。
+			// ローカルポーズの球面補間ではない近似だが、0.1〜0.2 秒の短いフェードでは
+			// 破綻が見えず、クリップ側の変更なしで済む。
+			if (blendRemaining_ > 0.0f)
+			{
+				blendRemaining_ -= deltaTime;
+				auto fromIt = slots_.find(blendFromHashKey_);
+				if (blendRemaining_ > 0.0f && fromIt != slots_.end() && fromIt->second.clip.IsLoaded())
+				{
+					const float fromWeight = blendRemaining_ / blendDuration_;
+					std::vector<aq::math::Matrix4x4> fromMatrices;
+					fromIt->second.clip.CalcBoneMatrices(blendFromTime_, *bones, fromMatrices);
+					if (fromMatrices.size() == boneMatrices->size())
+					{
+						for (size_t i = 0; i < boneMatrices->size(); ++i)
+						{
+							float*       dst = &(*boneMatrices)[i]._11;
+							const float* src = &fromMatrices[i]._11;
+							for (int e = 0; e < 16; ++e)
+							{
+								dst[e] += (src[e] - dst[e]) * fromWeight;
+							}
+						}
+					}
+				}
+				if (blendRemaining_ <= 0.0f) { blendFromHashKey_ = 0; }
+			}
+
 			skelMeshComp->GetSkeletalMesh()->SetBoneMatrices(boneMatrices);
 		}
 

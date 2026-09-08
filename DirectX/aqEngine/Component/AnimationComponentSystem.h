@@ -35,6 +35,12 @@ namespace aq
 			float                             playSpeed_;
 			bool                              isPlaying_;
 			bool                              isLooping_;
+
+			/** クロスフェード (切替元クリップの凍結ポーズと合成する。実行時のみ) */
+			uint32_t                          blendFromHashKey_;    // 0 = フェードなし
+			float                             blendFromTime_;       // 切替時点で凍結した再生時刻
+			float                             blendRemaining_;      // 残りフェード時間 [s]
+			float                             blendDuration_;       // フェード全長 [s]
 #ifdef AQ_DEBUG_IMGUI
 			// エディタのクリップ候補表示用キャッシュ (モデルパスが変わった時だけ再列挙)。
 			std::string                       clipListModel_;
@@ -49,7 +55,11 @@ namespace aq
 			// 名前から hash を計算し、name も保持する（serialize 対応版）。
 			void AddAnimation(const char* name, const char* path);
 
-			void Play(uint32_t nameHash, bool looping = true);
+			/**
+			 * 再生を開始する。別クリップからの切替時は blendSec の間、切替元の
+			 * 凍結ポーズとクロスフェードして合成する (0 で即時切替)。
+			 */
+			void Play(uint32_t nameHash, bool looping = true, float blendSec = 0.15f);
 			void Stop() { isPlaying_ = false; }
 
 			float GetCurrentTime() const { return currentTime_; }

@@ -78,3 +78,6 @@ DirectX/Game/Assets/Particle/FX_Fireball.particle
 DirectX/Game/Assets/Particle/FX_LightPillar.particle
 DirectX/Game/Assets/Particle/Textures/
 DirectX/Game/Assets/Particle/Meshes/
+
+# 起動計測ログ (aq::StartupMark がカレントディレクトリに出力)
+startup_timing.log

@@ -1859,6 +1859,10 @@ namespace aq
 					EnginePrintf("[LoadProf]   slow finish: %6.2f ms  %-28s (%s)\n",
 						lms, typeid(*loader).name(), loader->GetRequestPath().c_str());
 				}
+				// 起動計測: 仕上げ(GPU アップロード等)に 1ms 以上かかったものは Release でも記録する。
+				if (lms > 1.0) {
+					aq::StartupMarkf("      [res] finish %7.2f ms  %s", lms, loader->GetRequestPath().c_str());
+				}
 				delete loader;
 			}
 			aq::graphics::GraphicsDevice::Get().EndBatchedTextureUploads();

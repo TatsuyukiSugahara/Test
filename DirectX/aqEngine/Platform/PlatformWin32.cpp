@@ -10,8 +10,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #endif
 
 
-// 起動診断ログ (UWP 専用)。Win32 では no-op。
-namespace aq { void StartupLog(const char*) {} }
+// 起動診断ログ。Win32 では起動計測(StartupMark)に流して経過時間付きで記録する。
+namespace aq { void StartupLog(const char* msg) { StartupMark(msg); } }
 
 
 namespace aq

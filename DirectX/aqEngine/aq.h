@@ -122,6 +122,15 @@
 // (Device Portal の File explorer から読み出して初期化の到達点を特定する)
 namespace aq { void StartupLog(const char* msg); }
 
+// 起動時間の計測マーク。プロセス起動からの経過 ms と前マークからの差分を
+// カレントディレクトリの startup_timing.log(毎回上書き)と OutputDebugString に出す。
+// Debug/Release 両構成で有効(実装 aq.cpp)。Win32 の StartupLog もここへ流す。
+namespace aq
+{
+	void StartupMark(const char* label);
+	void StartupMarkf(const char* fmt, ...);
+}
+
 #include "Engine.h"
 #include "ECS/ECS.h"
 #include "Component/TransformComponentSystem.h"

@@ -80,6 +80,14 @@ namespace aq
 		}
 
 
+		void InstancedStaticMesh::AddInstances(const InstanceData* data, const uint32_t count)
+		{
+			if (data == nullptr || count == 0) { return; }
+			// ベイク済み(転置・色込み)のブロックなので、変換せずそのまま連結する。
+			pendingInstances_.insert(pendingInstances_.end(), data, data + count);
+		}
+
+
 		void InstancedStaticMesh::FlushInstances()
 		{
 			// 遅延ロード(FBX 等)のジオメトリが完了したら VB/IB を構築する(未完なら描画されない)。

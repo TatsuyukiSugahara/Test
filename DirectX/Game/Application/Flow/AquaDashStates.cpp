@@ -49,6 +49,10 @@ namespace app
 			// unityChan.tkm はメートル基準でない (素のままだと約 6m)。世界は 1m=1.0 なので縮めて使う。
 			static constexpr float PLAYER_MODEL_SCALE = 0.25f;
 
+			// 路面タイルをベイクするときの XZ セルの 1 辺 [m]。
+			// 小さいほど判定は細かくなるが、セル数 (判定回数) が増える。
+			static constexpr float ROAD_TILE_CELL_SIZE = 32.0f;
+
 			// コイン取得エフェクト (常駐エミッタを移動+Restart で使い回す)。
 			static const char* COLLECT_FX_PATH = "Assets/Particle/FX_Explosion.particle";
 
@@ -246,7 +250,7 @@ namespace app
 					// per-instance フラスタムカリングは gather 側 (RenderSystem) が行う。
 					// 20m 間隔 (約360枚) はミニマップ形状とのバランスで維持。
 					constexpr float TILE_SPACING = 20.0f;
-					aq::ecs::BoxStaticMeshComponent::RegisterInstancedMesh("RoadTile");
+					auto* roadMesh = aq::ecs::BoxStaticMeshComponent::RegisterInstancedMesh("RoadTile");
 
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent,
@@ -270,6 +274,15 @@ namespace app
 						// 路面は青みグレー (仮アセット。専用モデル導入までの色分け)。
 						p.color = aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f);
 						pointList->AddInstancePoint(p);
+					}
+
+					// 路面タイルは配置後に一切動かない静的オブジェクトなので、行列を焼き込んで
+					// セル単位でカリングする「ベイク経路」に載せる (ベイク経路の検証ケースも兼ねる)。
+					// エンティティは既定変換のままなので、織り込むワールド行列は単位行列でよい。
+					// maxDrawDistance は既定 (無制限) のまま — ミニマップのコース形状に遠方タイルが要る。
+					if (roadMesh != nullptr) {
+						pointList->BakeStatic(aq::math::Matrix4x4::Identity, roadMesh->GetLocalBounds(),
+						                      ROAD_TILE_CELL_SIZE);
 					}
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("RoadTiles");

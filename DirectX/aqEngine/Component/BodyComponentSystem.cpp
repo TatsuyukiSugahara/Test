@@ -104,6 +104,29 @@ namespace aq
 				g_sharedBoxVB = outVB;
 				g_sharedBoxIB = outIB;
 			}
+
+
+			// XZ セル座標を 1 個の 64bit キーへ詰める。負のセル座標も扱えるよう
+			// uint32_t へ再解釈してから連結する(符号拡張で衝突させないため)。
+			uint64_t MakeCellKey(const int32_t cx, const int32_t cz)
+			{
+				return (static_cast<uint64_t>(static_cast<uint32_t>(cx)) << 32)
+				     |  static_cast<uint64_t>(static_cast<uint32_t>(cz));
+			}
+
+
+			// 点とワールド空間 AABB の最短距離の 2 乗。点を箱の内側へクランプして差分を取る
+			// (箱の内側なら 0)。距離カリングは 2 乗のまま比較して sqrt を省く。
+			float DistanceSqPointToAABB(const aq::math::Vector3& point, const aq::math::AABB& box)
+			{
+				const float minX = box.center.x - box.extent.x, maxX = box.center.x + box.extent.x;
+				const float minY = box.center.y - box.extent.y, maxY = box.center.y + box.extent.y;
+				const float minZ = box.center.z - box.extent.z, maxZ = box.center.z + box.extent.z;
+				const float dx = point.x - std::fmin(std::fmax(point.x, minX), maxX);
+				const float dy = point.y - std::fmin(std::fmax(point.y, minY), maxY);
+				const float dz = point.z - std::fmin(std::fmax(point.z, minZ), maxZ);
+				return dx * dx + dy * dy + dz * dz;
+			}
 		}
 
 
@@ -173,6 +196,85 @@ namespace aq
 				aq::math::Vector3(0.0f, 0.0f, 0.0f),
 				aq::math::Vector3(0.5f, 0.5f, 0.5f)));
 			return mesh;
+		}
+
+		/*******************************************/
+		BakedData InstancedPointListComponent::BuildBakedData(const std::vector<InstancePoint>& points,
+		                                                     const aq::math::Matrix4x4& entityWorld,
+		                                                     const aq::math::AABB& meshLocalBounds,
+		                                                     const float cellSize)
+		{
+			// 純 CPU 計算。GPU リソース・ECS・シングルトンに触れないのでワーカースレッドから呼べる。
+			BakedData baked;
+			if (points.empty()) { return baked; }
+
+			// 1. 全点のワールド行列を先に作る(gather と同じ S·R·T × エンティティ行列)。
+			std::vector<aq::math::Matrix4x4> worlds(points.size());
+			for (size_t i = 0; i < points.size(); ++i)
+			{
+				const InstancePoint& p = points[i];
+				aq::math::Matrix4x4 ls, lr, lt, lsr, local;
+				ls.MakeScaling(p.scale);
+				lr.MakeRotationFromQuaternion(p.rotation);
+				lt.MakeTranslation(p.position);
+				lsr.Mull(ls, lr);
+				local.Mull(lsr, lt);
+				worlds[i].Mull(local, entityWorld);
+			}
+
+			// 2. ワールド並進の XZ でセルへ分類する(cellSize <= 0 なら全点を1セルにまとめる)。
+			std::unordered_map<uint64_t, std::vector<uint32_t>> buckets;
+			for (uint32_t i = 0; i < static_cast<uint32_t>(worlds.size()); ++i)
+			{
+				int32_t cx = 0;
+				int32_t cz = 0;
+				if (cellSize > 0.0f)
+				{
+					cx = static_cast<int32_t>(std::floor(worlds[i]._41 / cellSize));
+					cz = static_cast<int32_t>(std::floor(worlds[i]._43 / cellSize));
+				}
+				buckets[MakeCellKey(cx, cz)].push_back(i);
+			}
+
+			// 3. セルごとに連続領域へ並べ、セルのワールド AABB(メッシュの大きさ込み)を求める。
+			baked.instances.reserve(points.size());
+			baked.cells.reserve(buckets.size());
+			for (const auto& bucket : buckets)
+			{
+				if (bucket.second.empty()) { continue; }   // 空セルは持たない
+
+				BakedCell cell;
+				cell.offset = static_cast<uint32_t>(baked.instances.size());
+				cell.count  = static_cast<uint32_t>(bucket.second.size());
+
+				aq::math::AABBBuilder builder;
+				for (const uint32_t index : bucket.second)
+				{
+					const aq::math::Matrix4x4& world = worlds[index];
+					const aq::math::AABB worldBox = meshLocalBounds.Transformed(world);
+					builder.Add(worldBox.center - worldBox.extent);
+					builder.Add(worldBox.center + worldBox.extent);
+
+					// 格納形式は AddInstance と同一(転置済みワールド行列 + 色)。
+					aq::graphics::InstancedStaticMesh::InstanceData data;
+					data.world = world;
+					data.world.Transpose();
+					data.color = points[index].color;
+					baked.instances.push_back(data);
+				}
+				cell.bounds = builder.Build();
+				baked.cells.push_back(cell);
+			}
+			return baked;
+		}
+
+
+		void InstancedPointListComponent::BakeStatic(const aq::math::Matrix4x4& entityWorld,
+		                                             const aq::math::AABB& meshLocalBounds, const float cellSize)
+		{
+			SetBakedData(BuildBakedData(instancePoints_, entityWorld, meshLocalBounds, cellSize));
+			// ベイク済みデータが正なので、変換元(44B/本)は容量ごと解放する。
+			std::vector<InstancePoint>().swap(instancePoints_);
 		}
 
 		/*******************************************/
@@ -654,11 +756,30 @@ namespace aq
 			if (gatherInstances)
 			{
 				aq::ecs::Foreach<HierarchicalTransformComponent, InstancedStaticMeshComponent, InstancedPointListComponent>(
-					[&frustum, cullEnabled](const aq::ecs::Entity&, HierarchicalTransformComponent* hierarchicalTransformComponent,
+					[&frustum, cullEnabled, camPos](const aq::ecs::Entity&, HierarchicalTransformComponent* hierarchicalTransformComponent,
 					   InstancedStaticMeshComponent* meshComponent, InstancedPointListComponent* pointList)
 					{
 						auto* mesh = meshComponent->GetMesh();
 						if (mesh == nullptr) { return; }
+
+						// ベイク済み(静的配置)経路: 行列は事前計算済みなので、セル単位で判定して
+						// ブロックごと一括追加する。エンティティのワールド行列はベイク時に
+						// 織り込み済みなので、ここでは掛けない(=ベイク後は動かせない)。
+						if (pointList->IsBaked())
+						{
+							const BakedData& baked = pointList->GetBaked();
+							const float maxDrawDistance = pointList->GetMaxDrawDistance();
+							const float maxDistanceSq   = maxDrawDistance * maxDrawDistance;
+							for (const BakedCell& cell : baked.cells)
+							{
+								if (cullEnabled && !frustum.Intersects(cell.bounds)) { continue; }
+								// 距離カリングはセル AABB とカメラ位置の最短距離で行う(0=無制限)。
+								if (maxDrawDistance > 0.0f
+								 && DistanceSqPointToAABB(camPos, cell.bounds) > maxDistanceSq) { continue; }
+								mesh->AddInstances(baked.instances.data() + cell.offset, cell.count);
+							}
+							return;
+						}
 
 						// エンティティのワールド行列(S·R·T)。群全体の位置・向き・スケールを与える。
 						aq::math::Matrix4x4 es, er, et, esr, entityWorld;

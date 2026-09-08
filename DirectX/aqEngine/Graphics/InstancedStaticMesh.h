@@ -90,6 +90,9 @@ namespace aq
 			/** gather: 色付きでインスタンスを1件積む(world は非転置で渡す。内部で転置格納)。 */
 			void AddInstance(const math::Matrix4x4& world, const math::Vector4& color);
 
+			/** gather: ベイク済み InstanceData をまとめて追加する(行列計算・転置は呼び出し側で済ませておく)。 */
+			void AddInstances(const InstanceData* data, const uint32_t count);
+
 			/**
 			 * 共有ジオメトリの明示ローカル AABB を設定する。
 			 * 空間は per-instance のワールド行列を掛ける前のメッシュローカル空間

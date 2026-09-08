@@ -29,9 +29,9 @@ namespace app
 			static constexpr float COIN_COLOR_G   = 0.82f;
 			static constexpr float COIN_COLOR_B   = 0.15f;
 
-			// 専用のコイン SE がまだ無いため、暫定で決定音を流用する。
-			// 専用アセットが用意でき次第このパスを差し替える。
-			static const char* COLLECT_SE_PATH = "Assets/Sound/Decision.wav";
+			// リング取得音風の 2 音チャイム (専用に生成した SE)。
+			// メニューの決定音とは別音源なので、取得音だけが変わる。
+			static const char* COLLECT_SE_PATH = "Assets/Sound/CoinGet.wav";
 
 
 			// 取得 SE を鳴らす (サウンド無効環境では何もしない)。

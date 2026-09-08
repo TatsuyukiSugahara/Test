@@ -46,6 +46,8 @@ namespace app
 			static const char* DECISION_SE_PATH = "Assets/Sound/Decision.wav";
 			static const char* PLAYER_MODEL_PATH = "Assets/unityChan.tkm";
 			static const char* PLAYER_IDLE_ANIM  = "Assets/animData/idle.tka";
+			static const char* PLAYER_RUN_ANIM   = "Assets/animData/run.tka";
+			static const char* PLAYER_JUMP_ANIM  = "Assets/animData/jump.tka";
 
 			// unityChan.tkm はメートル基準でない (素のままだと約 6m)。世界は 1m=1.0 なので縮めて使う。
 			static constexpr float PLAYER_MODEL_SCALE = 0.25f;
@@ -547,9 +549,13 @@ namespace app
 					skelComp->GetSkeletalMesh()->SetReceiveShadow(true);
 					skelComp->GetSkeletalMesh()->SetReceivesDecal(false);
 
+					// 走行状態に応じた切り替えは SpeedCharacterSystem が行う。ここでは候補の登録だけ。
 					auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
 					animComp->AddAnimation(aqHash32("idle"), PLAYER_IDLE_ANIM);
+					animComp->AddAnimation(aqHash32("run"),  PLAYER_RUN_ANIM);
+					animComp->AddAnimation(aqHash32("jump"), PLAYER_JUMP_ANIM);
 					animComp->Play(aqHash32("idle"), true);
+					character->currentAnimHash = aqHash32("idle");
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("SpeedPlayer");
 #endif

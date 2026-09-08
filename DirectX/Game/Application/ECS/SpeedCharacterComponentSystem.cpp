@@ -4,6 +4,7 @@
 #include "GameInput.h"
 #include "GameAction.h"
 #include "Stage/StageData.h"
+#include "Component/AnimationComponentSystem.h"
 
 
 namespace app
@@ -25,6 +26,46 @@ namespace app
 			/** ループ脱落判定 */
 			static constexpr float INVERTED_UP_Y     = 0.25f;   // 路面 up がこれ未満なら「上下逆さ寄り」
 			static constexpr float LOOP_MIN_SPEED    = 35.0f;   // [m/s] 逆さ路面に張り付いていられる下限速度
+
+			/** アニメ切替 (idle / run / jump) */
+			static constexpr float RUN_MIN_SPEED       = 2.0f;         // [m/s] これ以上で走行アニメ
+			static constexpr float RUN_PLAYSPEED_BASE  = 0.5f;         // 再生速度 = BASE + speed * SCALE
+			static constexpr float RUN_PLAYSPEED_SCALE = 1.0f / 12.0f;
+			static constexpr float RUN_PLAYSPEED_MIN   = 0.7f;
+			static constexpr float RUN_PLAYSPEED_MAX   = 2.8f;
+
+
+			// 走行状態から目標アニメを決め、変化したときだけ切り替える
+			// (毎フレーム Play すると先頭へ巻き戻ってしまうため)。
+			void UpdateCharacterAnimation(aq::ecs::EntityContext& ctx, const aq::ecs::EntityHandle& handle,
+			                              SpeedCharacterComponent* character)
+			{
+				auto* anim = ctx.GetComponent<aq::ecs::AnimationComponent>(handle);
+				if (!anim) { return; }
+
+				uint32_t target  = aqHash32("idle");
+				bool     looping = true;
+				if (character->fallen || !character->grounded) {
+					target  = aqHash32("jump");
+					looping = false;   // 滞空姿勢は最終フレームで止める
+				} else if (character->speed >= RUN_MIN_SPEED) {
+					target = aqHash32("run");
+				}
+
+				if (character->currentAnimHash != target) {
+					anim->Play(target, looping);
+					character->currentAnimHash = target;
+				}
+
+				// 走行中は足の回転を速度に合わせる (それ以外は等速へ戻す)。
+				if (target == aqHash32("run")) {
+					anim->SetPlaySpeed(aq::math::Clamp(
+						RUN_PLAYSPEED_BASE + character->speed * RUN_PLAYSPEED_SCALE,
+						RUN_PLAYSPEED_MIN, RUN_PLAYSPEED_MAX));
+				} else {
+					anim->SetPlaySpeed(1.0f);
+				}
+			}
 		}
 
 
@@ -88,6 +129,7 @@ namespace app
 					if (character->fallen) {
 						character->worldVelocity.y -= GRAVITY * dt;
 						tc->position += character->worldVelocity * dt;
+						UpdateCharacterAnimation(ctx, handle, character);
 						return;
 					}
 
@@ -134,6 +176,8 @@ namespace app
 						character->grounded      = false;
 						character->worldVelocity = frame.tangent * character->speed;
 					}
+
+					UpdateCharacterAnimation(ctx, handle, character);
 				});
 		}
 	}

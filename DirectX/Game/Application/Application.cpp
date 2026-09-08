@@ -7,6 +7,7 @@
 #include "ECS/SpeedCharacterComponentSystem.h"
 #include "ECS/AutoCameraComponentSystem.h"
 #include "ECS/CoinComponentSystem.h"
+#include "Component/AnimationComponentSystem.h"
 #include "UI/Font/FontResource.h"
 #include "Resource/ParticleSystemData.h"
 #include "Resource/ParticleLoader.h"
@@ -103,8 +104,9 @@ namespace app
 		// SoundEngine の初期化は Engine が別スレッドで進めているので、ここで合流してから開く。
 		// レンダラ初期化(シェーダコンパイル)の後ろに置くことで、その間もサウンド初期化が並走する。
 		if (aq::Engine::Get().EnsureSoundInitialized() && aq::sound::SoundEngine::IsAvailable()) {
+			// AquaDash 用に生成したシンセループ (Tools/generate_bgm.py)。
 			bgmStream_ = aq::sound::SoundEngine::Get().OpenStream(
-				"Assets/Sound/AllBGM.wav", aq::sound::SoundBusId::BGM);
+				"Assets/Sound/AquaDashBGM.wav", aq::sound::SoundBusId::BGM);
 			if (bgmStream_) {
 				bgmStream_->Play(aq::sound::LoopRegion{ 0, 1, 0 });   // frameCount!=0 で無限ループ
 			}
@@ -210,6 +212,8 @@ namespace app
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::SpeedCharacterSystem,
 			app::ecs::PlayerInputSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::HierarcicalTransformSystem, app::ecs::SpeedCharacterSystem>();
+		// AquaDash: 走行状態からアニメを切り替えるため、アニメ更新は走行更新の後段に固定する。
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::AnimationSystem, app::ecs::SpeedCharacterSystem>();
 
 		// AquaDash: コイン判定は走行結果の位置を使うため SpeedCharacterSystem の後、ワールド変換の前。
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CoinSystem,

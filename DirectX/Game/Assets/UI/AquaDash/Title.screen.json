@@ -6,24 +6,10 @@
     },
     "children": [
         {
-            "name": "BGTop",
+            "name": "TitleBG",
             "components": {
-                "transform": { "position": [0, -270, 0], "sizeDelta": [1920, 540] },
-                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.01, 0.05, 0.16, 1.0] }
-            }
-        },
-        {
-            "name": "BGMid",
-            "components": {
-                "transform": { "position": [0, 180, 0], "sizeDelta": [1920, 360] },
-                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.03, 0.16, 0.38, 1.0] }
-            }
-        },
-        {
-            "name": "BGLow",
-            "components": {
-                "transform": { "position": [0, 450, 0], "sizeDelta": [1920, 180] },
-                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.05, 0.30, 0.50, 1.0] }
+                "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
+                "image": { "texture": "Assets/UI/AquaDash/TitleBG.png", "color": [1.0, 1.0, 1.0, 1.0] }
             }
         },
         {

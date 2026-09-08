@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -9,16 +10,38 @@ namespace aq
 	namespace util
 	{
 		// 軽量 JSON 値クラス。UI ドキュメントローダー用途特化。
+		//
+		// 配列/オブジェクトのコンテナは unique_ptr で遅延確保する。以前は全ノードが vector と
+		// unordered_map を実体で持っていたため、スカラー 1 個の生成・移動ごとに複数回のヒープ確保
+		// (MSVC の unordered_map は既定構築でも確保する)が走り、Debug では MemoryTracker 経由の
+		// 確保が支配的で 22KB の JSON 解析に 300〜700ms かかっていた(startup_timing.log 実測)。
 		class JsonValue
 		{
 		public:
 			enum class Type { Null, Bool, Number, String, Array, Object };
+			using Array  = std::vector<JsonValue>;
+			using Object = std::unordered_map<std::string, JsonValue>;
 
-			// ---- コンストラクタ ----
+			// ---- コンストラクタ / コピー / ムーブ ----
 			JsonValue()                        : type_(Type::Null)   {}
 			explicit JsonValue(bool v)         : type_(Type::Bool),   boolVal_(v) {}
 			explicit JsonValue(double v)       : type_(Type::Number), numVal_(v)  {}
 			explicit JsonValue(std::string v)  : type_(Type::String), strVal_(std::move(v)) {}
+
+			JsonValue(const JsonValue& other)
+				: type_(other.type_), boolVal_(other.boolVal_), numVal_(other.numVal_), strVal_(other.strVal_)
+				, arrVal_(other.arrVal_ ? std::make_unique<Array>(*other.arrVal_) : nullptr)
+				, objVal_(other.objVal_ ? std::make_unique<Object>(*other.objVal_) : nullptr)
+			{
+			}
+			JsonValue& operator=(const JsonValue& other)
+			{
+				if (this != &other) { JsonValue tmp(other); *this = std::move(tmp); }
+				return *this;
+			}
+			JsonValue(JsonValue&&) noexcept            = default;
+			JsonValue& operator=(JsonValue&&) noexcept = default;
+			~JsonValue()                               = default;
 
 			static JsonValue MakeArray()  { JsonValue v; v.type_ = Type::Array;  return v; }
 			static JsonValue MakeObject() { JsonValue v; v.type_ = Type::Object; return v; }
@@ -38,26 +61,27 @@ namespace aq
 			const std::string& AsString()                   const { return strVal_; }
 
 			// ---- 配列 ----
-			size_t Size() const { return arrVal_.size(); }
+			size_t Size() const { return arrVal_ ? arrVal_->size() : 0; }
 			const JsonValue& operator[](size_t i) const
 			{
-				return (i < arrVal_.size()) ? arrVal_[i] : Null();
+				return (arrVal_ && i < arrVal_->size()) ? (*arrVal_)[i] : Null();
 			}
-			void PushBack(JsonValue v) { arrVal_.push_back(std::move(v)); }
-			const std::vector<JsonValue>& GetArray() const { return arrVal_; }
+			void PushBack(JsonValue v) { EnsureArray().push_back(std::move(v)); }
+			const Array& GetArray() const { return arrVal_ ? *arrVal_ : EmptyArray(); }
 
 			// ---- オブジェクト ----
 			bool Contains(std::string_view key) const
 			{
-				return objVal_.count(std::string(key)) > 0;
+				return objVal_ && objVal_->count(std::string(key)) > 0;
 			}
 			const JsonValue& operator[](std::string_view key) const
 			{
-				auto it = objVal_.find(std::string(key));
-				return (it != objVal_.end()) ? it->second : Null();
+				if (!objVal_) return Null();
+				auto it = objVal_->find(std::string(key));
+				return (it != objVal_->end()) ? it->second : Null();
 			}
-			void Set(std::string key, JsonValue v) { objVal_[std::move(key)] = std::move(v); }
-			const std::unordered_map<std::string, JsonValue>& GetObject() const { return objVal_; }
+			void Set(std::string key, JsonValue v) { EnsureObject()[std::move(key)] = std::move(v); }
+			const Object& GetObject() const { return objVal_ ? *objVal_ : EmptyObject(); }
 
 			// ---- Deep merge (overrides パッチ用) ----
 			// オブジェクト同士: 再帰マージ。その他: override で上書き。
@@ -70,12 +94,17 @@ namespace aq
 			}
 
 		private:
+			Array&  EnsureArray()  { if (!arrVal_) arrVal_ = std::make_unique<Array>();  return *arrVal_; }
+			Object& EnsureObject() { if (!objVal_) objVal_ = std::make_unique<Object>(); return *objVal_; }
+			static const Array&  EmptyArray()  { static const Array  s; return s; }
+			static const Object& EmptyObject() { static const Object s; return s; }
+
 			Type   type_    = Type::Null;
 			bool   boolVal_ = false;
 			double numVal_  = 0.0;
 			std::string strVal_;
-			std::vector<JsonValue>                    arrVal_;
-			std::unordered_map<std::string, JsonValue> objVal_;
+			std::unique_ptr<Array>  arrVal_;   // Array のときだけ確保(空配列は null のまま)
+			std::unique_ptr<Object> objVal_;   // Object のときだけ確保(空オブジェクトは null のまま)
 		};
 
 

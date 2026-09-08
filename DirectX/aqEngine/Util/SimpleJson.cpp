@@ -14,13 +14,14 @@ namespace aq
 		{
 			if (IsObject() && overrides.IsObject())
 			{
+				Object& dst = EnsureObject();
 				for (const auto& [key, val] : overrides.GetObject())
 				{
-					auto it = objVal_.find(key);
-					if (it != objVal_.end() && it->second.IsObject() && val.IsObject())
+					auto it = dst.find(key);
+					if (it != dst.end() && it->second.IsObject() && val.IsObject())
 						it->second.Merge(val);
 					else
-						objVal_[key] = val;
+						dst[key] = val;
 				}
 			}
 			else

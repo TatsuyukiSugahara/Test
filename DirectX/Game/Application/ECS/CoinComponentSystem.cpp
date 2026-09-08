@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "CoinComponentSystem.h"
 #include "GameFlow.h"
+#include "GameInput.h"
 #include "SpeedCharacterComponentSystem.h"
 #include "Component/InstancedPointListComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
@@ -33,6 +34,11 @@ namespace app
 			// メニューの決定音とは別音源なので、取得音だけが変わる。
 			static const char* COLLECT_SE_PATH = "Assets/Sound/CoinGet.wav";
 
+			/** 取得時の振動 (弾けるような短い一発) */
+			static constexpr float COLLECT_RUMBLE_LEFT  = 0.5f;
+			static constexpr float COLLECT_RUMBLE_RIGHT = 0.8f;
+			static constexpr float COLLECT_RUMBLE_SEC   = 0.12f;
+
 
 			// 取得 SE を鳴らす (サウンド無効環境では何もしない)。
 			void PlayCollectSE()
@@ -41,6 +47,14 @@ namespace app
 					auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(COLLECT_SE_PATH);
 					aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
 				}
+			}
+
+
+			// 取得の手応えを短い振動で返す。ここはワーカースレッドなので値を積むだけで、
+			// 実際の送信と自動停止はメインスレッドの入力更新が行う。
+			void PlayCollectRumble()
+			{
+				GameInput::Get().Rumble(COLLECT_RUMBLE_LEFT, COLLECT_RUMBLE_RIGHT, COLLECT_RUMBLE_SEC);
 			}
 
 
@@ -152,6 +166,7 @@ namespace app
 
 							PlayCollectSE();
 							PlayCollectEffect(context, coinTc->position);
+							PlayCollectRumble();
 						});
 				});
 

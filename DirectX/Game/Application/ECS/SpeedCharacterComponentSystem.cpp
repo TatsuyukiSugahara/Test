@@ -27,6 +27,11 @@ namespace app
 			static constexpr float INVERTED_UP_Y     = 0.25f;   // 路面 up がこれ未満なら「上下逆さ寄り」
 			static constexpr float LOOP_MIN_SPEED    = 35.0f;   // [m/s] 逆さ路面に張り付いていられる下限速度
 
+			/** 速度連動の R2 抵抗 (DualSense のアダプティブトリガー) */
+			static constexpr float TRIGGER_START_POS    = 0.15f;   // 引き始めから重くする
+			static constexpr float TRIGGER_MAX_STRENGTH = 0.9f;    // 最高速での抵抗
+			static constexpr float TRIGGER_MIN_SPEED    = 2.0f;    // [m/s] これ未満は解除
+
 			/** アニメ切替 (idle / run / jump) */
 			static constexpr float RUN_MIN_SPEED       = 2.0f;         // [m/s] これ以上で走行アニメ
 			static constexpr float RUN_PLAYSPEED_BASE  = 0.5f;         // 再生速度 = BASE + speed * SCALE
@@ -65,6 +70,16 @@ namespace app
 				} else {
 					anim->SetPlaySpeed(1.0f);
 				}
+			}
+
+
+			// 速いほど R2 を重くして加速の手応えを出す (ほぼ停止しているときは解除)。
+			// パッドが未接続なら Pad 側で捨てられるので、ここでは接続を気にしない。
+			void UpdateTriggerResistance(const float speed)
+			{
+				const float ratio    = aq::math::Clamp(speed / MAX_SPEED, 0.0f, 1.0f);
+				const float strength = (speed < TRIGGER_MIN_SPEED) ? 0.0f : ratio * TRIGGER_MAX_STRENGTH;
+				GameInput::Get().SetTriggerResistance(aq::hid::PadAxis::RTrigger, TRIGGER_START_POS, strength);
 			}
 		}
 
@@ -130,6 +145,7 @@ namespace app
 						character->worldVelocity.y -= GRAVITY * dt;
 						tc->position += character->worldVelocity * dt;
 						UpdateCharacterAnimation(ctx, handle, character);
+						UpdateTriggerResistance(0.0f);
 						return;
 					}
 
@@ -142,6 +158,7 @@ namespace app
 						character->speed -= DRAG_DECEL * dt;
 					}
 					character->speed = aq::math::Clamp(character->speed, 0.0f, MAX_SPEED);
+					UpdateTriggerResistance(character->speed);
 
 					// 前進 + レーン移動。
 					character->distance += character->speed * dt;

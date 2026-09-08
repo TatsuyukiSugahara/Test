@@ -1,5 +1,6 @@
 #pragma once
 #include "GameFlow.h"
+#include "Terrain/HeightmapChunk.h"
 
 
 namespace app
@@ -21,13 +22,20 @@ namespace app
 
 
 		/**
-		 * ローディング。ステージ定義のパース (ThreadPool) → ワールド生成 →
+		 * ローディング。ステージ定義のパース + 地形の CPU 前計算 (ThreadPool) → ワールド生成 →
 		 * Level 非同期ロードの順で進め、完了でインゲームへ遷移する。
 		 */
 		class LoadingState : public IGameState
 		{
 		private:
 			enum class Phase { WarmUp, ParseStage, WaitStage, Streaming };
+
+			/** ワーカータスクの成果物。ステージ定義と、それから作った地形の CPU 側データ */
+			struct StageLoadResult
+			{
+				std::shared_ptr<stage::StageData>     stage;
+				aq::terrain::HeightmapChunk::CpuData  terrainCpu;
+			};
 
 			/** 進行状態 */
 			Phase phase_        = Phase::WarmUp;
@@ -37,7 +45,7 @@ namespace app
 
 			/** 非同期ロード */
 			std::string                                     stagePath_;
-			std::future<std::shared_ptr<stage::StageData>>  stageFuture_;
+			std::future<StageLoadResult>                    stageFuture_;
 
 
 		public:

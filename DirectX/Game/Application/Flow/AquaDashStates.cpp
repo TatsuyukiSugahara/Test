@@ -128,66 +128,98 @@ namespace app
 
 			// 地形 + プレイヤー + 自動カメラを生成する (ロード完了時に一度だけ)。
 			// 生成した Entity はタイトル復帰時の破棄用に context.stageEntities へ積む。
-			void CreateStageWorld(GameFlow& flow, const std::shared_ptr<stage::StageData>& stageData)
+			/** コースの XZ 範囲 (スプラインを 10m 刻みで粗くサンプリング)。地面サイズとミニマップ正規化に使う */
+			struct CourseExtents
+			{
+				float minX = 0.0f, maxX = 0.0f, minZ = 0.0f, maxZ = 0.0f;
+			};
+
+			CourseExtents ComputeCourseExtents(const stage::StageData& stageData)
+			{
+				CourseExtents e;
+				const float total = stageData.spline.GetTotalLength();
+				for (float d = 0.0f; d <= total; d += 10.0f) {
+					const auto p = stageData.spline.Evaluate(d).position;
+					if (p.x < e.minX) { e.minX = p.x; }
+					if (p.x > e.maxX) { e.maxX = p.x; }
+					if (p.z < e.minZ) { e.minZ = p.z; }
+					if (p.z > e.maxZ) { e.maxZ = p.z; }
+				}
+				return e;
+			}
+
+			// 地面の外周マージン。原点と terrainSize の式はベイク画像の座標系と対になっているので変えないこと。
+			constexpr float TERRAIN_MARGIN = 60.0f;
+
+			/**
+			 * 地形 Desc を組む。ステージが terrain を指定していればベイク済みのハイトマップ地形、
+			 * 未指定なら従来どおりの平坦 grass になる。
+			 * 文字列ポインタは stageData の std::string / 静的リテラルを指すので、stageData が生きている間だけ有効。
+			 * ワーカースレッド側の PrepareCpuData とメインスレッド側の SetDesc の両方から同じ Desc を得るために分離した。
+			 */
+			aq::terrain::HeightmapChunk::Desc MakeTerrainDesc(const stage::StageData& stageData, const CourseExtents& ext)
+			{
+				const float extentX = ext.maxX - ext.minX + TERRAIN_MARGIN * 2.0f;
+				const float extentZ = ext.maxZ - ext.minZ + TERRAIN_MARGIN * 2.0f;
+
+				aq::terrain::HeightmapChunk::Desc desc;
+				desc.heightmapPath = "Assets/Terrain/heightmap.png";
+				desc.splatmapPath  = "Assets/Terrain/splatmap.png";
+				desc.layerPaths[0] = "Assets/Terrain/grass.DDS";
+				desc.layerPaths[1] = "Assets/Terrain/snow.DDS";
+				desc.layerPaths[2] = "Assets/Terrain/rock.DDS";
+				desc.resolution    = stageData.terrainResolution;
+				desc.heightScale   = stageData.terrainHeightScale;   // 0 なら平坦
+				desc.terrainSize   = extentX > extentZ ? extentX : extentZ;
+				desc.layerTiling   = desc.terrainSize / 5.0f;
+
+				if (!stageData.terrainHeightmapPath.empty()) {
+					desc.heightmapPath = stageData.terrainHeightmapPath.c_str();
+				}
+				if (!stageData.terrainSplatmapPath.empty()) {
+					desc.splatmapPath = stageData.terrainSplatmapPath.c_str();
+				}
+				return desc;
+			}
+
+			/**
+			 * ステージワールドを生成する (メインスレッド)。
+			 * preparedTerrain はワーカーで PrepareCpuData 済みの地形データ。null なら同期で作る
+			 * (画像デコード+頂点生成が乗るので Debug では 200ms 超のヒッチになる)。
+			 */
+			void CreateStageWorld(GameFlow& flow, const std::shared_ptr<stage::StageData>& stageData,
+			                      aq::terrain::HeightmapChunk::CpuData* preparedTerrain)
 			{
 				auto& ctx     = aq::ecs::EntityContext::Get();
 				auto& context = flow.Context();
 				context.stageEntities.clear();
 
-				// コースの XZ 範囲を粗くサンプリングして地面サイズを決める。
-				float minX = 0.0f, maxX = 0.0f, minZ = 0.0f, maxZ = 0.0f;
+				const CourseExtents ext = ComputeCourseExtents(*stageData);
+				const float minX = ext.minX, maxX = ext.maxX, minZ = ext.minZ, maxZ = ext.maxZ;
+
+				// 地面。
 				{
-					const float total = stageData->spline.GetTotalLength();
-					for (float d = 0.0f; d <= total; d += 10.0f) {
-						const auto p = stageData->spline.Evaluate(d).position;
-						if (p.x < minX) { minX = p.x; }
-						if (p.x > maxX) { maxX = p.x; }
-						if (p.z < minZ) { minZ = p.z; }
-						if (p.z > maxZ) { maxZ = p.z; }
-					}
-				}
-
-				// 地面。ステージが terrain を指定していればベイク済みのハイトマップ地形、
-				// 未指定なら従来どおりの平坦 grass になる。
-				// 原点と terrainSize の式はベイク画像の座標系と対になっているので変えないこと。
-				{
-					constexpr float MARGIN = 60.0f;
-					const float extentX = maxX - minX + MARGIN * 2.0f;
-					const float extentZ = maxZ - minZ + MARGIN * 2.0f;
-
-					aq::terrain::HeightmapChunk::Desc desc;
-					desc.heightmapPath = "Assets/Terrain/heightmap.png";
-					desc.splatmapPath  = "Assets/Terrain/splatmap.png";
-					desc.layerPaths[0] = "Assets/Terrain/grass.DDS";
-					desc.layerPaths[1] = "Assets/Terrain/snow.DDS";
-					desc.layerPaths[2] = "Assets/Terrain/rock.DDS";
-					desc.resolution    = stageData->terrainResolution;
-					desc.heightScale   = stageData->terrainHeightScale;   // 0 なら平坦
-					desc.terrainSize   = extentX > extentZ ? extentX : extentZ;
-					desc.layerTiling   = desc.terrainSize / 5.0f;
-
-					// SetDesc は同期処理なので、stageData の文字列を c_str() のまま渡してよい。
-					if (!stageData->terrainHeightmapPath.empty()) {
-						desc.heightmapPath = stageData->terrainHeightmapPath.c_str();
-					}
-					if (!stageData->terrainSplatmapPath.empty()) {
-						desc.splatmapPath = stageData->terrainSplatmapPath.c_str();
-					}
+					const aq::terrain::HeightmapChunk::Desc desc = MakeTerrainDesc(*stageData, ext);
 
 					auto entity = ctx.CreateEntity<
 						aq::ecs::TransformComponent, aq::ecs::HierarchicalTransformComponent, aq::ecs::TerrainComponent>();
 					auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
 					// Y はステージ指定のオフセット (R=0 の高さ)。ベイク済みハイトマップは
 					// 路面の沈み (スプラインの y<0) を offset 起点の正値で表現している。
-					tc->position.Set(minX - MARGIN, stageData->terrainHeightOffset, minZ - MARGIN);
+					tc->position.Set(minX - TERRAIN_MARGIN, stageData->terrainHeightOffset, minZ - TERRAIN_MARGIN);
 					auto* terrain = entity.GetComponent<aq::ecs::TerrainComponent>();
-					terrain->SetDesc(desc);
+					if (preparedTerrain != nullptr) {
+						terrain->SetDesc(desc, std::move(*preparedTerrain));
+					} else {
+						terrain->SetDesc(desc);
+					}
 					terrain->GetChunk()->SetReceiveShadow(true);
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("StageGround");
 #endif
 					context.stageEntities.push_back(entity.GetHandle());
 				}
+				aq::StartupMark("[load]   terrain entity done");
 
 				// メインカメラの基本設定。
 				{
@@ -244,6 +276,7 @@ namespace app
 #endif
 					context.stageEntities.push_back(entity.GetHandle());
 				}
+				aq::StartupMark("[load]   road tiles done");
 
 				// プレイヤー。
 				{
@@ -282,6 +315,7 @@ namespace app
 					context.stageEntities.push_back(entity.GetHandle());
 				}
 				flow.SetPlayerHandle(context.playerHandle);   // 影の注視点用
+				aq::StartupMark("[load]   player done");
 
 				// 自動カメラ。
 				{
@@ -317,6 +351,8 @@ namespace app
 					context.stageEntities.push_back(entity.GetHandle());
 				}
 
+				aq::StartupMarkf("[load]   coin entities done (%zu)", stageData->coins.size());
+
 				// コインの描画をまとめる 1 エンティティ。点の中身は CoinSystem が毎フレーム再構築する
 				// (取得済みを除いたぶんだけ積むので、取得すれば次の再構築で消える)。
 				{
@@ -350,6 +386,7 @@ namespace app
 					context.coinInstancesHandle = entity.GetHandle();
 					context.stageEntities.push_back(entity.GetHandle());
 				}
+				aq::StartupMark("[load]   coin ring mesh done");
 
 				// コイン取得エフェクトの常駐エミッタ (取得時に移動して Restart する)。
 				{
@@ -501,11 +538,20 @@ namespace app
 
 			case Phase::ParseStage:
 			{
-				// ステージ定義のパースはワーカースレッドで行う (CPU 処理のみ)。
+				// ステージ定義のパースと地形の CPU 前計算 (画像デコード/頂点生成/画素変換) はワーカースレッドで行う。
+				// GPU リソース生成だけをメインスレッド (CreateStageWorld) に残す。
 				const std::string path = stagePath_;
 				stageFuture_ = aq::util::ThreadPool::Get().Submit([path]()
 					{
-						return stage::StageData::LoadFromFile(path.c_str());
+						StageLoadResult result;
+						result.stage = stage::StageData::LoadFromFile(path.c_str());
+						aq::StartupMark("[load] stage json parsed (worker)");
+						if (result.stage) {
+							const CourseExtents ext = ComputeCourseExtents(*result.stage);
+							result.terrainCpu = aq::terrain::HeightmapChunk::PrepareCpuData(MakeTerrainDesc(*result.stage, ext));
+							aq::StartupMark("[load] terrain cpu data prepared (worker)");
+						}
+						return result;
 					});
 				phase_ = Phase::WaitStage;
 				break;
@@ -515,7 +561,8 @@ namespace app
 			{
 				if (stageFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) { break; }
 
-				auto stageData = stageFuture_.get();
+				StageLoadResult result = stageFuture_.get();
+				auto stageData = result.stage;
 				EngineAssertMsg(stageData != nullptr, "ステージ定義の読み込みに失敗");
 				if (!stageData) {
 					// 読めない場合はタイトルへ戻す。
@@ -525,8 +572,8 @@ namespace app
 				}
 
 				flow.Context().activeStage = stageData;
-				aq::StartupMark("[load] stage json parsed");
-				CreateStageWorld(flow, stageData);   // 重い同期処理 (1 フレームだけヒッチ)
+				aq::StartupMark("[load] worker result received");
+				CreateStageWorld(flow, stageData, &result.terrainCpu);   // GPU 生成のみ (CPU 前計算はワーカー済み)
 				aq::StartupMark("[load] CreateStageWorld done (terrain/road/player/coins, sync)");
 
 				// 見た目 Level の非同期ロードを開始する。

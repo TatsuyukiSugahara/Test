@@ -48,7 +48,7 @@ namespace aq
 			ImGui::SameLine();
 			ImGui::TextColored(
 				paused_ ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : ImVec4(0.4f, 1.0f, 0.4f, 1.0f),
-				paused_ ? "停止中 (表示を固定)" : "計測中 (毎フレーム更新)");
+				paused_ ? "Paused (display frozen)" : "Recording (updates every frame)");
 
 			if (ImGui::BeginTabBar("##profiler_tabs"))
 			{
@@ -110,9 +110,9 @@ namespace aq
 			ImGui::TextDisabled(" | ");
 			ImGui::SameLine();
 #ifdef AQ_RENDER_PIPELINED
-			ImGui::TextColored(ImVec4(0.4f, 0.9f, 1.0f, 1.0f), "[Async: Render は 1 フレーム遅れ]");
+			ImGui::TextColored(ImVec4(0.4f, 0.9f, 1.0f, 1.0f), "[Async: Render lags 1 frame]");
 #else
-			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.4f, 1.0f), "[Serial: 毎フレーム完了待ち]");
+			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.4f, 1.0f), "[Serial: waits for completion every frame]");
 #endif
 
 			// スレッド別 CPU 時間。直列なら Main+Render≈Frame、非同期なら max(Main,Render)≈Frame。
@@ -139,7 +139,7 @@ namespace aq
 			ImGui::Separator();
 
 			// 詳細ツリー (既定で折りたたみ)
-			if (ImGui::CollapsingHeader("詳細 (ツリー)"))
+			if (ImGui::CollapsingHeader("Details (tree)"))
 			{
 				std::vector<const ThreadFrame*> ordered;
 				ordered.reserve(snapshot_.size());
@@ -399,13 +399,13 @@ namespace aq
 				ImGui::ProgressBar(frac > 1.0f ? 1.0f : frac, ImVec2(-1.0f, 0.0f), overlay);
 				ImGui::PopStyleColor();
 				if (memOver_)
-					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "予算超過!");
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Over budget!");
 			} else {
-				ImGui::Text("使用中: %.1f MB  (予算: 無制限)", mb);
+				ImGui::Text("In use: %.1f MB  (budget: unlimited)", mb);
 			}
 
 #ifdef _DEBUG
-			ImGui::Text("未解放: %zu 件 / %zu サイト  (ソース情報なし = engineNewWith 未使用分)",
+			ImGui::Text("Unreleased: %zu allocs / %zu sites  (no source info = not via engineNewWith)",
 			            memCount_, memUsage_.size());
 
 			// bytes 降順に並べて表示 (トップ N)
@@ -422,9 +422,9 @@ namespace aq
 				ImGuiTableFlags_SizingStretchProp;
 
 			if (ImGui::BeginTable("##mem_by_source", 3, flags, ImVec2(0.0f, 220.0f))) {
-				ImGui::TableSetupColumn("確保サイト", ImGuiTableColumnFlags_WidthStretch, 0.65f);
-				ImGui::TableSetupColumn("サイズ",     ImGuiTableColumnFlags_WidthStretch, 0.20f);
-				ImGui::TableSetupColumn("件数",       ImGuiTableColumnFlags_WidthStretch, 0.15f);
+				ImGui::TableSetupColumn("Alloc site", ImGuiTableColumnFlags_WidthStretch, 0.65f);
+				ImGui::TableSetupColumn("Size",       ImGuiTableColumnFlags_WidthStretch, 0.20f);
+				ImGui::TableSetupColumn("Count",      ImGuiTableColumnFlags_WidthStretch, 0.15f);
 				ImGui::TableHeadersRow();
 
 				const size_t maxRows = 40;
@@ -439,7 +439,7 @@ namespace aq
 							if (*pp == '/' || *pp == '\\') base = pp + 1;
 						ImGui::Text("%s:%d (%s)", base, e->line, e->func ? e->func : "");
 					} else {
-						ImGui::TextDisabled("(ソース情報なし)");
+						ImGui::TextDisabled("(no source info)");
 					}
 					ImGui::TableNextColumn();
 					const double eMb = static_cast<double>(e->bytes) / (1024.0 * 1024.0);
@@ -451,7 +451,7 @@ namespace aq
 				ImGui::EndTable();
 			}
 #else
-			ImGui::TextDisabled("内訳は Debug ビルドのみ (MemoryTracker は _DEBUG 限定)");
+			ImGui::TextDisabled("Breakdown is Debug build only (MemoryTracker is _DEBUG only)");
 #endif
 		}
 

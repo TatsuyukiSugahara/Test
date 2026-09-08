@@ -15,7 +15,7 @@ namespace aq
 
 		void BloomDebugPanel::DebugRenderMenu()
 		{
-			ImGui::MenuItem("ポストエフェクト", nullptr, &show_);
+			ImGui::MenuItem("Post Effects", nullptr, &show_);
 		}
 
 
@@ -60,7 +60,7 @@ namespace aq
 			ImGui::SameLine();
 			ImGui::TextDisabled("(?)");
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("リニアパイプライン用。現状ガンマ空間のため通常 off。");
+				ImGui::SetTooltip("For a linear pipeline. Currently gamma space, so normally off.");
 
 			// 輝度抽出テクスチャのプレビュー
 			ImGui::Separator();
@@ -78,7 +78,7 @@ namespace aq
 		void BloomDebugPanel::DebugRender()
 		{
 			if (!show_) return;
-			if (ImGui::Begin("ポストエフェクト"))
+			if (ImGui::Begin("Post Effects"))
 				RenderContent();
 			ImGui::End();
 		}

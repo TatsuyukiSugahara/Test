@@ -77,7 +77,7 @@ namespace aq
 				const bool committed = ImGui::InputText(
 					label, buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue);
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-					ImGui::SetTooltip("Enter キーで適用");
+					ImGui::SetTooltip("Press Enter to apply");
 				if (committed)
 					path = buf;
 				return committed;

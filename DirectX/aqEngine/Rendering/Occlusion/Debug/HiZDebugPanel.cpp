@@ -19,8 +19,8 @@ namespace aq
 		void HiZDebugPanel::RenderContent()
 		{
 			ImGui::TextWrapped(
-				"Hi-Z ピラミッド: GBuffer2 worldPos から再構成した深度の max ミップ連鎖。"
-				"白いほど遠い (depth=1)。背景は遠方扱い。");
+				"Hi-Z pyramid: max-depth mip chain reconstructed from GBuffer2 worldPos. "
+				"Brighter = farther (depth=1). Background counts as far.");
 			ImGui::SliderFloat("Preview Size", &previewSize_, 80.0f, 360.0f, "%.0f");
 			ImGui::Separator();
 
@@ -36,7 +36,7 @@ namespace aq
 				else
 				{
 					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f),
-						"Readback: まだ届いていません (GPU→CPU 失敗 or 起動直後)");
+						"Readback: not available yet (GPU->CPU failed or just started)");
 				}
 				// 診断カウンタ (createFails スロットは readFound, valid スロットは Map HRESULT を流用)
 				uint32_t copies = 0, maps = 0, readFound = 0, stamps = 0, mapHr = 0, fenceReady = 0;
@@ -56,17 +56,17 @@ namespace aq
 						renderer_.SelfTest(vp, cam->GetPosition(), fwd, cam->GetNear(), cam->GetFar());
 					if (!st.valid)
 					{
-						ImGui::TextDisabled("Self-test: 有効な検証画素なし (画面に近距離の不透明物が必要)");
+						ImGui::TextDisabled("Self-test: no valid test pixels (needs a nearby opaque object on screen)");
 					}
 					else
 					{
 						ImGui::TextColored(st.pass ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
-							"Self-test: %s  (depth %.3f / 手前=%s 奥=%s)",
+							"Self-test: %s  (depth %.3f / near=%s far=%s)",
 							st.pass ? "PASS" : "FAIL",
 							st.sampleDepth,
-							st.nearOccluded ? "遮蔽" : "可視",
-							st.farOccluded  ? "遮蔽" : "可視");
-						ImGui::TextDisabled("PASS = 手前が可視 かつ 奥が遮蔽 → 遮蔽判定は正常に動作");
+							st.nearOccluded ? "occluded" : "visible",
+							st.farOccluded  ? "occluded" : "visible");
+						ImGui::TextDisabled("PASS = near visible AND far occluded -> occlusion test works");
 					}
 				}
 			}
@@ -76,7 +76,7 @@ namespace aq
 			const uint32_t count = renderer_.GetLevelCount();
 			if (count == 0)
 			{
-				ImGui::TextDisabled("(Hi-Z 未初期化)");
+				ImGui::TextDisabled("(Hi-Z not initialized)");
 				return;
 			}
 

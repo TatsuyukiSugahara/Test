@@ -141,7 +141,7 @@ namespace aq
 			ImGui::TextDisabled("--- Preview ---");
 			ImGui::SetNextItemWidth(-1.f);
 			ImGui::InputText("##preview_text", previewBuf_, sizeof(previewBuf_));
-			ImGui::TextDisabled("(ImGui font による近似表示)");
+			ImGui::TextDisabled("(approximate preview using ImGui font)");
 
 			if (previewBuf_[0] == '\0') return;
 

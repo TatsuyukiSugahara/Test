@@ -193,7 +193,7 @@ namespace aq
 				}
 				else
 				{
-					std::snprintf(statusMsg_, sizeof(statusMsg_), "パスを入力してください");
+					std::snprintf(statusMsg_, sizeof(statusMsg_), "Enter a path");
 				}
 			}
 			ImGui::EndDisabled();
@@ -268,7 +268,7 @@ namespace aq
 			if (!obj)
 			{
 				ImGui::Separator();
-				ImGui::TextDisabled("オブジェクトを選択してください");
+				ImGui::TextDisabled("Select an object");
 				return;
 			}
 
@@ -430,7 +430,7 @@ namespace aq
 					ImGui::DragFloat("Scale##txt",     &txt->scale,    0.01f, 0.01f, 8.f, "x%.3f");
 					ImGui::DragFloat2("Offset##txt",   &txt->offset.x, 0.5f, -2000.f, 2000.f, "%.1f px");
 					ImGui::ColorEdit4("Color##txt",    &txt->color.x);
-					ImGui::TextDisabled("  alpha=0 のとき Style の fillColor を使用");
+					ImGui::TextDisabled("  alpha=0 uses the Style fillColor");
 
 					ImGui::Separator();
 
@@ -598,7 +598,7 @@ namespace aq
 
 			ImGui::Checkbox("Text Overlay", &showTextOverlay_);
 			ImGui::SameLine();
-			ImGui::TextDisabled("(UIText 仮表示)");
+			ImGui::TextDisabled("(UIText placeholder)");
 			ImGui::Separator();
 
 			UIScreen* top  = UIContext::Get().Screens().Top();
@@ -643,7 +643,7 @@ namespace aq
 			if (root)
 				RenderTree(root);
 			else
-				ImGui::TextDisabled("UIScreen がありません");
+				ImGui::TextDisabled("No UIScreen");
 
 			RenderSaveLoad(root);
 			ImGui::EndChild();

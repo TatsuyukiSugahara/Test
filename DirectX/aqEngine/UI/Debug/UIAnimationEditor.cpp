@@ -58,7 +58,7 @@ namespace aq
 			// dt 取得 (preview 用)
 			const float dt = ImGui::GetIO().DeltaTime;
 
-			if (ImGui::SmallButton(windowPinned_ ? "[固定中] 解除" : "[固定]"))
+			if (ImGui::SmallButton(windowPinned_ ? "[Pinned] Unpin" : "[Pin]"))
 				windowPinned_ = !windowPinned_;
 			ImGui::SameLine();
 
@@ -68,7 +68,7 @@ namespace aq
 			UIObject* target = UIContext::Get().Resolve(targetHandle_);
 			if (!target)
 			{
-				ImGui::TextDisabled("対象 UIObject を選択してください");
+				ImGui::TextDisabled("Select a target UIObject");
 				ImGui::End();
 				return;
 			}
@@ -76,8 +76,8 @@ namespace aq
 			auto* anim = target->GetComponent<UIAnimationComponent>();
 			if (!anim)
 			{
-				ImGui::TextColored(ImVec4(1,0.6f,0,1), "UIAnimationComponent がありません");
-				if (ImGui::Button("コンポーネント追加"))
+				ImGui::TextColored(ImVec4(1,0.6f,0,1), "No UIAnimationComponent");
+				if (ImGui::Button("Add Component"))
 					anim = target->AddComponent<UIAnimationComponent>();
 				if (!anim) { ImGui::End(); return; }
 			}
@@ -104,7 +104,7 @@ namespace aq
 			}
 			else
 			{
-				ImGui::TextDisabled("クリップを選択してください");
+				ImGui::TextDisabled("Select a clip");
 			}
 			ImGui::EndChild();
 
@@ -148,9 +148,9 @@ namespace aq
 		void UIAnimationEditor::DrawObjectPicker()
 		{
 			UIObject* cur = UIContext::Get().Resolve(targetHandle_);
-			const char* label = cur ? cur->GetName().data() : "(未選択)";
+			const char* label = cur ? cur->GetName().data() : "(none)";
 
-			ImGui::Text("対象: ");
+			ImGui::Text("Target: ");
 			ImGui::SameLine();
 			if (ImGui::Button(label))
 			{
@@ -489,7 +489,7 @@ namespace aq
 			const float contentH = RULER_H + totalRows * ROW_H + 10.f;
 
 			// 操作ヒント
-			ImGui::TextDisabled("右クリック: キー追加/削除  |  Ctrl+Click: キー追加  |  Delete: 削除  |  Drag: 移動  |  Wheel: ズーム");
+			ImGui::TextDisabled("Right click: add/remove key  |  Ctrl+Click: add key  |  Delete: remove  |  Drag: move  |  Wheel: zoom");
 
 			// 横スクロール可能な子ウィンドウ
 			ImGui::BeginChild("##tlscroll", ImVec2(0, 0), false,
@@ -916,7 +916,7 @@ namespace aq
 			    selPropTrackIdx_ < 0 ||
 			    selKeyframeIdx_  < 0)
 			{
-				ImGui::TextDisabled("キーフレームを選択してください");
+				ImGui::TextDisabled("Select a keyframe");
 				return;
 			}
 
@@ -1052,7 +1052,7 @@ namespace aq
 				}
 			}
 			if (!canAddKey) ImGui::EndDisabled();
-			if (ImGui::IsItemHovered()) ImGui::SetTooltip("選択トラックにスクラブ時刻でキーフレームを追加");
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add a keyframe to the selected track at the scrub time");
 
 			// 復元ボタン
 			if (hasSnapshot_)

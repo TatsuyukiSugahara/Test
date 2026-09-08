@@ -13,7 +13,7 @@ namespace aq
 		{
 			if (!ecs::RenderSystem::IsAvailable())
 			{
-				ImGui::TextDisabled("(RenderSystem 未初期化)");
+				ImGui::TextDisabled("(RenderSystem not initialized)");
 				return;
 			}
 
@@ -70,11 +70,11 @@ namespace aq
 					ImGui::TextColored(ImVec4(0.85f, 0.8f, 1.0f, 1.0f),
 						"clusters %u/%u  tris %u/%u (%.0f%% drawn, %u culled)",
 						clVis, clTot, triVis, triTot, triPct, (triTot >= triVis) ? (triTot - triVis) : 0u);
-					ImGui::TextDisabled("注: Stats は CPU 側 (frustum+backface のみ・Hi-Z 非対象)。GPU 実描画数とは別。");
+					ImGui::TextDisabled("Note: Stats are CPU side (frustum+backface only, no Hi-Z). Not the GPU draw count.");
 				}
 				else
 				{
-					ImGui::TextDisabled("(Stats OFF: %% drawn を見るなら Stats を ON。CPU コスト増)");
+					ImGui::TextDisabled("(Stats OFF: turn Stats ON to see %% drawn. Adds CPU cost)");
 				}
 			}
 		}

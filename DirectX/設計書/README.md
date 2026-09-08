@@ -60,6 +60,8 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 | --- | --- |
 | [Xbox移植設計](Xbox移植設計.md) | UWP / GDK方針、リソース制限、抽象化、移植計画 |
 | [Xbox UWP移植変更まとめ](Xbox_UWP移植_変更まとめ.md) | Xbox One実機描画までの変更、調査結果、配置手順、制約 |
+| [Mac移植設計](Mac移植設計.md) | macOS/Metal 移植の設計。方針決定、Platform/入力/サウンド/Vulkan(MoltenVK) の責務表、フェーズ計画とチェックリスト |
+| [Mac移植調査](Mac移植調査.md) | 同・調査メモ(一次資料)。Windows 依存の棚卸し、MoltenVK/DXC の対応状況、道A/道B 比較 |
 
 ## 既知の課題
 

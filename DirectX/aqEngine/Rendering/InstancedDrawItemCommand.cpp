@@ -33,6 +33,21 @@ namespace aq
 			ctx.VSSetConstantBuffer(0, *drawCB);
 			ctx.PSSetConstantBuffer(0, *drawCB);
 
+			// b2: 風揺れ(草)。風パラメータを持たないメッシュ(路面タイル/コイン)には bind しないので、
+			// 既存のインスタンス描画は一切変わらない。
+			if (item_.windEnabled)
+			{
+				graphics::IConstantBuffer* windCB = fc.perDrawCBPool->Allocate();
+				if (windCB)
+				{
+					InstancedWindCBData windData = {};
+					windData.windParams    = item_.windParams;
+					windData.windDirection = item_.windDirection;
+					ctx.UpdateSubresource(*windCB, windData);
+					ctx.VSSetConstantBuffer(2, *windCB);
+				}
+			}
+
 			// t0: アルベドテクスチャ + s0: サンプラー(テクスチャ付きメッシュのみ)
 			if (item_.albedo) { ctx.PSSetShaderResource(0, *item_.albedo); }
 			else              { ctx.PSUnsetShaderResource(0); }

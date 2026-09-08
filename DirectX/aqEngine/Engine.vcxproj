@@ -245,6 +245,7 @@
     <ClCompile Include="Graphics\D3D11\D3D11Shader.cpp" />
     <ClCompile Include="Graphics\StaticMesh.cpp" />
     <ClCompile Include="Graphics\InstancedStaticMesh.cpp" />
+    <ClCompile Include="Graphics\MeshPrimitives.cpp" />
     <ClCompile Include="HID\ActionMap.cpp" />
     <ClCompile Include="HID\Input.cpp" />
     <ClCompile Include="HID\XInputPadBackend.cpp" />
@@ -503,6 +504,7 @@
     <ClInclude Include="Graphics\SkeletalMesh.h" />
     <ClInclude Include="Graphics\StaticMesh.h" />
     <ClInclude Include="Graphics\InstancedStaticMesh.h" />
+    <ClInclude Include="Graphics\MeshPrimitives.h" />
     <ClInclude Include="HID\ActionMap.h" />
     <ClInclude Include="HID\IPadBackend.h" />
     <ClInclude Include="HID\Input.h" />

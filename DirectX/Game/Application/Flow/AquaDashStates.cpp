@@ -13,6 +13,7 @@
 #include "Component/InstancedPointListComponentSystem.h"
 #include <cstdio>
 #include "Terrain/HeightmapChunk.h"
+#include "Graphics/MeshPrimitives.h"
 #include "Level/LevelManager.h"
 #include "Sound/SoundClip.h"
 #include "Sound/SoundEngine.h"
@@ -63,6 +64,41 @@ namespace app
 			static constexpr int   COIN_RING_SEGMENT_COUNT = 24;      // 中心円まわりの分割数
 			static constexpr int   COIN_RING_SIDE_COUNT    = 12;      // 管断面の分割数
 			static constexpr float COIN_RING_TWO_PI        = 6.28318530718f;
+
+			// 草 (P12-2: 見た目と風の確認用に 1000 本程度。散布規則の作り込みは P12-3)。
+			static constexpr uint32_t GRASS_QUAD_COUNT      = 3;        // 房を構成する交差クアッドの枚数
+			static constexpr float GRASS_HEIGHT             = 0.5f;     // 房の高さ [m]
+			static constexpr float GRASS_WIDTH              = 0.12f;    // 房の根元の幅 [m]
+			static constexpr float GRASS_CELL_SIZE          = 32.0f;    // ベイクする XZ セルの 1 辺 [m]
+			static constexpr float GRASS_DRAW_DISTANCE      = 120.0f;   // セル AABB までの最大描画距離 [m]
+			static constexpr int   GRASS_TARGET_COUNT       = 1000;     // 置きたいおおよその本数
+			static constexpr int   GRASS_PER_STEP_COUNT     = 3;        // スプラインの 1 ステップあたりの本数
+			static constexpr float GRASS_BAND_HALF_WIDTH    = 40.0f;    // コース中心からの横方向の帯 [m]
+			static constexpr float GRASS_ROAD_MARGIN        = 2.0f;     // 路面端からさらに空ける余白 [m]
+
+			// 風。強め (0.06m) にすると 0.5m の房でも先端の動きがはっきり見える。
+			static constexpr float GRASS_WIND_STRENGTH      = 0.06f;
+			static constexpr float GRASS_WIND_FREQUENCY     = 1.7f;
+
+			// 基準の緑。per-instance で明度と色相を少しずつ散らす。
+			static constexpr float GRASS_BASE_R             = 0.22f;
+			static constexpr float GRASS_BASE_G             = 0.46f;
+			static constexpr float GRASS_BASE_B             = 0.16f;
+
+			// ハッシュ乱数のシードを作るときの XZ 量子化 (1m あたりの分割数)。
+			static constexpr float GRASS_SEED_QUANTIZE      = 4.0f;
+			static constexpr float GRASS_TWO_PI             = 6.28318530718f;
+
+
+			// 整数座標から 0-1 の決定的な擬似乱数を作る (SplatmapPainter の HashNoise と同じ式)。
+			// 位置をシードにするので、再ロードしても同じ見た目になる。
+			float HashNoise(const int x, const int y)
+			{
+				uint32_t h = static_cast<uint32_t>(x) * 374761393u + static_cast<uint32_t>(y) * 668265263u;
+				h = (h ^ (h >> 13)) * 1274126177u;
+				h ^= h >> 16;
+				return static_cast<float>(h & 0x00ffffffu) / static_cast<float>(0x00ffffffu);
+			}
 
 
 			// 決定 SE を再生する (クリップは GameFlow::Update で先読み済み)。
@@ -201,6 +237,10 @@ namespace app
 				const CourseExtents ext = ComputeCourseExtents(*stageData);
 				const float minX = ext.minX, maxX = ext.maxX, minZ = ext.minZ, maxZ = ext.maxZ;
 
+				// 草の高さ引きに使う地形の原点とチャンク (地面ブロックで確定する)。
+				aq::math::Vector3              terrainOrigin(0.0f, 0.0f, 0.0f);
+				aq::terrain::HeightmapChunk*   terrainChunk = nullptr;
+
 				// 地面。
 				{
 					const aq::terrain::HeightmapChunk::Desc desc = MakeTerrainDesc(*stageData, ext);
@@ -218,6 +258,10 @@ namespace app
 						terrain->SetDesc(desc);
 					}
 					terrain->GetChunk()->SetReceiveShadow(true);
+					// GetHeight は地形ローカル XZ を取り、エンティティの Y オフセットを含まない高さを返す。
+					// 草の配置で使うので、原点 (= TransformComponent の位置) とチャンクを控えておく。
+					terrainOrigin = tc->position;
+					terrainChunk  = terrain->GetChunk();
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("StageGround");
 #endif
@@ -290,6 +334,105 @@ namespace app
 					context.stageEntities.push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   road tiles done");
+
+				// 草 (手続き生成の房 + 風揺れ)。この段はコース沿いに 1000 本程度置いて見た目と
+				// 風の動きを確認するだけで、散布規則 (スプラットマスク/傾斜除外/ワーカー/10万本) は次段。
+				{
+					// 房メッシュはここで一度だけ生成する。同名が登録済みならそれが返るので、
+					// RETRY やステージ再入場で作り直しにはならない。
+					std::vector<aq::graphics::VertexData> grassVertices;
+					std::vector<uint32_t>                 grassIndices;
+					aq::graphics::BuildGrassTuftMesh(grassVertices, grassIndices,
+					                                 GRASS_QUAD_COUNT, GRASS_HEIGHT, GRASS_WIDTH);
+
+					auto* grassMesh = aq::graphics::InstancedStaticMesh::RegisterFromData(
+						"Grass",
+						grassVertices.data(), static_cast<uint32_t>(grassVertices.size()), sizeof(aq::graphics::VertexData),
+						grassIndices.data(),  static_cast<uint32_t>(grassIndices.size()),
+						aq::graphics::StaticMesh::ShaderType::InstancedGrass);
+					if (grassMesh != nullptr) {
+						// ローカル AABB が無いとセル AABB が点になりカリングが一切効かないので必ず持たせる。
+						grassMesh->SetLocalBounds(aq::math::AABB(
+							aq::math::Vector3(0.0f, GRASS_HEIGHT * 0.5f, 0.0f),
+							aq::math::Vector3(GRASS_WIDTH * 0.5f, GRASS_HEIGHT * 0.5f, GRASS_WIDTH * 0.5f)));
+						grassMesh->SetWindParams(GRASS_WIND_STRENGTH, GRASS_WIND_FREQUENCY,
+						                         aq::math::Vector3(1.0f, 0.0f, 0.35f));
+					}
+
+					auto entity = ctx.CreateEntity<
+						aq::ecs::TransformComponent,
+						aq::ecs::HierarchicalTransformComponent,
+						aq::ecs::InstancedStaticMeshComponent,
+						aq::ecs::InstancedPointListComponent>();
+					entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh("Grass");
+
+					auto* pointList = entity.GetComponent<aq::ecs::InstancedPointListComponent>();
+					pointList->ReserveInstancePoints(static_cast<size_t>(GRASS_TARGET_COUNT));
+
+					// スプラインを一定間隔で歩き、1 ステップにつき数本を帯の中の乱数横位置へ置く。
+					// 路面上 (|lateral| < 路面半幅 + マージン) に当たったぶんは捨てる。
+					const float total         = stageData->spline.GetTotalLength();
+					const int   stepCount     = (GRASS_TARGET_COUNT >= GRASS_PER_STEP_COUNT)
+					                          ? GRASS_TARGET_COUNT / GRASS_PER_STEP_COUNT : 1;
+					const float step          = total / static_cast<float>(stepCount);
+					const float roadHalfWidth = stageData->width * 0.5f + GRASS_ROAD_MARGIN;
+					for (int s = 0; s < stepCount; ++s)
+					{
+						const auto frame = stageData->spline.Evaluate(step * static_cast<float>(s));
+						for (int k = 0; k < GRASS_PER_STEP_COUNT; ++k)
+						{
+							const float lateral = (HashNoise(s, k) * 2.0f - 1.0f) * GRASS_BAND_HALF_WIDTH;
+							if (fabsf(lateral) < roadHalfWidth) { continue; }   // 路面の上には生やさない
+
+							// 高さは地形から取る。GetHeight は地形ローカル XZ を受け、エンティティの
+							// Y オフセットを含まない高さを返すので、原点 Y を足して戻す。
+							const aq::math::Vector3 base = frame.position + frame.right * lateral;
+							const float worldX = base.x;
+							const float worldZ = base.z;
+							const float worldY = terrainOrigin.y
+							                   + ((terrainChunk != nullptr)
+							                      ? terrainChunk->GetHeight(worldX - terrainOrigin.x, worldZ - terrainOrigin.z)
+							                      : 0.0f);
+
+							// 回転・スケール・色は「量子化したワールド XZ」のハッシュから作る。
+							// 位置が同じなら常に同じ値になるので、再ロードで見た目が揺れない。
+							const int ix = static_cast<int>(floorf(worldX * GRASS_SEED_QUANTIZE));
+							const int iz = static_cast<int>(floorf(worldZ * GRASS_SEED_QUANTIZE));
+							const float rotRand    = HashNoise(ix, iz);
+							const float scaleRand  = HashNoise(ix + 131, iz);
+							const float brightRand = HashNoise(ix, iz + 197);
+							const float hueRand    = HashNoise(ix + 263, iz + 311);
+
+							// 明度と色相 (黄寄り / 青寄り) を少し散らして、群れの単調さを消す。
+							const float bright = 0.75f + 0.40f * brightRand;
+							const float hue    = (hueRand - 0.5f) * 0.10f;
+
+							aq::ecs::InstancePoint p;
+							p.position.Set(worldX, worldY, worldZ);
+							p.rotation.SetRotation(aq::math::Vector3(0.0f, 1.0f, 0.0f), rotRand * GRASS_TWO_PI);
+							p.scale.Set(0.8f + 0.5f * scaleRand);
+							p.color = aq::math::Vector4((GRASS_BASE_R + hue)        * bright,
+							                            GRASS_BASE_G               * bright,
+							                            (GRASS_BASE_B - hue * 0.5f) * bright,
+							                            1.0f);
+							pointList->AddInstancePoint(p);
+						}
+					}
+
+					// 路面タイルと同じく、配置後に動かない静的オブジェクトなのでベイク経路に載せる。
+					// エンティティは既定変換のままなので、織り込むワールド行列は単位行列でよい。
+					if (grassMesh != nullptr) {
+						pointList->BakeStatic(aq::math::Matrix4x4::Identity, grassMesh->GetLocalBounds(),
+						                      GRASS_CELL_SIZE);
+					}
+					// 草は小さいので遠景では見えない。路面と違いミニマップにも要らないので距離で切る。
+					pointList->SetMaxDrawDistance(GRASS_DRAW_DISTANCE);
+#ifdef AQ_DEBUG_IMGUI
+					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Grass");
+#endif
+					context.stageEntities.push_back(entity.GetHandle());
+				}
+				aq::StartupMark("[load]   grass done");
 
 				// プレイヤー。
 				{

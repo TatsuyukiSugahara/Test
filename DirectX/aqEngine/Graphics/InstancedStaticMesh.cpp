@@ -19,9 +19,12 @@ namespace aq
 
 			const char* InstancedShaderPath(StaticMesh::ShaderType type)
 			{
-				return (type == StaticMesh::ShaderType::InstancedTextured)
-					? "Assets/Shader/InstancedModelTex.fx"
-					: "Assets/Shader/InstancedSimple.fx";
+				switch (type)
+				{
+				case StaticMesh::ShaderType::InstancedTextured: return "Assets/Shader/InstancedModelTex.fx";
+				case StaticMesh::ShaderType::InstancedGrass:    return "Assets/Shader/InstancedGrass.fx";
+				default:                                        return "Assets/Shader/InstancedSimple.fx";
+				}
 			}
 		}
 
@@ -85,6 +88,20 @@ namespace aq
 			if (data == nullptr || count == 0) { return; }
 			// ベイク済み(転置・色込み)のブロックなので、変換せずそのまま連結する。
 			pendingInstances_.insert(pendingInstances_.end(), data, data + count);
+		}
+
+
+		void InstancedStaticMesh::SetWindParams(const float strength, const float frequency, const math::Vector3& direction)
+		{
+			windStrength_  = strength;
+			windFrequency_ = frequency;
+
+			// 風向は必ず正規化して持つ(シェーダ側は正規化済み前提)。ゼロベクトルなら既定の +X に戻す。
+			windDirection_ = direction;
+			if (!windDirection_.TryNormalize()) {
+				windDirection_.Set(1.0f, 0.0f, 0.0f);
+			}
+			windEnabled_ = true;
 		}
 
 
@@ -154,7 +171,7 @@ namespace aq
 		}
 
 
-		bool InstancedStaticMesh::FillInstancedRenderItem(rendering::InstancedRenderItem& out) const
+		bool InstancedStaticMesh::FillInstancedRenderItem(rendering::InstancedRenderItem& out, const float time) const
 		{
 			if (instanceCount_ == 0)                              { return false; }
 			if (!vertexBuffer_ || !indexBuffer_ || !instanceBuffer_) { return false; }
@@ -176,6 +193,13 @@ namespace aq
 				if (srv) { out.albedo = std::shared_ptr<IShaderResourceView>(albedoResource_, srv); }
 			}
 			out.sampler = sampler_;
+
+			// 風揺れ(草など)。時刻はゲームスレッドで採った値を受け取ってそのまま載せる。
+			out.windEnabled = windEnabled_;
+			if (windEnabled_) {
+				out.windParams.Set(time, windStrength_, windFrequency_, 0.0f);
+				out.windDirection.Set(windDirection_.x, windDirection_.y, windDirection_.z, 0.0f);
+			}
 
 			out.indexCount     = indexCount_;
 			out.instanceCount  = instanceCount_;
@@ -206,13 +230,13 @@ namespace aq
 		}
 
 
-		void InstancedStaticMesh::CollectRenderItems(std::vector<rendering::InstancedRenderItem>& out)
+		void InstancedStaticMesh::CollectRenderItems(std::vector<rendering::InstancedRenderItem>& out, const float time)
 		{
 			for (auto& weak : g_registry)
 			{
 				if (auto mesh = weak.lock()) {
 					rendering::InstancedRenderItem item;
-					if (mesh->FillInstancedRenderItem(item)) {
+					if (mesh->FillInstancedRenderItem(item, time)) {
 						out.push_back(std::move(item));
 					}
 				}

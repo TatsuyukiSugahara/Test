@@ -148,6 +148,12 @@ namespace aq
 			std::shared_ptr<graphics::ISamplerState>       sampler;  // サンプラー(s0・任意)
 			uint32_t                                 indexCount    = 0;
 			uint32_t                                 instanceCount = 0;
+
+			// 風揺れ(草など)。時刻はゲームスレッドで採ってここへ載せる(レンダースレッドから
+			// エンジンのシングルトンを読まないため)。windEnabled が false なら b2 は bind しない。
+			bool          windEnabled = false;            // b2 の WindCB を積むか
+			math::Vector4 windParams;                     // x=経過時間[s], y=揺れ幅[m], z=周波数, w=未使用
+			math::Vector4 windDirection;                  // xyz=風向, w=未使用
 		};
 
 

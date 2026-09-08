@@ -29,6 +29,7 @@ namespace aq
 				TerrainPBRLit, // TerrainPBRGBuffer.fx (ディファード PBR、terrain)
 				InstancedSimple,   // InstancedSimple.fx (フォワード・per-instance ワールド行列・単色)
 				InstancedTextured, // InstancedModelTex.fx (per-instance ワールド行列・アルベドテクスチャ+簡易ライト)
+				InstancedGrass,    // InstancedGrass.fx (per-instance ワールド行列・風揺れ+縦グラデーション)
 			};
 
 		private:

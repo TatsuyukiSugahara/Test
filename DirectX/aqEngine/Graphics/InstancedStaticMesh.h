@@ -69,6 +69,12 @@ namespace aq
 			math::AABB                     localBounds_;
 			bool                           hasLocalBounds_ = false;
 
+			/** 風揺れ(草など。有効なときだけ描画で b2 の WindCB を積む) */
+			bool                           windEnabled_    = false;
+			float                          windStrength_   = 0.0f;                            // 先端の揺れ幅 [m]
+			float                          windFrequency_  = 0.0f;                            // 揺れの周波数
+			math::Vector3                  windDirection_  = math::Vector3(1.0f, 0.0f, 0.0f); // 風向(正規化済み)
+
 
 		public:
 			InstancedStaticMesh()  = default;
@@ -107,11 +113,22 @@ namespace aq
 			/** 明示ローカル AABB が設定済みか */
 			inline bool HasLocalBounds() const { return hasLocalBounds_; }
 
+			/**
+			 * 風揺れパラメータを設定する(設定した時点で風揺れが有効になる)。
+			 * @param strength  先端の揺れ幅 [m]
+			 * @param frequency 揺れの周波数
+			 * @param direction 風向(正規化できないときは既定の +X を使う)
+			 */
+			void SetWindParams(const float strength, const float frequency, const math::Vector3& direction);
+
+			/** 風揺れパラメータを持つか */
+			inline bool HasWind() const { return windEnabled_; }
+
 			/** 毎フレーム必ず呼ぶ。pending を動的VBへ書込み instanceCount_ を確定し、retired を計時する。 */
 			void FlushInstances();
 
-			/** 描画1件分を out に詰める。count==0 / 未準備なら false。 */
-			bool FillInstancedRenderItem(rendering::InstancedRenderItem& out) const;
+			/** 描画1件分を out に詰める。count==0 / 未準備なら false。time はゲームスレッドで採った経過時間 [s]。 */
+			bool FillInstancedRenderItem(rendering::InstancedRenderItem& out, const float time) const;
 
 
 			// ── 静的レジストリ(全メッシュ一括処理) ──
@@ -119,8 +136,8 @@ namespace aq
 			static std::shared_ptr<InstancedStaticMesh> Create();
 			/** 登録済み全メッシュを毎フレーム Flush する(gather の最後に呼ぶ)。 */
 			static void FlushAllRegistered();
-			/** 登録済み全メッシュのうち count>0 の描画アイテムを out へ追加する。 */
-			static void CollectRenderItems(std::vector<rendering::InstancedRenderItem>& out);
+			/** 登録済み全メッシュのうち count>0 の描画アイテムを out へ追加する。time はゲームスレッドで採った経過時間 [s]。 */
+			static void CollectRenderItems(std::vector<rendering::InstancedRenderItem>& out, const float time);
 
 			// ── 名前レジストリ(JSON/コンポーネントからの共有メッシュ参照) ──
 			/** 名前で共有メッシュを登録する(shared_ptr を保持=アプリ寿命で生存)。 */

@@ -836,7 +836,9 @@ namespace aq
 			}
 
 			// インスタンス描画アイテム(1メッシュ=1ドロー)。Flush 済みの登録メッシュから収集する。
-			aq::graphics::InstancedStaticMesh::CollectRenderItems(frame.instancedItems);
+			// 風揺れ用の経過時間はここ(ゲームスレッド)で採ってアイテムへ載せる。レンダースレッドから
+			// Engine のシングルトンを読まないための意図的な採取点(スレッド境界規約)。
+			aq::graphics::InstancedStaticMesh::CollectRenderItems(frame.instancedItems, aq::Engine::GetTotalTime());
 
 			// ShaderType で deferred / forward を振り分け
 			aq::ecs::Foreach<StaticMeshComponent>([&frame, &isVisible, &accumClusters](const aq::ecs::Entity&, StaticMeshComponent* comp)

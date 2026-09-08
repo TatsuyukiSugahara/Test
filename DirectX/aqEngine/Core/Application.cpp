@@ -61,7 +61,9 @@ namespace aq
 			EngineAssertMsg(false, "InputManager::Setup failed: DirectInput or device initialization failed");
 			return false;
 		}
+		aq::StartupMark("  [app] input ok");
 		aq::ui::UIContext::Initialize();
+		aq::StartupMark("  [app] UIContext ok (UI shaders x4 compiled)");
 		aq::CameraManager::Initialize();
 		aq::graphics::LightManager::Initialize();
 #ifdef AQ_DEBUG_IMGUI
@@ -75,8 +77,10 @@ namespace aq
 		{
 			ImGui::CreateContext();
 
-				// 日本語フォントを Windows フォントフォルダから読み込む
-				// GetWindowsDirectoryA でフォントパスを動的に解決する
+				// ImGui 用フォントを Windows フォントフォルダから読み込む(GetWindowsDirectoryA で動的解決)。
+				// 日本語グリフ(かな/CJK 統合漢字 約 21,000 字)は起動時のアトラス生成に約 0.26 秒かかる一方、
+				// 使用箇所は Debug パネルの一部ラベルのみだったため ASCII(+矢印/図形記号)に制限した。
+				// 日本語ラベルは "?" で表示される。必要なら kCustomRanges に範囲を足す。
 				{
 					char winDir[MAX_PATH] = {};
 					if (GetWindowsDirectoryA(winDir, MAX_PATH) == 0)
@@ -99,15 +103,12 @@ namespace aq
 						if (fopen_s(&f, path, "rb") != 0 || !f) continue;
 						fclose(f);
 
-						// 日本語 + Arrows (U+2190-21FF) + Geometric Shapes (U+25A0-25FF) を追加
+						// ASCII/Latin-1 + Arrows (U+2190-21FF) + Geometric Shapes (U+25A0-25FF) のみ。
+						// 日本語範囲(U+3000-30FF / U+31F0-31FF / U+FF00-FFEF / U+4E00-9FAF)は起動短縮のため外した。
 						static const ImWchar kCustomRanges[] = {
 							0x0020, 0x00FF, // Basic Latin + Latin-1
 							0x2190, 0x21FF, // Arrows (→←↑↓↖↗↘↙↕ 等)
 							0x25A0, 0x25FF, // Geometric Shapes (●▶◀▲▼ 等)
-							0x3000, 0x30FF, // CJK Symbols, Hiragana, Katakana
-							0x31F0, 0x31FF, // Katakana Phonetic Extensions
-							0xFF00, 0xFFEF, // Half-width
-							0x4e00, 0x9FAF, // CJK Unified Ideographs
 							0,
 						};
 						ImFontConfig cfg;
@@ -143,6 +144,7 @@ namespace aq
 				EngineAssertMsg(false, "ImGui backend initialization failed");
 			}
 		}
+		aq::StartupMark("  [app] ImGui ok (font atlas built, ASCII only)");
 #endif
 
 		renderer_.SetUIRenderCallback([](aq::rendering::RenderCommandList& list) {
@@ -150,6 +152,7 @@ namespace aq
 		});
 
 		if (!OnInitialize()) return false;
+		aq::StartupMark("  [app] game OnInitialize ok");
 
 		// GPU 駆動クラスタ(トライアングル)カリング: compute シェーダをロード。
 		// compute 非対応(FL10 の Xbox One UWP 等)では初期化せず、カリングも無効化する。
@@ -186,6 +189,7 @@ namespace aq
 			}
 		}
 		}  // if (aq::graphics::IsComputeSupported())
+		aq::StartupMark("  [app] ClusterCull/HiZ ok (CS x4 compiled)");
 
 #ifdef AQ_DEBUG_IMGUI
 		// OnInitialize() でゲーム側が Shadow/Bloom 等のレンダラを設定した後にパネルを生成する
@@ -453,7 +457,7 @@ namespace aq
 					ImGui::Text("%s  %.1f FPS (%.2f ms)", backend, fps, ms);
 #ifdef AQ_DEBUG_IMGUI
 					// トグル操作のヒント（非表示中は重いデバッグ描画がスキップされる）。
-					ImGui::TextDisabled(showDebugUI_ ? "F1 / 中クリック: Debug UI を隠す" : "F1 / 中クリック: Debug UI を表示");
+					ImGui::TextDisabled(showDebugUI_ ? "F1 / Middle click: hide Debug UI" : "F1 / Middle click: show Debug UI");
 #endif
 
 #if defined(ENGINE_GRAPHICS_D3D12)

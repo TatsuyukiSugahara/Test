@@ -36,9 +36,12 @@ namespace aq
 			EngineAssert(desc.width);
 			EngineAssert(desc.height);
 
+			// 背景ブラシは黒にする。初回 Present までの初期化中(約 1〜2 秒)に OS 既定の白が
+			// 見えていたため、その間も黒画面にしておく(描画開始後は D3D が全面を塗るので影響なし)。
 			WNDCLASSEX wc = {
 				sizeof(WNDCLASSEX), CS_CLASSDC, MsgProc, 0L, 0L,
-				GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr,
+				GetModuleHandle(nullptr), nullptr, nullptr,
+				static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)), nullptr,
 				TEXT("Application"), nullptr
 			};
 			RegisterClassEx(&wc);

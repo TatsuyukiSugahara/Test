@@ -447,12 +447,12 @@ namespace app
 		// 事前にキャッシュして決定時に即座に黒背景を出せるようにする。
 		if (!preloaded_)
 		{
-			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Terrain/rock.png");
-			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/Character/Character.png");
 			// UI フォント(小さな ASCII アトラス)を先読み。テキストはアトラス完了まで描画されないため。
 			// (CorporateLogo の先読みは撤去。上の UI_FONT_PATH の注を参照)
 			aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
-			// タイトルの単色塗り(和紙/落款/フラッシュ)に使う白テクスチャ。
+			// タイトル/ローディングの単色塗りに使う白テクスチャ(1×1)。ローディング背景も以前は
+			// 2.9MB の rock.png を黒く着色して使っていたが、これに置き換えた(Loading.screen.json)。
+			// Character.png の先読みも旧 SetupWorld 経路専用だったため撤去。
 			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/UI/Textures/white.png");
 			// 決定 SE を先読み(タイトルで押した瞬間に即鳴らせるように)。
 			aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);

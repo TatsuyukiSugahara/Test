@@ -9,7 +9,7 @@
             "name": "LoadingBG",
             "components": {
                 "transform": { "position": [0, 0, 0], "sizeDelta": [1920, 1080] },
-                "image": { "texture": "Assets/Terrain/rock.png", "color": [0, 0, 0, 1] }
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [0, 0, 0, 1] }
             }
         },
         {

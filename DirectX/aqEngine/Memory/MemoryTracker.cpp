@@ -2,21 +2,16 @@
 #ifdef _DEBUG
 
 #include "MemoryTracker.h"
+#include <atomic>
 #include <cstdio>
+#include <mutex>
+#include <unordered_map>
 
 
 namespace aq
 {
 	namespace memory
 	{
-		struct AllocationInfo
-		{
-			size_t      size;
-			const char* file; // nullptr = ソース情報なし (通常の new)
-			int         line;
-			const char* func;
-		};
-
 		// スレッドローカル: engineNewWith マクロが次の Allocate 前にセットするソース情報
 		struct AllocSource
 		{
@@ -26,23 +21,40 @@ namespace aq
 		};
 		thread_local AllocSource g_nextSource;
 
-		// 再帰防止フラグ: TrackingData の map 操作が内部で new を呼ぶ際の無限再帰を防ぐ
+		// 再入防止フラグ: 集計(CaptureUsageBySource)中の一時確保がリストのロックへ再入しないようにする。
+		// フラグが立っている間の確保はヘッダは持つがリストには連結しない(tracked=false)。
 		thread_local bool g_inTracking = false;
 
-		// メモリ予算の観測用: 現在未解放のヒープ確保バイト数の総和。
+		// メモリ予算の観測用: 現在未解放のヒープ確保バイト数の総和と件数。
 		std::atomic<size_t> g_liveBytes{ 0 };
+		std::atomic<size_t> g_liveCount{ 0 };
 
 
+		// ライブブロックの侵入型双方向リスト。番兵ノードを持ち、連結/切断は O(1)。
 		struct TrackingData
 		{
-			std::mutex                                mutex;
-			std::unordered_map<void*, AllocationInfo> map;
+			std::mutex  mutex;
+			TrackHeader sentinel;
+
+			TrackingData()
+			{
+				sentinel = {};
+				sentinel.prev = &sentinel;
+				sentinel.next = &sentinel;
+			}
 		};
 
 		static TrackingData& GetData()
 		{
-			// リーキーシングルトン: main() 後の静的デストラクタから呼ばれても map が有効なまま保たれる
-			static TrackingData* s_data = new TrackingData();
+			// リーキーシングルトン: main() 後の静的デストラクタから呼ばれても有効なまま保たれる。
+			// 自身の確保は g_inTracking を立てて行い、リーク報告に混ざらないようにする。
+			static TrackingData* s_data = []() {
+				const bool prev = g_inTracking;
+				g_inTracking = true;
+				auto* d = new TrackingData();
+				g_inTracking = prev;
+				return d;
+			}();
 			return *s_data;
 		}
 
@@ -53,44 +65,51 @@ namespace aq
 		}
 
 
-		void TrackAllocation(void* ptr, size_t size) noexcept
+		void RegisterBlock(TrackHeader* header, size_t size) noexcept
 		{
-			if (!ptr || g_inTracking) {
-				return;
-			}
-
 			// ソース情報を消費してリセット
-			AllocSource src = g_nextSource;
-			g_nextSource    = {};
+			const AllocSource src = g_nextSource;
+			g_nextSource = {};
 
-			g_inTracking = true;
-			{
-				auto& data = GetData();
-				std::lock_guard<std::mutex> lock(data.mutex);
-				data.map[ptr] = AllocationInfo{ size, src.file, src.line, src.func };
-				g_liveBytes.fetch_add(size, std::memory_order_relaxed);
+			header->magic   = TRACK_MAGIC;
+			header->size    = size;
+			header->file    = src.file;
+			header->func    = src.func;
+			header->line    = src.line;
+			header->tracked = false;
+			header->prev    = nullptr;
+			header->next    = nullptr;
+
+			if (g_inTracking) {
+				return;   // 集計中の一時確保: 統計とリストには含めない
 			}
-			g_inTracking = false;
+
+			auto& data = GetData();
+			std::lock_guard<std::mutex> lock(data.mutex);
+			header->tracked = true;
+			header->prev    = data.sentinel.prev;
+			header->next    = &data.sentinel;
+			data.sentinel.prev->next = header;
+			data.sentinel.prev       = header;
+			g_liveBytes.fetch_add(size, std::memory_order_relaxed);
+			g_liveCount.fetch_add(1,    std::memory_order_relaxed);
 		}
 
 
-		void UntrackAllocation(void* ptr) noexcept
+		void UnregisterBlock(TrackHeader* header) noexcept
 		{
-			if (!ptr || g_inTracking) {
-				return;
-			}
-
-			g_inTracking = true;
-			{
+			if (header->tracked) {
 				auto& data = GetData();
 				std::lock_guard<std::mutex> lock(data.mutex);
-				auto it = data.map.find(ptr);
-				if (it != data.map.end()) {
-					g_liveBytes.fetch_sub(it->second.size, std::memory_order_relaxed);
-					data.map.erase(it);
-				}
+				header->prev->next = header->next;
+				header->next->prev = header->prev;
+				g_liveBytes.fetch_sub(header->size, std::memory_order_relaxed);
+				g_liveCount.fetch_sub(1,            std::memory_order_relaxed);
 			}
-			g_inTracking = false;
+			header->magic   = 0;   // 二重解放検出用
+			header->tracked = false;
+			header->prev    = nullptr;
+			header->next    = nullptr;
 		}
 
 
@@ -102,16 +121,14 @@ namespace aq
 
 		size_t GetTrackedCount() noexcept
 		{
-			auto& data = GetData();
-			std::lock_guard<std::mutex> lock(data.mutex);
-			return data.map.size();
+			return g_liveCount.load(std::memory_order_relaxed);
 		}
 
 
 		void CaptureUsageBySource(std::vector<MemoryUsageEntry>& out) noexcept
 		{
 			out.clear();
-			// 集計中の一時確保が map / lock へ再入しないようガードする。
+			// 集計中の一時確保(agg / out)がリストへ連結・ロック再入しないようガードする。
 			const bool prev = g_inTracking;
 			g_inTracking = true;
 			{
@@ -127,17 +144,16 @@ namespace aq
 					h ^= std::hash<const void*>()(k.func) + 0x9e3779b9u + (h << 6) + (h >> 2);
 					return h; } };
 				std::unordered_map<Key, size_t, KeyHash> agg;
-				agg.reserve(data.map.size());
+				agg.reserve(g_liveCount.load(std::memory_order_relaxed));
 
-				for (const auto& [ptr, info] : data.map) {
-					(void)ptr;
-					const Key key{ info.file, info.line, info.func };
+				for (const TrackHeader* h = data.sentinel.next; h != &data.sentinel; h = h->next) {
+					const Key key{ h->file, h->line, h->func };
 					auto it = agg.find(key);
 					if (it == agg.end()) {
 						agg.emplace(key, out.size());
-						out.push_back(MemoryUsageEntry{ info.file, info.func, info.line, info.size, 1 });
+						out.push_back(MemoryUsageEntry{ h->file, h->func, h->line, h->size, 1 });
 					} else {
-						out[it->second].bytes += info.size;
+						out[it->second].bytes += h->size;
 						out[it->second].count += 1;
 					}
 				}
@@ -151,7 +167,7 @@ namespace aq
 			auto& data = GetData();
 			std::lock_guard<std::mutex> lock(data.mutex);
 
-			if (data.map.empty()) {
+			if (data.sentinel.next == &data.sentinel) {
 				OutputDebugStringA("[MemoryTracker] No leaks detected.\n");
 				return;
 			}
@@ -159,20 +175,21 @@ namespace aq
 			char buf[512];
 			snprintf(buf, sizeof(buf),
 				"[MemoryTracker] ========== %zu leak(s) detected ==========\n",
-				data.map.size());
+				g_liveCount.load(std::memory_order_relaxed));
 			OutputDebugStringA(buf);
 
 			size_t totalBytes = 0;
-			for (const auto& [ptr, info] : data.map) {
-				totalBytes += info.size;
-				if (info.file) {
+			for (const TrackHeader* h = data.sentinel.next; h != &data.sentinel; h = h->next) {
+				const void* userPtr = reinterpret_cast<const uint8_t*>(h) + sizeof(TrackHeader);
+				totalBytes += h->size;
+				if (h->file) {
 					snprintf(buf, sizeof(buf),
 						"  %p  %6zu bytes  %s:%d  (%s)\n",
-						ptr, info.size, info.file, info.line, info.func ? info.func : "");
+						userPtr, h->size, h->file, h->line, h->func ? h->func : "");
 				} else {
 					snprintf(buf, sizeof(buf),
 						"  %p  %6zu bytes  (no source info -- use engineNewWith for tracking)\n",
-						ptr, info.size);
+						userPtr, h->size);
 				}
 				OutputDebugStringA(buf);
 			}

@@ -52,6 +52,21 @@ namespace aq
 		// Bullet allocator hook は MemoryManager 直後、かつ Bullet 型が一切生成される前に設定する。
 		aq::physics::PhysicsWorld::InstallAllocatorHook();
 
+		// COM(MTA) をメインスレッドでプロセス寿命ぶん保持する。XAudio2 / WIC(DirectXTex) / Media Foundation が
+		// COM を要求し、MTA が 1 つでも存在すれば未初期化スレッド(ThreadPool ワーカ)も暗黙に MTA 参加扱いになる。
+		// 従来は XAudio2 バックエンドのメインスレッド CoInitializeEx がこれを兼ねていたが、サウンド初期化を
+		// 別スレッドへ移したため明示的にここで行う。
+		comInitialized_ = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+
+		// サウンド初期化(XAudio2Create + マスタリングボイス)は実測 0.25〜1.0 秒かかり、その大半がデバイス待ちで
+		// CPU を使わない。ウィンドウ/グラフィックス/シェーダ初期化と並列に別スレッドで走らせ、利用側は
+		// EnsureSoundInitialized() で合流する(SoundEngine::Create 自体はここで済ませるので IsAvailable() は true)。
+		aq::sound::SoundEngine::Create<aq::sound::DefaultSoundBackend>();
+		soundInitFuture_ = std::async(std::launch::async, [] {
+			return aq::sound::SoundEngine::Get().Initialize();
+		});
+		aq::StartupLog("  [engine] sound init started (async)");
+
 		if (!InitializeWindow(initializeParameter)) {
 			aq::StartupLog("  [engine] InitializeWindow FAILED");
 			return false;
@@ -65,25 +80,24 @@ namespace aq
 		// ThreadPool のワーカ数はリソース予算で決める。
 		// Win32 は 0(論理コア数)、Xbox(UWP)は 4コア占有+2コア共有に合わせて 6 固定。
 		aq::util::ThreadPool::Initialize(aq::platform::GetResourceBudget().threadPoolWorkerCount);
+		aq::StartupLog("  [engine] threadpool ok");
 
-		// サウンド: プラットフォームで選択したバックエンドを注入して初期化する（§10）。
-		aq::sound::SoundEngine::Create<aq::sound::DefaultSoundBackend>();
-		if (!aq::sound::SoundEngine::Get().Initialize()) {
-			aq::StartupLog("  [engine] SoundEngine::Initialize FAILED");
-			return false;
-		}
-		aq::StartupLog("  [engine] sound ok");
-
-		// データ駆動オーディオ層（イベント/Bank）。SoundEngine の上に載る。
+		// データ駆動オーディオ層（イベント/Bank）。SoundEngine の上に載る(Initialize は SoundEngine を触らない)。
 		aq::audio::AudioDirector::Create();
 		aq::audio::AudioDirector::Get().Initialize();
 		aq::StartupLog("  [engine] audio director ok");
 
+		// application 初期化中にサウンドが要るところ(BGM 開始など)は EnsureSoundInitialized() で合流する。
 		if (!application_->Initialize(renderContext_)) {
 			aq::StartupLog("  [engine] application_->Initialize FAILED");
 			return false;
 		}
 		aq::StartupLog("  [engine] application ok");
+
+		// application 側が合流していなくてもここで必ず待つ。以降 SoundEngine は初期化済みとして扱える。
+		if (!EnsureSoundInitialized()) {
+			return false;
+		}
 		application_->Register();
 
 		gameTimer_.Initialize();
@@ -104,14 +118,37 @@ namespace aq
 		aq::audio::AudioDirector::Get().Finalize();
 		aq::audio::AudioDirector::Release();
 
-		aq::sound::SoundEngine::Get().Finalize();
-		aq::sound::SoundEngine::Release();
+		// 初期化途中で失敗した場合など、サウンド初期化スレッドが未合流なら破棄前に待つ。
+		if (soundInitFuture_.valid()) {
+			soundInitFuture_.wait();
+		}
+		if (aq::sound::SoundEngine::IsAvailable()) {
+			aq::sound::SoundEngine::Get().Finalize();
+			aq::sound::SoundEngine::Release();
+		}
 
 		aq::graphics::GraphicsDevice::Get().Finalize();
 		aq::graphics::GraphicsDevice::Release();
 
 		aq::util::ThreadPool::Finalize();
+
+		// COM はワーカ(WIC 等)が全て止まった後に解放する。
+		if (comInitialized_) {
+			CoUninitialize();
+			comInitialized_ = false;
+		}
 		aq::memory::MemoryManager::Finalize();
+	}
+
+
+	bool Engine::EnsureSoundInitialized()
+	{
+		if (soundInitFuture_.valid()) {
+			soundInitialized_ = soundInitFuture_.get();   // get() で future は無効化され 2 回目以降はここを通らない
+			aq::StartupLog(soundInitialized_ ? "  [engine] sound ok (joined)"
+			                                 : "  [engine] SoundEngine::Initialize FAILED");
+		}
+		return soundInitialized_;
 	}
 
 

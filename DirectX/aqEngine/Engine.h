@@ -10,6 +10,7 @@
 #include "Memory/MemoryManager.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Util/GameTimer.h"
+#include <future>
 
 
 namespace aq
@@ -46,6 +47,12 @@ namespace aq
 
 		aq::util::GameTimer gameTimer_;
 
+		/** サウンド初期化(XAudio2)を別スレッドで走らせた結果。EnsureSoundInitialized() で合流する */
+		std::future<bool> soundInitFuture_;
+		bool              soundInitialized_ = false;
+		/** メインスレッドで CoInitializeEx(MTA) したか(プロセス寿命で保持し Finalize で解放) */
+		bool              comInitialized_   = false;
+
 
 	private:
 		Engine();
@@ -56,6 +63,12 @@ namespace aq
 		bool Initialize(const InitializeParameter& initializeParameter);
 		void Finalize();
 		void RunGame();
+
+		/**
+		 * 別スレッドで進めているサウンド初期化の完了を待ち、成否を返す(2 回目以降は即返る)。
+		 * SoundEngine を最初に使う直前に呼ぶ。Initialize() 内でも application 初期化後に必ず合流する。
+		 */
+		bool EnsureSoundInitialized();
 
 
 	private:

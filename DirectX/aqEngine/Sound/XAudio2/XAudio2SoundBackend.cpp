@@ -18,9 +18,15 @@ namespace aq
 
 		bool XAudio2SoundBackend::Initialize()
 		{
-			// XAudio2 は COM を要求する。既に初期化済みなら RPC_E_CHANGED_MODE を許容。
-			HRESULT hrCom = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-			comInitialized_ = SUCCEEDED(hrCom);
+			// XAudio2 は COM を要求する。本関数は Engine のサウンド初期化スレッドから呼ばれるため、
+			// COM の初期化/解放はこのスレッド内で対にする(スコープ脱出時に解放)。プロセス寿命の MTA は
+			// Engine::Initialize がメインスレッドで保持しており、XAudio2 オブジェクトはそこに属し続ける。
+			struct ComScope
+			{
+				bool ok;
+				ComScope()  : ok(SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {}
+				~ComScope() { if (ok) { CoUninitialize(); } }
+			} comScope;
 
 			HRESULT hr = XAudio2Create(&xaudio2_, 0, XAUDIO2_DEFAULT_PROCESSOR);
 			if (FAILED(hr)) {
@@ -68,10 +74,6 @@ namespace aq
 			if (xaudio2_) {
 				xaudio2_->Release();
 				xaudio2_ = nullptr;
-			}
-			if (comInitialized_) {
-				CoUninitialize();
-				comInitialized_ = false;
 			}
 		}
 

@@ -18,7 +18,6 @@ namespace aq
 
 			uint32_t outputChannels_   = 0;
 			uint32_t outputSampleRate_ = 0;
-			bool     comInitialized_   = false;
 
 		// ── メンバ関数 ──
 		public:

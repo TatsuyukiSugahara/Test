@@ -88,7 +88,7 @@ namespace app
 			const uint32_t renderW = aq::Engine::Get().GetRenderWidth();
 			const uint32_t renderH = aq::Engine::Get().GetRenderHeight();
 
-			auto bloom = std::make_unique<aq::rendering::BloomRenderer>();
+			auto bloom = std::make_unique<aq::rendering::PostProcessChain>();
 			if (bloom->Initialize(renderW, renderH))
 			{
 				// カメラモーションブラー用に GBuffer2 (worldPos) を渡す (ディファード有効時のみ)。

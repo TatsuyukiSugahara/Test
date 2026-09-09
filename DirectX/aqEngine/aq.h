@@ -143,7 +143,7 @@ namespace aq
 #include "Rendering/RenderCommandList.h"
 #include "Rendering/FrameCommands.h"
 #include "Rendering/Shadow/HardShadowRenderer.h"
-#include "Rendering/PostProcess/BloomRenderer.h"
+#include "Rendering/PostProcess/PostProcessChain.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "Resource/Resource.h"
 #include "UI/UIContext.h"

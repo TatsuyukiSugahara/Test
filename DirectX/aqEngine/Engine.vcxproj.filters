@@ -94,6 +94,12 @@
     <Filter Include="Rendering\PostProcess\Debug">
       <UniqueIdentifier>{f4a1bad1-f13e-5e67-b46a-1f7a26e3d634}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\PostProcess\Passes">
+      <UniqueIdentifier>{6b0c1d24-7e3a-4f58-9c61-2d8ab5f70e13}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rendering\PostProcess\Commands">
+      <UniqueIdentifier>{9d47a2f1-05b6-4c83-8ea9-71f3c60d54b8}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Rendering\Shadow">
       <UniqueIdentifier>{f0e1d2c3-b4a5-9678-01ef-234567890abc}</UniqueIdentifier>
     </Filter>
@@ -488,13 +494,28 @@
     <ClCompile Include="Rendering\Shadow\Debug\ShadowDebugPanel.cpp">
       <Filter>Rendering\Shadow\Debug</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\BloomPassCommand.cpp">
+    <ClCompile Include="Rendering\PostProcess\PostProcessChain.cpp">
       <Filter>Rendering\PostProcess</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\BloomRenderer.cpp">
-      <Filter>Rendering\PostProcess</Filter>
+    <ClCompile Include="Rendering\PostProcess\Passes\MotionBlurPass.cpp">
+      <Filter>Rendering\PostProcess\Passes</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\Debug\BloomDebugPanel.cpp">
+    <ClCompile Include="Rendering\PostProcess\Passes\BloomPass.cpp">
+      <Filter>Rendering\PostProcess\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Passes\TonemapPass.cpp">
+      <Filter>Rendering\PostProcess\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.cpp">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Commands\BloomPassCommand.cpp">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Commands\TonemapPassCommand.cpp">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Debug\PostProcessDebugPanel.cpp">
       <Filter>Rendering\PostProcess\Debug</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\Occlusion\ClusterCull.cpp">
@@ -1156,13 +1177,37 @@
     <ClInclude Include="Rendering\Shadow\ShadowPassCommand.h">
       <Filter>Rendering\Shadow</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\Debug\BloomDebugPanel.h">
+    <ClInclude Include="Rendering\PostProcess\Debug\PostProcessDebugPanel.h">
       <Filter>Rendering\PostProcess\Debug</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\BloomPassCommand.h">
+    <ClInclude Include="Rendering\PostProcess\Commands\PostProcessCB.h">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.h">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Commands\BloomPassCommand.h">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Commands\TonemapPassCommand.h">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Passes\MotionBlurPass.h">
+      <Filter>Rendering\PostProcess\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Passes\BloomPass.h">
+      <Filter>Rendering\PostProcess\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Passes\TonemapPass.h">
+      <Filter>Rendering\PostProcess\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\PostProcessChain.h">
       <Filter>Rendering\PostProcess</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\BloomRenderer.h">
+    <ClInclude Include="Rendering\PostProcess\PostProcessContext.h">
+      <Filter>Rendering\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\IPostProcessPass.h">
       <Filter>Rendering\PostProcess</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h">

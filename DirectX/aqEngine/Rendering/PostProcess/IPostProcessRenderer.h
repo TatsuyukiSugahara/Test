@@ -21,7 +21,7 @@ namespace aq
 				RenderCommandList& outList,
 				RenderTargetHandle sceneRT,
 				uint32_t           width,
-				uint32_t           height) const = 0;
+				uint32_t           height) = 0;
 
 			/** ポストプロセス後の最終出力 RT ハンドル。displayRT に渡す。 */
 			virtual RenderTargetHandle GetFinalRT() const = 0;

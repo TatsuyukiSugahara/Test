@@ -315,6 +315,7 @@
     <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp" />
     <ClCompile Include="Rendering\Shadow\Debug\ShadowDebugPanel.cpp" />
+    <ClCompile Include="Rendering\Offscreen\OffscreenScenePass.cpp" />
     <ClCompile Include="Rendering\PostProcess\PostProcessChain.cpp" />
     <ClCompile Include="Rendering\PostProcess\Passes\MotionBlurPass.cpp" />
     <ClCompile Include="Rendering\PostProcess\Passes\BloomPass.cpp" />
@@ -574,6 +575,7 @@
     <ClInclude Include="Rendering\PostProcess\Passes\MotionBlurPass.h" />
     <ClInclude Include="Rendering\PostProcess\Passes\BloomPass.h" />
     <ClInclude Include="Rendering\PostProcess\Passes\TonemapPass.h" />
+    <ClInclude Include="Rendering\Offscreen\OffscreenScenePass.h" />
     <ClInclude Include="Rendering\PostProcess\PostProcessChain.h" />
     <ClInclude Include="Rendering\PostProcess\PostProcessContext.h" />
     <ClInclude Include="Rendering\PostProcess\IPostProcessPass.h" />

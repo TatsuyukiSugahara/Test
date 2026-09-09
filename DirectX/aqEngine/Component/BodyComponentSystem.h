@@ -344,7 +344,8 @@ namespace aq
 			 * @param updateStats          カリング統計 (デバッグ表示) を更新するか (1 ビューのみ true にする)
 			 * @param gatherInstances      インスタンス描画の gather + Flush を行うか
 			 *                             (Flush は 1 フレーム 1 回。分割画面では先頭ビューのみ true にし、
-			 *                              以降のビューはビュー0 の視錐台で切った結果を共有する)
+			 *                              以降のビューはビュー0 の視錐台で切った結果を共有する。
+			 *                              true でも同一フレーム 2 回目以降は 1 回目の結果を再利用する)
 			 */
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame, const aq::Camera& viewCamera,
 			                      const bool enableFrustumCulling, const bool enableOcclusion,
@@ -377,6 +378,9 @@ namespace aq
 
 		private:
 			static RenderSystem* instance_;
+
+			/** 同一フレーム内で gather + Flush を済ませたか (Update の先頭でリセットする) */
+			static bool     instanceGatherDone_;
 
 			static bool     frustumCullingEnabled_;
 			static uint32_t cullingTotalCount_;

@@ -88,6 +88,9 @@
     <Filter Include="Rendering\Occlusion\Debug">
       <UniqueIdentifier>{567e3a9e-f939-5e52-a500-73e8b61a5aa2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\Offscreen">
+      <UniqueIdentifier>{3f8c51d7-2a64-4b19-9d07-5c8e12ab7f40}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Rendering\PostProcess">
       <UniqueIdentifier>{a1e2f3b4-c5d6-7890-ef12-34567890abcd}</UniqueIdentifier>
     </Filter>
@@ -493,6 +496,9 @@
     </ClCompile>
     <ClCompile Include="Rendering\Shadow\Debug\ShadowDebugPanel.cpp">
       <Filter>Rendering\Shadow\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Offscreen\OffscreenScenePass.cpp">
+      <Filter>Rendering\Offscreen</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\PostProcess\PostProcessChain.cpp">
       <Filter>Rendering\PostProcess</Filter>
@@ -1200,6 +1206,9 @@
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\Passes\TonemapPass.h">
       <Filter>Rendering\PostProcess\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Offscreen\OffscreenScenePass.h">
+      <Filter>Rendering\Offscreen</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\PostProcessChain.h">
       <Filter>Rendering\PostProcess</Filter>

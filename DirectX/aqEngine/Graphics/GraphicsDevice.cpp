@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "GraphicsDevice.h"
 #include "RenderContext.h"
+#include "IRenderTarget.h"
 #include "Rendering/RenderTargetHandle.h"
 
 
@@ -68,6 +69,18 @@ namespace aq
 		{
 			if (!handle.IsValid()) return nullptr;
 			return impl_->GetRenderTarget(handle.index);
+		}
+
+
+		std::shared_ptr<IShaderResourceView> GraphicsDevice::GetRenderTargetSRVShared(
+			rendering::RenderTargetHandle handle)
+		{
+			IRenderTarget* rt = GetRenderTarget(handle);
+			if (!rt) { return nullptr; }
+
+			// SRV の寿命は RT が持つ。ここで返す shared_ptr は参照するだけなので解放しない。
+			return std::shared_ptr<IShaderResourceView>(&rt->GetRenderTargetSRV(),
+			                                            [](IShaderResourceView*) {});
 		}
 
 

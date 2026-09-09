@@ -60,6 +60,13 @@ namespace aq
 			/** ハンドルが示す RT を返す（メイン・オフスクリーン両対応）。無効なら nullptr */
 			IRenderTarget* GetRenderTarget(rendering::RenderTargetHandle handle);
 
+			/**
+			 * ハンドルが示す RT の SRV を shared_ptr で返す（無効なら nullptr）。
+			 * 寿命は RT 側が持つため、非所有 deleter を持つ shared_ptr を返す
+			 * （UIImageComponent::texture のように shared_ptr を要求する場所へ渡すため）。
+			 */
+			std::shared_ptr<IShaderResourceView> GetRenderTargetSRVShared(rendering::RenderTargetHandle handle);
+
 			/** R32_Float オフスクリーン RT を CPU へリードバックする (詳細は IGraphicsDeviceImpl)。 */
 			bool ReadbackOffscreenR32(rendering::RenderTargetHandle handle,
 			                          uint32_t width, uint32_t height, std::vector<float>& outData);

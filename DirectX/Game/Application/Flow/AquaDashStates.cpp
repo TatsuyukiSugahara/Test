@@ -54,9 +54,21 @@ namespace app
 			// unityChan.tkm はメートル基準でない (素のままだと約 6m)。世界は 1m=1.0 なので縮めて使う。
 			static constexpr float PLAYER_MODEL_SCALE = 0.25f;
 
-			// 路面タイルをベイクするときの XZ セルの 1 辺 [m]。
-			// 小さいほど判定は細かくなるが、セル数 (判定回数) が増える。
-			static constexpr float ROAD_TILE_CELL_SIZE = 32.0f;
+			// 路面リボン (スプライン追従の連続メッシュ)。断面ピッチが細かいほどカーブが滑らかになるが頂点が増える。
+			static constexpr float ROAD_SECTION_STEP  = 2.0f;    // 断面の間隔 [m]
+			static constexpr float ROAD_THICKNESS     = 0.3f;    // 路面の厚み [m]
+			// 地形面 (y=0) より上面がわずかに出るよう断面中心を 0.1 下げる (厚み 0.3 → 上面 +0.05)。
+			// 深く沈めると平坦地形に埋まって見えなくなる。
+			static constexpr float ROAD_SINK          = 0.1f;    // 断面中心をスプラインから下げる量 [m]
+			static constexpr float ROAD_UV_LENGTH     = 20.0f;   // UV の v が 1 進む距離 [m]
+
+			// ライン装飾 (テクスチャ経路を使わずメッシュを分けて色で出す)。
+			static constexpr float ROAD_MARKING_LIFT  = 0.02f;   // 路面上面から浮かせる量 [m] (z-fight 回避)
+			static constexpr float ROAD_EDGE_INSET    = 0.35f;   // 路面端からエッジライン中心までの距離 [m]
+			static constexpr float ROAD_EDGE_WIDTH    = 0.25f;   // エッジラインの幅 [m]
+			static constexpr float ROAD_DASH_WIDTH    = 0.15f;   // センター破線の幅 [m]
+			static constexpr float ROAD_DASH_ON       = 4.0f;    // 破線の描き [m]
+			static constexpr float ROAD_DASH_OFF      = 4.0f;    // 破線の空き [m]
 
 			// コイン取得エフェクト (常駐エミッタを移動+Restart で使い回す)。
 			static const char* COLLECT_FX_PATH = "Assets/Particle/FX_Explosion.particle";
@@ -185,6 +197,252 @@ namespace app
 						outIndices.push_back(v01);
 					}
 				}
+			}
+
+
+			// 頂点を 1 個積む (路面系メッシュ共通)。接線はシェーダが使わないのでゼロのまま。
+			void PushRoadVertex(std::vector<aq::graphics::VertexData>& outVertices,
+			                    const aq::math::Vector3& position, const aq::math::Vector3& normal,
+			                    const float u, const float v)
+			{
+				aq::graphics::VertexData vertex;
+				vertex.position = position;
+				vertex.normal   = normal;
+				vertex.uv.Set(u, v);
+				vertex.tangent.Set(0.0f, 0.0f, 0.0f, 0.0f);
+				outVertices.push_back(vertex);
+			}
+
+
+			// 四角形 1 枚を三角形 2 枚のインデックスへ展開する。頂点は
+			// 「手前左 → 奥左 → 奥右 → 手前右」の順 (左 = -right / 奥 = +tangent) で渡す。
+			// この並びなら (b-a)×(d-a) が面法線と同じ向きになるので表面として描かれる。
+			void EmitRoadQuad(std::vector<uint32_t>& outIndices,
+			                  const uint32_t a, const uint32_t b, const uint32_t c, const uint32_t d)
+			{
+				outIndices.push_back(a);
+				outIndices.push_back(b);
+				outIndices.push_back(d);
+				outIndices.push_back(b);
+				outIndices.push_back(c);
+				outIndices.push_back(d);
+			}
+
+
+			// 頂点列からローカル AABB を作る。インスタンス点は原点・無回転・等倍で置くので、
+			// これがそのままカリング用のワールド AABB になる。
+			aq::math::AABB ComputeRoadMeshBounds(const std::vector<aq::graphics::VertexData>& vertices)
+			{
+				aq::math::AABBBuilder builder;
+				for (const auto& vertex : vertices) {
+					builder.Add(vertex.position);
+				}
+				return builder.Build();
+			}
+
+
+			// 断面を取る距離を刻む。終端は端数ぶんの断面を 1 枚足して、コース末端まで隙間なく閉じる。
+			// 路面本体とエッジラインで同じ列を使うので、両者の断面がずれない。
+			void BuildRoadSectionDistances(const float totalLength, std::vector<float>& outDistances)
+			{
+				outDistances.clear();
+				if (totalLength <= 0.0f) { return; }
+
+				outDistances.reserve(static_cast<size_t>(totalLength / ROAD_SECTION_STEP) + 2);
+				for (float d = 0.0f; d < totalLength; d += ROAD_SECTION_STEP) {
+					outDistances.push_back(d);
+				}
+				if (outDistances.back() < totalLength - 0.001f) {
+					outDistances.push_back(totalLength);
+				}
+			}
+
+
+			// 路面本体。断面ごとに上面 / 底面 / 左右側面ぶんの法線を分けた 8 頂点を積み、
+			// 隣り合う断面を 4 枚の面で閉じる。閉じ断面なのでループを巻いても裏面欠けが出ない。
+			// UV は将来のテクスチャ対応用に焼いておく (u = 横位置 0-1 / v = 距離 / ROAD_UV_LENGTH)。
+			void BuildRoadRibbonMesh(const stage::StageData& stageData, const std::vector<float>& distances,
+			                         std::vector<aq::graphics::VertexData>& outVertices,
+			                         std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+				if (distances.size() < 2) { return; }
+
+				const float halfWidth     = stageData.width * 0.5f;
+				const float halfThickness = ROAD_THICKNESS * 0.5f;
+
+				outVertices.reserve(distances.size() * 8);
+				for (const float d : distances)
+				{
+					const auto frame = stageData.spline.Evaluate(d);
+					const aq::math::Vector3 up    = frame.up;
+					const aq::math::Vector3 down  = frame.up * -1.0f;
+					const aq::math::Vector3 right = frame.right;
+					const aq::math::Vector3 left  = frame.right * -1.0f;
+
+					const aq::math::Vector3 center      = frame.position - up * ROAD_SINK;
+					const aq::math::Vector3 topLeft     = center + up   * halfThickness + left  * halfWidth;
+					const aq::math::Vector3 topRight    = center + up   * halfThickness + right * halfWidth;
+					const aq::math::Vector3 bottomLeft  = center + down * halfThickness + left  * halfWidth;
+					const aq::math::Vector3 bottomRight = center + down * halfThickness + right * halfWidth;
+					const float v = d / ROAD_UV_LENGTH;
+
+					PushRoadVertex(outVertices, topLeft,     up,    0.0f, v);   // +0 上面
+					PushRoadVertex(outVertices, topRight,    up,    1.0f, v);   // +1
+					PushRoadVertex(outVertices, bottomLeft,  down,  0.0f, v);   // +2 底面
+					PushRoadVertex(outVertices, bottomRight, down,  1.0f, v);   // +3
+					PushRoadVertex(outVertices, topLeft,     left,  1.0f, v);   // +4 左側面
+					PushRoadVertex(outVertices, bottomLeft,  left,  0.0f, v);   // +5
+					PushRoadVertex(outVertices, topRight,    right, 1.0f, v);   // +6 右側面
+					PushRoadVertex(outVertices, bottomRight, right, 0.0f, v);   // +7
+				}
+
+				outIndices.reserve((distances.size() - 1) * 24);
+				for (size_t i = 0; i + 1 < distances.size(); ++i)
+				{
+					const uint32_t s = static_cast<uint32_t>(i * 8);
+					const uint32_t n = static_cast<uint32_t>((i + 1) * 8);
+
+					EmitRoadQuad(outIndices, s + 0, n + 0, n + 1, s + 1);   // 上面 (+up)
+					EmitRoadQuad(outIndices, s + 3, n + 3, n + 2, s + 2);   // 底面 (-up)
+					EmitRoadQuad(outIndices, s + 5, n + 5, n + 4, s + 4);   // 左側面 (-right)
+					EmitRoadQuad(outIndices, s + 6, n + 6, n + 7, s + 7);   // 右側面 (+right)
+				}
+			}
+
+
+			// 左右のエッジライン。路面上面から少し浮かせた薄いストリップ 2 本を 1 メッシュにまとめる。
+			void BuildRoadEdgeLineMesh(const stage::StageData& stageData, const std::vector<float>& distances,
+			                           std::vector<aq::graphics::VertexData>& outVertices,
+			                           std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+				if (distances.size() < 2) { return; }
+
+				const float lift     = ROAD_THICKNESS * 0.5f + ROAD_MARKING_LIFT - ROAD_SINK;
+				const float lineMid  = stageData.width * 0.5f - ROAD_EDGE_INSET;
+				const float halfLine = ROAD_EDGE_WIDTH * 0.5f;
+
+				outVertices.reserve(distances.size() * 4);
+				for (const float d : distances)
+				{
+					const auto frame = stageData.spline.Evaluate(d);
+					const aq::math::Vector3 base = frame.position + frame.up * lift;
+					const float v = d / ROAD_UV_LENGTH;
+
+					// 横位置は -right 側から順に積む (EmitRoadQuad の「手前左」の並びに合わせる)。
+					PushRoadVertex(outVertices, base + frame.right * (-lineMid - halfLine), frame.up, 0.0f, v);   // +0 左ライン外
+					PushRoadVertex(outVertices, base + frame.right * (-lineMid + halfLine), frame.up, 1.0f, v);   // +1 左ライン内
+					PushRoadVertex(outVertices, base + frame.right * ( lineMid - halfLine), frame.up, 0.0f, v);   // +2 右ライン内
+					PushRoadVertex(outVertices, base + frame.right * ( lineMid + halfLine), frame.up, 1.0f, v);   // +3 右ライン外
+				}
+
+				outIndices.reserve((distances.size() - 1) * 12);
+				for (size_t i = 0; i + 1 < distances.size(); ++i)
+				{
+					const uint32_t s = static_cast<uint32_t>(i * 4);
+					const uint32_t n = static_cast<uint32_t>((i + 1) * 4);
+
+					EmitRoadQuad(outIndices, s + 0, n + 0, n + 1, s + 1);   // 左ライン
+					EmitRoadQuad(outIndices, s + 2, n + 2, n + 3, s + 3);   // 右ライン
+				}
+			}
+
+
+			// センター破線。描き区間だけを独立したクアッド列として同一メッシュへ積む
+			// (空き区間には頂点を作らないので、1 ドローのまま破線に見える)。
+			void BuildRoadCenterDashMesh(const stage::StageData& stageData,
+			                             std::vector<aq::graphics::VertexData>& outVertices,
+			                             std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+
+				const float total = stageData.spline.GetTotalLength();
+				if (total <= 0.0f) { return; }
+
+				const float lift     = ROAD_THICKNESS * 0.5f + ROAD_MARKING_LIFT - ROAD_SINK;
+				const float halfDash = ROAD_DASH_WIDTH * 0.5f;
+				const float period   = ROAD_DASH_ON + ROAD_DASH_OFF;
+
+				for (float start = 0.0f; start < total; start += period)
+				{
+					const float end = (start + ROAD_DASH_ON < total) ? start + ROAD_DASH_ON : total;
+					const float span = end - start;
+					if (span < 0.01f) { break; }
+
+					// 描き区間の中もカーブに沿わせたいので、断面ピッチで分割する。
+					const int stepCount = static_cast<int>(span / ROAD_SECTION_STEP) + 1;
+					const uint32_t base = static_cast<uint32_t>(outVertices.size());
+
+					for (int k = 0; k <= stepCount; ++k)
+					{
+						const float d     = start + span * static_cast<float>(k) / static_cast<float>(stepCount);
+						const auto  frame = stageData.spline.Evaluate(d);
+						const aq::math::Vector3 center = frame.position + frame.up * lift;
+						const float v = d / ROAD_UV_LENGTH;
+
+						PushRoadVertex(outVertices, center + frame.right * -halfDash, frame.up, 0.0f, v);
+						PushRoadVertex(outVertices, center + frame.right *  halfDash, frame.up, 1.0f, v);
+					}
+					for (int k = 0; k < stepCount; ++k)
+					{
+						const uint32_t s = base + static_cast<uint32_t>(k * 2);
+						EmitRoadQuad(outIndices, s + 0, s + 2, s + 3, s + 1);
+					}
+				}
+			}
+
+
+			/**
+			 * 手続き生成した路面メッシュを登録し、インスタンス点 1 個のエンティティとして置く。
+			 * 形状はワールド座標で焼き込んであるので、点は原点・無回転・等倍でよい。
+			 * メッシュ名が登録済みならそれが再利用される (RETRY やステージ再入場で作り直しにならない)。
+			 * @param meshName 登録名 兼 デバッグ表示名
+			 * @param color    per-instance color (InstancedSimple はこれで色分けする)
+			 */
+			void CreateRoadMeshEntity(GameFlow& flow, const char* meshName,
+			                          const std::vector<aq::graphics::VertexData>& vertices,
+			                          const std::vector<uint32_t>& indices,
+			                          const aq::math::Vector4& color)
+			{
+				if (vertices.empty() || indices.empty()) { return; }
+
+				auto* mesh = aq::graphics::InstancedStaticMesh::RegisterFromData(
+					meshName,
+					vertices.data(), static_cast<uint32_t>(vertices.size()), sizeof(aq::graphics::VertexData),
+					indices.data(),  static_cast<uint32_t>(indices.size()),
+					aq::graphics::StaticMesh::ShaderType::InstancedSimple);
+
+				// ローカル AABB が無いとセル AABB が点になりカリングが一切効かないので必ず持たせる。
+				const aq::math::AABB bounds = ComputeRoadMeshBounds(vertices);
+				if (mesh != nullptr) {
+					mesh->SetLocalBounds(bounds);
+				}
+
+				auto& ctx = aq::ecs::EntityContext::Get();
+				auto entity = ctx.CreateEntity<
+					aq::ecs::TransformComponent,
+					aq::ecs::HierarchicalTransformComponent,
+					aq::ecs::InstancedStaticMeshComponent,
+					aq::ecs::InstancedPointListComponent>();
+				entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh(meshName);
+
+				auto* pointList = entity.GetComponent<aq::ecs::InstancedPointListComponent>();
+				aq::ecs::InstancePoint p;
+				p.color = color;
+				pointList->AddInstancePoint(p);
+
+				// 配置後に一切動かない静的オブジェクトなのでベイク経路に載せる。点は 1 個しかないため
+				// セルサイズは 0 (= 全点を 1 セルにまとめる指定) にして、コース全長の AABB 1 個で判定する。
+				// maxDrawDistance は既定 (無制限) のまま — ミニマップの俯瞰ベイクに路面を映すのに要る。
+				pointList->BakeStatic(aq::math::Matrix4x4::Identity, bounds, 0.0f);
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName(meshName);
+#endif
+				flow.StageEntities().push_back(entity.GetHandle());
 			}
 
 
@@ -434,53 +692,34 @@ namespace app
 					session->minimapHalfExtent = (extentX > extentZ ? extentX : extentZ) * 0.5f + 40.0f;
 				}
 
-				// 路面タイル (スプラインに沿った薄い箱)。走行時の路面の見た目と、
-				// ミニマップ (俯瞰) に映るコース形状を兼ねる。ループでもタイル姿勢が路面に追従する。
+				// 路面 (スプラインに追従する連続リボン + ライン装飾)。走行時の路面の見た目と、
+				// ミニマップ (俯瞰) に映るコース形状を兼ねる。ループでも断面が路面に追従する。
 				{
-					// 全タイルを 1 エンティティのインスタンス描画にまとめる (約360枚=1ドロー)。
-					// per-instance フラスタムカリングは gather 側 (RenderSystem) が行う。
-					// 20m 間隔 (約360枚) はミニマップ形状とのバランスで維持。
-					constexpr float TILE_SPACING = 20.0f;
-					auto* roadMesh = aq::ecs::BoxStaticMeshComponent::RegisterInstancedMesh("RoadTile");
+					std::vector<float> sectionDistances;
+					BuildRoadSectionDistances(stageData->spline.GetTotalLength(), sectionDistances);
 
-					auto entity = ctx.CreateEntity<
-						aq::ecs::TransformComponent,
-						aq::ecs::HierarchicalTransformComponent,
-						aq::ecs::InstancedStaticMeshComponent,
-						aq::ecs::InstancedPointListComponent>();
-					entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh("RoadTile");
+					std::vector<aq::graphics::VertexData> roadVertices;
+					std::vector<uint32_t>                 roadIndices;
 
-					auto* pointList = entity.GetComponent<aq::ecs::InstancedPointListComponent>();
-					const float total = stageData->spline.GetTotalLength();
-					pointList->ReserveInstancePoints(static_cast<size_t>(total / TILE_SPACING) + 1);
-					for (float d = 0.0f; d < total; d += TILE_SPACING)
-					{
-						const auto frame = stageData->spline.Evaluate(d);
-						aq::ecs::InstancePoint p;
-						// 地形面 (y=0) より上面がわずかに出るよう -0.10 (厚み 0.3 → 上面 +0.05)。
-						// 深く沈めると平坦地形に埋まって見えなくなる。
-						p.position = frame.position - frame.up * 0.1f;
-						p.rotation = frame.ToRotation();
-						p.scale.Set(stageData->width, 0.3f, TILE_SPACING * 1.02f);
-						// 路面は青みグレー (仮アセット。専用モデル導入までの色分け)。
-						p.color = aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f);
-						pointList->AddInstancePoint(p);
-					}
+					// 本体は青みグレー (仮アセット。路面テクスチャ導入までの色分け)。
+					BuildRoadRibbonMesh(*stageData, sectionDistances, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RoadRibbon", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f));
+					const size_t ribbonVertexCount = roadVertices.size();
 
-					// 路面タイルは配置後に一切動かない静的オブジェクトなので、行列を焼き込んで
-					// セル単位でカリングする「ベイク経路」に載せる (ベイク経路の検証ケースも兼ねる)。
-					// エンティティは既定変換のままなので、織り込むワールド行列は単位行列でよい。
-					// maxDrawDistance は既定 (無制限) のまま — ミニマップのコース形状に遠方タイルが要る。
-					if (roadMesh != nullptr) {
-						pointList->BakeStatic(aq::math::Matrix4x4::Identity, roadMesh->GetLocalBounds(),
-						                      ROAD_TILE_CELL_SIZE);
-					}
-#ifdef AQ_DEBUG_IMGUI
-					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("RoadTiles");
-#endif
-					flow.StageEntities().push_back(entity.GetHandle());
+					// 装飾は色を変えたいだけなので、テクスチャではなくメッシュを分けて出す。
+					BuildRoadEdgeLineMesh(*stageData, sectionDistances, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RoadEdgeLines", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.75f, 0.95f, 1.00f, 1.0f));
+
+					BuildRoadCenterDashMesh(*stageData, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RoadCenterDashes", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.95f, 0.97f, 1.00f, 1.0f));
+
+					aq::StartupMarkf("[load]   road ribbon %zu sections / %zu vertices",
+					                 sectionDistances.size(), ribbonVertexCount);
 				}
-				aq::StartupMark("[load]   road tiles done");
+				aq::StartupMark("[load]   road mesh done");
 
 				// 草 (手続き生成の房 + 風揺れ)。散布とベイクはワーカー (BuildGrassBakedData) 側で終えてあり、
 				// ここは GPU メッシュの登録・エンティティ生成・ベイク結果の move だけを行う。
@@ -740,7 +979,7 @@ namespace app
 				flow.StageList() = stage::StageRegistry::LoadList(STAGE_LIST_PATH);
 			}
 
-			// 選択中ステージ名をタイトルへ反映する。
+			// 選択中ステージ名とサムネイルをタイトルへ反映する。
 			const auto& list = flow.StageList();
 			if (!list.empty()) {
 				const int index = aq::math::Clamp(flow.SelectedStageIndex(), 0, static_cast<int>(list.size()) - 1);
@@ -748,6 +987,7 @@ namespace app
 					char buf[64];
 					std::snprintf(buf, sizeof(buf), "STAGE %02d    %s", index + 1, list[index].name.c_str());
 					screen->SetStageName(buf);
+					screen->SetStageThumbnail(list[index].thumbnailPath.c_str());
 				}
 			}
 		}

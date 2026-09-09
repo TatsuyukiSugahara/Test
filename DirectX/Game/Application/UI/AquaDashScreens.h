@@ -14,8 +14,8 @@ namespace app
 
 
 		/**
-		 * タイトル画面 (R-14)。ロゴ / ステージ名 / PRESS 点滅を表示する。
-		 * ステージ名の内容は StageDefinition 側から SetStageName で流し込む。
+		 * タイトル画面 (R-14)。ロゴ / ステージサムネイル / ステージ名 / PRESS 点滅を表示する。
+		 * ステージ名とサムネイルの内容は StageDefinition 側から流し込む。
 		 */
 		class TitleScreen : public aq::ui::UIScreen
 		{
@@ -23,6 +23,7 @@ namespace app
 			float             elapsed_    = 0.0f;
 			aq::ui::UIObject* press_      = nullptr;
 			aq::ui::UIObject* stageLabel_ = nullptr;
+			aq::ui::UIObject* stageThumb_ = nullptr;
 
 
 		public:
@@ -31,6 +32,12 @@ namespace app
 
 			/** ステージ表示ラベルの内容を差し替える (例: "STAGE 01    GREEN COAST") */
 			void SetStageName(const char* text);
+
+			/**
+			 * ステージサムネイル画像を差し替える (StageList.json の thumbnail)。
+			 * パスが空 / ロードできない場合は枠ごと非表示のままにする。
+			 */
+			void SetStageThumbnail(const char* path);
 		};
 
 

@@ -39,6 +39,44 @@ namespace app
 					image->color.w = a;
 				}
 			}
+
+
+			/**
+			 * GPUResource の非同期ロード完了後に SRV を解決するラッパー
+			 * (UIDocumentLoader が JSON のテクスチャ指定に使っているものと同型)。
+			 * Release() は no-op (所有権は GPUResource 側の TextureData が持つ)。
+			 */
+			class DeferredSRV final : public aq::graphics::IShaderResourceView
+			{
+			private:
+				std::shared_ptr<aq::res::GPUResource> resource_;
+
+
+			public:
+				explicit DeferredSRV(std::shared_ptr<aq::res::GPUResource> resource)
+					: resource_(std::move(resource))
+				{
+				}
+
+				void Release() override {}
+
+				void* GetNativeHandle() const override
+				{
+					if (!resource_) { return nullptr; }
+					const auto* srv = resource_->GetShaderResourceView();
+					return srv ? srv->GetNativeHandle() : nullptr;
+				}
+			};
+
+
+			// テクスチャパスを非同期ロードし、DeferredSRV でラップして返す。
+			std::shared_ptr<aq::graphics::IShaderResourceView> LoadTexture(const char* path)
+			{
+				if (!path || path[0] == '\0') { return nullptr; }
+				auto resource = aq::res::ResourceManager::Get().Load<aq::res::GPUResource>(path);
+				if (!resource) { return nullptr; }
+				return std::make_shared<DeferredSRV>(std::move(resource));
+			}
 		}
 
 
@@ -50,6 +88,10 @@ namespace app
 			elapsed_    = 0.0f;
 			press_      = Resolve(FindHandle("Press"));
 			stageLabel_ = Resolve(FindHandle("StageLabel"));
+			stageThumb_ = Resolve(FindHandle("StageThumb"));
+
+			// SetStageThumbnail が来るまでは隠した状態で始める。
+			SetImageAlpha(stageThumb_, 0.0f);
 		}
 
 
@@ -70,6 +112,24 @@ namespace app
 			if (auto* label = stageLabel_->GetComponent<aq::ui::UITextComponent>()) {
 				label->content = text ? text : "";
 			}
+		}
+
+
+		void TitleScreen::SetStageThumbnail(const char* path)
+		{
+			if (!stageThumb_) { return; }
+			auto* image = stageThumb_->GetComponent<aq::ui::UIImageComponent>();
+			if (!image) { return; }
+
+			auto texture = LoadTexture(path);
+			if (!texture) {
+				SetImageAlpha(stageThumb_, 0.0f);
+				return;
+			}
+
+			// 生成 PNG の見た目をそのまま出すため白でティントしない。
+			image->texture = texture;
+			image->color   = { 1.0f, 1.0f, 1.0f, 1.0f };
 		}
 
 

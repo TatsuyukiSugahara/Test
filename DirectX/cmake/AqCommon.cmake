@@ -26,7 +26,12 @@ function(aq_apply_common_compile_options targetName)
 
 	if(MSVC)
 		# MSVC / clang-cl 共通(if(MSVC) は clang-cl でも真になる)
+		# /EHsc は vcxproj 側の既定(ExceptionHandling=Sync)に合わせて明示する。
+		# CMake 4.x は MSVC 系でも既定フラグに /EHsc を入れないため、
+		# Ninja + clang-cl 構成だと ECS/System.cpp の try が
+		# 「cannot use 'try' with exceptions disabled」で落ちる。
 		target_compile_options(${targetName} PRIVATE
+			/EHsc
 			/utf-8
 			/W3
 			$<$<CONFIG:Release>:/Gy>

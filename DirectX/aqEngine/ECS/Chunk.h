@@ -18,7 +18,15 @@ namespace aq
 			// over-aligned component（alignas(N) で N > __STDCPP_DEFAULT_NEW_ALIGNMENT__）に対応した
 			// カスタムデリータ。AllocBuffer で確保したブロックを正しく解放する。
 			struct AlignedDeleter {
-				size_t align = __STDCPP_DEFAULT_NEW_ALIGNMENT__;
+				size_t align;
+
+				// 既定値をメンバ初期化子(NSDMI)で書くと、ネストクラスの NSDMI が
+				// 外側クラスの完全クラス文脈に属するため、下の begin_ を宣言する時点では
+				// clang が「既定構築できない」と判断して unique_ptr の既定コンストラクタが
+				// 消える(MSVC は判定を遅延するので通る)。コンストラクタで明示する。
+				AlignedDeleter() noexcept : align(__STDCPP_DEFAULT_NEW_ALIGNMENT__) {}
+				explicit AlignedDeleter(size_t alignment) noexcept : align(alignment) {}
+
 				void operator()(uint8_t* p) const noexcept {
 					if (align > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
 						::operator delete(static_cast<void*>(p), std::align_val_t(align));

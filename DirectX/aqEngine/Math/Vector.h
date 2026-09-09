@@ -239,7 +239,7 @@ namespace aq
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat3(&vector);
 				DirectX::XMVECTOR xv1 = DirectX::XMLoadFloat3(&v.vector);
-				return DirectX::XMVector3Dot(xv0, xv1).m128_f32[0];
+				return DirectX::XMVectorGetX(DirectX::XMVector3Dot(xv0, xv1));
 			}
 			/** 外積 */
 			inline void Cross(const Vector3& v)
@@ -260,13 +260,13 @@ namespace aq
 			inline float Length() const
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat3(&vector);
-				return DirectX::XMVector3Length(xv).m128_f32[0];
+				return DirectX::XMVectorGetX(DirectX::XMVector3Length(xv));
 			}
 			/** 長さの2乗を取得 */
 			inline float LengthSq() const
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat3(&vector);
-				return DirectX::XMVector3LengthSq(xv).m128_f32[0];
+				return DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(xv));
 			}
 			/** 拡大縮小 */
 			inline void Scale(float s)
@@ -410,19 +410,19 @@ namespace aq
 			{
 				DirectX::XMVECTOR xv0 = DirectX::XMLoadFloat4(&vector);
 				DirectX::XMVECTOR xv1 = DirectX::XMLoadFloat4(&v.vector);
-				return DirectX::XMVector4Dot(xv0, xv1).m128_f32[0];
+				return DirectX::XMVectorGetX(DirectX::XMVector4Dot(xv0, xv1));
 			}
 			/** 長さを取得 */
 			inline float Length()
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat4(&vector);
-				return DirectX::XMVector4Length(xv).m128_f32[0];
+				return DirectX::XMVectorGetX(DirectX::XMVector4Length(xv));
 			}
 			/** 長さの2乗を取得 */
 			inline float LengthSq()
 			{
 				DirectX::XMVECTOR xv = DirectX::XMLoadFloat4(&vector);
-				return DirectX::XMVector4LengthSq(xv).m128_f32[0];
+				return DirectX::XMVectorGetX(DirectX::XMVector4LengthSq(xv));
 			}
 			/** 拡大縮小 */
 			inline void Scale(float scale)

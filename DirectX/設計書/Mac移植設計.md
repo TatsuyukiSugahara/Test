@@ -174,7 +174,11 @@
 4. **`GetOutputClock` の精度**: A/V 同期(`SoundStream`)が要求する精度を `mHostTime` 基準で満たせるか。
 5. **imgui_impl_osx と `PumpEvents` の競合**: imgui の OSX impl は `NSView` にイベントモニタを張る。`PlatformMac` の `sendEvent` と二重処理にならないよう順序を決める。
 6. **KosmicKrisp**: macOS 26 + Apple Silicon 限定の完全準拠 Vulkan。MoltenVK で portability subset の制限に当たった場合の代替として評価。
-7. **HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係(Retina で 2 倍になる)。P2 で決める。
+7. **clang が出す警告の扱い**(P0 の clang-cl 検証で判明。ビルドは通るので P0 の完了条件からは外した):
+   - `-Wdelete-abstract-non-virtual-dtor` 2 件 — `aq::IApplication`(`Engine.cpp:115`)と `app::actor::IState`(`StateMachine.cpp:117`)を、仮想デストラクタ無しの抽象基底ポインタ経由で `delete` している。**派生のデストラクタが走らない未定義動作**なので P1 で潰す
+   - `-Wnontrivial-memcall` 6 件 — `MaterialCBData` / `Matrix4x4` への `memcpy`。実体はトリビアルに扱える見込みだが要確認
+   - `-Wreorder-ctor` 1 件(`Graphics/Camera.cpp:10`)、`-Winconsistent-missing-override` 4 件、`-Wmicrosoft-exception-spec` 16 件
+8. **HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係(Retina で 2 倍になる)。P2 で決める。
 
 ---
 
@@ -197,8 +201,11 @@
       - Debug|x64 = 0 エラー / 54 警告、Release|x64 = 0 エラー / 52 警告、DebugXbox|x64 = 0 エラー(**VS2019 の MSBuild が必要**。VS18 の MSBuild だと `Microsoft.Windows.UI.Xaml.Cpp.targets` の解決に失敗する。P0 前からの既存事情)
       - Vulkan 構成は SDK 未導入のため未検証(P2 に持ち越し)
 - [x] CMake → VS 生成(`--preset windows-vs2026`)で configure・ビルドが通り `build/windows-vs2026/bin/Debug/Game.exe` が生成される
-- [ ] CMake → clang-cl 構成でエンジンと Game が**コンパイル・リンク**できる(実行は任意)
-      - **保留**: VS の「C++ Clang tools for Windows」コンポーネントが未導入で `clang-cl` が存在しない。導入後に `--preset windows-clang-cl` で検証する
+- [x] CMake → clang-cl 構成でエンジンと Game が**コンパイル・リンク**できる(実行は任意)
+      - clang 20.1.8 / Ninja Multi-Config で `Game.exe` の生成まで到達。潰した問題は 3 件:
+        1. `Math/Vector.h` の `XMVECTOR.m128_f32[0]` 6 箇所 → `XMVectorGetX`。`m128_f32` は MSVC 固有の共用体メンバで **Mac でも落ちる**
+        2. `ECS/Chunk.h` の `AlignedDeleter`。ネストクラスの NSDMI は外側クラスの完全クラス文脈に属するため、`begin_` 宣言時点で clang は既定構築不可と判断し `unique_ptr` の既定コンストラクタが消える(MSVC は判定を遅延して通す)。NSDMI をコンストラクタに置換
+        3. CMake 4.x は MSVC 系でも既定フラグに `/EHsc` を入れない → `cmake/AqCommon.cmake` で明示(vcxproj の `ExceptionHandling=Sync` と揃えた)
 - [x] `AQ_PLATFORM_*` を 2 つ定義すると `#error`、未定義なら WIN32 になる(cl で 3 ケース検証: 未定義→WIN32+DESKTOP+WINDOWS_FAMILY / WIN32+MAC→`#error` / UWP のみ→WINDOWS_FAMILY のみ)
 - [x] `#pragma comment(lib` はエンジン/ゲームで 0 件(`aq.h` に残るのは説明コメント 2 行のみ。ThirdParty/imgui は対象外)。`!defined(AQ_PLATFORM_UWP)` は 0 件。`!defined(AQ_PLATFORM_WIN32)` は `PlatformDefs.h` の既定値判定と `HID/Input.h:100`(DirectInput 非対応プラットフォーム共通の中立マウス状態)の 2 箇所のみで、いずれも意図どおり
 - [x] `AqGraphicsApi` を `D3D11`/`D3D12` に切り替えると、`aq.h` を編集せずに構成が切り替わり両方ビルド・起動する(`/p:AqGraphicsApi=D3D11` で 0 エラー、HUD が `D3D11 554.7 FPS` 表示。`Vulkan` は SDK 導入環境でのみ検証)

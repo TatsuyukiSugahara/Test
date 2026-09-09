@@ -6,6 +6,7 @@
 #include "ECS/SpeedCharacterComponentSystem.h"
 #include "ECS/AutoCameraComponentSystem.h"
 #include "ECS/CoinComponentSystem.h"
+#include "ECS/SessionComponent.h"
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
@@ -102,6 +103,14 @@ namespace app
 			static constexpr float GRASS_TWO_PI             = 6.28318530718f;
 
 
+			// セッション状態を取り出す。生成は GameFlow::Initialize なので通常は非 null。
+			// 状態クラスはメインスレッドで動くので、ここから得たポインタへは書き込んでよい。
+			app::ecs::SessionComponent* GetSession()
+			{
+				return aq::ecs::EntityContext::Get().GetSingletonComponent<app::ecs::SessionComponent>();
+			}
+
+
 			// 整数座標から 0-1 の決定的な擬似乱数を作る (SplatmapPainter の HashNoise と同じ式)。
 			// 位置をシードにするので、再ロードしても同じ見た目になる。
 			float HashNoise(const int x, const int y)
@@ -179,7 +188,7 @@ namespace app
 
 
 			// 地形 + プレイヤー + 自動カメラを生成する (ロード完了時に一度だけ)。
-			// 生成した Entity はタイトル復帰時の破棄用に context.stageEntities へ積む。
+			// 生成した Entity はタイトル復帰時の破棄用に GameFlow の stageEntities へ積む。
 			/** コースの XZ 範囲 (スプラインを 10m 刻みで粗くサンプリング)。地面サイズとミニマップ正規化に使う */
 			struct CourseExtents
 			{
@@ -375,8 +384,9 @@ namespace app
 			                      aq::ecs::BakedData* preparedGrass)
 			{
 				auto& ctx     = aq::ecs::EntityContext::Get();
-				auto& context = flow.Context();
-				context.stageEntities.clear();
+				auto* session = GetSession();
+				if (!session) { return; }
+				flow.StageEntities().clear();
 
 				const CourseExtents ext = ComputeCourseExtents(*stageData);
 				const float minX = ext.minX, maxX = ext.maxX, minZ = ext.minZ, maxZ = ext.maxZ;
@@ -401,7 +411,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("StageGround");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   terrain entity done");
 
@@ -419,8 +429,8 @@ namespace app
 				{
 					const float extentX = maxX - minX;
 					const float extentZ = maxZ - minZ;
-					context.minimapCenterXZ   = aq::math::Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
-					context.minimapHalfExtent = (extentX > extentZ ? extentX : extentZ) * 0.5f + 40.0f;
+					session->minimapCenterXZ   = aq::math::Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
+					session->minimapHalfExtent = (extentX > extentZ ? extentX : extentZ) * 0.5f + 40.0f;
 				}
 
 				// 路面タイル (スプラインに沿った薄い箱)。走行時の路面の見た目と、
@@ -467,7 +477,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("RoadTiles");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   road tiles done");
 
@@ -518,7 +528,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Grass");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   grass done");
 
@@ -559,22 +569,22 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("SpeedPlayer");
 #endif
-					context.playerHandle = entity.GetHandle();
-					context.stageEntities.push_back(entity.GetHandle());
+					session->playerHandle = entity.GetHandle();
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
-				flow.SetPlayerHandle(context.playerHandle);   // 影の注視点用
+				flow.SetPlayerHandle(session->playerHandle);   // 影の注視点用
 				aq::StartupMark("[load]   player done");
 
 				// 自動カメラ。
 				{
 					auto entity = ctx.CreateEntity<app::ecs::AutoCameraComponent>();
 					auto* autoCam = entity.GetComponent<app::ecs::AutoCameraComponent>();
-					autoCam->targetHandle = context.playerHandle;
+					autoCam->targetHandle = session->playerHandle;
 					autoCam->cameraType   = aq::CameraType::Main;
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("AutoCamera");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 
 				// コイン (スプライン座標 → ワールドへ焼き込み。判定と回転は CoinSystem)。
@@ -596,7 +606,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coin");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 
 				aq::StartupMarkf("[load]   coin entities done (%zu)", stageData->coins.size());
@@ -631,8 +641,8 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coins");
 #endif
-					context.coinInstancesHandle = entity.GetHandle();
-					context.stageEntities.push_back(entity.GetHandle());
+					session->coinInstancesHandle = entity.GetHandle();
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   coin ring mesh done");
 
@@ -648,8 +658,8 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CollectFX");
 #endif
-					context.collectFxHandle = entity.GetHandle();
-					context.stageEntities.push_back(entity.GetHandle());
+					session->collectFxHandle = entity.GetHandle();
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 			}
 
@@ -657,13 +667,14 @@ namespace app
 			// プレイヤーをスポーン状態へ戻す (「もう一度」のロードなし再開用)。
 			void ResetPlayers(GameFlow& flow)
 			{
-				auto& context = flow.Context();
-				const auto stageData = context.activeStage;
+				auto* session = GetSession();
+				if (!session) { return; }
+				const auto stageData = session->activeStage;
 				if (!stageData) { return; }
 
 				auto& ctx = aq::ecs::EntityContext::Get();
-				if (ctx.IsValid(context.playerHandle)) {
-					if (auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle)) {
+				if (ctx.IsValid(session->playerHandle)) {
+					if (auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(session->playerHandle)) {
 						character->distance         = stageData->spawnDistance;
 						character->lateral          = stageData->spawnLanes.empty() ? 0.0f : stageData->spawnLanes[0];
 						character->height           = 0.0f;
@@ -673,12 +684,12 @@ namespace app
 						character->fallen           = false;
 						character->worldVelocity    = aq::math::Vector3(0.0f, 0.0f, 0.0f);
 					}
-					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle)) {
+					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(session->playerHandle)) {
 						score->coinCount = 0;
 						score->fallCount = 0;
 					}
 				}
-				context.playResult = PlayResult();
+				flow.PlayResult() = PlayResult();
 
 				// コインを全復活させる (取得済みフラグと表示を戻す)。
 				app::ecs::CoinSystem::ReactivateAll();
@@ -696,17 +707,19 @@ namespace app
 			void DestroyStageWorld(GameFlow& flow)
 			{
 				auto& ctx     = aq::ecs::EntityContext::Get();
-				auto& context = flow.Context();
-				for (const auto& handle : context.stageEntities) {
+				auto* session = GetSession();
+				for (const auto& handle : flow.StageEntities()) {
 					if (ctx.IsValid(handle)) {
 						ctx.RequestDestroyEntity(handle);
 					}
 				}
-				context.stageEntities.clear();
-				context.playerHandle        = aq::ecs::EntityHandle();
-				context.collectFxHandle     = aq::ecs::EntityHandle();
-				context.coinInstancesHandle = aq::ecs::EntityHandle();
-				context.activeStage.reset();
+				flow.StageEntities().clear();
+				if (session) {
+					session->playerHandle        = aq::ecs::EntityHandle();
+					session->collectFxHandle     = aq::ecs::EntityHandle();
+					session->coinInstancesHandle = aq::ecs::EntityHandle();
+					session->activeStage.reset();
+				}
 
 				if (flow.LoadHandle().IsValid()) {
 					aq::level::LevelManager::Get().Unload(flow.LoadHandle().GetLevelId());
@@ -722,14 +735,14 @@ namespace app
 		void TitleState::OnEnter(GameFlow& flow)
 		{
 			// ステージ一覧は初回のみ読む (小さな JSON なので同期でよい)。
-			if (flow.Context().stageList.empty()) {
-				flow.Context().stageList = stage::StageRegistry::LoadList(STAGE_LIST_PATH);
+			if (flow.StageList().empty()) {
+				flow.StageList() = stage::StageRegistry::LoadList(STAGE_LIST_PATH);
 			}
 
 			// 選択中ステージ名をタイトルへ反映する。
-			const auto& list = flow.Context().stageList;
+			const auto& list = flow.StageList();
 			if (!list.empty()) {
-				const int index = aq::math::Clamp(flow.Context().selectedStageIndex, 0, static_cast<int>(list.size()) - 1);
+				const int index = aq::math::Clamp(flow.SelectedStageIndex(), 0, static_cast<int>(list.size()) - 1);
 				if (auto* screen = static_cast<TitleScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
 					char buf[64];
 					std::snprintf(buf, sizeof(buf), "STAGE %02d    %s", index + 1, list[index].name.c_str());
@@ -742,11 +755,11 @@ namespace app
 		void TitleState::OnUpdate(GameFlow& flow, const float /*dt*/)
 		{
 			if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
-			if (flow.Context().stageList.empty()) { return; }   // 一覧が無ければ開始できない
+			if (flow.StageList().empty()) { return; }   // 一覧が無ければ開始できない
 
 			PlayDecisionSE();
 
-			flow.Context().playResult = PlayResult();
+			flow.PlayResult() = PlayResult();
 			aq::ui::UIContext::Get().Screens().Replace("Loading");
 			flow.ChangeState(std::make_unique<LoadingState>());
 		}
@@ -766,9 +779,9 @@ namespace app
 			warmupFrames_ = 0;
 			timer_        = 0.0f;
 
-			const auto& context = flow.Context();
-			const int index = context.selectedStageIndex;
-			stagePath_ = context.stageList[index >= 0 && index < static_cast<int>(context.stageList.size()) ? index : 0].stagePath;
+			const auto& list = flow.StageList();
+			const int index = flow.SelectedStageIndex();
+			stagePath_ = list[index >= 0 && index < static_cast<int>(list.size()) ? index : 0].stagePath;
 			aq::StartupMarkf("[load] LoadingState enter (%s)", stagePath_.c_str());
 		}
 
@@ -825,7 +838,7 @@ namespace app
 					break;
 				}
 
-				flow.Context().activeStage = stageData;
+				if (auto* session = GetSession()) { session->activeStage = stageData; }
 				aq::StartupMark("[load] worker result received");
 				CreateStageWorld(flow, stageData, &result.terrainCpu, &result.grassBaked);   // GPU 生成のみ (CPU 前計算はワーカー済み)
 				aq::StartupMark("[load] CreateStageWorld done (terrain/road/player/coins, sync)");
@@ -866,18 +879,20 @@ namespace app
 		void InGameState::OnEnter(GameFlow& flow)
 		{
 			elapsed_ = 0.0f;
-			flow.Context().gameplayPaused = false;
+
+			auto* session = GetSession();
+			if (!session) { return; }
+			session->gameplayPaused = false;
 			ResetPlayers(flow);
 
 			// ミニマップ: コース形状をスプラインから等間隔サンプリングし、UI の点列として描く。
 			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
 				std::vector<aq::math::Vector2> uvPoints;
-				const auto& context   = flow.Context();
-				const auto  stageData = context.activeStage;
-				if (stageData && stageData->spline.IsValid() && context.minimapHalfExtent > 1.0f)
+				const auto stageData = session->activeStage;
+				if (stageData && stageData->spline.IsValid() && session->minimapHalfExtent > 1.0f)
 				{
 					constexpr int SAMPLE_COUNT = 160;
-					const float span  = context.minimapHalfExtent * 2.0f;
+					const float span  = session->minimapHalfExtent * 2.0f;
 					const float total = stageData->spline.GetTotalLength();
 					uvPoints.reserve(SAMPLE_COUNT + 1);
 					for (int i = 0; i <= SAMPLE_COUNT; ++i)
@@ -885,8 +900,8 @@ namespace app
 						const auto position =
 							stageData->spline.Evaluate(total * static_cast<float>(i) / SAMPLE_COUNT).position;
 						uvPoints.push_back(aq::math::Vector2(
-							0.5f + (position.x - context.minimapCenterXZ.x) / span,
-							0.5f - (position.z - context.minimapCenterXZ.y) / span));
+							0.5f + (position.x - session->minimapCenterXZ.x) / span,
+							0.5f - (position.z - session->minimapCenterXZ.y) / span));
 					}
 				}
 				screen->SetMinimapCourse(uvPoints);
@@ -898,26 +913,27 @@ namespace app
 		{
 			elapsed_ += dt;
 
-			auto& context = flow.Context();
-			const auto stageData = context.activeStage;
+			auto* session = GetSession();
+			if (!session) { return; }
+			const auto stageData = session->activeStage;
 			if (!stageData) { return; }
 
 			auto& ctx = aq::ecs::EntityContext::Get();
-			if (!ctx.IsValid(context.playerHandle)) { return; }
-			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle);
+			if (!ctx.IsValid(session->playerHandle)) { return; }
+			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(session->playerHandle);
 			if (!character) { return; }
 
 			// HUD 更新 (時間 / コイン / 速度 / ミニマップマーカー)。
-			const auto* score    = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle);
-			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(context.playerHandle);
+			const auto* score    = ctx.GetComponent<app::ecs::PlayerScoreComponent>(session->playerHandle);
+			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(session->playerHandle);
 			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
 				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f);
 
 				// 俯瞰カメラは 画面右=+X / 画面上=+Z。UI の v は下+なので Z を反転する。
-				if (playerTc && context.minimapHalfExtent > 1.0f) {
-					const float span = context.minimapHalfExtent * 2.0f;
-					const float u = 0.5f + (playerTc->position.x - context.minimapCenterXZ.x) / span;
-					const float v = 0.5f - (playerTc->position.z - context.minimapCenterXZ.y) / span;
+				if (playerTc && session->minimapHalfExtent > 1.0f) {
+					const float span = session->minimapHalfExtent * 2.0f;
+					const float u = 0.5f + (playerTc->position.x - session->minimapCenterXZ.x) / span;
+					const float v = 0.5f - (playerTc->position.z - session->minimapCenterXZ.y) / span;
 					screen->SetMinimapMarker(u, v);
 				}
 			}
@@ -929,7 +945,7 @@ namespace app
 			                    || (character->fallen && playerTc && playerTc->position.y < 0.5f);
 			if (!goal && !fall) { return; }
 
-			PlayResult& result  = context.playResult;
+			PlayResult& result  = flow.PlayResult();
 			result.cleared      = goal;
 			result.clearTimeSec = elapsed_;
 			result.coinCount    = score ? score->coinCount : 0;
@@ -953,17 +969,17 @@ namespace app
 			prevStickY_ = 0.0f;
 
 			// 走行と判定を停止する。描画/アニメ/カメラは動き続けるため背景は生きたまま。
-			flow.Context().gameplayPaused = true;
+			auto* session = GetSession();
+			if (session) { session->gameplayPaused = true; }
 
 			// Replace 済みの最前面がリザルト画面。結果と初期カーソルを反映する。
 			if (auto* screen = static_cast<ResultScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
-				const auto&       context = flow.Context();
-				const PlayResult& result  = context.playResult;
+				const PlayResult& result = flow.PlayResult();
 
 				// ランクはクリア時のみ (設計 03: ゲームオーバーはランクなし)。
 				std::string rank;
-				if (result.cleared && context.activeStage) {
-					rank = context.activeStage->CalcRank(result.coinCount, result.clearTimeSec);
+				if (result.cleared && session && session->activeStage) {
+					rank = session->activeStage->CalcRank(result.coinCount, result.clearTimeSec);
 				}
 				screen->SetResult(result.cleared, result.clearTimeSec, result.coinCount, rank.c_str());
 				screen->SetCursor(cursor_);
@@ -1017,7 +1033,7 @@ namespace app
 
 			case MENU_TITLE:
 				DestroyStageWorld(flow);
-				flow.Context().gameplayPaused = false;
+				if (auto* session = GetSession()) { session->gameplayPaused = false; }
 				screens.Replace("AquaDashTitle");
 				flow.ChangeState(std::make_unique<TitleState>());
 				break;

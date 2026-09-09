@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "CoinComponentSystem.h"
-#include "GameFlow.h"
+#include "SessionComponent.h"
 #include "GameInput.h"
 #include "SpeedCharacterComponentSystem.h"
 #include "Component/InstancedPointListComponentSystem.h"
@@ -60,10 +60,10 @@ namespace app
 
 			// 取得エフェクトを撃つ。エミッタは常駐エンティティなので、
 			// 生成せずコイン位置へ移してから Restart する。
-			void PlayCollectEffect(const aquadash::GameContext& context, const aq::math::Vector3& position)
+			void PlayCollectEffect(const SessionComponent& session, const aq::math::Vector3& position)
 			{
 				auto& ctx = aq::ecs::EntityContext::Get();
-				const aq::ecs::EntityHandle& handle = context.collectFxHandle;
+				const aq::ecs::EntityHandle& handle = session.collectFxHandle;
 				if (!ctx.IsValid(handle)) { return; }
 
 				auto* tc      = ctx.GetComponent<aq::ecs::TransformComponent>(handle);
@@ -77,10 +77,10 @@ namespace app
 
 			// 未取得のコインだけを Coins エンティティのインスタンス点として積み直す。
 			// 取得済みは積まれないので、取得の見た目はこの再構築だけで消える。
-			void RebuildCoinInstances(const aquadash::GameContext& context)
+			void RebuildCoinInstances(const SessionComponent& session)
 			{
 				auto& ctx = aq::ecs::EntityContext::Get();
-				const aq::ecs::EntityHandle& handle = context.coinInstancesHandle;
+				const aq::ecs::EntityHandle& handle = session.coinInstancesHandle;
 				if (!ctx.IsValid(handle)) { return; }
 
 				auto* pointList = ctx.GetComponent<aq::ecs::InstancedPointListComponent>(handle);
@@ -115,8 +115,11 @@ namespace app
 		 */
 		void CoinSystem::Update()
 		{
-			auto& context = GameFlow::Get().Context();
-			if (context.gameplayPaused) { return; }
+			// セッション状態はワーカースレッドから読むだけ (書き込みはメインスレッドの状態クラス)。
+			const auto* session =
+				aq::ecs::EntityContext::Get().GetSingletonComponent<const SessionComponent>();
+			if (!session) { return; }
+			if (session->gameplayPaused) { return; }
 
 			const float dt = aq::Engine::GetDeltaTime();
 
@@ -134,7 +137,7 @@ namespace app
 			// 取得判定。コイン数十枚 × プレイヤー数なので総当たりで足りる。
 			// 枚数が増えたら distance でソート済みの配列を持ち、窓の範囲だけを見るように絞る。
 			aq::ecs::Foreach<SpeedCharacterComponent>(
-				[&context](const aq::ecs::Entity& playerEntity, SpeedCharacterComponent* character)
+				[session](const aq::ecs::Entity& playerEntity, SpeedCharacterComponent* character)
 				{
 					auto& ctx = aq::ecs::EntityContext::Get();
 					const auto playerHandle = playerEntity.GetHandle();
@@ -165,13 +168,13 @@ namespace app
 							score->coinCount++;
 
 							PlayCollectSE();
-							PlayCollectEffect(context, coinTc->position);
+							PlayCollectEffect(*session, coinTc->position);
 							PlayCollectRumble();
 						});
 				});
 
 			// 位相と取得結果を反映したインスタンス点へ組み直す。
-			RebuildCoinInstances(context);
+			RebuildCoinInstances(*session);
 		}
 
 
@@ -184,7 +187,10 @@ namespace app
 				});
 
 			// リザルト中 (Update が止まっている間) の呼び出しでも見た目が戻るように即時再構築する。
-			RebuildCoinInstances(GameFlow::Get().Context());
+			const auto* session =
+				aq::ecs::EntityContext::Get().GetSingletonComponent<const SessionComponent>();
+			if (!session) { return; }
+			RebuildCoinInstances(*session);
 		}
 	}
 }

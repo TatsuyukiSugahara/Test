@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "SpeedCharacterComponentSystem.h"
-#include "GameFlow.h"
+#include "SessionComponent.h"
 #include "GameInput.h"
 #include "GameAction.h"
 #include "Stage/StageData.h"
@@ -89,7 +89,11 @@ namespace app
 		 */
 		void PlayerInputSystem::Update()
 		{
-			if (GameFlow::Get().Context().gameplayPaused) { return; }
+			// セッション状態はワーカースレッドから読むだけ (書き込みはメインスレッドの状態クラス)。
+			const auto* session =
+				aq::ecs::EntityContext::Get().GetSingletonComponent<const SessionComponent>();
+			if (!session) { return; }
+			if (session->gameplayPaused) { return; }
 
 			aq::ecs::Foreach<PlayerInputComponent>([](const aq::ecs::Entity& /*entity*/, PlayerInputComponent* input)
 				{
@@ -120,10 +124,13 @@ namespace app
 		 */
 		void SpeedCharacterSystem::Update()
 		{
-			auto& context = GameFlow::Get().Context();
-			if (context.gameplayPaused) { return; }
+			// セッション状態はワーカースレッドから読むだけ (書き込みはメインスレッドの状態クラス)。
+			const auto* session =
+				aq::ecs::EntityContext::Get().GetSingletonComponent<const SessionComponent>();
+			if (!session) { return; }
+			if (session->gameplayPaused) { return; }
 
-			const auto stageData = context.activeStage;
+			const auto stageData = session->activeStage;
 			if (!stageData || !stageData->spline.IsValid()) { return; }
 
 			const float dt = aq::Engine::GetDeltaTime();

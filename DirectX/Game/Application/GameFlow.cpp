@@ -14,6 +14,7 @@
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
+#include "ECS/SessionComponent.h"
 #include "ECS/EntityContext.h"
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
@@ -413,12 +414,22 @@ namespace app
 
 	void GameFlow::Release()
 	{
-		if (instance_) { delete instance_; instance_ = nullptr; }
+		if (instance_) { instance_->Finalize(); delete instance_; instance_ = nullptr; }
 	}
 
 
 	void GameFlow::Initialize()
 	{
+		// セッション状態 (System / UI が読む共有データ) を載せるエンティティ。
+		// ステージ再入場でも破棄しないので stageEntities_ には積まない。
+		{
+			auto entity    = aq::ecs::EntityContext::Get().CreateEntity<app::ecs::SessionComponent>();
+			sessionHandle_ = entity.GetHandle();
+#ifdef AQ_DEBUG_IMGUI
+			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Session");
+#endif
+		}
+
 		auto& screens = aq::ui::UIContext::Get().Screens();
 		screens.Register<TitleScreen>("Title",     "Assets/UI/Title.screen.json");
 		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
@@ -431,6 +442,16 @@ namespace app
 		// フォント準備を待ってからタイトルを出す(BootState)。テキストを確実に表示するため。
 		current_ = std::make_unique<BootState>();
 		current_->OnEnter(*this);
+	}
+
+
+	void GameFlow::Finalize()
+	{
+		auto& ctx = aq::ecs::EntityContext::Get();
+		if (ctx.IsValid(sessionHandle_)) {
+			ctx.RequestDestroyEntity(sessionHandle_);
+		}
+		sessionHandle_ = aq::ecs::EntityHandle();
 	}
 
 

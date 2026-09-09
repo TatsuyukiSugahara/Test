@@ -7,6 +7,7 @@
 #include "ECS/SpeedCharacterComponentSystem.h"
 #include "ECS/AutoCameraComponentSystem.h"
 #include "ECS/CoinComponentSystem.h"
+#include "ECS/SessionComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "UI/Font/FontResource.h"
 #include "Resource/ParticleSystemData.h"
@@ -161,13 +162,15 @@ namespace app
 			constexpr float BLUR_MAX_STRENGTH  = 0.6f;    // 速度ベクトル (px) に掛けるスケール
 
 			float strength = 0.0f;
-			const auto& context = app::GameFlow::Get().Context();
-			if (context.activeStage && !context.gameplayPaused)
+			// セッション状態はここでは読み取りのみ (書き込みは GameFlow の状態クラス)。
+			const auto* session =
+				aq::ecs::EntityContext::Get().GetSingletonComponent<const app::ecs::SessionComponent>();
+			if (session && session->activeStage && !session->gameplayPaused)
 			{
 				auto& ctx = aq::ecs::EntityContext::Get();
-				if (ctx.IsValid(context.playerHandle)) {
+				if (ctx.IsValid(session->playerHandle)) {
 					if (const auto* character =
-							ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle)) {
+							ctx.GetComponent<app::ecs::SpeedCharacterComponent>(session->playerHandle)) {
 						const float rate = aq::math::Clamp01(
 							aq::math::InverseLerp(BLUR_SPEED_MIN, BLUR_SPEED_MAX, character->speed));
 						strength = rate * BLUR_MAX_STRENGTH;

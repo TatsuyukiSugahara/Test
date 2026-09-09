@@ -36,7 +36,7 @@
     <ClInclude Include="Application\ECS\SpeedCharacterComponentSystem.h" />
     <ClInclude Include="Application\ECS\AutoCameraComponentSystem.h" />
     <ClInclude Include="Application\ECS\CoinComponentSystem.h" />
-    <ClInclude Include="Application\Flow\GameContext.h" />
+    <ClInclude Include="Application\ECS\SessionComponent.h" />
     <ClInclude Include="Application\Flow\AquaDashStates.h" />
     <ClInclude Include="Application\Stage\StageData.h" />
     <ClInclude Include="Application\UI\AquaDashScreens.h" />

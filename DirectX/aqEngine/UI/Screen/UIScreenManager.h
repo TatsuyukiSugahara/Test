@@ -46,6 +46,13 @@ namespace aq
 			void Replace(std::string_view name);
 			void Back(); // top の OnBack() が false なら Pop()
 
+			// キャンセル入力 (Esc / パッド B) で UIInputSystem が自動的に Back() するか。
+			// 既定は無効: 画面遷移をゲームの状態機械が管理する構成 (AquaDash) では、
+			// UI 側の勝手な Pop がゲーム状態と食い違い、空のスタック=何も無い画面を作ってしまう。
+			// メニュー階層を UI スタックで組むゲームだけが明示的に有効化する。
+			void SetBackNavigationEnabled(bool enabled) { backNavigationEnabled_ = enabled; }
+			bool IsBackNavigationEnabled() const        { return backNavigationEnabled_; }
+
 			// ---- 更新 (Application::OnUpdate() から呼ぶ) ----
 
 			// 1. 全スタック画面のアニメーション更新
@@ -78,6 +85,7 @@ namespace aq
 			std::vector<std::unique_ptr<UIScreen>>          stack_;
 			std::vector<PendingOp>                          pendingOps_;
 			std::unordered_map<std::string, ScreenEntry>    registry_;
+			bool                                            backNavigationEnabled_ = false;
 		};
 
 	} // namespace ui

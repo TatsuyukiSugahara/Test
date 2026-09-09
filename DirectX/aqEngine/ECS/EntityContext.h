@@ -37,6 +37,16 @@ namespace aq
 				entityManager_.FlushCommands();
 			}
 
+			/**
+			 * 積まれた遅延コマンド (RequestDestroyEntity 等) を即時フラッシュする。
+			 * System 反復の外 (OnUpdate など単一スレッドの安全点) からのみ呼ぶこと。
+			 * GPU アイドル化と組み合わせ、リソース所有エンティティを安全に即時破棄するのに使う。
+			 */
+			void FlushPendingCommands()
+			{
+				entityManager_.FlushCommands();
+			}
+
 
 			// --- Entity 操作 ---
 

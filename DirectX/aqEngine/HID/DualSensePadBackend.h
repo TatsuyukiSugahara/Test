@@ -52,11 +52,17 @@ namespace aq
 				/** 非ブロッキング読み(最新レポートだけを保持する) */
 				OVERLAPPED readOverlapped{};
 				HANDLE     readEvent   = nullptr;
-				HANDLE     writeEvent  = nullptr;
 				bool       readPending = false;
 				bool       hasReport   = false;
 				uint8_t    readBuffer  [MAX_REPORT_SIZE]{};
 				uint8_t    latestReport[MAX_REPORT_SIZE]{};
+
+				/** 非ブロッキング書き。OVERLAPPED とバッファは I/O 完了まで生存が必要なので
+				    スタックではなくここに持つ(飛行中は writePending で再利用を防ぐ) */
+				OVERLAPPED writeOverlapped{};
+				HANDLE     writeEvent   = nullptr;
+				bool       writePending = false;
+				uint8_t    writeBuffer[MAX_REPORT_SIZE]{};
 
 				/** 出力(振動 / トリガー抵抗)。dirty のときだけ送る */
 				uint8_t           rumbleLeft  = 0;

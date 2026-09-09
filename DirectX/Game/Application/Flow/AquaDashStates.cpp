@@ -965,6 +965,15 @@ namespace app
 					aq::level::LevelManager::Get().Unload(flow.LoadHandle().GetLevelId());
 					flow.SetLoadHandle(aq::level::LevelLoadHandle());
 				}
+
+				// 破棄するエンティティ (地形など) は自前の GPU バッファを持つ。在フライトの
+				// 描画フレームがそれらを参照したまま解放すると device removed でクラッシュするため、
+				// レンダースレッドを完全にドレインして GPU アイドルにしてから、遅延コマンドを
+				// 即時フラッシュして破棄を確定させる (この時点で参照は自分だけなので安全に解放できる)。
+				if (app::Application::IsAvailable()) {
+					app::Application::Get().WaitForRenderIdle();
+				}
+				aq::ecs::EntityContext::Get().FlushPendingCommands();
 			}
 		}
 
@@ -1199,9 +1208,13 @@ namespace app
 
 			// ゴール / 落下判定。
 			// 落下は「路面相対 height がしきい値未満」または「ループ脱落後に地面高さまで落ちた」。
-			const bool  goal     = character->distance >= stageData->goalDistance;
+			bool        goal     = character->distance >= stageData->goalDistance;
 			const bool  fall     = character->height < stageData->fallHeight
 			                    || (character->fallen && playerTc && playerTc->position.y < 0.5f);
+#ifdef _DEBUG
+			// デバッグ: G で即クリア (リザルト遷移や BACK TO TITLE のデバッグを走り切らずに試す)。
+			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::G)) { goal = true; }
+#endif
 			if (!goal && !fall) { return; }
 
 			PlayResult& result  = flow.PlayResult();

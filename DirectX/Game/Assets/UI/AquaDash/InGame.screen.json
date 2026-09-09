@@ -86,7 +86,7 @@
                     "name": "Minimap",
                     "components": {
                         "transform": { "position": [0, 0, 0], "sizeDelta": [256, 256] },
-                        "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.02, 0.08, 0.16, 0.85] }
+                        "image": { "texture": "Assets/UI/Textures/white.png", "color": [1.0, 1.0, 1.0, 1.0] }
                     },
                     "children": [
                         {

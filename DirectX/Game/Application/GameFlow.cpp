@@ -551,17 +551,13 @@ namespace app
 		// world(0,0) = terrain local(50,50)(XZ オフセット -50 適用後)
 		const float spawnY = terrainComp->GetChunk()->GetHeight(50.0f, 50.0f);
 
-		// メインカメラ(位置/注視点は CameraSteeringSystem が管理) + オフスクリーンカメラ + ライト
+		// メインカメラ(位置/注視点は CameraSteeringSystem が管理) + ライト。
+		// オフスクリーンカメラはミニマップ専用なので AquaDash 側 (コース確定時) が一本で設定する。
 		aq::Camera* const mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);
 		mainCamera->SetNear(0.01f);
 		mainCamera->SetViewportSize(
 			static_cast<float>(aq::Engine::Get().GetRenderWidth()),
 			static_cast<float>(aq::Engine::Get().GetRenderHeight()));
-
-		aq::Camera* offscreenCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);
-		offscreenCamera->SetPosition(aq::math::Vector3(0.0f, spawnY + 5.0f, -15.0f));
-		offscreenCamera->SetTarget(aq::math::Vector3(0.0f, spawnY, 5.0f));
-		offscreenCamera->SetNear(0.01f);
 
 		aq::graphics::LightManager::Get().SetDirectionalColor(aq::math::Vector3(1.0f, 0.6f, 0.6f));
 

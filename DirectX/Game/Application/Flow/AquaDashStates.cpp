@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "AquaDashStates.h"
+#include "Application.h"
 #include "UI/AquaDashScreens.h"
 #include "GameInput.h"
 #include "GameAction.h"
@@ -885,26 +886,44 @@ namespace app
 			session->gameplayPaused = false;
 			ResetPlayers(flow);
 
-			// ミニマップ: コース形状をスプラインから等間隔サンプリングし、UI の点列として描く。
-			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
-				std::vector<aq::math::Vector2> uvPoints;
-				const auto stageData = session->activeStage;
-				if (stageData && stageData->spline.IsValid() && session->minimapHalfExtent > 1.0f)
-				{
-					constexpr int SAMPLE_COUNT = 160;
-					const float span  = session->minimapHalfExtent * 2.0f;
-					const float total = stageData->spline.GetTotalLength();
-					uvPoints.reserve(SAMPLE_COUNT + 1);
-					for (int i = 0; i <= SAMPLE_COUNT; ++i)
-					{
-						const auto position =
-							stageData->spline.Evaluate(total * static_cast<float>(i) / SAMPLE_COUNT).position;
-						uvPoints.push_back(aq::math::Vector2(
-							0.5f + (position.x - session->minimapCenterXZ.x) / span,
-							0.5f - (position.z - session->minimapCenterXZ.y) / span));
-					}
+			// ミニマップ: 真上からの正射影でシーンを RT へ 1 回だけベイクし、その画像を貼る。
+			// 構図はマーカーの UV 式と同じ minimapCenterXZ ± minimapHalfExtent。
+			// up を +Z に取ると RT は「画面右=+X / 画面上=+Z」になり、
+			// SetMinimapMarker の u=+X / v=-Z (下+) と一致する。
+			auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top());
+			const bool minimapReady = session->minimapHalfExtent > 1.0f && app::Application::IsAvailable();
+			if (minimapReady)
+			{
+				// 俯瞰は正射影なので高さは構図に影響しない。地形 (最大約 31m) とループを
+				// 確実に前後クリップの内側へ収められる値にする。
+				constexpr float CAMERA_HEIGHT = 2000.0f;
+				constexpr float CAMERA_NEAR   = 1.0f;
+				constexpr float CAMERA_FAR    = 4000.0f;
+
+				const float centerX = session->minimapCenterXZ.x;
+				const float centerZ = session->minimapCenterXZ.y;
+				const float span    = session->minimapHalfExtent * 2.0f;
+
+				aq::Camera* const camera = aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);
+				camera->SetPosition(aq::math::Vector3(centerX, CAMERA_HEIGHT, centerZ));
+				camera->SetTarget(aq::math::Vector3(centerX, 0.0f, centerZ));
+				camera->SetUp(aq::math::Vector3(0.0f, 0.0f, 1.0f));
+				camera->SetNear(CAMERA_NEAR);
+				camera->SetFar(CAMERA_FAR);
+				camera->SetOrthographic(span, span);
+
+				// RETRY / ステージ再入場でもここを通るので毎回ベイクし直す。
+				app::Application& application = app::Application::Get();
+				application.RequestMinimapBake();
+
+				if (screen) {
+					screen->SetMinimapTexture(aq::graphics::GraphicsDevice::Get()
+						.GetRenderTargetSRVShared(application.GetMinimapRT()));
 				}
-				screen->SetMinimapCourse(uvPoints);
+			}
+			else if (screen)
+			{
+				screen->SetMinimapTexture(nullptr);
 			}
 		}
 

@@ -14,12 +14,16 @@ namespace app
 		Application();
 		~Application();
 
+	// ── ミニマップ用オフスクリーンパス（俯瞰スナップショット）──
 	protected:
-		aq::rendering::RenderTargetHandle offscreenRTHandle_;
+		aq::rendering::OffscreenScenePass offscreenPass_;
 
 	private:
-		static constexpr float kOffscreenRTWidth  = 512.0f;
-		static constexpr float kOffscreenRTHeight = 512.0f;
+		/** 次の描画で俯瞰ベイクを行うか（ステージ確定時に立てて 1 回だけ描く） */
+		bool minimapBakeRequested_ = false;
+
+		static constexpr uint32_t OFFSCREEN_RT_WIDTH  = 512;
+		static constexpr uint32_t OFFSCREEN_RT_HEIGHT = 512;
 
 	// ── BGM（起動時から常時ループ再生）──
 	private:
@@ -28,11 +32,25 @@ namespace app
 		std::unique_ptr<aq::audio::AudioAuthoringPanel> audioPanel_;
 #endif
 
+	public:
+		/** ミニマップの俯瞰ベイクを次の描画で 1 回だけ要求する（構図はオフスクリーンカメラ側で設定） */
+		inline void RequestMinimapBake() { minimapBakeRequested_ = true; }
+		/** 俯瞰ベイク先の RT。UI へ SRV を渡すのに使う */
+		inline aq::rendering::RenderTargetHandle GetMinimapRT() const { return offscreenPass_.GetSceneRT(); }
+
 	protected:
 		bool OnInitialize() override;
 		void OnFinalize() override;
 		void OnUpdate() override;
 		void OnRegister() override;
 		void OnPreRender() override;
+
+
+	private:
+		static Application* instance_;
+
+	public:
+		static Application& Get()   { return *instance_; }
+		static bool IsAvailable()   { return instance_ != nullptr; }
 	};
 }

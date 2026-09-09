@@ -91,13 +91,10 @@ namespace app
 			minimap_       = Resolve(FindHandle("Minimap"));
 			minimapMarker_ = Resolve(FindHandle("MinimapMarker"));
 
-			// SetMinimapCourse が来るまでは隠した状態で始める (プールのドットも含む)。
+			// SetMinimapTexture が来るまでは隠した状態で始める。
 			SetImageAlpha(minimapFrame_,  0.0f);
 			SetImageAlpha(minimap_,       0.0f);
 			SetImageAlpha(minimapMarker_, 0.0f);
-			for (auto* dot : minimapDots_) {
-				SetImageAlpha(dot, 0.0f);
-			}
 		}
 
 
@@ -133,45 +130,21 @@ namespace app
 		}
 
 
-		void InGameScreen::SetMinimapCourse(const std::vector<aq::math::Vector2>& uvPoints)
+		void InGameScreen::SetMinimapTexture(const std::shared_ptr<aq::graphics::IShaderResourceView>& texture)
 		{
-			const bool visible = minimap_ && !uvPoints.empty();
+			const bool visible = minimap_ && texture != nullptr;
 			SetImageAlpha(minimapFrame_,  visible ? MINIMAP_FRAME_ALPHA : 0.0f);
-			SetImageAlpha(minimap_,       visible ? 1.0f : 0.0f);
 			SetImageAlpha(minimapMarker_, visible ? 1.0f : 0.0f);
 			if (!minimap_) { return; }
 
-			// ドットは白テクスチャを下地画像と共有する (実行時に SRV をパスから引かずに済む)。
-			std::shared_ptr<aq::graphics::IShaderResourceView> whiteTexture;
-			if (auto* baseImage = minimap_->GetComponent<aq::ui::UIImageComponent>()) {
-				whiteTexture = baseImage->texture;
-			}
-
-			// プール再利用: 足りない分だけ生成し、余った分は透明化する。
-			auto& uiContext = aq::ui::UIContext::Get();
-			for (size_t i = 0; i < uvPoints.size(); ++i)
-			{
-				if (i >= minimapDots_.size())
-				{
-					aq::ui::UIObject* dot = uiContext.CreateObject("MinimapDot");
-					auto* transform = dot->AddComponent<aq::ui::UITransformComponent>();
-					transform->sizeDelta = { 4.0f, 4.0f };
-					auto* image = dot->AddComponent<aq::ui::UIImageComponent>();
-					image->texture = whiteTexture;
-					image->color   = { 0.35f, 0.85f, 1.0f, 0.9f };
-					minimap_->AddChild(dot);
-					minimapDots_.push_back(dot);
+			// 俯瞰ベイクの RT をそのまま貼る。色は素の見た目を出すため白でティントしない。
+			if (auto* image = minimap_->GetComponent<aq::ui::UIImageComponent>()) {
+				if (visible) {
+					image->texture = texture;
+					image->color   = { 1.0f, 1.0f, 1.0f, 1.0f };
+				} else {
+					image->color.w = 0.0f;
 				}
-
-				auto* dot = minimapDots_[i];
-				if (auto* transform = dot->GetComponent<aq::ui::UITransformComponent>()) {
-					transform->localPosition.x = (aq::math::Clamp01(uvPoints[i].x) - 0.5f) * MINIMAP_SIZE_PX;
-					transform->localPosition.y = (aq::math::Clamp01(uvPoints[i].y) - 0.5f) * MINIMAP_SIZE_PX;
-				}
-				SetImageAlpha(dot, visible ? 0.9f : 0.0f);
-			}
-			for (size_t i = uvPoints.size(); i < minimapDots_.size(); ++i) {
-				SetImageAlpha(minimapDots_[i], 0.0f);
 			}
 		}
 

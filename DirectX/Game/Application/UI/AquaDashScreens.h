@@ -3,6 +3,8 @@
 #include "Math/Vector.h"
 
 
+namespace aq { namespace graphics { class IShaderResourceView; } }
+
 namespace app
 {
 	namespace aquadash
@@ -46,11 +48,10 @@ namespace app
 			aq::ui::UIObject* coinText_  = nullptr;
 			aq::ui::UIObject* speedText_ = nullptr;
 
-			/** ミニマップ (枠 / 下地 / プレイヤーマーカー / コース点列プール) */
-			aq::ui::UIObject*              minimapFrame_  = nullptr;
-			aq::ui::UIObject*              minimap_       = nullptr;
-			aq::ui::UIObject*              minimapMarker_ = nullptr;
-			std::vector<aq::ui::UIObject*> minimapDots_;
+			/** ミニマップ (枠 / 俯瞰ベイク画像 / プレイヤーマーカー) */
+			aq::ui::UIObject* minimapFrame_  = nullptr;
+			aq::ui::UIObject* minimap_       = nullptr;
+			aq::ui::UIObject* minimapMarker_ = nullptr;
 
 
 		public:
@@ -65,10 +66,10 @@ namespace app
 			void SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh);
 
 			/**
-			 * ミニマップのコース形状を設定する (uv は 0-1。u=右+, v=下+)。
-			 * 点列はドットの UIObject プールとして生成・再利用する。空を渡すとミニマップ全体を隠す。
+			 * ミニマップに表示する俯瞰ベイク画像を差し替える。
+			 * nullptr を渡すとミニマップ全体を隠す。
 			 */
-			void SetMinimapCourse(const std::vector<aq::math::Vector2>& uvPoints);
+			void SetMinimapTexture(const std::shared_ptr<aq::graphics::IShaderResourceView>& texture);
 
 			/** ミニマップ上のプレイヤーマーカー位置。u,v は 0-1 (ミニマップ矩形ローカル。u=右+, v=下+) */
 			void SetMinimapMarker(const float u, const float v);

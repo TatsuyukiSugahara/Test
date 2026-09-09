@@ -1,6 +1,6 @@
 #include "aq.h"
-// UWP では XInput / HID 直読みが使えないため空 TU。
-#if !defined(AQ_PLATFORM_UWP)
+// UWP / Mac では XInput / HID 直読みが使えないため空 TU。
+#if defined(AQ_PLATFORM_WIN32)
 #include "HID/Win32PadBackend.h"
 
 namespace aq
@@ -55,4 +55,4 @@ namespace aq
 		}
 	}
 }
-#endif // !AQ_PLATFORM_UWP
+#endif // AQ_PLATFORM_WIN32

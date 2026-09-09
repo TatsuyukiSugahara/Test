@@ -5,20 +5,19 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <windows.h>
 #include <cassert>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <functional>
-#include <tchar.h>
+#include "Platform/Common/DebugOutput.h"
 
 
 // アサート
 #ifdef _DEBUG
 #define EngineAssert(expr) if(!(expr)) { assert(expr); }
-#define EngineAssertMsg(expr, message) if(!(expr)) { _wassert(_T(message), _CRT_WIDE(__FILE__), (unsigned)(__LINE__)); }
+#define EngineAssertMsg(expr, message) if(!(expr)) { aq::debug::OutputString("Assertion failed: " message "\n"); assert(expr); }
 #else
 #define EngineAssert(expression) ((void)0)
 #define EngineAssertMsg(expr, message) ((void)0)
@@ -49,7 +48,7 @@ namespace aq
 	{
 		inline void Clear(void* ptr, uint32_t length)
 		{
-			ZeroMemory(ptr, length);
+			memset(ptr, 0, length);
 		}
 
 		inline void Copy(void* dist, void* src, uint32_t size)
@@ -73,8 +72,8 @@ namespace aq
 			
 			va_start(ap, format);
 
-			vsprintf_s(temp, format, ap);
-			OutputDebugStringA(temp);
+			vsnprintf(temp, sizeof(temp), format, ap);
+			aq::debug::OutputString(temp);
 
 			va_end(ap);
 		}

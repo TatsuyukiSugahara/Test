@@ -75,7 +75,7 @@ namespace aq
 				for (int i = 0; i < 4; ++i)
 				{
 					char label[16];
-					sprintf_s(label, sizeof(label), "Wave %d", i);
+					snprintf(label, sizeof(label), "Wave %d", i);
 					ImGui::PushID(i);
 					if (ImGui::TreeNode(label))
 					{
@@ -126,11 +126,11 @@ namespace aq
 				for (int i = 0; i < 4; ++i)
 				{
 					char k[24];
-					sprintf_s(k, sizeof(k), "wave%d_dirX",    i); visitor.Field(k, params_.waves[i].dirX);
-					sprintf_s(k, sizeof(k), "wave%d_dirZ",    i); visitor.Field(k, params_.waves[i].dirZ);
-					sprintf_s(k, sizeof(k), "wave%d_amp",     i); visitor.Field(k, params_.waves[i].amplitude);
-					sprintf_s(k, sizeof(k), "wave%d_wavelen", i); visitor.Field(k, params_.waves[i].wavelength);
-					sprintf_s(k, sizeof(k), "wave%d_speed",   i); visitor.Field(k, params_.waves[i].speed);
+					snprintf(k, sizeof(k), "wave%d_dirX",    i); visitor.Field(k, params_.waves[i].dirX);
+					snprintf(k, sizeof(k), "wave%d_dirZ",    i); visitor.Field(k, params_.waves[i].dirZ);
+					snprintf(k, sizeof(k), "wave%d_amp",     i); visitor.Field(k, params_.waves[i].amplitude);
+					snprintf(k, sizeof(k), "wave%d_wavelen", i); visitor.Field(k, params_.waves[i].wavelength);
+					snprintf(k, sizeof(k), "wave%d_speed",   i); visitor.Field(k, params_.waves[i].speed);
 				}
 			}
 

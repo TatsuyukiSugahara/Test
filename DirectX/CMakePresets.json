@@ -1,0 +1,121 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "AQ_GRAPHICS_API": "D3D12"
+      }
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-vs2026",
+      "displayName": "Windows / Visual Studio 2026 (v145)",
+      "description": "VS プロジェクトを生成する。既存 DirectX.sln とは別物なので上書きしない。",
+      "inherits": "windows-base",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "toolset": "host=x64"
+    },
+    {
+      "name": "windows-vs2022",
+      "displayName": "Windows / Visual Studio 2022 (v143)",
+      "description": "VS2026 が無い環境向け。",
+      "inherits": "windows-base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "toolset": "host=x64"
+    },
+    {
+      "name": "windows-clang-cl",
+      "displayName": "Windows / clang-cl (Ninja Multi-Config)",
+      "description": "MSVC 拡張依存を潰すための可搬性検証用。x64 Native Tools コマンドプロンプトから実行すること。",
+      "inherits": "windows-base",
+      "generator": "Ninja Multi-Config",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      }
+    },
+    {
+      "name": "macos-ninja",
+      "displayName": "macOS / Ninja Multi-Config (Vulkan + MoltenVK)",
+      "description": "P2 で検証する。Vulkan SDK for macOS が必要。",
+      "inherits": "base",
+      "generator": "Ninja Multi-Config",
+      "cacheVariables": {
+        "AQ_GRAPHICS_API": "Vulkan"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "macos-xcode",
+      "displayName": "macOS / Xcode (Vulkan + MoltenVK)",
+      "description": "P2 で検証する。Vulkan SDK for macOS が必要。",
+      "inherits": "macos-ninja",
+      "generator": "Xcode"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-vs2026-debug",
+      "configurePreset": "windows-vs2026",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs2026-release",
+      "configurePreset": "windows-vs2026",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-vs2022-debug",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs2022-release",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-clang-cl-debug",
+      "configurePreset": "windows-clang-cl",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-clang-cl-release",
+      "configurePreset": "windows-clang-cl",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-ninja-debug",
+      "configurePreset": "macos-ninja",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-ninja-release",
+      "configurePreset": "macos-ninja",
+      "configuration": "Release"
+    }
+  ]
+}

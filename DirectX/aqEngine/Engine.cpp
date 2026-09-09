@@ -55,8 +55,10 @@ namespace aq
 		// COM(MTA) をメインスレッドでプロセス寿命ぶん保持する。XAudio2 / WIC(DirectXTex) / Media Foundation が
 		// COM を要求し、MTA が 1 つでも存在すれば未初期化スレッド(ThreadPool ワーカ)も暗黙に MTA 参加扱いになる。
 		// 従来は XAudio2 バックエンドのメインスレッド CoInitializeEx がこれを兼ねていたが、サウンド初期化を
-		// 別スレッドへ移したため明示的にここで行う。
+		// 別スレッドへ移したため明示的にここで行う。COM は Windows 系プラットフォーム専用。
+#if defined(AQ_PLATFORM_WINDOWS_FAMILY)
 		comInitialized_ = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+#endif // AQ_PLATFORM_WINDOWS_FAMILY
 
 		// サウンド初期化(XAudio2Create + マスタリングボイス)は実測 0.25〜1.0 秒かかり、その大半がデバイス待ちで
 		// CPU を使わない。ウィンドウ/グラフィックス/シェーダ初期化と並列に別スレッドで走らせ、利用側は
@@ -133,10 +135,12 @@ namespace aq
 		aq::util::ThreadPool::Finalize();
 
 		// COM はワーカ(WIC 等)が全て止まった後に解放する。
+#if defined(AQ_PLATFORM_WINDOWS_FAMILY)
 		if (comInitialized_) {
 			CoUninitialize();
 			comInitialized_ = false;
 		}
+#endif // AQ_PLATFORM_WINDOWS_FAMILY
 		aq::memory::MemoryManager::Finalize();
 	}
 

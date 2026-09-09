@@ -155,7 +155,8 @@ namespace aq
 				ImGui::SameLine();
 
 				char buf[512];
-				strncpy_s(buf, sizeof(buf), kv.second.path.c_str(), _TRUNCATE);
+				// snprintf は切り詰めても必ず NUL 終端する。
+				snprintf(buf, sizeof(buf), "%s", kv.second.path.c_str());
 				ImGui::SetNextItemWidth(220.0f);
 				if (ImGui::InputText("##path", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue))
 				{

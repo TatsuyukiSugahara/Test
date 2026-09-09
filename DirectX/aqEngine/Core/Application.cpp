@@ -84,7 +84,7 @@ namespace aq
 				{
 					char winDir[MAX_PATH] = {};
 					if (GetWindowsDirectoryA(winDir, MAX_PATH) == 0)
-						strcpy_s(winDir, "C:\\Windows");
+						snprintf(winDir, sizeof(winDir), "%s", "C:\\Windows");
 
 					static const char* kJpFontNames[] = {
 						"meiryo.ttc",    // Meiryo (Vista+、推奨)
@@ -97,10 +97,10 @@ namespace aq
 					for (const char* name : kJpFontNames)
 					{
 						char path[MAX_PATH];
-						sprintf_s(path, "%s\\Fonts\\%s", winDir, name);
+						snprintf(path, sizeof(path), "%s\\Fonts\\%s", winDir, name);
 
-						FILE* f = nullptr;
-						if (fopen_s(&f, path, "rb") != 0 || !f) continue;
+						FILE* f = fopen(path, "rb");
+						if (!f) continue;
 						fclose(f);
 
 						// ASCII/Latin-1 + Arrows (U+2190-21FF) + Geometric Shapes (U+25A0-25FF) のみ。

@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "IAllocator.h"
-#include <malloc.h>
+#include "Platform/Common/AlignedAlloc.h"
 #include <cassert>
 #include <cstdint>
 
@@ -11,11 +11,11 @@ namespace aq
 	{
 		/**
 		 * システムヒープを使うアロケータ。
-		 * _aligned_malloc / _aligned_free は CRT レベルでスレッドセーフ。
+		 * aq::memory::AlignedAlloc / AlignedFree は CRT レベルでスレッドセーフ。
 		 *
 		 * デバッグビルドでは各ブロックのユーザー領域直前に TrackHeader を埋め込み、MemoryTracker の
 		 * ライブリストに連結する(確保ごとの二次確保なし)。レイアウト:
-		 *   [ _aligned_malloc 先頭 ][ 詰め物 ][ TrackHeader ][ ユーザー領域(alignment 境界) ]
+		 *   [ AlignedAlloc 先頭 ][ 詰め物 ][ TrackHeader ][ ユーザー領域(alignment 境界) ]
 		 *   headerSize = sizeof(TrackHeader) を alignment の倍数に切り上げた値。
 		 */
 		class HeapAllocator : public IAllocator
@@ -31,7 +31,7 @@ namespace aq
 				}
 #ifdef _DEBUG
 				const size_t headerSize = (sizeof(TrackHeader) + alignment - 1) / alignment * alignment;
-				uint8_t* raw = static_cast<uint8_t*>(_aligned_malloc(headerSize + size, alignment));
+				uint8_t* raw = static_cast<uint8_t*>(AlignedAlloc(headerSize + size, alignment));
 				assert(raw && "HeapAllocator: allocation failed");
 				if (!raw) {
 					return nullptr;
@@ -42,7 +42,7 @@ namespace aq
 				RegisterBlock(header, size);
 				return user;
 #else
-				void* ptr = _aligned_malloc(size, alignment);
+				void* ptr = AlignedAlloc(size, alignment);
 				assert(ptr && "HeapAllocator: allocation failed");
 				return ptr;
 #endif
@@ -59,15 +59,15 @@ namespace aq
 				if (header->magic == TRACK_MAGIC) {
 					const uint32_t headerOffset = header->headerOffset;
 					UnregisterBlock(header);
-					_aligned_free(user - headerOffset);
+					AlignedFree(user - headerOffset);
 				}
 				else {
-					// 本アロケータ以外(生の _aligned_malloc 等)から来たポインタ、または二重解放。
+					// 本アロケータ以外(生の AlignedAlloc 等)から来たポインタ、または二重解放。
 					assert(header->magic != 0 && "HeapAllocator: double free detected");
-					_aligned_free(ptr);
+					AlignedFree(ptr);
 				}
 #else
-				_aligned_free(ptr);
+				AlignedFree(ptr);
 #endif
 			}
 		};

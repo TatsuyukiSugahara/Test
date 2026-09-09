@@ -49,6 +49,9 @@
     <Filter Include="Platform">
       <UniqueIdentifier>{f1a2b3c4-d5e6-47f8-9a0b-1c2d3e4f5a6b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Platform\Common">
+      <UniqueIdentifier>{a08d464f-9a73-4c81-a3fb-5c075f4db595}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Sound">
       <UniqueIdentifier>{a7d1c2e3-4f50-4a6b-8c9d-0e1f2a3b4c5d}</UniqueIdentifier>
     </Filter>
@@ -286,6 +289,9 @@
     </ClCompile>
     <ClCompile Include="Platform\PlatformUWP.cpp">
       <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="Platform\Common\DebugOutputWin32.cpp">
+      <Filter>Platform\Common</Filter>
     </ClCompile>
     <ClCompile Include="Memory\MemoryManager.cpp">
       <Filter>Memory</Filter>
@@ -862,6 +868,15 @@
     </ClInclude>
     <ClInclude Include="Platform\PlatformUWP.h">
       <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Common\PlatformDefs.h">
+      <Filter>Platform\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Common\DebugOutput.h">
+      <Filter>Platform\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Common\AlignedAlloc.h">
+      <Filter>Platform\Common</Filter>
     </ClInclude>
     <ClInclude Include="aq.h" />
     <ClInclude Include="RenderConfig.h" />

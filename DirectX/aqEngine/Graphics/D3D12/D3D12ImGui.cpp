@@ -8,8 +8,6 @@
 #include "D3D12Resources.h"
 #include <imgui/imgui.h>
 
-#pragma comment(lib, "d3dcompiler.lib")
-
 // ─────────────────────────────────────────────────────────────────────────
 // 自前の DirectX12 ImGui レンダラー (Phase 4)。
 // 同梱の imgui_impl_dx12 はコア(1.92 WIP 19193)より新しく非互換のため使用せず、

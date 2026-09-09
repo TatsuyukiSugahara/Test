@@ -1,7 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 #include <windows.h>
 #endif
 #include "Graphics/RenderContext.h"
@@ -103,12 +103,19 @@ namespace aq
 			return aq::rendering::RenderTargetHandle{ currentMainRenderTarget_ };
 		}
 
-#if !defined(AQ_PLATFORM_UWP)
+	public:
+		/**
+		 * プラットフォーム非依存のメインウィンドウハンドル。
+		 * Win32: HWND / UWP: CoreWindow^ / Mac: CAMetalLayer* を void* として保持する。
+		 */
+		inline aq::graphics::NativeWindowHandle GetNativeWindowHandle() const { return window_; }
+
+#if defined(AQ_PLATFORM_WIN32)
 	public:
 		// Win32 専用。DirectInput / ImGui_ImplWin32 など、まだ HWND を直接要求する
 		// サブシステム向け。これらが GameInput 等に抽象化されたら撤去する最後の Win32 接合点。
-		HWND GetHWND() const { return static_cast<HWND>(window_.handle); }
-#endif
+		inline HWND GetHWND() const { return static_cast<HWND>(GetNativeWindowHandle().handle); }
+#endif // AQ_PLATFORM_WIN32
 
 	public:
 		template <typename _Application>

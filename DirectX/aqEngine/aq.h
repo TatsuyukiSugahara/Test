@@ -1,6 +1,9 @@
 #pragma once
+#include "Platform/Common/PlatformDefs.h"
 
+#if defined(AQ_PLATFORM_WINDOWS_FAMILY)
 #pragma warning (disable  : 4201)
+#endif
 
 // Graphics API selection.
 // Define one ENGINE_GRAPHICS_* macro in project settings to override the default.
@@ -25,17 +28,21 @@
 #include "RenderConfig.h"
 
 
+// ここから windows.h 系(Win32 / UWP)専用ブロック。
+// リンクするライブラリは Game/GraphicsApi.props と各 vcxproj の
+// AdditionalDependencies で指定する(#pragma comment(lib) は使わない)。
+#if defined(AQ_PLATFORM_WINDOWS_FAMILY)
+
 #define NOMINMAX
 #include <windows.h>
+#include <tchar.h>
 
 #ifdef ENGINE_GRAPHICS_D3D11
 #pragma warning(push)
 #pragma warning(disable:4005)
 #include <d3d11.h>
 #pragma warning(pop)
-#pragma comment(lib, "d3d11.lib")
 #include <d3dcompiler.h>
-#pragma comment(lib,"d3dcompiler.lib")
 #endif // ENGINE_GRAPHICS_D3D11
 
 #ifdef ENGINE_GRAPHICS_D3D12
@@ -44,23 +51,18 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #pragma warning(pop)
-#pragma comment(lib, "d3d12.lib")
-#pragma comment(lib, "dxgi.lib")
 #include <d3dcompiler.h>
-#pragma comment(lib,"d3dcompiler.lib")
 #endif // ENGINE_GRAPHICS_D3D12
 
 #ifdef ENGINE_GRAPHICS_VULKAN
 // Vulkan ヘッダ本体は Graphics/Vulkan/VulkanCommon.h 側で取り込む (VK_USE_PLATFORM_WIN32_KHR 定義込み)。
-// ここでは最終リンクへ vulkan-1.lib を要求する (ライブラリパスは Game vcxproj の $(VULKAN_SDK)\Lib)。
-#pragma comment(lib, "vulkan-1.lib")
+// vulkan-1.lib は Game/GraphicsApi.props の AqGraphicsApi=Vulkan 分岐でリンクする
+// (ライブラリパスは Game vcxproj の $(VULKAN_SDK)\Lib)。
 #endif // ENGINE_GRAPHICS_VULKAN
 
 
 //DirectInput
 #define	DIRECTINPUT_VERSION	0x0800
-#pragma comment(lib, "dinput8.lib")
-#pragma comment(lib, "dxguid.lib")
 #include <dinput.h>
 
 
@@ -82,6 +84,8 @@
 #pragma warning(pop)
 #endif
 
+#endif // AQ_PLATFORM_WINDOWS_FAMILY
+
 #include <vector>
 #include <array>
 #include <list>
@@ -100,7 +104,6 @@
 #include <atomic>
 #include <chrono>
 
-#include <tchar.h>
 #include <stdio.h>
 #include <cstdint>
 #include <cstring>

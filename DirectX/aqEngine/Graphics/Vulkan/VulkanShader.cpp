@@ -7,8 +7,6 @@
 #include <wrl/client.h>
 #include <filesystem>
 
-#pragma comment(lib, "dxcompiler.lib")
-
 using Microsoft::WRL::ComPtr;
 
 namespace aq

@@ -29,7 +29,7 @@ namespace aq
 		{
 			// カレントディレクトリ(VS 既定は Game/)に毎回上書きで作る。
 			opened = true;
-			fopen_s(&fp, "startup_timing.log", "w");
+			fp = fopen("startup_timing.log", "w");
 		}
 
 		char line[512];

@@ -52,7 +52,8 @@ namespace aq
 			if (path == nullptr) {
 				return false;
 			}
-			if (fopen_s(&file_, path, "rb") != 0 || file_ == nullptr) {
+			file_ = std::fopen(path, "rb");
+			if (file_ == nullptr) {
 				return false;
 			}
 

@@ -35,7 +35,7 @@ namespace aq
 				/*threadPoolWorkerCount*/  6u,
 				/*maxSingleFileBytes*/     static_cast<size_t>(2) * 1024 * 1024 * 1024
 			};
-#else
+#elif defined(AQ_PLATFORM_WIN32)
 			// デスクトップ(Win32): 上限なし・論理コア数・ファイル制限なし。
 			return ResourceBudget{
 				/*memoryBudgetBytes*/      0,
@@ -43,6 +43,9 @@ namespace aq
 				/*threadPoolWorkerCount*/  0u,
 				/*maxSingleFileBytes*/     0
 			};
+#else
+			// Mac(AQ_PLATFORM_MAC)のプロファイルは P2 で追加する。
+#error "GetResourceBudget: 未対応のプラットフォームです"
 #endif
 		}
 

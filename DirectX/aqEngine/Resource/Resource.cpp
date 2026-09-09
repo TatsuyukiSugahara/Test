@@ -135,8 +135,7 @@ namespace aq
 
 		bool PMDLoader::Loading()
 		{
-			FILE* fp = nullptr;
-			fopen_s(&fp, requestPath_.c_str(), "rb");
+			FILE* fp = fopen(requestPath_.c_str(), "rb");
 			if (fp == nullptr) {
 				return false;
 			}
@@ -150,7 +149,7 @@ namespace aq
 			fseek(fp, 0, SEEK_SET);
 
 			uint8_t* binHead = new uint8_t[fileSize];
-			fread_s(binHead, sizeof(uint8_t) * fileSize, sizeof(uint8_t), static_cast<size_t>(fileSize), fp);
+			fread(binHead, sizeof(uint8_t), static_cast<size_t>(fileSize), fp);
 			fclose(fp);
 
 			uint8_t* bin = binHead;
@@ -327,7 +326,8 @@ namespace aq
 
 				*fp = nullptr;
 				for (const std::string& path : BuildResourcePathCandidates(filePath)) {
-					if (fopen_s(fp, path.c_str(), "rb") == 0 && *fp) {
+					*fp = fopen(path.c_str(), "rb");
+					if (*fp) {
 					// 予算照合: サイズ取得 → 照合 → 先頭へ巻き戻し。超過なら拒否。
 					std::fseek(*fp, 0, SEEK_END);
 					const long budgetSize = std::ftell(*fp);
@@ -1110,8 +1110,7 @@ namespace aq
 
 			bool LoadTkmMeshFile(const std::string& filePath, MeshData& outMesh)
 			{
-				FILE* fp = nullptr;
-				fopen_s(&fp, filePath.c_str(), "rb");
+				FILE* fp = fopen(filePath.c_str(), "rb");
 				// 予算照合(超過なら拒否)。
 				if (fp) {
 					std::fseek(fp, 0, SEEK_END);
@@ -1490,8 +1489,7 @@ namespace aq
 			// DirectX 左上)。座標系・巻き順は Unity=DX とも左手 Y-up のためそのまま。
 			bool LoadObjMesh(const std::string& filePath, MeshData& outMesh)
 			{
-				FILE* fp = nullptr;
-				fopen_s(&fp, filePath.c_str(), "rb");
+				FILE* fp = fopen(filePath.c_str(), "rb");
 				if (fp == nullptr) {
 					return false;
 				}
@@ -1504,7 +1502,7 @@ namespace aq
 				fseek(fp, 0, SEEK_SET);
 				std::string text(static_cast<size_t>(fileSize > 0 ? fileSize : 0), '\0');
 				if (fileSize > 0) {
-					fread_s(&text[0], text.size(), 1, static_cast<size_t>(fileSize), fp);
+					fread(&text[0], 1, static_cast<size_t>(fileSize), fp);
 				}
 				fclose(fp);
 
@@ -1600,9 +1598,14 @@ namespace aq
 				}
 			}
 
-			wchar_t filePath[256];
-			size_t ret;
-			mbstowcs_s(&ret, filePath, requestPath_.c_str(), ArraySize(filePath));
+			// DirectXTex にはワイド文字パスを渡す。mbstowcs は失敗時に (size_t)-1 を返し、
+			// 切り詰め時は終端を書かないため、どちらも呼び出し側で担保する。
+			wchar_t filePath[256] = {};
+			const size_t converted = std::mbstowcs(filePath, requestPath_.c_str(), ArraySize(filePath));
+			if (converted == static_cast<size_t>(-1)) {
+				return false;
+			}
+			filePath[ArraySize(filePath) - 1] = L'\0';
 
 			DirectX::TexMetadata info;
 			std::unique_ptr<DirectX::ScratchImage> image = std::make_unique<DirectX::ScratchImage>();

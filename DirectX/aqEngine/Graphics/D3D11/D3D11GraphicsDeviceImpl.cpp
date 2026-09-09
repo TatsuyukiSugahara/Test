@@ -9,8 +9,6 @@
 #include <dxgi1_2.h>   // IDXGIFactory2 / CreateSwapChainForCoreWindow / DXGI_SWAP_CHAIN_DESC1
 #include <dxgi1_6.h>   // IDXGIFactory4 / IDXGIAdapter1 (D3D12 probe 用)
 #include <d3d12.h>     // D3D12 サポート probe 用(バックエンドは D3D11 のまま)
-#pragma comment(lib, "d3d12.lib")
-#pragma comment(lib, "dxgi.lib")
 
 namespace {
 	// 【診断】このデバイス(Xbox の App/Game 種別など)で D3D12 がハードウェアで通るかを調べる。
@@ -250,7 +248,7 @@ namespace aq
 		}
 
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 		// Win32 専用: D3D11CreateDeviceAndSwapChain は HWND スワップチェーンモデル用で
 		// UWP では利用不可。UWP は下の CreateDeviceAndSwapChainUWP を使う。
 		bool D3D11GraphicsDeviceImpl::CreateDeviceAndSwapChain(HWND hwnd, uint32_t width, uint32_t height)
@@ -299,7 +297,7 @@ namespace aq
 			}
 			return SUCCEEDED(hr);
 		}
-#endif // !AQ_PLATFORM_UWP
+#endif // AQ_PLATFORM_WIN32
 
 
 #if defined(AQ_PLATFORM_UWP)

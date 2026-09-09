@@ -81,3 +81,8 @@ DirectX/Game/Assets/Particle/Meshes/
 
 # 起動計測ログ (aq::StartupMark がカレントディレクトリに出力)
 startup_timing.log
+
+
+# CMake (Mac 移植で併設したビルド。既存の vcxproj ビルドとは別ツリー)
+build/
+CMakeUserPresets.json

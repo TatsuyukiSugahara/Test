@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cctype>
+#include <cstdlib>
 
 
 namespace aq
@@ -40,12 +41,14 @@ namespace aq
 #if defined(AQ_PLATFORM_UWP)
 				(void)path; (void)outHeights; (void)outW; (void)outH;
 				return false;   // UWP: DirectXTex 未リンク(画像ロード無効)
-#else
+#elif defined(AQ_PLATFORM_WIN32)
 				if (!path || !path[0]) return false;
 
+				// DirectXTex にはワイド文字パスを渡す。変換失敗と収まらなかった場合は
+				// 失敗扱い(mbstowcs_s の ERANGE と同じ)。終端は 0 初期化で担保する。
 				wchar_t wpath[512] = {};
-				size_t converted = 0;
-				if (mbstowcs_s(&converted, wpath, path, 511) != 0) return false;
+				const size_t converted = std::mbstowcs(wpath, path, ArraySize(wpath) - 1);
+				if (converted == static_cast<size_t>(-1) || converted >= ArraySize(wpath) - 1) return false;
 
 				DirectX::TexMetadata meta;
 				DirectX::ScratchImage raw;
@@ -91,7 +94,11 @@ namespace aq
 					}
 				}
 				return true;
-#endif // !AQ_PLATFORM_UWP
+#else
+				// Mac: WIC が無いため未対応。P1 の ImageLoader(stb_image)で置き換える。
+				(void)path; (void)outHeights; (void)outW; (void)outH;
+				return false;
+#endif // AQ_PLATFORM_WIN32
 			}
 
 			bool LoadSplatValues(const char* path,
@@ -101,12 +108,14 @@ namespace aq
 #if defined(AQ_PLATFORM_UWP)
 				(void)path; (void)outSplat; (void)outW; (void)outH;
 				return false;   // UWP: DirectXTex 未リンク(画像ロード無効)
-#else
+#elif defined(AQ_PLATFORM_WIN32)
 				if (!path || !path[0]) return false;
 
+				// DirectXTex にはワイド文字パスを渡す。変換失敗と収まらなかった場合は
+				// 失敗扱い(mbstowcs_s の ERANGE と同じ)。終端は 0 初期化で担保する。
 				wchar_t wpath[512] = {};
-				size_t converted = 0;
-				if (mbstowcs_s(&converted, wpath, path, 511) != 0) return false;
+				const size_t converted = std::mbstowcs(wpath, path, ArraySize(wpath) - 1);
+				if (converted == static_cast<size_t>(-1) || converted >= ArraySize(wpath) - 1) return false;
 
 				DirectX::TexMetadata meta;
 				DirectX::ScratchImage raw;
@@ -152,7 +161,11 @@ namespace aq
 					}
 				}
 				return true;
-#endif // !AQ_PLATFORM_UWP
+#else
+				// Mac: WIC が無いため未対応。P1 の ImageLoader(stb_image)で置き換える。
+				(void)path; (void)outSplat; (void)outW; (void)outH;
+				return false;
+#endif // AQ_PLATFORM_WIN32
 			}
 
 

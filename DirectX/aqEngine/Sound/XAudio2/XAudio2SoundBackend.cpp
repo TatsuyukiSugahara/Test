@@ -3,8 +3,6 @@
 #include "XAudio2SoundVoice.h"
 #include <objbase.h>
 
-#pragma comment(lib, "xaudio2.lib")
-
 
 namespace aq
 {

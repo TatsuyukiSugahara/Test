@@ -1,7 +1,7 @@
 ﻿#pragma once
-// DirectInput / XInput はデスクトップ専用。UWP(Xbox 道A)では使えないため、
-// キーボード/マウスは当面 no-op(入力は Phase 4 の GameInput で対応)。
-#if !defined(AQ_PLATFORM_UWP)
+// DirectInput / XInput は Win32 デスクトップ専用。UWP(Xbox 道A)/ Mac では使えないため、
+// キーボード/マウスは当面 no-op(入力は Phase 4 の GameInput / P1 の Bridge 化で対応)。
+#if defined(AQ_PLATFORM_WIN32)
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 #include <Xinput.h>
@@ -20,7 +20,7 @@ namespace aq
 		// Keyboard
 		// ==========================================
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 		enum class KeyBoardType : uint32_t
 		{
 			Left  = DIK_LEFT,
@@ -43,7 +43,7 @@ namespace aq
 			Num4 = DIK_4,
 		};
 #else
-		// UWP: DIK_ が無いため中立値。now_[256] のインデックスとして安全なら値は任意。
+		// UWP / Mac: DIK_ が無いため中立値。now_[256] のインデックスとして安全なら値は任意。
 		enum class KeyBoardType : uint32_t
 		{
 			Left, Right, Up, Down,
@@ -60,7 +60,7 @@ namespace aq
 			KeyBoard()  = default;
 			~KeyBoard();
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			HRESULT Initialize(LPDIRECTINPUT8 input);
 #endif
 			void    Update(float dt);
@@ -73,7 +73,7 @@ namespace aq
 		private:
 			static constexpr uint32_t KEY_COUNT = 256;
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			LPDIRECTINPUTDEVICE8 device_ = nullptr;
 #endif
 			uint8_t              now_[KEY_COUNT]{};
@@ -97,9 +97,10 @@ namespace aq
 		};
 
 
-#if defined(AQ_PLATFORM_UWP)
-		// UWP: DIMOUSESTATE2 が無いため、既存の判定コードが参照するフィールドだけ持つ
-		// 中立状態(全ゼロ=入力なし)。フィールド名は DIMOUSESTATE2 に合わせる。
+#if !defined(AQ_PLATFORM_WIN32)
+		// DirectInput が使えないプラットフォーム(UWP / Mac): DIMOUSESTATE2 が無いため、
+		// 既存の判定コードが参照するフィールドだけ持つ中立状態(全ゼロ=入力なし)。
+		// フィールド名は DIMOUSESTATE2 に合わせる。
 		struct MouseStateNeutral
 		{
 			long    lX = 0;
@@ -115,7 +116,7 @@ namespace aq
 			Mouse()  = default;
 			~Mouse();
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			HRESULT Initialize(LPDIRECTINPUT8 input);
 #endif
 			void    Update(float dt);
@@ -128,7 +129,7 @@ namespace aq
 			math::Vector2 GetCursorPos() const;
 
 		private:
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			LPDIRECTINPUTDEVICE8 device_ = nullptr;
 			DIMOUSESTATE2        now_{};
 			DIMOUSESTATE2        old_{};
@@ -243,7 +244,7 @@ namespace aq
 			static void          Finalize()   { if (sInstance_) { delete sInstance_; sInstance_ = nullptr; } }
 
 		private:
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			LPDIRECTINPUT8               input_ = nullptr;
 #endif
 			std::unique_ptr<KeyBoard>    keyBoard_;

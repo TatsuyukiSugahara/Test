@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <atomic>
 #include <cassert>
-#include <malloc.h>
+#include "Platform/Common/AlignedAlloc.h"
 
 
 namespace aq
@@ -63,13 +63,13 @@ namespace aq
 				: capacity_(capacityBytes)
 				, offset_(0)
 			{
-				memory_ = static_cast<uint8_t*>(_aligned_malloc(capacityBytes, alignof(std::max_align_t)));
+				memory_ = static_cast<uint8_t*>(AlignedAlloc(capacityBytes, alignof(std::max_align_t)));
 				assert(memory_ && "StackAllocator: pre-allocation failed");
 			}
 
 			~StackAllocator()
 			{
-				_aligned_free(memory_);
+				AlignedFree(memory_);
 			}
 
 			StackAllocator(const StackAllocator&) = delete;

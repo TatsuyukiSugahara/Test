@@ -1,5 +1,8 @@
 #include "aq.h"
 #include "Profiler.h"
+#include <chrono>
+#include <functional>
+#include <thread>
 
 
 namespace aq
@@ -8,11 +11,15 @@ namespace aq
 	{
 		namespace
 		{
-			int64_t QPCNow()
+			/** steady_clock の 1 tick (= 1ns) あたりのミリ秒 */
+			static constexpr double TICK_TO_MS = 1.0 / 1000000.0;
+
+
+			/** 現在時刻を tick (ナノ秒) で返す */
+			int64_t NowTick()
 			{
-				LARGE_INTEGER c;
-				QueryPerformanceCounter(&c);
-				return c.QuadPart;
+				return std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now().time_since_epoch()).count();
 			}
 		}
 
@@ -26,9 +33,7 @@ namespace aq
 
 		Profiler::Profiler()
 		{
-			LARGE_INTEGER freq;
-			QueryPerformanceFrequency(&freq);
-			ticksToMs_ = 1000.0 / static_cast<double>(freq.QuadPart);
+			ticksToMs_ = TICK_TO_MS;
 		}
 
 
@@ -38,7 +43,8 @@ namespace aq
 			if (tls == nullptr)
 			{
 				auto td = std::make_shared<ThreadData>();
-				td->threadId   = static_cast<uint64_t>(GetCurrentThreadId());
+				// OS 依存の API を避け、std::thread::id のハッシュを ID とする (表示/キー用途のみ)
+				td->threadId   = static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
 				td->orderIndex = nextOrderIndex_.fetch_add(1);
 				td->name       = "Thread " + std::to_string(td->orderIndex);
 				{
@@ -70,7 +76,7 @@ namespace aq
 			s.name        = name;
 			s.parentIndex = td.stack.empty() ? -1 : td.stack.back();
 			s.depth       = static_cast<int>(td.stack.size());
-			s.startTick   = QPCNow();
+			s.startTick   = NowTick();
 			const int index = static_cast<int>(td.samples.size());
 			td.samples.push_back(s);
 			td.stack.push_back(index);
@@ -83,7 +89,7 @@ namespace aq
 			if (td.stack.empty()) return;
 			const int index = td.stack.back();
 			td.stack.pop_back();
-			const int64_t end = QPCNow();
+			const int64_t end = NowTick();
 			td.samples[index].durationMs =
 				static_cast<double>(end - td.samples[index].startTick) * ticksToMs_;
 		}
@@ -115,7 +121,7 @@ namespace aq
 		{
 			// PublishWorkers() はメインスレッドが毎フレーム 1 回だけ呼ぶ。
 			// その呼び出し間隔を実フレーム時間として記録する。
-			const int64_t now = QPCNow();
+			const int64_t now = NowTick();
 			if (lastFramePublishTick_ != 0)
 				frameMs_ = static_cast<double>(now - lastFramePublishTick_) * ticksToMs_;
 			lastFramePublishTick_ = now;

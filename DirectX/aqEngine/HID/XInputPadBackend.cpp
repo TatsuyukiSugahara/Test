@@ -1,8 +1,7 @@
 #include "aq.h"
-// XInput はデスクトップ向け。UWP(Xbox)ではパッドは Phase 4(GameInput)で対応するため空 TU。
-#if !defined(AQ_PLATFORM_UWP)
+// XInput は Win32 デスクトップ向け。UWP(Xbox)ではパッドは Phase 4(GameInput)で対応するため空 TU。
+#if defined(AQ_PLATFORM_WIN32)
 #include "HID/XInputPadBackend.h"
-#pragma comment(lib, "xinput.lib")
 
 namespace aq
 {
@@ -94,4 +93,4 @@ namespace aq
 		}
 	}
 }
-#endif // !AQ_PLATFORM_UWP
+#endif // AQ_PLATFORM_WIN32

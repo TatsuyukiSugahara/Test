@@ -62,10 +62,11 @@ flowchart LR
    - デスクトップ: `Debug` / `Release`（`x64`）
    - Xbox（UWP）: `DebugXbox` / `ReleaseXbox`
 4. **描画バックエンドの切り替え**
-   - 既定は **D3D12**（`aqEngine/aq.h` で自動選択）
-   - D3D11 / Vulkan を使う場合は、プロジェクトのプリプロセッサ定義で
-     `ENGINE_GRAPHICS_D3D11` または `ENGINE_GRAPHICS_VULKAN` を明示定義する
-     （複数同時定義はビルドエラーになる）
+   - MSBuild プロパティ `AqGraphicsApi`（`Game/GraphicsApi.props`）で選ぶ。既定は **D3D12**
+   - 例: `msbuild DirectX.sln /p:Configuration=Release /p:Platform=x64 /p:AqGraphicsApi=D3D11`
+   - `ENGINE_GRAPHICS_*` の定義とリンクするライブラリの両方がこのプロパティから決まるため、
+     `aq.h` を編集する必要はない（複数同時定義はビルドエラーになる）
+   - CMake からビルドする場合は同じ意味のキャッシュ変数 `AQ_GRAPHICS_API` を使う
 5. **実行**: `Game`（`DirectX.vcxproj`）をスタートアッププロジェクトにして起動
 
 > ※作業ディレクトリやアセットの配置など、実行時の前提はプロジェクト設定に依存します。

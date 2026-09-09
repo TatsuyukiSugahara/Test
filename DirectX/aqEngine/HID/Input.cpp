@@ -13,7 +13,7 @@ namespace aq
 
 		KeyBoard::~KeyBoard()
 		{
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			if (device_)
 			{
 				device_->Unacquire();
@@ -24,7 +24,7 @@ namespace aq
 		}
 
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 		HRESULT KeyBoard::Initialize(LPDIRECTINPUT8 input)
 		{
 			if (FAILED(input->CreateDevice(GUID_SysKeyboard, &device_, nullptr)))
@@ -43,7 +43,7 @@ namespace aq
 		{
 			aq::memory::Copy(old_, now_, sizeof(old_));
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			HRESULT hr = device_->GetDeviceState(sizeof(now_), &now_);
 			if (FAILED(hr))
 			{
@@ -95,7 +95,7 @@ namespace aq
 
 		Mouse::~Mouse()
 		{
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			if (device_)
 			{
 				device_->Unacquire();
@@ -106,7 +106,7 @@ namespace aq
 		}
 
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 		HRESULT Mouse::Initialize(LPDIRECTINPUT8 input)
 		{
 			if (FAILED(input->CreateDevice(GUID_SysMouse, &device_, nullptr)))
@@ -136,7 +136,7 @@ namespace aq
 		{
 			old_ = now_;
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			aq::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
 
 			HRESULT hr = device_->GetDeviceState(sizeof(DIMOUSESTATE2), &now_);
@@ -147,7 +147,7 @@ namespace aq
 					aq::memory::Clear(&now_, sizeof(DIMOUSESTATE2));
 			}
 #else
-			now_ = {};   // UWP: 入力なし(Phase 4 で GameInput)
+			now_ = {};   // UWP / Mac: 入力なし(Phase 4 の GameInput / P1 の Bridge 化で対応)
 #endif
 
 			for (uint32_t i = 0; i < 3; ++i)
@@ -200,7 +200,7 @@ namespace aq
 
 		math::Vector2 Mouse::GetCursorPos() const
 		{
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			POINT pos;
 			::GetCursorPos(&pos);
 			ScreenToClient(aq::Engine::Get().GetHWND(), &pos);
@@ -390,7 +390,7 @@ namespace aq
 			// デバイスを先に解放してから DirectInput オブジェクトを解放する
 			keyBoard_.reset();
 			mouse_.reset();
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			if (input_)
 			{
 				input_->Release();
@@ -402,7 +402,7 @@ namespace aq
 
 		HRESULT InputManager::Setup()
 		{
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			if (FAILED(DirectInput8Create(
 				GetModuleHandle(nullptr), DIRECTINPUT_VERSION,
 				IID_IDirectInput8, reinterpret_cast<VOID**>(&input_), nullptr)))
@@ -414,8 +414,8 @@ namespace aq
 			mouse_ = std::make_unique<Mouse>();
 			if (FAILED(mouse_->Initialize(input_))) return S_FALSE;
 #else
-			// UWP: DirectInput 不使用。KB/Mouse は no-op スタブとして生成しておく
-			// (wrapper が非 null 前提で参照するため)。実入力は Phase 4 の GameInput。
+			// UWP / Mac: DirectInput 不使用。KB/Mouse は no-op スタブとして生成しておく
+			// (wrapper が非 null 前提で参照するため)。実入力は Phase 4 の GameInput / P1 の Bridge 化。
 			keyBoard_ = std::make_unique<KeyBoard>();
 			mouse_    = std::make_unique<Mouse>();
 #endif

@@ -59,6 +59,7 @@ namespace aq
 			void Finalize() override;
 			void OnSuspend() override;   // PLM: GPU をアイドルにする
 			void OnResume()  override;
+			void WaitIdle()   override;   // 提出済み GPU 作業の完了待ち(WaitForGPU)
 			void SetupRenderContext(RenderContext& outContext) override;
 			uint32_t GetMainRenderTargetCount() const override;
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;

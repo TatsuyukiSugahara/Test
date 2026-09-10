@@ -48,6 +48,9 @@ namespace aq
 			void OnSuspend();
 			void OnResume();
 
+			// 提出済みの全 GPU 作業の完了待ち(終了処理でリソースを破棄する前に呼ぶ)。実装へ委譲。
+			void WaitIdle();
+
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);
 

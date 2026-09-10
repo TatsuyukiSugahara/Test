@@ -32,9 +32,6 @@
 #include "Graphics/Vulkan/VulkanImGui.h"
 #endif
 #endif
-#ifdef ENGINE_GRAPHICS_VULKAN
-#include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"   // Finalize 前の vkDeviceWaitIdle 用
-#endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #include "Level/LevelComponentRegistry.h"
 #include "Level/LevelStreamSystem.h"
@@ -319,19 +316,14 @@ namespace aq
 			renderThreadReady_ = false;
 		}
 
-#ifdef ENGINE_GRAPHICS_VULKAN
 		// この下で ImGui / UIContext / ResourceManager / EntityContext が GPU リソースを
 		// 破棄していくが、RenderThread の完了待ちは CPU 側(コマンド積み)までしか見ないため、
-		// 最後のフレームがまだ GPU で走っていることがある。そのまま壊すと validation が
-		// 「currently in use by VkCommandBuffer」を並べ、VMA が未解放アロケーションで
-		// アサートして終了時にクラッシュする(Mac 実機の P2 で発覚)。
-		// D3D11/D3D12 は Present までに同期が入るためこの待ちを持たない。
-		if (auto* vulkanDevice = dynamic_cast<aq::graphics::VulkanGraphicsDeviceImpl*>(
-			    aq::graphics::GraphicsDevice::Get().GetImplRaw()))
-		{
-			vulkanDevice->WaitDeviceIdle();
-		}
-#endif
+		// 最後のフレームがまだ GPU で走っていることがある。そのまま壊すと
+		//  - Vulkan: validation が「currently in use by VkCommandBuffer」を並べ VMA がアサート(Mac P2 で発覚)
+		//  - D3D12 : Present はフェンス Signal のみで待たないため、在フライトの参照先を解放して
+		//            終了時に例外(タイミング依存で再現)
+		// となるため、API を問わず提出済みの GPU 作業を完了させてから破棄に入る(D3D11 は no-op)。
+		aq::graphics::GraphicsDevice::Get().WaitIdle();
 
 #ifdef AQ_IMGUI
 		if (imguiReady_)

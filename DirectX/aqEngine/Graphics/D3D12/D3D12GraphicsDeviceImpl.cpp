@@ -167,6 +167,14 @@ namespace aq
 		}
 
 
+		void D3D12GraphicsDeviceImpl::WaitIdle()
+		{
+			// Present はフェンスを Signal するだけで待たない(frames-in-flight)。
+			// 終了処理で GPU 参照中のリソースを破棄する前に、提出済みの全コマンドを完了させる。
+			if (commandQueue_ && fence_) WaitForGPU();
+		}
+
+
 		bool D3D12GraphicsDeviceImpl::CreateDeviceAndQueues()
 		{
 #ifdef _DEBUG

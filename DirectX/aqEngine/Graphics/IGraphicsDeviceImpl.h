@@ -44,6 +44,13 @@ namespace aq
 			virtual void OnResume()  {}
 
 			/**
+			 * 提出済みの全 GPU 作業が完了するまで待つ(GPU アイドル化)。
+			 * GPU が参照中かもしれないリソースを破棄する前(終了処理など)に呼ぶ。
+			 * 即時実行モデル(D3D11)では不要のため既定は no-op。
+			 */
+			virtual void WaitIdle() {}
+
+			/**
 			 * RenderContext に API 依存のコンテキストを渡す。
 			 * D3D11 なら ID3D11DeviceContext*、D3D12 なら CommandList など。
 			 */

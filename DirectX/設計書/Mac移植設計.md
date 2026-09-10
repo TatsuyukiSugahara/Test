@@ -18,12 +18,24 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
 
 ### 引き継ぎで最初に読むべきこと
 
-1. **Windows 側の回帰確認が一度も行われていない。** 本移植は Mac 固有ではない不具合を
-   いくつも掘り当てており(下記)、それらは**プラットフォーム非依存のコードを触っている**。
-   Windows で D3D11 / D3D12 / Vulkan / UWP をビルドして動かすまで、回帰の有無は不明。
+1. **Windows 側の回帰確認(2026-09-10 実施)**: `DirectX.sln`(MSBuild v145)で D3D11 / D3D12 / Vulkan の
+   Debug をビルドし、いずれも 0 エラー・警告 54 件(マージ前と同数。C4099×2 はマージ前から存在)。
+   3 構成ともタイトル画面まで起動し、ウィンドウを閉じて終了コード 0 で終わることを確認した。
+   - **D3D12 の終了時クラッシュ(例外 0x87D、タイミング依存)を発見・修正**。マージ前のコミット
+     (6dd3e7f)でも同じ条件で再現したため**本移植の回帰ではなく既存不具合**。原因は D3D12 の
+     `Present` がフェンスを Signal するだけで待たないのに、`Application::Finalize` が
+     `D3D12ImGui::Shutdown` で在フライトの GPU 参照先を解放していたこと。Vulkan だけに入れていた
+     `WaitDeviceIdle` を、抽象IF `IGraphicsDeviceImpl::WaitIdle()`(既定 no-op、D3D12=`WaitForGPU`、
+     Vulkan=`vkDeviceWaitIdle`)に一般化して API を問わず待つようにした(§8-19)。
+   - **この PC で検証できなかったもの**: UWP(`DebugXbox`)は VS 18 / VS 2022 のどちらにも
+     Windows Store 向け C++ ツールセット(v142/v143/v145)が無く MSB8020 で止まる(コードの問題ではない)。
+     Release は `ThirdParty/BulletPhysics/lib/Release` の prebuilt が無く `LNK1181`(gitignore 対象で
+     ローカルに Debug しか無い環境依存)。コンパイルは通っている。
+   - 未確認: 実操作(キー/パッド)での通しプレイ、`GameTimer` の FPS 制限(ゲーム側で `SetFPSLimit` 未使用)。
 2. Mac で見つけた「Mac 固有ではない」不具合(いずれも Windows にも同じものがある):
    - `void*` への `delete` でデストラクタが走らずリソースが漏れていた(リソース 4 型)
-   - 終了時に GPU の完了を待たずにリソースを破棄していた
+   - 終了時に GPU の完了を待たずにリソースを破棄していた(Vulkan で発見。D3D12 でも同根の
+     クラッシュがあり Windows 回帰確認で修正 → §8-19)
    - 関数ローカル static / グローバルなキャッシュが GPU デバイスより長生きしていた(3 例)
    - **Vulkan バックエンドにインスタンス描画が丸ごと欠けていた**(路面・草・コインが出ない)
    - パス途中で SRV に束縛される RT のレイアウト遷移が抜けていた
@@ -270,6 +282,16 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
    Windows(VSync オフ)との比較には present mode の選択(`IMMEDIATE` / `MAILBOX` の
    対応可否を見て選ぶ)か、GPU タイムスタンプによる計測が要る。どちらも Vulkan
    バックデンド共通の話なので Windows 側とまとめて決める。
+19. **D3D12 の終了時クラッシュ(Windows 回帰確認で発見・修正済)**: `Application::Finalize` が
+   `renderThread_.Finalize()`(CPU 側の完了待ちのみ)の直後に `D3D12ImGui::Shutdown()` で
+   VB/IB/フォント/PSO を解放するが、D3D12 の `Present` は `commandQueue_->Signal` するだけで
+   GPU 完了を待たない(frames-in-flight)ため、最後のフレームが参照中のリソースを解放して
+   `KERNELBASE` で例外 0x87D(終了コード 2173)。15 秒実行で 3/3・25 秒で 1/2 と**タイミング依存**で、
+   マージ前(6dd3e7f)でも再現する既存不具合。D3D11 は即時実行モデルのため発生しない。
+   修正: `IGraphicsDeviceImpl::WaitIdle()`(既定 no-op)を追加し D3D12=`WaitForGPU()` /
+   Vulkan=`WaitDeviceIdle()` で override、`GraphicsDevice::WaitIdle()` 経由で `Application::Finalize`
+   が API を問わず呼ぶ(Vulkan 限定の `dynamic_cast` 分岐を撤去)。修正後 D3D12 ×5 / Vulkan ×2 /
+   D3D11 ×1 の起動→終了がすべて終了コード 0。
 ---
 
 ## 9. フェーズ計画
@@ -602,6 +624,8 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
 - [ ] キーボード/マウス/パッドで AquaDash が**通してプレイ**できる
       (基本操作の確認は P2.5 で済ませた。ここでは音と UI を含めた通しプレイを見る)
 - [ ] Windows 側の回帰なし(D3D12/Vulkan/UWP がビルド・動作)
+      (2026-09-10: D3D11/D3D12/Vulkan はビルド・起動・終了まで確認済(冒頭「引き継ぎ」1)。
+      UWP は Windows Store ツールセットが無い PC のため未確認)
 
 ### P5: 配布形態(任意)
 

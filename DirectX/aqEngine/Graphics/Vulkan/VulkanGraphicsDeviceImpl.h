@@ -100,6 +100,7 @@ namespace aq
 			 * GPU リソースを破棄する前段ではこちらで在フライトのコマンドバッファを空にする。
 			 */
 			void WaitDeviceIdle();
+			void WaitIdle() override { WaitDeviceIdle(); }
 
 		private:
 			bool CreateInstance();

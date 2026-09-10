@@ -180,9 +180,8 @@
    - `-Wdelete-abstract-non-virtual-dtor` 2 件 — `aq::IApplication`(`Engine.cpp:115`)と `app::actor::IState`(`StateMachine.cpp:117`)を、仮想デストラクタ無しの抽象基底ポインタ経由で `delete` している。**派生のデストラクタが走らない未定義動作**なので P1 で潰す
    - `-Wnontrivial-memcall` 6 件 — `MaterialCBData` / `Matrix4x4` への `memcpy`。実体はトリビアルに扱える見込みだが要確認
    - `-Wreorder-ctor` 1 件(`Graphics/Camera.cpp:10`)、`-Winconsistent-missing-override` 5 件、`-Wmicrosoft-exception-spec` 16 件<br>`-Wdelete-abstract-non-virtual-dtor` の 2 件は解消済み(コミット e5eecf2)
-8. **`CompressedDecoder.h` の Mac 分岐が未定義**(P1 で判明): 設計では `ExtAudioFileDecoder` を P4 で足すことになっているが、
-   **P2 は「Mac でビルド・リンクが通る」ことが到達点**なので、P2 の時点で `SoundClip.cpp` / `SoundEngine.cpp` が
-   コンパイルできない。P2 で Mac 分岐に Null デコーダを置き、P4 で `ExtAudioFileDecoder` に差し替える。
+8. ~~**`CompressedDecoder.h` の Mac 分岐が未定義**~~ → **解決(P4a)**。P2 で置いた `NullDecoder` を
+   `ExtAudioFileDecoder`(AudioToolbox の `ExtAudioFile`)へ差し替えた。
 9. **`ISoundVoice::SetOutputMatrix` のコメントと実装が逆**(P1 で判明): ヘッダは「入力ch × 出力ch, row-major」だが、
    `XAudio2SoundVoice` は XAudio2 の並び(出力ch × 入力ch)でそのまま渡している。`SoftwareMixer` は Windows と
    音が一致する方(XAudio2 の並び)に合わせた。唯一の呼び出し元(`SoundSource.cpp:138`、src=1/dst=2)は
@@ -501,19 +500,61 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
       - `.fx` から拾ったエントリらしき関数 59 件がすべて `shader_entries.txt` にあり、
         `Game/Assets/Shader/spv/` に 59 本生成されている(過不足 0)
 
-### P4: Mac で入力・サウンド・デバッグ UI(Mac 実機)
+### P4a: Mac のサウンド(Mac 実機)
+
+**入力は P2.5 で済ませたので、旧 P4 の残りをサウンドと ImGui に分けた**(互いに独立していて、
+問題が出たときの切り分けが楽なため)。こちらはサウンドだけ。
 
 実装:
-- ~~§3.2 の Cocoa 入力 + `GameControllerPadBackend`~~ → **P2.5 へ前倒し**(理由は P2.5 の冒頭)。
 - §5 の `CoreAudioSoundBackend`/`CoreAudioSoundVoice`/`ExtAudioFileDecoder` を `SoftwareMixer` に接続。
-- `imgui_impl_osx`。
+- `SoundBackend.h` の MAC 分岐を `SOUND_BACKEND_NULL` → `SOUND_BACKEND_COREAUDIO` へ。
+- `CompressedDecoder.h` の MAC 分岐を `NullDecoder` → `ExtAudioFileDecoder` へ(§8-8 の解消)。
+
+決定事項:
+- **出力フォーマットは 48kHz / float32 / 2ch のインターリーブ**で AudioUnit を開く。
+  `SoftwareMixer::Render(float* out, frames)` の出力をコールバックのバッファへ直接書けるため、
+  レンダーコールバック内でのコピーも確保も発生しない(§5 が要求する実時間契約)。
+- `SoundEngine` / `Mixer3D` / `SoundStream` / `AudioDirector` は無変更。
 
 評価:
-- [ ] キーボード/マウス/パッドで AquaDash が**通してプレイ**でき、長押し・トリガー判定が Windows と同じ
-      (基本操作の確認は P2.5 で済ませる。ここでは音と UI を含めた通しプレイを見る)
-- [ ] BGM(mp3/wav)・SE・3D 音源が再生され、ピッチ/パン/バス音量が反映される。停止・一時停止・自然終了の回収が動く
+- [x] AudioUnit が開いてレンダーコールバックが回り、`GetOutputClock` の `outputFrames` が進む
+      - 起動 149.9ms で `[sound] CoreAudio 出力を開始 (48kHz / float32 / 2ch)`。
+        `outputFrames` は 300 ゲームフレーム(= 5 秒)ごとにちょうど約 240,000 進み、
+        **実時間と一致**する(48000 × 5)
+- [x] **出力が無音でない**ことを波形で確認
+      - レンダーコールバックの出力ピークを 1 秒ごとに測ると、左右で異なる値
+        (L 0.65〜0.83 / R 0.66〜0.84)が連続して出る。クリップ(1.0 到達)は無し。
+        デコーダ → `SoftwareMixer` → CoreAudio → デバイスが通っている証拠
+- [x] `latencySeconds` が実測値になる(**12.9ms**)
+      - `kAudioUnitProperty_Latency` は AudioUnit 自身の遅延しか返さず DefaultOutput では 0。
+        A/V 同期(`SoundStream`)が欲しいのは「書いた PCM が鳴るまで」なので、HAL 側の
+        デバイス遅延 + セーフティオフセット + バッファ長を足して求めるようにした
+- [ ] アンダーランが発生しない
+      - **起動直後に 2 回**発生し、その後は増えない(以降ずっと 2 のまま)。
+        BGM ストリームの投入がデバイス開始に追いつくまでの立ち上がりと見られる。
+        定常状態では 0 なので実害は無いが、Windows 側と比較していないため未確定
+- [ ] BGM(wav/mp3)・SE・3D 音源が**実際に聞こえる**。ピッチ/パン/バス音量が反映される
+      - **耳での確認待ち**(波形上は鳴っている)
+- [ ] 停止・一時停止・自然終了の回収が動く
 - [ ] `SoundStream` の A/V 同期指標が Windows と同等の範囲
+- [x] Windows 側の回帰なし(`AQ_PLATFORM_WIN32` 側のプリプロセス結果が変わらない)
+      - 共有ファイルの差分は `SoundBackend.h` / `CompressedDecoder.h` の Mac 分岐と
+        `aqEngine/CMakeLists.txt` の `elseif(APPLE)` 内(`-framework CoreAudio` 追加)のみ。
+        新規ファイルは `Sound/CoreAudio/` と `Sound/Decoder/ExtAudioFileDecoder.*` で、
+        CMake が非 Mac では除外する
+
+### P4b: Mac のデバッグ UI(Mac 実機)
+
+実装:
+- `imgui_impl_osx` の同梱と配線。
+- §8-5(`imgui_impl_osx` が `NSView` に張るイベントモニタと `PlatformMac::PumpEvents` の
+  二重処理)の順序決め。
+
+評価:
 - [ ] ImGui のデバッグ UI が表示・操作でき、`SuppressKeyboard/Mouse` がゲーム入力と排他になる
+- [ ] 入力が二重に処理されない(1 回のクリックで ImGui とゲームの両方が反応しない)
+- [ ] キーボード/マウス/パッドで AquaDash が**通してプレイ**できる
+      (基本操作の確認は P2.5 で済ませた。ここでは音と UI を含めた通しプレイを見る)
 - [ ] Windows 側の回帰なし(D3D12/Vulkan/UWP がビルド・動作)
 
 ### P5: 配布形態(任意)

@@ -187,6 +187,7 @@ elseif(APPLE)
 		"-framework Metal"
 		"-framework GameController"
 		"-framework AudioToolbox"
+		"-framework CoreAudio"
 		"-framework AVFoundation"
 	)
 endif()

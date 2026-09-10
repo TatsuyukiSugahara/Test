@@ -5,7 +5,7 @@
 //  プラットフォームで自動分岐する（§10）。
 //    Windows デスクトップ : XAudio2
 //    Xbox(UWP / 道A)      : XAudio2（UWP でも XAudio2 2.9 が標準。ほぼ無改修）
-//    Mac                  : 無音（NullSoundBackend）。CoreAudio 実装は P4 で追加
+//    Mac                  : CoreAudio（AudioUnit + SoftwareMixer）
 //    Android              : Oboe（フェーズ5で追加予定）
 // ============================================================
 
@@ -14,7 +14,7 @@
 #if defined(AQ_PLATFORM_WINDOWS_FAMILY)
 #  define SOUND_BACKEND_XAUDIO2
 #elif defined(AQ_PLATFORM_MAC)
-#  define SOUND_BACKEND_NULL
+#  define SOUND_BACKEND_COREAUDIO
 #elif defined(__ANDROID__)
 #  define SOUND_BACKEND_OBOE
 #endif
@@ -25,11 +25,16 @@
 #include "XAudio2/XAudio2SoundBackend.h"
 namespace aq { namespace sound { using DefaultSoundBackend = XAudio2SoundBackend; } }
 
+#elif defined(SOUND_BACKEND_COREAUDIO)
+
+// Mac: AudioUnit（既定の出力デバイス）を 1 つ開き、レンダーコールバックで
+// SoftwareMixer::Render を回す（Mac移植設計 §5 / §9 P4a）。
+#include "CoreAudio/CoreAudioSoundBackend.h"
+namespace aq { namespace sound { using DefaultSoundBackend = CoreAudioSoundBackend; } }
+
 #elif defined(SOUND_BACKEND_NULL)
 
-// Mac: P2〜P3 は無音で進める（Initialize は成功し、ボイスも作れる）。
-// TODO(P4): Sound/CoreAudio/CoreAudioSoundBackend.{h,mm} を追加して
-//           SOUND_BACKEND_COREAUDIO へ差し替える（Mac移植設計 §5 / §9 P4）。
+// どのプラットフォームでも使える無音バックエンド（移植の足場用に残してある）。
 #include "NullSoundBackend.h"
 namespace aq { namespace sound { using DefaultSoundBackend = NullSoundBackend; } }
 

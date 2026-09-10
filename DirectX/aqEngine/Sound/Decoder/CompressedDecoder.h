@@ -26,17 +26,15 @@ namespace aq
 	}
 }
 #elif defined(AQ_PLATFORM_MAC)
-#include "Sound/Decoder/NullDecoder.h"
+#include "Sound/Decoder/ExtAudioFileDecoder.h"
 
 namespace aq
 {
 	namespace sound
 	{
-		// Mac: P2〜P3 は圧縮音源をデコードしない(Open / DecodeFileFully が常に false)。
-		// エイリアスを定義しておくことで SoundClip.cpp / SoundEngine.cpp が無改修で通る
-		// (Mac移植設計 §8-8)。
-		// TODO(P4): ExtAudioFileDecoder に差し替える。
-		using CompressedDecoder = NullDecoder;
+		// Mac: AudioToolbox の ExtAudioFile。OS が対応する形式(mp3 / aac / m4a 等)を
+		// 16bit PCM へ落とす。MFDecoder と同じ契約(Mac移植設計 §5)。
+		using CompressedDecoder = ExtAudioFileDecoder;
 	}
 }
 #else

@@ -3,6 +3,7 @@
 // (Win32 は PlatformWin32.cpp、UWP は PlatformUWP.cpp が代替)。
 #if defined(AQ_PLATFORM_MAC)
 #include "Platform/Mac/PlatformMac.h"
+#include "HID/Mac/CocoaInputSink.h"
 #import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -76,6 +77,90 @@ namespace
 			[layer setDrawableSize:CGSizeMake(bounds.width, bounds.height)];
 		}
 	}
+
+
+	// イベントの位置をビュー座標(左上原点)へ直して入力シンクへ渡す。
+	// Cocoa は左下原点なので Y を反転する。§8-13 の決定で contentsScale = 1 に
+	// してあるため、ポイント座標と描画ピクセルは 1:1 で倍率補正は要らない。
+	void PushMousePosition(NSEvent* event, NSView* view, float deltaX, float deltaY)
+	{
+		const NSPoint inView = [view convertPoint:[event locationInWindow] fromView:nil];
+		const CGFloat height = [view bounds].size.height;
+		aq::hid::CocoaInputSink::Get().OnMouseMove(
+			static_cast<float>(inView.x),
+			static_cast<float>(height - inView.y),
+			deltaX, deltaY);
+	}
+
+
+	// NSEvent を CocoaInputSink へ振り分ける(設計書/Mac移植設計.md §3.2)。
+	// ここが「Cocoa の型を扱う最後の場所」で、シンクから先には NSEvent / NSView は出ない。
+	void DispatchInputEvent(NSEvent* event, NSView* view)
+	{
+		if (event == nil || view == nil)
+		{
+			return;
+		}
+		// 別ウィンドウ(将来のパネル等)のイベントは拾わない。
+		// keyDown 等は window が nil になることがないが、念のため両方を見る。
+		NSWindow* eventWindow = [event window];
+		if (eventWindow != nil && eventWindow != [view window])
+		{
+			return;
+		}
+
+		aq::hid::CocoaInputSink& sink = aq::hid::CocoaInputSink::Get();
+
+		switch ([event type])
+		{
+		case NSEventTypeKeyDown:
+			// isARepeat のリピートも「押されている」ことに変わりはないのでそのまま通す。
+			sink.OnKey([event keyCode], true);
+			break;
+
+		case NSEventTypeKeyUp:
+			sink.OnKey([event keyCode], false);
+			break;
+
+		case NSEventTypeFlagsChanged:
+			sink.OnModifierFlagsChanged(([event modifierFlags] & NSEventModifierFlagCommand) != 0);
+			break;
+
+		case NSEventTypeMouseMoved:
+		case NSEventTypeLeftMouseDragged:
+		case NSEventTypeRightMouseDragged:
+		case NSEventTypeOtherMouseDragged:
+			PushMousePosition(event, view,
+			                  static_cast<float>([event deltaX]),
+			                  static_cast<float>([event deltaY]));
+			break;
+
+		case NSEventTypeLeftMouseDown:
+		case NSEventTypeLeftMouseUp:
+		case NSEventTypeRightMouseDown:
+		case NSEventTypeRightMouseUp:
+		case NSEventTypeOtherMouseDown:
+		case NSEventTypeOtherMouseUp:
+		{
+			const NSEventType type = [event type];
+			const bool pressed = (type == NSEventTypeLeftMouseDown)
+			                  || (type == NSEventTypeRightMouseDown)
+			                  || (type == NSEventTypeOtherMouseDown);
+			// buttonNumber は左=0 / 右=1 / 中=2 で、DirectInput の rgbButtons と同じ並び。
+			sink.OnMouseButton(static_cast<int32_t>([event buttonNumber]), pressed);
+			// クリックだけでカーソルが動かない場合もあるので位置も更新しておく。
+			PushMousePosition(event, view, 0.0f, 0.0f);
+			break;
+		}
+
+		case NSEventTypeScrollWheel:
+			sink.OnScrollWheel(static_cast<float>([event scrollingDeltaY]));
+			break;
+
+		default:
+			break;
+		}
+	}
 }
 
 
@@ -89,6 +174,15 @@ namespace
 		platform_ = platform;
 	}
 	return self;
+}
+
+
+// 非アクティブになったキー/ボタンを持ち越さない。macOS は Command 押下中の keyUp を
+// 配送しないなど、押しっぱなしが残りやすい(CocoaInputSink 側でも同じ対策を入れている)。
+- (void)windowDidResignKey:(NSNotification*)notification
+{
+	(void)notification;
+	aq::hid::CocoaInputSink::Get().OnFocusLost();
 }
 
 
@@ -241,6 +335,17 @@ namespace aq
 				UpdateLayerBacking(view);
 
 				[window makeKeyAndOrderFront:nil];
+				// アプリを前面に出す。`NSApp run` を使わず自前でループを回しているため、
+				// これが無いとアプリがアクティブにならず、**ウィンドウがキーウィンドウに
+				// ならないのでキーボードイベントがキューに入らない**(P2.5 で発覚)。
+				if (@available(macOS 14.0, *))
+				{
+					[NSApp activate];
+				}
+				else
+				{
+					[NSApp activateIgnoringOtherApps:YES];
+				}
 
 				objects_ = new MacWindowObjects();
 				objects_->window         = window;
@@ -273,11 +378,10 @@ namespace aq
 						break;
 					}
 
-					// TODO(P4): キー/マウスイベント(keyDown/keyUp/flagsChanged/mouseMoved/
-					// mouseDown/mouseUp/scrollWheel)を CocoaInputSink へ転送する
-					// (設計書/Mac移植設計.md §3.2)。P2 では転送先が無いのでそのまま流す。
-					// TODO(Mac実機): 要確認 — imgui_impl_osx は NSView にイベントモニタを張るため、
-					// ここの sendEvent と二重処理になりうる(設計書 §8-5)。順序は P4 で決める。
+					// 入力シンクへ転送してから NSApplication へ流す。
+					// TODO(P4): imgui_impl_osx は NSView にイベントモニタを張るため、
+					// ここの sendEvent と二重処理になりうる(設計書 §8-5)。順序は P4 で再確認する。
+					DispatchInputEvent(event, objects_ != nullptr ? objects_->view : nil);
 					[NSApp sendEvent:event];
 				}
 			}

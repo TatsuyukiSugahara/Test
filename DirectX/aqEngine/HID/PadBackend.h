@@ -32,15 +32,15 @@ namespace aq
 	}
 }
 #elif defined(AQ_PLATFORM_MAC)
-#include "HID/NullPadBackend.h"
+#include "HID/Mac/GameControllerPadBackend.h"
 
 namespace aq
 {
 	namespace hid
 	{
-		// Mac: P2〜P3 はパッド入力なしで進める(常に未接続)。
-		// TODO(P4): HID/Mac/GameControllerPadBackend へ差し替える。
-		using DefaultPadBackend = NullPadBackend;
+		// Mac: GameController.framework。Xbox / DualShock / DualSense を OS が
+		// 同じプロファイルへ正規化するので HID 直読みは要らない(設計書 §3.2)。
+		using DefaultPadBackend = GameControllerPadBackend;
 	}
 }
 #else

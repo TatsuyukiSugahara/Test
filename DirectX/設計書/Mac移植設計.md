@@ -377,7 +377,95 @@
         Mac 実機では `.spv` だけで全シェーダが生成できることを確認済み(上記)
 - [x] Retina 環境での `drawableSize` と描画解像度の扱いを §8-13 に記録した
 
+### P2.5: Mac の入力(Mac 実機) ― P3 より先に実施
+
+**P4 から前倒しした。** P3 の評価は「タイトル〜**ステージ**まで Windows と同じ見た目」だが、
+Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` とも Mac は Null 実装)で、
+**タイトル画面から先へ進めないため P3 を評価できない**。入力だけを P4 から切り出して先に置く。
+サウンド(`CoreAudioSoundBackend`)と `imgui_impl_osx` は P4 に残す。
+
+実装:
+- §3.2 の `CocoaInputSink` / `CocoaKeyboardBackend` / `CocoaMouseBackend`。
+- §3.2 の `GameControllerPadBackend`。
+- `PlatformMac::PumpEvents` からシンクへの `NSEvent` 転送(現在の `TODO(P4)` を潰す)。
+- `KeyboardMouseBackend.h` / `PadBackend.h` の MAC 分岐を Null から実装へ差し替え。
+
+決定事項(P2.5 で決めたもの):
+- **シンクへの到達手段**: `CocoaInputSink` は `.mm` 内のファイルスコープシングルトン。
+  `PlatformMac`(転送側)と `Cocoa*Backend`(取得側)はどちらも Mac 専用なので、
+  `IPlatform` にも `IKeyboardBackend` にも露出させない(§3.2 の方針どおり)。
+  GPU リソースを持たないため、シングルトンの寿命は問題にならない。
+- **キーコード**: Carbon 仮想キーコード(`kVK_*`)の数値を自前の名前付き定数として持ち、
+  `Carbon.framework` には依存しない。値は macOS の ANSI 配列で固定されている。
+- **座標系**: §8-13 の決定で `contentsScale = 1` にしてあるため、
+  **NSView のポイント座標 = 描画ピクセル座標が 1:1** になる。Y は Cocoa が左下原点なので
+  `MouseState::cursorX/Y`(左上原点)へ反転するだけでよく、倍率補正は要らない。
+- **`imgui_impl_osx` との競合**(§8-5): P2.5 では `imgui_impl_osx` を入れないため競合しない。
+  `PumpEvents` は「シンクへ転送 → `[NSApp sendEvent:]`」の順とし、P4 で imgui を足すときに
+  この順序のまま二重処理にならないかを再確認する。
+- **振動は P2.5 では実装しない**: `GameControllerPadBackend::SetVibration` は no-op に留める。
+  `GCDeviceHaptics` + `CHHapticEngine` はエンジンの生成/停止の寿命管理が要り、
+  `CoreHaptics.framework` のリンク追加も伴う。P2.5 の目的(ステージまで進める)に不要なため
+  **P4 へ回す**。アダプティブトリガー(`SetTriggerResistance`)は
+  `GCDualSenseAdaptiveTrigger` で素直に書けるので P2.5 で入れる。
+
+実装中に決めた追加事項:
+- **押下のラッチ**: `CocoaInputSink` は「前回の取得以降に一度でも押されたキー/ボタン」も
+  押下として返す。DirectInput はデバイスの**現在状態**をサンプリングするが Cocoa は離散
+  イベントで届くため、1 フレームが長引くと(ロード中のヒッチ等)そのフレーム内で押して
+  離すところまで進み、レベルだけ見ていると取りこぼす。次の取得では実レベルへ戻るので
+  トリガー判定がちょうど 1 回成立する。
+- **`.mm` にしないもの**: `CocoaInputSink` / `CocoaKeyboardBackend` / `CocoaMouseBackend` は
+  Objective-C を一切使わないため `.cpp`(§3.2 は `.mm` としていたが実態に合わせる)。
+  Cocoa の型を触るのは `PlatformMac.mm` と `GameControllerPadBackend.mm` だけ。
+
+評価:
+- [x] キーボードで AquaDash のタイトル → ステージまで操作できる
+      - Space(仮想キーコード 49)でタイトルが進み、ステージ用アセット
+        (`Terrain/grass.DDS` / `rock.DDS` / `snow.DDS` / `utc_all2.dds` / `utc_nomal.dds`)の
+        読み込みまで到達することを確認
+      - **前提として 2 つ潰した**:
+        1. `.app` の `CFBundleIdentifier` が**空文字列**だった(CMake の既定 Info.plist)。
+           識別子が空のバンドルは macOS から通常のアプリとして扱われず、
+           ウィンドウがキーウィンドウにならないためキーボードイベントがキューに届かない。
+           `Game/CMakeLists.txt` で `MACOSX_BUNDLE_GUI_IDENTIFIER` 等を設定した
+        2. `NSApp run` を使わず自前ループを回しているため、`makeKeyAndOrderFront:` だけでは
+           アプリがアクティブにならない。`[NSApp activate]`(macOS 14 未満は
+           `activateIgnoringOtherApps:`)を追加した。`MacMain.mm` の `TODO(Mac実機)` が
+           想定していたとおりの症状
+- [x] トリガー(押した瞬間)判定が効く
+      - Space の 1 回押下でちょうど 1 回だけ画面が進む(2 回押して 2 段進む)ことを確認
+      - **長押しの挙動は未検証**。現在の AquaDash に「押しっぱなしで繰り返す」操作が
+        見当たらず、観測できる差が作れなかった。P4 の通しプレイで見る
+- [x] マウスのカーソル位置が正しい
+      - ウィンドウ位置 (95, 58) / サイズ 1280x752(コンテンツ 720 + タイトルバー 32)の状態で、
+        画面座標 (WX+100, WY+100) へワープ → クライアント (100.0, **68.0**) を取得。
+        タイトルバー分を引いた期待値と一致し、(+200, +100) 移動も 1:1 で反映された
+        (§8-13 で `contentsScale = 1` にしたため Retina でも倍率補正が要らないことの裏取り)
+      - 左クリックが `buttons[0] = 0x80` として取れることも確認
+      - **UI のヒットテストとの一致は未検証**。AquaDash の画面 JSON に `button` コンポーネントが
+        無く(使っているのは `image` / `text` / `nineSlice` / `circleGauge`)、
+        マウスで押せる UI が存在しないため。P4 で ImGui のパネルを足したときに見る
+      - **相対移動量(dx/dy)も未検証**。合成イベント(`CGWarpMouseCursorPosition`)では
+        delta が常に 0 になるため、実際に手で動かさないと確認できない
+- [ ] パッド(接続時)でスティック・ボタンが効く
+      - **実機コントローラが無く未検証**。未接続時に `connected=false` で落ちないことは、
+        今回の全実行(パッド無し)で確認済み。振動は P4
+- [x] Windows 側の回帰なし(`AQ_PLATFORM_WIN32` 側のプリプロセス結果が変わらない)
+      - 共有ファイルの差分は `KeyboardMouseBackend.h` / `PadBackend.h` の
+        `#elif defined(AQ_PLATFORM_MAC)` ブロック内と、`Game/CMakeLists.txt` の
+        `if(APPLE)` ブロックのみ。新規ファイルは全て `HID/Mac/` で、CMake が非 Mac では除外する
+
 ### P3: Mac で実シーン(Mac 実機)
+
+> P2.5 でステージまで到達できるようになった時点で、**次の 2 件が既に見えている**。
+> どちらもステージに入って初めて出るもので、P3 の入口の課題として扱う。
+> 1. **イメージレイアウトの検証エラー**: `vkQueueSubmit2()` が
+>    「`SHADER_READ_ONLY_OPTIMAL` を期待しているが現在は `COLOR_ATTACHMENT_OPTIMAL`」と
+>    毎フレーム報告する(同一 VkImage について 10 件で打ち止め)。レンダーターゲットを
+>    シェーダリソースとして読む箇所のバリアが抜けている。タイトル画面では出ない。
+> 2. **終了時の VMA アサート再発**: ステージのリソースにも、GPU デバイス破棄より後まで
+>    生き残る保持者が残っている(タイトルだけなら `e8710e4` の修正で解消済み)。
 
 実装:
 - `.spv` をビルド時生成(§4)。アセットの `GetContentRoot` 経由読み込み。
@@ -392,12 +480,13 @@
 ### P4: Mac で入力・サウンド・デバッグ UI(Mac 実機)
 
 実装:
-- §3.2 の Cocoa 入力 + `GameControllerPadBackend`。
+- ~~§3.2 の Cocoa 入力 + `GameControllerPadBackend`~~ → **P2.5 へ前倒し**(理由は P2.5 の冒頭)。
 - §5 の `CoreAudioSoundBackend`/`CoreAudioSoundVoice`/`ExtAudioFileDecoder` を `SoftwareMixer` に接続。
 - `imgui_impl_osx`。
 
 評価:
-- [ ] キーボード/マウス/パッドで AquaDash がプレイでき、長押し・トリガー判定が Windows と同じ
+- [ ] キーボード/マウス/パッドで AquaDash が**通してプレイ**でき、長押し・トリガー判定が Windows と同じ
+      (基本操作の確認は P2.5 で済ませる。ここでは音と UI を含めた通しプレイを見る)
 - [ ] BGM(mp3/wav)・SE・3D 音源が再生され、ピッチ/パン/バス音量が反映される。停止・一時停止・自然終了の回収が動く
 - [ ] `SoundStream` の A/V 同期指標が Windows と同等の範囲
 - [ ] ImGui のデバッグ UI が表示・操作でき、`SuppressKeyboard/Mouse` がゲーム入力と排他になる

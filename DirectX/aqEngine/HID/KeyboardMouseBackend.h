@@ -36,17 +36,17 @@ namespace aq
 	}
 }
 #elif defined(AQ_PLATFORM_MAC)
-#include "HID/NullKeyboardBackend.h"
-#include "HID/NullMouseBackend.h"
+#include "HID/Mac/CocoaKeyboardBackend.h"
+#include "HID/Mac/CocoaMouseBackend.h"
 
 namespace aq
 {
 	namespace hid
 	{
-		// Mac: P2〜P3 は入力なしで進める。
-		// TODO(P4): CocoaKeyboardBackend / CocoaMouseBackend(HID/Mac/)へ差し替える。
-		using DefaultKeyboardBackend = NullKeyboardBackend;
-		using DefaultMouseBackend    = NullMouseBackend;
+		// Mac: NSEvent を PlatformMac::PumpEvents が CocoaInputSink へ流し、
+		// バックエンドはそれを読むだけ(設計書/Mac移植設計.md §3.2)。
+		using DefaultKeyboardBackend = CocoaKeyboardBackend;
+		using DefaultMouseBackend    = CocoaMouseBackend;
 	}
 }
 #else

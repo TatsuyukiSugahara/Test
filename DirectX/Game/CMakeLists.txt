@@ -35,6 +35,24 @@ add_executable(Game WIN32 MACOSX_BUNDLE ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
 
+# ----------------------------------------------------------------------------
+#  .app バンドルの情報(Mac のみ)
+#
+#  CMake の既定 Info.plist は CFBundleIdentifier / CFBundleName が **空文字列**になる。
+#  識別子が空のバンドルは macOS から通常のアプリとして扱われず、
+#  **ウィンドウがキーウィンドウにならずキーボードイベントがアプリのキューに届かない**
+#  (P2.5 の入力実装で発覚。nextEventMatchingMask がほぼ nil を返す状態になる)。
+# ----------------------------------------------------------------------------
+if(APPLE)
+	set_target_properties(Game PROPERTIES
+		MACOSX_BUNDLE_BUNDLE_NAME          "AquaDash"
+		MACOSX_BUNDLE_GUI_IDENTIFIER       "com.aqengine.aquadash"
+		MACOSX_BUNDLE_BUNDLE_VERSION       "1.0"
+		MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+	)
+endif()
+
+
 aq_apply_common_compile_options(Game)
 
 target_include_directories(Game PRIVATE

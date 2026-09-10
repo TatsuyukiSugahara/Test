@@ -19,6 +19,11 @@ namespace app
 		public:
 			IState(StateMachine* stateMachine) : stateMachine_(stateMachine) {}
 
+			// StateMachine のデストラクタが IState* 経由で delete するため仮想デストラクタが要る
+			// (無いと派生の後始末が走らない未定義動作。clang の
+			//  -Wdelete-abstract-non-virtual-dtor が検出)
+			virtual ~IState() = default;
+
 			virtual void Entry() = 0;
 			virtual void Update() = 0;
 			virtual void Exit() = 0;

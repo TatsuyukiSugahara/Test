@@ -9,6 +9,11 @@ namespace aq
 	class IApplication
 	{
 	public:
+		// Engine::Finalize() が IApplication* 経由で delete するため仮想デストラクタが要る
+		// (無いと派生の後始末が走らない未定義動作。clang の
+		//  -Wdelete-abstract-non-virtual-dtor が検出)
+		virtual ~IApplication() = default;
+
 		virtual bool Initialize(aq::graphics::RenderContext& renderContext) = 0;
 		virtual void Finalize() = 0;
 

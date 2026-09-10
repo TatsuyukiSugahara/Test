@@ -5,6 +5,15 @@
 #include <mutex>
 #include <string>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
+
 namespace aq
 {
 	namespace
@@ -52,4 +61,144 @@ namespace aq
 		va_end(args);
 		StartupMark(buf);
 	}
+
+
+#if defined(_WIN32)
+	namespace
+	{
+		/**
+		 * 致命例外が起きた地点のコールスタックを startup_timing.log へ書き出す診断ハンドラ。
+		 *
+		 * このPCには cdb/WinDbg が無く、デバッガ無しで落ちた時に手掛かりが
+		 * 「ログがどこで途切れたか」しか残らないため、例外アドレスと関数名/行番号を残す。
+		 * 記録するだけで挙動は変えない(EXCEPTION_CONTINUE_SEARCH で通常のクラッシュ処理へ流す)。
+		 *
+		 * VEH は first-chance の全例外で呼ばれるので、C++ 例外(0xE06D7363)などは
+		 * switch で即座に弾く。多重記録を避けるため記録は最初の 1 件だけ。
+		 * スタックオーバーフローはスタックが尽きているため best-effort(出ないことがある)。
+		 */
+		LONG CALLBACK CrashStackLogger(EXCEPTION_POINTERS* info)
+		{
+			if (!info || !info->ExceptionRecord || !info->ContextRecord) {
+				return EXCEPTION_CONTINUE_SEARCH;
+			}
+
+			const DWORD code = info->ExceptionRecord->ExceptionCode;
+			switch (code)
+			{
+			case EXCEPTION_ACCESS_VIOLATION:
+			case EXCEPTION_ILLEGAL_INSTRUCTION:
+			case EXCEPTION_STACK_OVERFLOW:
+			case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+			case EXCEPTION_INT_DIVIDE_BY_ZERO:
+			case EXCEPTION_PRIV_INSTRUCTION:
+				break;
+			default:
+				return EXCEPTION_CONTINUE_SEARCH;
+			}
+
+			static LONG logged = 0;
+			if (InterlockedCompareExchange(&logged, 1, 0) != 0) {
+				return EXCEPTION_CONTINUE_SEARCH;
+			}
+
+			StartupMarkf("[crash] exception 0x%08lX at %p (thread %lu)",
+				static_cast<unsigned long>(code),
+				info->ExceptionRecord->ExceptionAddress,
+				GetCurrentThreadId());
+
+			// AV は「読み/書き/実行のどれで」「どのアドレスを」触ったかが原因究明の要になる。
+			if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2)
+			{
+				const ULONG_PTR op   = info->ExceptionRecord->ExceptionInformation[0];
+				const ULONG_PTR addr = info->ExceptionRecord->ExceptionInformation[1];
+				StartupMarkf("[crash]   access violation %s address %p",
+					op == 0 ? "reading" : (op == 1 ? "writing" : "executing"),
+					reinterpret_cast<void*>(addr));
+			}
+
+			HANDLE process = GetCurrentProcess();
+			HANDLE thread  = GetCurrentThread();
+
+			SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+			SymInitialize(process, nullptr, TRUE);
+
+			// 例外発生時のコンテキストから巻き戻す(ハンドラ自身のフレームではなく落ちた地点が出る)。
+			CONTEXT      ctx   = *info->ContextRecord;
+			STACKFRAME64 frame = {};
+			DWORD        machine;
+#if defined(_M_X64)
+			machine                = IMAGE_FILE_MACHINE_AMD64;
+			frame.AddrPC.Offset    = ctx.Rip;
+			frame.AddrFrame.Offset = ctx.Rbp;
+			frame.AddrStack.Offset = ctx.Rsp;
+#elif defined(_M_ARM64)
+			machine                = IMAGE_FILE_MACHINE_ARM64;
+			frame.AddrPC.Offset    = ctx.Pc;
+			frame.AddrFrame.Offset = ctx.Fp;
+			frame.AddrStack.Offset = ctx.Sp;
+#else
+			machine                = IMAGE_FILE_MACHINE_I386;
+			frame.AddrPC.Offset    = ctx.Eip;
+			frame.AddrFrame.Offset = ctx.Ebp;
+			frame.AddrStack.Offset = ctx.Esp;
+#endif
+			frame.AddrPC.Mode    = AddrModeFlat;
+			frame.AddrFrame.Mode = AddrModeFlat;
+			frame.AddrStack.Mode = AddrModeFlat;
+
+			alignas(SYMBOL_INFO) char symBuf[sizeof(SYMBOL_INFO) + 512] = {};
+			SYMBOL_INFO* sym  = reinterpret_cast<SYMBOL_INFO*>(symBuf);
+			sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+			sym->MaxNameLen   = 500;
+
+			for (int i = 0; i < 48; ++i)
+			{
+				if (!StackWalk64(machine, process, thread, &frame, &ctx,
+						nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) {
+					break;
+				}
+				const DWORD64 pc = frame.AddrPC.Offset;
+				if (pc == 0) { break; }
+
+				char    line[720];
+				DWORD64 disp = 0;
+				if (SymFromAddr(process, pc, &disp, sym))
+				{
+					IMAGEHLP_LINE64 src = {};
+					src.SizeOfStruct = sizeof(src);
+					DWORD srcDisp = 0;
+					if (SymGetLineFromAddr64(process, pc, &srcDisp, &src)) {
+						snprintf(line, sizeof(line), "[crash]   #%02d %s + 0x%llX  (%s:%lu)",
+							i, sym->Name, static_cast<unsigned long long>(disp),
+							src.FileName ? src.FileName : "?", src.LineNumber);
+					} else {
+						snprintf(line, sizeof(line), "[crash]   #%02d %s + 0x%llX",
+							i, sym->Name, static_cast<unsigned long long>(disp));
+					}
+				}
+				else
+				{
+					snprintf(line, sizeof(line), "[crash]   #%02d 0x%llX (no symbol)",
+						i, static_cast<unsigned long long>(pc));
+				}
+				StartupMark(line);
+			}
+
+			StartupMark("[crash] --- end of stack ---");
+			return EXCEPTION_CONTINUE_SEARCH;
+		}
+
+
+		// WinMain より前(静的初期化)に仕込んで、エンジン初期化中のクラッシュも拾えるようにする。
+		struct CrashStackLoggerInstaller
+		{
+			CrashStackLoggerInstaller()
+			{
+				AddVectoredExceptionHandler(1 /*先頭に登録*/, CrashStackLogger);
+			}
+		};
+		CrashStackLoggerInstaller g_crashStackLoggerInstaller;
+	}
+#endif
 }

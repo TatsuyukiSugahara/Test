@@ -270,7 +270,7 @@ namespace aq
 			ImGui::Text("Clip: %s", clip.name.c_str());
 
 			// Clip 名変更
-			strncpy_s(clipNameBuf_, sizeof(clipNameBuf_), clip.name.c_str(), _TRUNCATE);
+			std::snprintf(clipNameBuf_, sizeof(clipNameBuf_), "%s", clip.name.c_str());
 			ImGui::SetNextItemWidth(120.f);
 			if (ImGui::InputText("Name##clip", clipNameBuf_, sizeof(clipNameBuf_),
 			                     ImGuiInputTextFlags_EnterReturnsTrue))
@@ -344,7 +344,7 @@ namespace aq
 				if (open)
 				{
 					ImGui::SetNextItemWidth(100.f);
-					strncpy_s(ctNameBuf_, sizeof(ctNameBuf_), ct.name.c_str(), _TRUNCATE);
+					std::snprintf(ctNameBuf_, sizeof(ctNameBuf_), "%s", ct.name.c_str());
 					if (ImGui::InputText("Name##ct", ctNameBuf_, sizeof(ctNameBuf_),
 					                     ImGuiInputTextFlags_EnterReturnsTrue))
 						ct.name = ctNameBuf_;
@@ -356,7 +356,7 @@ namespace aq
 
 					if (ct.condition != UITrackCondition::Default)
 					{
-						strncpy_s(condParamBuf_, sizeof(condParamBuf_), ct.conditionParam.c_str(), _TRUNCATE);
+						std::snprintf(condParamBuf_, sizeof(condParamBuf_), "%s", ct.conditionParam.c_str());
 						ImGui::SetNextItemWidth(100.f);
 						if (ImGui::InputText("Param##ct", condParamBuf_, sizeof(condParamBuf_),
 						                     ImGuiInputTextFlags_EnterReturnsTrue))

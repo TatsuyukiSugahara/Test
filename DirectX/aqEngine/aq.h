@@ -88,6 +88,18 @@
 #pragma warning(disable:4065)
 #include <DirectXTex/DirectXTex.h> // ソースは ThirdParty/DirectXTex を Engine に同梱ビルド
 #pragma warning(pop)
+#elif defined(__OBJC__)
+// Objective-C++ TU(.mm)には持ち込まない。
+//
+// 非 Windows の DirectXTex は <wsl/winadapter.h> 経由で DirectX-Headers の
+// スタブ basetsd.h を読む。これが `BOOL` を uint32_t に typedef し `interface` を
+// struct に #define するため、Cocoa の `typedef bool BOOL` と衝突し、
+// `@interface` が `struct` に置換されて Foundation のヘッダが全滅する。
+// aq.h は PCH として全 TU に強制インクルードされるので、ここで切るしかない。
+//
+// .mm 側は Platform/Mac・HID/Mac・Sound/CoreAudio に閉じており(設計書 §10)、
+// 画像デコードには触らないため機能欠落は無い。.mm から DirectXTex が要るように
+// なったら、それは責務の置き場所を間違えているサインとして扱う。
 #else
 #include <DirectXTex/DirectXTex.h>
 #endif

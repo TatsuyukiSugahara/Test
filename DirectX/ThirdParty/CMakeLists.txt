@@ -35,11 +35,20 @@ endif()
 #                            こちらを通さないと Windows では SDK 版が拾われ、同梱版と
 #                            2 種類の DirectXMath.h が同一 TU に入って多重定義になる。
 # ----------------------------------------------------------------------------
+#  非 Windows では 3 つ目に WinCompat も載せる。DirectXMath.h が無条件に書く
+#  `#include "sal.h"` の受け皿で、Windows SDK が無い環境ではここにしか無い
+#  (上流の DirectXMath / DirectX-Headers のどちらも sal.h を同梱していない)。
+#  Windows では載せない。SDK の sal.h を隠してしまうため。
+# ----------------------------------------------------------------------------
 add_library(directxmath INTERFACE)
 target_include_directories(directxmath INTERFACE
 	"${AQ_THIRDPARTY_ROOT}"
 	"${AQ_THIRDPARTY_ROOT}/DirectXMath/Inc"
 )
+
+if(NOT WIN32)
+	target_include_directories(directxmath INTERFACE "${AQ_THIRDPARTY_ROOT}/WinCompat")
+endif()
 
 
 # ----------------------------------------------------------------------------
@@ -83,8 +92,14 @@ endif()
 file(GLOB AQ_DIRECTXTEX_SOURCES CONFIGURE_DEPENDS "${AQ_THIRDPARTY_ROOT}/DirectXTex/*.cpp")
 
 if(NOT WIN32)
+	# DirectXTexFlipRotate.cpp も除外する。他の WIC 利用ファイル(Resize / Mipmaps /
+	# Util / Convert)はファイル内に _WIN32 ガードがあり非 Windows でも通るが、
+	# こちらだけは全体が WIC 実装でガードが 1 つも無い(上流の CMake も
+	# 非 Windows ではビルド対象から外している)。FlipRotate は本エンジンからは
+	# 呼んでいないため、落としても機能欠落にならない。
 	aq_exclude_sources(AQ_DIRECTXTEX_SOURCES
 		"/DirectXTexWIC\\.cpp$"
+		"/DirectXTexFlipRotate\\.cpp$"
 		"/BCDirectCompute\\.cpp$"
 		"/DirectXTexD3D1[12]\\.cpp$"
 	)
@@ -160,8 +175,11 @@ endif()
 #  実装は aqEngine/Graphics/Vulkan/VulkanVMAImpl.cpp が
 #  VMA_IMPLEMENTATION 付きで取り込む。
 # ----------------------------------------------------------------------------
+#  SYSTEM 付き。clang は vk_mem_alloc.h から
+#  -Wnullability-completeness を 901 件出し、自前コードの警告が埋もれる。
+#  Engine.vcxproj が ThirdParty を /external:I で渡しているのと同じ意図。
 add_library(vma INTERFACE)
-target_include_directories(vma INTERFACE "${AQ_THIRDPARTY_ROOT}")
+target_include_directories(vma SYSTEM INTERFACE "${AQ_THIRDPARTY_ROOT}")
 
 
 # ----------------------------------------------------------------------------
@@ -212,7 +230,25 @@ else()
 
 	add_subdirectory("${AQ_BULLET_ROOT}/src" bullet_src)
 
-	foreach(bulletLib BulletCollision BulletDynamics LinearMath)
+	# src/CMakeLists.txt は SUBDIRS を並べるだけで、インクルードパスは Bullet の
+	# **ルート** CMakeLists.txt の INCLUDE_DIRECTORIES(${BULLET_PHYSICS_SOURCE_DIR}/src)
+	# が与えている。ここではルートを読まないので自分で与える必要がある
+	# (与えないと "LinearMath/btScalar.h が無い" が全ソースで出る)。
+	#
+	# 定義もインクルードパスも src/ が生成する 6 ターゲット全てに付ける。
+	# BT_USE_DOUBLE_PRECISION は btScalar のサイズを変えるので、リンクしない
+	# ターゲット(BulletSoftBody 等)だけ定義が欠けると ODR 違反になる。
+	set(AQ_BULLET_TARGETS
+		LinearMath
+		BulletCollision
+		BulletDynamics
+		BulletSoftBody
+		BulletInverseDynamics
+		Bullet3Common
+	)
+
+	foreach(bulletLib IN LISTS AQ_BULLET_TARGETS)
+		target_include_directories(${bulletLib} PUBLIC "${AQ_BULLET_ROOT}/src")
 		target_compile_definitions(${bulletLib} PUBLIC BT_USE_DOUBLE_PRECISION BT_THREADSAFE=1)
 	endforeach()
 

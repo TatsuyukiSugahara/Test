@@ -73,10 +73,11 @@ namespace aq
 
 			// 事前ビルドした SPIR-V の探索パス: <shaderDir>/spv/<stem>.<entry>.<stage>.spv
 			// Tools/ShaderCompile/compile_spv.cmake の出力名と一対一で対応させること。
-			// TODO(Mac実機): 要確認 — この環境に Vulkan SDK が無く、.spv を実際に読ませた
-			// 検証ができていない。dxc CLI 出力の SPIR-V に対して BuildInputLayout()
-			// (SPIRV-Reflect) が IDxcCompiler3 経由と同じ入力レイアウトを返すか、
-			// Mac移植設計.md §9 P2 の「.spv あり/なし双方で見た目が一致する」で確認すること。
+			// Mac 実機で確認済み(P2): dxc CLI 出力の .spv だけで全シェーダが生成でき、
+			// BuildInputLayout()(SPIRV-Reflect)も入力レイアウトを正しく返す。
+			// Mac は実行時 DXC を持たないため、失敗すれば起動できない = この経路が
+			// 使われている証明になる。Windows Vulkan 構成での「.spv あり/なし双方で
+			// 見た目が一致する」比較は Mac移植設計.md §9 P2 に残っている。
 			std::string BuildSpirvPath(const char* resolvedPath, const char* entry, IShader::ShaderType type)
 			{
 				const std::filesystem::path src(resolvedPath ? resolvedPath : "");

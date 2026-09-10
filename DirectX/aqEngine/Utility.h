@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 汎用処理群
  */
 #pragma once
@@ -33,10 +33,16 @@
 
 
 // デバッグ出力
+//
+// 可変引数を fmt と __VA_ARGS__ に分けて書くと、引数が書式文字列だけのときに
+// 末尾のカンマが残る。MSVC / clang-cl は独自拡張で黙って落としてくれるが、
+// 標準準拠モードの clang(Mac ビルド)は "expected expression" で落ちる。
+// 分けずに丸ごと転送すればカンマ自体が発生しない(__VA_OPT__ は MSVC の
+// 従来プリプロセッサが未対応なので使わない)。
 #ifdef _DEBUG
-#define EnginePrintf( fmt , ... ) aq::debug::Printf(fmt, __VA_ARGS__ )
+#define EnginePrintf( ... ) aq::debug::Printf( __VA_ARGS__ )
 #else
-#define EnginePrintf( fmt , ... ) ((void)0)
+#define EnginePrintf( ... ) ((void)0)
 #endif
 
 

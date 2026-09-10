@@ -445,6 +445,20 @@ namespace aq
 		{
 #if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_NewFrame();
+#else
+			// TODO(P4): ImGui_ImplOSX_NewFrame へ差し替える(設計書 §6)。
+			// それまでは、プラットフォームバックエンドが埋めるべき最低限の 2 つを自前で入れる。
+			//  - DisplaySize: 0 のままだと ImGui::NewFrame のサニティチェックで停止する
+			//  - DeltaTime  : 0 以下だと同じくアサートに掛かる(初回フレームは実測値が無い)
+			// 入力(マウス/キー)は P4 で ImGui_ImplOSX_* に任せる。DisplayFramebufferScale は
+			// 既定の (1,1) のまま。Retina の扱いは設計書 §8-7 の未決事項。
+			{
+				ImGuiIO& io = ImGui::GetIO();
+				io.DisplaySize = ImVec2(static_cast<float>(Engine::Get().GetScreenWidth()),
+				                        static_cast<float>(Engine::Get().GetScreenHeight()));
+				const float deltaTime = Engine::GetDeltaTime();
+				io.DeltaTime = (deltaTime > 0.0f) ? deltaTime : (1.0f / 60.0f);
+			}
 #endif
 #ifdef ENGINE_GRAPHICS_D3D11
 			ImGui_ImplDX11_NewFrame();

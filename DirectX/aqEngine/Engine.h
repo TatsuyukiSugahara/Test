@@ -80,6 +80,11 @@ namespace aq
 		inline int32_t GetRenderWidth()  const { return renderWidth_; }
 		inline int32_t GetRenderHeight() const { return renderHeight_; }
 
+		// ウィンドウ(クライアント領域)のサイズ。レンダー解像度とは別で、
+		// ImGui の DisplaySize のようにウィンドウ座標系で扱うものが参照する。
+		inline int32_t GetScreenWidth()  const { return static_cast<int32_t>(screenWidth_);  }
+		inline int32_t GetScreenHeight() const { return static_cast<int32_t>(screenHeight_); }
+
 		inline aq::util::GameTimer& GetTimer() { return gameTimer_; }
 
 		// アセット読み込みの基点パス。Win32 は nullptr(=Resource 側の従来探索に委ねる)、

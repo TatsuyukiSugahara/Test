@@ -121,10 +121,18 @@ target_include_directories(aqEngine PUBLIC
 #  _DEBUG / NDEBUG は CMake の既定フラグが付ける。_WINDOWS と AQ_PLATFORM_* は
 #  aq_apply_platform_definitions が、BT_* は bullet ターゲットが伝播させる。
 # ----------------------------------------------------------------------------
+#  ENGINE_GRAPHICS_* は必ず大文字にする。AQ_GRAPHICS_API の値は MSBuild の
+#  AqGraphicsApi と表記を揃えて "Vulkan" なので、そのまま連結すると
+#  ENGINE_GRAPHICS_Vulkan になり、コードが見ている ENGINE_GRAPHICS_VULKAN と
+#  一致しない(D3D11 / D3D12 は元から大文字なので、この取り違えは Vulkan 構成
+#  でしか表面化せず、リンク時に D3D12 の未定義シンボルとして出る)。
+# ----------------------------------------------------------------------------
+string(TOUPPER "${AQ_GRAPHICS_API}" AQ_GRAPHICS_API_UPPER)
+
 target_compile_definitions(aqEngine PUBLIC
 	AQ_IMGUI
 	$<$<CONFIG:Debug>:AQ_DEBUG_IMGUI>
-	ENGINE_GRAPHICS_${AQ_GRAPHICS_API}
+	ENGINE_GRAPHICS_${AQ_GRAPHICS_API_UPPER}
 )
 
 

@@ -1,6 +1,6 @@
 # Mac(Metal)移植 設計
 
-> 対象コミット: 6dd3e7f / 最終更新: 2026-09-09
+> 対象コミット: f13f621 / 最終更新: 2026-09-10
 
 対象: `aqEngine/` + `Game/`。macOS(Apple Silicon)で Metal 描画・プレイ可能にする。
 一次資料の分担:
@@ -147,11 +147,13 @@
 |---|---|
 | `ThirdParty/stb/stb_image.h` **(新規・同梱)** | PNG/JPG デコード |
 | `aqEngine/Resource/ImageLoader.{h,cpp}` **(新規)** | `LoadImageFile(path) → ScratchImage`(DirectXTex 型は維持)。拡張子で DDS/TGA は DirectXTex、PNG/JPG は WIN32/UWP なら `LoadFromWICFile`、MAC なら `stb_image` → `Image` 構造体へ詰めて `ScratchImage::InitializeFromImage`。`Resource.cpp:1607-1625`・`Terrain/HeightmapChunk.cpp:50-133` の直呼びをこれに集約。引数は `std::string`(UTF-8)で受け、呼び出し元の `mbstowcs_s` による `wchar_t` パス変換(`Resource.cpp:1605`・`HeightmapChunk.cpp:47`)を本ローダ内へ吸収する |
-| `ThirdParty/DirectXTex` | 非 Windows 経路(`DirectXTexDDS/TGA/HDR/Convert/Resize/Mipmaps/BC*`)を CMake で選択。`DirectXTexWIC.cpp`・`BCDirectCompute`・D3D11/12 系 cpp は Windows のみ。`sal.h` 互換は `ThirdParty/DirectX-Headers/include/wsl/` を同梱 |
+| `ThirdParty/DirectXTex` | 非 Windows 経路(`DirectXTexDDS/TGA/HDR/Convert/Resize/Mipmaps/BC*`)を CMake で選択。`DirectXTexWIC.cpp`・`BCDirectCompute`・D3D11/12 系 cpp は Windows のみ。`sal.h` は `ThirdParty/WinCompat/sal.h`(自前。P2 で追加)、その他の SAL / Windows 型は `ThirdParty/DirectX-Headers/include/wsl/` が供給する。`DirectXTexFlipRotate.cpp` は `_WIN32` ガードが無く全体が WIC 実装なので非 Windows では除外(P2 で判明。エンジンから未使用) |
 | `ThirdParty/DirectXMath` **(新規・同梱)** | 3.21b(jun2026)/ MIT。`Inc/` 一式 10 ファイル。コードは無改変。**`aq.h` の include を書き換えるだけでは足りない**: `Math/Vector.h` と DirectXTex のヘッダが無修飾の `<DirectXMath.h>` を書くため、`ThirdParty/DirectXMath/Inc` 自体をインクルードパスに載せて SDK 版を隠す必要がある(vcxproj は `/external:I`、CMake は INTERFACE ターゲット)。Windows SDK 版は 3.19(UWP は 3.18) |
+| `ThirdParty/WinCompat/sal.h` **(新規・自前。P2 で追加)** | 同梱 DirectXMath の `DirectXMath.h` が無条件に `#include "sal.h"` する受け皿。**上流の DirectXMath / DirectX-Headers のどちらも `sal.h` を同梱していない**ため自前で用意する(P2 で判明。上流の contents API で確認済み)。中身は DirectXMath / DirectXTex が実際に使う注釈だけを空マクロにしたもので、`basetsd.h` と定義が重なっても双方 `#ifndef` + 空定義なので衝突しない。**非 Windows のときだけ**インクルードパスに載せる(Windows SDK の `sal.h` を隠さないため) |
 | `ThirdParty/DirectX-Headers` **(新規・同梱)** | v1.619.5 / MIT。**現行版に `sal.h` というファイルは無く**、SAL 注釈は `include/wsl/stubs/basetsd.h` が定義する。DirectXTex の非 Windows 経路が要求するのは `directx/dxgiformat.h` + `wsl/winadapter.h` + `wsl/wrladapter.h` + `directx/d3d12.h` とその推移依存(`dxgicommon.h`/`d3dcommon.h`/`d3d12sdklayers.h`/`wsl/stubs/*`)。`d3dx12_*` や `dxguids` 等は不要なので入れない。**インクルードパスへ載せるのは非 Windows のときだけ**(`wsl/stubs/` が Windows SDK の同名ヘッダを隠すため) |
 | `ThirdParty/BulletPhysics` | Mac は `add_subdirectory(src)`(`BT_USE_DOUBLE_PRECISION`/`BT_THREADSAFE=1`)。Windows は既存 prebuilt `.lib` 維持 |
 | `ThirdParty/imgui/imgui_impl_osx.{h,mm}` **(新規・同梱)** | imgui 本体(1.92 WIP)と同じ版のものを取得 |
+| `aqEngine/aq.h` | **ObjC++ TU(`__OBJC__`)では DirectXTex を include しない**(P2 で追加)。非 Windows の DirectXTex は `wsl/winadapter.h` 経由でスタブ `basetsd.h` を読み、そこが `BOOL` を uint32_t に typedef し `interface` を struct に #define するため、Cocoa の `typedef bool BOOL` と衝突して `@interface` が全滅する。`aq.h` は PCH として全 TU に強制インクルードされるので、ここで切る以外に手が無い。§10 の「`.mm` は Platform/Mac・HID/Mac・Sound/CoreAudio に閉じる」の帰結として、`.mm` は画像デコードに触らない |
 | `aqEngine/Core/Application.cpp` | `ImGui_ImplWin32_*` を `#if defined(AQ_PLATFORM_WIN32)`、MAC は `ImGui_ImplOSX_Init(NSView*)`(`CAMetalLayer` の `delegate`/`superview` から取得するため `PlatformMac` に `GetNSView()` を持たせ、`static_cast<PlatformMac*>` は Mac ブロック内でのみ行う)。描画は既存 `VulkanImGui`(自前) |
 | `aqEngine/Rendering/ImGuiRenderCommand.cpp` | `imgui_impl_dx11.h` include を D3D11 ブロック内へ |
 
@@ -189,14 +191,39 @@
    無条件 `return false` していたが、現在 UWP は NuGet の `directxtex_uwp` を使っており記述が古い。
    `ImageLoader` への集約で分岐を畳んだため、**Xbox で地形が「読めない」→「読める」に変わる**(ユーザー承認済み)。
    Xbox 実機での確認は次に Xbox を触るときに行う。
-11. **MoltenVK が Vulkan 1.3 を advertise するか**(P2 の最大リスク): 既存コードは `apiVersion = VK_API_VERSION_1_3` かつ
-   `VkPhysicalDeviceVulkan13Features`(dynamicRendering / synchronization2)を pNext に繋いでいる。MoltenVK は両機能を
-   個別拡張として実装済みだが `VK_KHR_maintenance4` 未対応との情報があり、**`vkCreateDevice` が
-   `VK_ERROR_FEATURE_NOT_PRESENT` で落ちる可能性**がある。落ちたら 1.2 + 個別拡張
-   (`VkPhysicalDeviceDynamicRenderingFeatures` / `Synchronization2Features`)へ分解する。Mac 実機で最初に確認する。
+11. ~~**MoltenVK が Vulkan 1.3 を advertise するか**(P2 の最大リスク)~~ → **解決(P2 実機)**。MoltenVK
+   (Vulkan SDK 1.4.357.1 / macOS 26.6.2 / Apple Silicon)は `apiVersion = VK_API_VERSION_1_3` と
+   `VkPhysicalDeviceVulkan13Features` をそのまま受け付け、`vkCreateDevice` は成功した。1.2 + 個別拡張への
+   分解は不要。`VK_KHR_portability_subset` で非対応が報告されたのは `pointPolygons` /
+   `tessellationIsolines` / `tessellationPointMode` の 3 件のみで、いずれも本エンジンは未使用。
 12. **`SoftwareMixer` と XAudio2 の差異**(P4 への申し送り): リサンプルは線形補間のみ / `GetConsumedFrames` が
    先読み分 +2 進む(`SoundStream` の A/V 同期に影響しうる) / ピッチ比の上限なし / エフェクト・フィルタ・submix なし。
-13. **HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係(Retina で 2 倍になる)。P2 で決める。
+13. ~~**HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係~~ → **P2 で決定**。
+   Retina(backingScaleFactor = 2)では drawableSize が 2560x1440 になる一方、Engine のレンダーターゲットと
+   深度は `InitializeParameter` の 1280x720 のままなので、スワップチェーンと深度アタッチメントが同じ
+   `vkCmdBeginRendering` に並んで `VUID-VkRenderingInfo-pNext-06079/06080` の**エラー**になる(実機で再現)。
+   **`CAMetalLayer.contentsScale = 1` に固定してドロウアブルを論理サイズ(1280x720)と一致させる**方針を採る。
+   Windows と同じ 1 枚を描き、Retina への引き伸ばしは Core Animation に任せる(その分ぼやける)。
+   Engine に解像度の概念を増やさずに済み、P3 の「Windows Vulkan 構成と同じ見た目」とも噛み合う。
+   ネイティブ解像度で描く案(screenWidth/Height をドロウアブルに合わせ、renderWidth/Height は据え置いて
+   最終パスで拡大)は、UI のヒットテスト座標系と ImGui の `DisplayFramebufferScale` まで巻き込むため
+   **P4 以降**で扱う。実装は `PlatformMac.mm` の `UpdateLayerBacking`。
+14. **`-G Xcode` が未検証**(P2 で判明): 検証環境が Xcode Command Line Tools のみでフル Xcode.app が無く、
+   Xcode ジェネレータを起動できない。`macos-xcode` プリセットは残してあるが**動作未確認**。
+   Ninja 経路は通っているので、Xcode 側を必須にするか落とすかを決める必要がある。
+15. **ストレージイメージのフォーマット不一致警告 10 件**(P2 で判明。Mac 固有ではない): SPIR-V が
+   `Rgba32f` を宣言している `RWTexture2D<float4>` に対して、実際のビューが `R16G16B16A16_SFLOAT` /
+   `R8G8B8A8_UNORM` で束ねられている(Bloom の `g_Bright` / `g_Output` ほか)。**仕様上は
+   ロード/ストアの結果が未定義**。DXC は HLSL の `RWTexture2D<float4>` を既定で `Rgba32f` として出すため、
+   `[[vk::image_format("rgba16f")]]` を付けるか、ビュー側のフォーマットを揃える必要がある。
+   Vulkan バックエンド共通の問題なので Windows Vulkan 構成でも同じはず。**`.fx` 無改変**の方針に触れるため、
+   対処方針は別途決める。
+16. **`.app` の `GetContentRoot` が P5 まで機能しない**(P2 で判明): `.app` から起動すると
+   `GetContentRoot()` が `Contents/Resources` を返し、`FindProjectRoot()` はそこで確定してソースツリーの
+   上方探索を行わない。しかし P5 まで `Resources` に Assets は入らないため、**実際に読めているのは
+   「相対パス候補が CWD = `Game/` で解決している」から**にすぎない。`Game/` 以外を CWD にすると
+   アセットを読めない(`.app` / 素の実行ファイルの双方で確認)。P5 で Assets を `Resources` へ
+   同梱すれば解消する。それまでは CWD を `Game/` にして起動する。
 
 ---
 
@@ -267,12 +294,56 @@
 - 入力 = Null、サウンド = `CoreAudioSoundBackend` の骨格(`Initialize` 成功・無音)、`ImageLoader` の `stb_image` 分岐。
 
 評価:
-- [ ] Mac(Apple Silicon)で `cmake -G Xcode` / `-G Ninja` からビルド・リンクが通る
-- [ ] ウィンドウが開き、Vulkan(MoltenVK)でクリア色が出る。Vulkan validation layer でエラー 0
+- [x] Mac(Apple Silicon)で `-G Ninja` からビルド・リンクが通る(macOS 26.6.2 / M 系 / AppleClang 21.0.0)
+      - `cmake --preset macos-ninja` の configure は**初回から無修正で成功**。ビルドで潰した問題は 6 件:
+        1. **Bullet のインクルードパスが空**。`src/CMakeLists.txt` は `SUBDIRS` を並べるだけで、
+           `INCLUDE_DIRECTORIES(${BULLET_PHYSICS_SOURCE_DIR}/src)` は読まないルート側にある。
+           `ThirdParty/CMakeLists.txt` で 6 ターゲット全てに付与。`BT_USE_DOUBLE_PRECISION` も
+           3 ターゲットにしか付いていなかったため同時に 6 つへ広げた(btScalar のサイズが
+           ターゲット間でずれる ODR 違反になる)
+        2. **`sal.h` が無い**。同梱 DirectXMath が無条件に `#include "sal.h"` する一方、上流の
+           DirectXMath / DirectX-Headers のどちらも同梱していない(§6 の「DirectX-Headers が供給する」は
+           誤り)。`ThirdParty/WinCompat/sal.h` を新設し、非 Windows のみインクルードパスに載せた
+        3. **`DirectXTexFlipRotate.cpp` が非 Windows で通らない**。他の WIC 利用ファイルと違い
+           `_WIN32` ガードが 1 つも無く全体が WIC 実装。エンジンから未使用なので除外した
+        4. **`EnginePrintf` の末尾カンマ**。`Printf(fmt, __VA_ARGS__)` は書式文字列だけで呼ぶと
+           `Printf("...", )` になる。MSVC / clang-cl は独自拡張で通すが標準準拠の clang は落ちる。
+           丸ごと転送する形(`Printf(__VA_ARGS__)`)に変更(`__VA_OPT__` は MSVC の従来
+           プリプロセッサが未対応なので使わない)
+        5. **`strncpy_s` + `_TRUNCATE` の残り 5 箇所**(`UIAnimationEditor` / `TextStyleEditorPanel`)。
+           P0 の `*_s` 置換から漏れていた。`std::snprintf(buf, sizeof(buf), "%s", …)` に置換
+        6. **`ENGINE_GRAPHICS_Vulkan` と `ENGINE_GRAPHICS_VULKAN` の食い違い**。CMake が
+           `ENGINE_GRAPHICS_${AQ_GRAPHICS_API}` をそのまま定義していた。D3D11 / D3D12 は元から
+           大文字なので**この取り違えは Vulkan 構成でしか表面化しない**(D3D12 の未定義シンボルに
+           化けてリンクエラーになる)。`string(TOUPPER …)` を挟んだ
+      - **ObjC++ TU の衝突**も 1 件。`aq.h`(PCH)→ DirectXTex → `wsl/winadapter.h` →
+        スタブ `basetsd.h` が `BOOL` を uint32_t に typedef し `interface` を struct に #define するため、
+        Cocoa の `typedef bool BOOL` と衝突し `@interface` が全滅する。`aq.h` で
+        `__OBJC__` のときだけ DirectXTex を持ち込まないようにした(§10 の「`.mm` は
+        Platform/Mac・HID/Mac・Sound/CoreAudio に閉じる」の帰結として、画像デコードには触らない)
+      - **`-G Xcode` は未検証**。この環境は Command Line Tools のみでフル Xcode.app が無く、
+        Xcode ジェネレータが使えない(§8-14)
+      - クリーンビルドの警告は **35 件**。当初 939 件だったが、901 件は `vk_mem_alloc.h` からの
+        `-Wnullability-completeness` だったため、`vma` の INTERFACE インクルードを `SYSTEM` に
+        変更して黙らせた(Engine.vcxproj が ThirdParty を `/external:I` で渡しているのと同じ意図)。
+        残り 35 件は §8-7 に挙げた clang 警告と同種で、自前コード側にある
+- [x] Vulkan(MoltenVK)で描画され、Vulkan validation layer で**エラー 0**
+      - クリア画面どころか **AquaDash のタイトル画面まで到達**(海/UI/フォント/PNG サムネイルが表示)。
+        `.spv` 事前生成のみで全シェーダが生成でき、`BuildInputLayout()`(SPIRV-Reflect)も通った
+      - validation の**警告は 10 件残る**。すべて同一 VUID(ストレージイメージのフォーマット不一致。
+        SPIR-V が `Rgba32f` を宣言しているのに実際のビューは `R16G16B16A16_SFLOAT` 等)。
+        Vulkan バックエンド共通の問題で Mac 固有ではない → §8-15
+      - HiDPI は当初 `VUID-VkRenderingInfo-pNext-06079/06080` の**エラー**として出た(スワップチェーン
+        2560x1440 対 深度 1280x720)。§8-13 の決定で解消
 - [ ] 閉じるボタンで `PumpEvents` が false を返し、`Finalize` まで到達してプロセスが正常終了する
-- [ ] `StartupLog` に portability subset の非対応項目が出力される
+      - **手動確認待ち**。合成クリック(`osascript` / System Events)は補助アクセス未許可で送れない
+- [x] `StartupLog` に portability subset の非対応項目が出力される
+      - `[vulkan] VK_KHR_portability_subset enabled` に続き `unsupported: pointPolygons` /
+        `tessellationIsolines` / `tessellationPointMode` の 3 件。いずれも本エンジンは未使用
 - [ ] Windows Vulkan 構成で `.spv` あり/なし双方で全シーンが描画され、見た目が一致する(P1 から移動)
-- [ ] Retina 環境での `drawableSize` と描画解像度の扱いを §8-7 に記録した
+      - **Windows 側の作業**。Mac では実行時 DXC 経路が無いため「なし」側を作れない。
+        Mac 実機では `.spv` だけで全シェーダが生成できることを確認済み(上記)
+- [x] Retina 環境での `drawableSize` と描画解像度の扱いを §8-13 に記録した
 
 ### P3: Mac で実シーン(Mac 実機)
 

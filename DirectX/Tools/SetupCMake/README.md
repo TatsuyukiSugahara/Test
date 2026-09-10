@@ -1,6 +1,6 @@
 # CMake ビルド セットアップ手順
 
-Mac 移植(→ [設計書/Mac移植設計.md](../../設計書/Mac移植設計.md) §9 P0)のために追加した
+Mac 移植(→ [設計書/Mac移植設計.md](../../設計書/Mac移植設計.md) §9)のために追加した
 CMake ビルドの導入手順。**既存の `DirectX.sln`(MSBuild)と併存する**もので、
 Windows 開発の主経路は当面 `.vcxproj` のまま。
 
@@ -89,46 +89,97 @@ cmake --preset windows-vs2026 -D AQ_GRAPHICS_API=Vulkan
   ファイル冒頭の `#ifdef ENGINE_GRAPHICS_VULKAN` により空 TU になるだけで、
   Vulkan SDK のヘッダは要求されない(既存 `Engine.vcxproj` と同じ方針)。
 
-## 5. Mac(P2 検証中)
+## 5. Mac(P2 到達済み)
 
-### 5.1 手順(これだけ)
+macOS 26.6.2 / Apple Silicon / Xcode Command Line Tools + AppleClang 21.0.0 で
+**ビルドが通り、AquaDash のタイトル画面まで起動する**ところまで確認済み。
+
+### 5.1 ツールの導入(初回のみ)
+
+Homebrew があれば `brew install cmake ninja` でよい。無い環境向けに、
+**sudo 不要でユーザーローカルに置く**手順を示す(検証環境はこちら)。
 
 ```bash
-# 初回のみ
-xcode-select --install
-brew install cmake ninja
-# + Vulkan SDK for macOS(LunarG)を導入し、echo $VULKAN_SDK が通ることを確認
+xcode-select --install          # 済んでいれば不要
 
-git checkout feature/mac-port && git pull
-cd DirectX
-cmake --preset macos-ninja                  # または macos-xcode
-cmake --build --preset macos-ninja-debug 2>&1 | head -60
-./build/macos-ninja/bin/Debug/Game
+mkdir -p ~/.local/bin ~/.local/opt && cd ~/Downloads
+# CMake(macOS universal)。バージョンは cmake.org / GitHub Releases の最新に読み替える
+curl -fsSLO https://github.com/Kitware/CMake/releases/download/v4.4.3/cmake-4.4.3-macos-universal.tar.gz
+tar xzf cmake-4.4.3-macos-universal.tar.gz
+mv cmake-4.4.3-macos-universal ~/.local/opt/cmake
+ln -sf ~/.local/opt/cmake/CMake.app/Contents/bin/cmake ~/.local/bin/cmake
+
+# Ninja(universal バイナリ 1 個)
+curl -fsSLO https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-mac.zip
+unzip -o ninja-mac.zip -d ~/.local/bin && chmod +x ~/.local/bin/ninja
 ```
 
-**まだ Mac 実機で一度も通していない**ので、エラーが出るのが前提。
-先頭のエラーから順に潰す。
+Vulkan SDK for macOS(MoltenVK / dxc / validation layer が入る。約 360MB)は
+LunarG から取得して**非対話インストール**できる。
 
-### 5.2 前提と構成
+```bash
+cd ~/Downloads
+curl -fL -o vulkan_sdk.zip https://sdk.lunarg.com/sdk/download/latest/mac/vulkan_sdk.zip
+unzip -q vulkan_sdk.zip -d vulkan_sdk_extract && cd vulkan_sdk_extract
+xattr -dr com.apple.quarantine vulkansdk-macOS-*.app
+./vulkansdk-macOS-*.app/Contents/MacOS/vulkansdk-macOS-* \
+    --root ~/VulkanSDK/1.4.357.1 --accept-licenses --default-answer-yes \
+    --confirm-command install
+```
+
+毎回の環境設定はまとめて source すると楽。
+
+```bash
+cat > ~/.local/aq-mac-env.sh <<'EOF'
+export PATH="$HOME/.local/bin:$PATH"
+source "$HOME/VulkanSDK/1.4.357.1/setup-env.sh"
+EOF
+```
+
+### 5.2 ビルドと実行
+
+```bash
+source ~/.local/aq-mac-env.sh
+cd <repo>/DirectX
+cmake --preset macos-ninja
+cmake --build --preset macos-ninja-debug
+
+# 実行は必ず CWD を Game/ にする(理由は下記)
+cd Game && ../build/macos-ninja/bin/Debug/Game.app/Contents/MacOS/Game
+```
+
+- **CWD は `Game/` にすること。** `.app` から起動すると `GetContentRoot()` が
+  `Contents/Resources` を返し、ソースツリーの上方探索が行われない。Assets を
+  `Resources` へ同梱するのは P5 の作業なので、それまでは相対パス
+  (`Assets/...` が CWD で解決する)に頼っている。設計書 §8-16。
+- 起動診断は CWD に `startup_timing.log` が出る。
+- validation layer のメッセージは stderr に出る。P2 時点で**エラー 0 / 警告 10**
+  (警告はストレージイメージのフォーマット不一致。Mac 固有ではない。設計書 §8-15)。
+
+### 5.3 前提と構成
 
 - `AQ_GRAPHICS_API` は `Vulkan` 固定(道A = MoltenVK)。`dxc` は Vulkan SDK 同梱で、
   `AQ_GRAPHICS_API=Vulkan` のときだけ `.spv` 生成ターゲット(`aqCompileSpv`)が配線される。
+  59 エントリすべてが生成でき、実行時は `.spv` だけでシェーダを作れている。
 - Bullet は Windows の prebuilt `.lib` ではなく `ThirdParty/BulletPhysics/src` をソースからビルド。
-- P2 までで揃っているもの: `ThirdParty/DirectXMath`(3.21b)/ `DirectX-Headers`(v1.619.5)/
-  `stb_image` の同梱、`Platform/Mac/PlatformMac.{h,mm}`、`Game/Application/MacMain.mm`、
-  Vulkan の Metal サーフェス分岐、`.spv` 読み込み経路、Null 実装一式(入力/パッド/サウンド/デコーダ)。
+- **`-G Xcode`(`macos-xcode` プリセット)は未検証**。フル Xcode.app が要る。
+  Command Line Tools だけの環境では使えない(設計書 §8-14)。
 
-### 5.3 落ちそうな箇所(優先度順・実機で最初に見るところ)
+### 5.4 P2 で潰した Mac 固有の問題
 
-| # | 箇所 | 内容 |
+再発したときの手掛かりとして残す。詳細は設計書 §9 P2 の評価欄。
+
+| # | 症状 | 原因と対処 |
 |---|---|---|
-| 1 | `aq.h` を `.mm` から | PCH が Objective-C++ TU にも強制インクルードされる。DirectXMath / STL が ObjC++ 下で通るか |
-| 2 | ARC の前提 | `-fobjc-arc` が無いので手動参照カウント(MRR)前提で実装。誤りなら `PlatformMac.mm` 冒頭の `#if __has_feature(objc_arc)` → `#error` で即判明 |
-| 3 | MoltenVK の Vulkan 1.3 | `VkPhysicalDeviceVulkan13Features` を要求している。`VK_KHR_maintenance4` 未対応で `vkCreateDevice` が `VK_ERROR_FEATURE_NOT_PRESENT` になりうる → 1.2 + 個別拡張へ分解 |
-| 4 | HiDPI | Retina で `drawableSize` = 2560x1440、エンジンのレンダーターゲットは 1280x720。設計書 §8-12 の未決事項 |
-| 5 | `.spv` 生成 | `shader_entries.txt` の 59 エントリのうち 11 個はコードから未参照で、DXC を一度も通っていない可能性がある。構文エラーが出たら該当行を削除(`.fx` は無改変) |
-
-コード中の `// TODO(Mac実機): 要確認` を grep すると、実機確認が要る箇所が全部出る。
+| 1 | `LinearMath/btScalar.h` が無いと全 Bullet ソースで出る | `src/CMakeLists.txt` はインクルードパスを持たない(ルート側にある)。`ThirdParty/CMakeLists.txt` で 6 ターゲットに付与 |
+| 2 | `'sal.h' file not found` | 上流の DirectXMath / DirectX-Headers のどちらも同梱していない。`ThirdParty/WinCompat/sal.h` を自前で追加 |
+| 3 | `DirectXTexFlipRotate.cpp` が WIC シンボルで落ちる | このファイルだけ `_WIN32` ガードが無い。非 Windows では除外(未使用) |
+| 4 | `EnginePrintf("...")` が `expected expression` | 可変引数ゼロで末尾カンマが残る。MSVC / clang-cl は独自拡張で通す。`Printf(__VA_ARGS__)` へ |
+| 5 | `_TRUNCATE` が未定義 | `strncpy_s` の残り。`std::snprintf(buf, sizeof(buf), "%s", …)` へ |
+| 6 | リンクで **D3D12 の未定義シンボル** | CMake が `ENGINE_GRAPHICS_Vulkan` を定義していた(コードは `_VULKAN`)。D3D11/D3D12 は元から大文字なので Vulkan 構成でしか出ない |
+| 7 | `.mm` で `@interface` が壊れる / `BOOL` の typedef 衝突 | PCH(`aq.h`)→ DirectXTex → スタブ `basetsd.h` が `BOOL`/`interface` を定義。`aq.h` で `__OBJC__` のとき DirectXTex を外す |
+| 8 | `ImGui::NewFrame` で `Invalid DisplaySize` | `ImGui_ImplWin32_NewFrame` が非 Windows で呼ばれない。`Application.cpp` で `DisplaySize`/`DeltaTime` を自前で埋める(P4 で `imgui_impl_osx` へ) |
+| 9 | validation の `VUID-VkRenderingInfo-pNext-06079/06080` | Retina で drawableSize が 2560x1440。`contentsScale = 1` に固定して 1280x720 に揃える(設計書 §8-13) |
 
 ---
 

@@ -39,9 +39,23 @@ namespace aq { void StartupLog(const char* msg) { StartupMark(msg); } }
 
 namespace
 {
-	// レイヤの表示スケールとドロウアブルサイズ(物理ピクセル)を実際のビューへ合わせる。
-	// backingScaleFactor を直に掛けるより convertRectToBacking を使うほうが推奨
-	// (NSWindow.backingScaleFactor のドキュメント Note)。
+	// レイヤのドロウアブルサイズをビューの論理サイズ(ポイント)に合わせる。
+	//
+	// HiDPI の扱い(設計書 §8-13 の未決事項。P2 で下記に決定):
+	//   Retina では backingScaleFactor = 2 なので、素直に物理ピクセルへ合わせると
+	//   drawableSize が 2560x1440 になる。一方 Engine のレンダーターゲット・深度は
+	//   InitializeParameter の 1280x720 のままなので、スワップチェーン(サーフェス
+	//   capabilities 由来 = 2560x1440)と深度アタッチメント(1280x720)が同じ
+	//   vkCmdBeginRendering に並び、VUID-VkRenderingInfo-pNext-06079/06080 に掛かる。
+	//
+	//   P2 では **contentsScale = 1 に固定してドロウアブルを論理サイズと一致させる**。
+	//   Windows と同じ 1280x720 で 1 枚だけ描き、Retina への引き伸ばしは Core Animation
+	//   に任せる(その分ぼやける)。Engine 側に解像度の概念を増やさずに済み、
+	//   「Windows Vulkan 構成と同じ見た目」という P3 の評価基準とも噛み合うため。
+	//
+	//   ネイティブ解像度で描く案(screenWidth/Height をドロウアブル側に合わせ、
+	//   renderWidth/Height は据え置いて最終パスで拡大)は、UI のヒットテスト座標系と
+	//   ImGui の DisplayFramebufferScale まで巻き込むので P4 以降で扱う。
 	void UpdateLayerBacking(NSView* view)
 	{
 		id layerObject = [view layer];
@@ -53,16 +67,13 @@ namespace
 
 		// レイヤホスティングでは contentsScale を自分で設定する必要がある
 		// (Core Animation Programming Guide「Setting Up Layer Objects」)。
-		NSWindow* window = [view window];
-		if (window != nil)
-		{
-			[layer setContentsScale:[window backingScaleFactor]];
-		}
+		// 1 を入れると、以降 convertRectToBacking とは無関係に 1 ポイント = 1 ピクセルになる。
+		[layer setContentsScale:1.0];
 
-		const NSRect backing = [view convertRectToBacking:[view bounds]];
-		if (backing.size.width > 0.0 && backing.size.height > 0.0)
+		const NSSize bounds = [view bounds].size;
+		if (bounds.width > 0.0 && bounds.height > 0.0)
 		{
-			[layer setDrawableSize:CGSizeMake(backing.size.width, backing.size.height)];
+			[layer setDrawableSize:CGSizeMake(bounds.width, bounds.height)];
 		}
 	}
 }
@@ -218,17 +229,15 @@ namespace aq
 				// ドキュメントに「順序が重要」と明記されている)。
 				AqMetalView* view = [[AqMetalView alloc] initWithFrame:contentRect];
 				CAMetalLayer* layer = [CAMetalLayer layer];
-				// TODO(Mac実機): 要確認 — layer.device / pixelFormat は設定していない。
-				// MoltenVK が vkCreateMetalSurfaceEXT の中で自分で設定する想定だが、未確認。
+				// layer.device / pixelFormat は設定しない。MoltenVK が
+				// vkCreateMetalSurfaceEXT の中で自分で設定する(実機確認済み)。
 				[view setLayer:layer];
 				[view setWantsLayer:YES];
 
 				[window setContentView:view];
 				[window makeFirstResponder:view];
-				// TODO(Mac実機): 要確認 — Retina では drawableSize が desc の 2 倍(2560x1440)に
-				// なる一方、Engine の renderWidth/renderHeight は 1280x720 のまま。Vulkan の
-				// スワップチェーンはサーフェス capabilities に従うため食い違う。設計書 §8-12
-				// (HiDPI)が「P2 で決める」としている未決事項。実機で挙動を見て決める。
+				// HiDPI の扱いは UpdateLayerBacking のコメントを参照(設計書 §8-13。
+				// P2 では contentsScale = 1 に固定してドロウアブルを 1280x720 に揃える)。
 				UpdateLayerBacking(view);
 
 				[window makeKeyAndOrderFront:nil];

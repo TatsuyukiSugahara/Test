@@ -11,6 +11,7 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
+#include "Graphics/InstancedStaticMesh.h"      // Finalize での名前レジストリ解放
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Occlusion/Debug/CullingDebugPanel.h"
 #endif
@@ -356,6 +357,8 @@ namespace aq
 		// 関数ローカル static のためプロセス終了まで生き残る。GraphicsDevice の破棄より
 		// 前にシェーダを手放さないと VkShaderModule がデバイスより長生きする。
 		aq::rendering::GpuClusterCuller::Get().Finalize();
+		// 名前レジストリもファイルスコープのグローバルで、頂点/インデックスバッファを抱えている。
+		aq::graphics::InstancedStaticMesh::ClearNamed();
 		aq::ui::UIContext::Finalize();
 		aq::graphics::LightManager::Finalize();
 		aq::ecs::EntityContext::Finalize();

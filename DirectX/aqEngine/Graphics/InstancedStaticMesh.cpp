@@ -251,6 +251,12 @@ namespace aq
 		}
 
 
+		void InstancedStaticMesh::ClearNamed()
+		{
+			g_named.clear();
+		}
+
+
 		InstancedStaticMesh* InstancedStaticMesh::GetByName(const char* name)
 		{
 			if (!name) { return nullptr; }

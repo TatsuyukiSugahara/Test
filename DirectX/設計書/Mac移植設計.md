@@ -219,6 +219,11 @@
    `[[vk::image_format("rgba16f")]]` を付けるか、ビュー側のフォーマットを揃える必要がある。
    Vulkan バックエンド共通の問題なので Windows Vulkan 構成でも同じはず。**`.fx` 無改変**の方針に触れるため、
    対処方針は別途決める。
+17. **Mac は VSync 固定でフレーム時間を比較できない**(P3 で判明): スワップチェーンが
+   `VK_PRESENT_MODE_FIFO_KHR` 決め打ちで、60Hz ディスプレイでは 60fps に張り付く。
+   Windows(VSync オフ)との比較には present mode の選択(`IMMEDIATE` / `MAILBOX` の
+   対応可否を見て選ぶ)か、GPU タイムスタンプによる計測が要る。どちらも Vulkan
+   バックデンド共通の話なので Windows 側とまとめて決める。
 16. **`.app` の `GetContentRoot` が P5 まで機能しない**(P2 で判明): `.app` から起動すると
    `GetContentRoot()` が `Contents/Resources` を返し、`FindProjectRoot()` はそこで確定してソースツリーの
    上方探索を行わない。しかし P5 まで `Resources` に Assets は入らないため、**実際に読めているのは
@@ -458,14 +463,7 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
 
 ### P3: Mac で実シーン(Mac 実機)
 
-> P2.5 でステージまで到達できるようになった時点で、**次の 2 件が既に見えている**。
-> どちらもステージに入って初めて出るもので、P3 の入口の課題として扱う。
-> 1. **イメージレイアウトの検証エラー**: `vkQueueSubmit2()` が
->    「`SHADER_READ_ONLY_OPTIMAL` を期待しているが現在は `COLOR_ATTACHMENT_OPTIMAL`」と
->    毎フレーム報告する(同一 VkImage について 10 件で打ち止め)。レンダーターゲットを
->    シェーダリソースとして読む箇所のバリアが抜けている。タイトル画面では出ない。
-> 2. **終了時の VMA アサート再発**: ステージのリソースにも、GPU デバイス破棄より後まで
->    生き残る保持者が残っている(タイトルだけなら `e8710e4` の修正で解消済み)。
+> P2.5 でステージまで到達できるようになって見えた 2 件は、**どちらも解決済み**(下記の評価欄)。
 
 実装:
 - `.spv` をビルド時生成(§4)。アセットの `GetContentRoot` 経由読み込み。
@@ -473,9 +471,35 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
 
 評価:
 - [ ] タイトル〜ステージまで Windows Vulkan 構成と同じ見た目(海・キャラ・影・Bloom・UI・デカール・草)
-- [ ] validation layer エラー 0。フレーム時間を Windows(同等 GPU クラス)と比較して記録
-- [ ] 未対応機能が出た場合、`IsComputeSupported()` 等の既存ゲートで落ちて描画が破綻しない
-- [ ] 全 `.fx` × エントリの `.spv` がビルド時に生成される(`shader_entries.txt` に漏れなし)
+      - **目視確認待ち**。この環境では画面収録の権限が無く `screencapture` が使えないため、
+        スクリーンショットでの比較ができない
+- [x] validation layer エラー 0(タイトル〜ステージを通して)
+      - ステージに入って初めて出ていた **2 件を潰した**:
+        1. **レンダーターゲットが `COLOR_ATTACHMENT` のままサンプルされていた**。
+           `BarrierBeforePass` は dynamic rendering の scope に入る**前**にしか遷移を打てない
+           (scope 内では打てないので、これ自体は正しい)。ところが UI はパスの**途中**で
+           ミニマップのベイク結果(`OffscreenScenePass` の 512x512 RT)を SRV に束縛して描くため、
+           バリアを打つ機会が無かった。**生産側(パス終了時)でカラー RT を
+           `SHADER_READ_ONLY_OPTIMAL` へ戻す**ように `EndRenderingIfActive` を直した。
+           次にその RT へ描くときは `BarrierBeforePass` が `COLOR_ATTACHMENT` へ戻すので往復は成立する
+        2. **終了時の VMA アサート**: `InstancedStaticMesh` の名前レジストリ `g_named` が
+           ファイルスコープのグローバルで、頂点/インデックスバッファを抱えたまま
+           `vkDestroyDevice` より後まで生き残っていた。`ClearNamed()` を新設して
+           `Application::Finalize` から呼ぶ(`e8710e4` で潰した `FontAssetCache` /
+           `GpuClusterCuller` と同じ形)
+      - **どちらも Mac 固有ではない**。Vulkan バックエンド共通の問題で、Windows Vulkan 構成にも同じものがある
+- [ ] フレーム時間を Windows(同等 GPU クラス)と比較して記録
+      - **比較不能のまま**。Mac のスワップチェーンは `VK_PRESENT_MODE_FIFO_KHR` 固定(VSync)で、
+        タイトルもステージも **60.0 fps / 16.67 ms に張り付く**。Windows 側は VSync オフで
+        900 fps 級(§9 P0 の記録)なので、同じ土俵に乗せるには present mode を選べるようにするか、
+        GPU タイムスタンプで測る必要がある → §8-17
+- [x] 未対応機能のゲートで描画が破綻しない
+      - そもそもゲートに掛かる機能が無かった。portability subset が非対応と報告したのは
+        `pointPolygons` / `tessellationIsolines` / `tessellationPointMode` の 3 件のみで、
+        いずれも本エンジンは未使用。compute は対応しているため `IsComputeSupported()` は true で通る
+- [x] 全 `.fx` × エントリの `.spv` がビルド時に生成される(`shader_entries.txt` に漏れなし)
+      - `.fx` から拾ったエントリらしき関数 59 件がすべて `shader_entries.txt` にあり、
+        `Game/Assets/Shader/spv/` に 59 本生成されている(過不足 0)
 
 ### P4: Mac で入力・サウンド・デバッグ UI(Mac 実機)
 

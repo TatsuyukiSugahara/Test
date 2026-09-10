@@ -289,6 +289,34 @@ namespace aq
 			if (!renderingActive_) return;
 			vkCmdEndRendering(device_->GetCommandBuffer());
 			renderingActive_ = false;
+
+			// パスで書いたカラー RT を SHADER_READ_ONLY へ戻す(proxy = スワップチェーンは除く。
+			// あちらは device が Present で扱う)。
+			//
+			// BarrierBeforePass は**パスの先頭でしか**走らない。dynamic rendering の scope 内では
+			// レイアウト遷移を打てないためで、これは正しい。ところが利用側は、パスの途中で
+			// オフスクリーン RT を SRV として束縛して描くことがある(UI がミニマップの
+			// ベイク結果を貼る等)。その場合バリアを打つ機会が無く、
+			// COLOR_ATTACHMENT のままサンプルされて validation の
+			// 「expects ... SHADER_READ_ONLY_OPTIMAL -- instead, current layout is
+			// COLOR_ATTACHMENT_OPTIMAL」になる。
+			//
+			// 生産側(書いたパスの終わり)で読み取り可能な状態に戻しておけば、
+			// 消費側がいつ束縛しても正しい。次にこの RT へ描くときは BarrierBeforePass が
+			// COLOR_ATTACHMENT へ戻すので、往復は従来どおり成立する。
+			{
+				VkCommandBuffer cmd = device_->GetCommandBuffer();
+				for (uint32_t i = 0; i < rtCount_; ++i)
+				{
+					VulkanRenderTarget* rt = curRTs_[i];
+					if (!rt || rt->IsProxy()) continue;
+					VkImageLayout* lp = rt->ColorLayoutPtr();
+					if (!lp || *lp != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) continue;
+					TransitionImg(cmd, rt->GetImage(), VK_IMAGE_ASPECT_COLOR_BIT,
+					              *lp, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+					*lp = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				}
+			}
 		}
 
 		// ── flush + draw ─────────────────────────────────────────

@@ -310,14 +310,39 @@ namespace aq
 		namespace
 		{
 			/**
-			 * per-instance 入力か。DXC は入力変数を `in_var_<セマンティクス>` と名付けるので、
-			 * セマンティクスが `I_` で始まるかをその名前から見る。
+			 * per-instance 入力か。
+			 *
+			 * DXC は入力変数を **`in.var.<セマンティクス>`**(ドット区切り)と名付ける。
+			 * `spirv-dis` は表示のときにドットをアンダースコアへ直して
+			 * `%in_var_POSITION` と見せるので、逆アセンブル出力を見て
+			 * `in_var_` を期待すると一致しない(実際に一度そこで嵌まった)。
+			 * 念のため両方の綴りを受ける。
+			 *
+			 * 前置きを剥がしたセマンティクスが `I_` で始まれば per-instance
+			 * (D3D12Shader.cpp の perInstance 判定と同じ規約)。
 			 */
 			bool IsPerInstanceInput(const char* name)
 			{
 				if (name == nullptr) { return false; }
-				static constexpr char PREFIX[] = "in_var_I_";
-				return std::strncmp(name, PREFIX, sizeof(PREFIX) - 1) == 0;
+
+				static constexpr char PREFIX_DOT[]   = "in.var.";
+				static constexpr char PREFIX_UNDER[] = "in_var_";
+
+				const char* semantic = nullptr;
+				if (std::strncmp(name, PREFIX_DOT, sizeof(PREFIX_DOT) - 1) == 0)
+				{
+					semantic = name + (sizeof(PREFIX_DOT) - 1);
+				}
+				else if (std::strncmp(name, PREFIX_UNDER, sizeof(PREFIX_UNDER) - 1) == 0)
+				{
+					semantic = name + (sizeof(PREFIX_UNDER) - 1);
+				}
+				else
+				{
+					semantic = name;   // 前置きが無い綴りにも一応対応する
+				}
+
+				return semantic[0] == 'I' && semantic[1] == '_';
 			}
 		}
 

@@ -77,6 +77,9 @@ namespace aq
 			void Draw(uint32_t vertexCount, uint32_t startVertexLocation) override;
 			void DrawIndexed(uint32_t indexCount) override;
 			void DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation) override;
+			void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
+			                          uint32_t startIndexLocation, int32_t baseVertexLocation,
+			                          uint32_t startInstanceLocation) override;
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
 
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;

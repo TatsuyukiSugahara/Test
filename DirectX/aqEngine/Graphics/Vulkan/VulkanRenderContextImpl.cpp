@@ -351,9 +351,12 @@ namespace aq
 			key.dsFormat = depthOnly ? VK_FORMAT_D32_SFLOAT
 			             : ((depthSrc_ && depthSrc_->HasDepth()) ? depthSrc_->GetDepthFormat() : VK_FORMAT_UNDEFINED);
 			key.vertexStride = vb_ ? vb_->GetStride() : 0;  // 実 VB stride (部分宣言 VS の誤読防止)
-			// per-instance ストリームの stride。VS がインスタンス属性を持ち、かつ実際に
-			// slot1 が束縛されているときだけ binding 1 を作る(片方だけでは PSO と VB が食い違う)。
-			key.instanceStride = (instanceVB_ && vs_) ? vs_->GetInstanceStride() : 0;
+			// VS がインスタンス属性を持ち、かつ slot1 が束縛されているときだけ binding 1 を作る
+			// (片方だけでは PSO と VB が食い違う)。stride は **実 VB のもの** を使う。
+			// リフレクション由来だと、未使用の per-instance 属性(例: I_COLOR)が DXC に
+			// 削られた分だけ短くなり、2 個目以降のインスタンスが 1 つずつずれて読まれる。
+			key.instanceStride = (instanceVB_ && vs_ && vs_->GetInstanceStride() > 0)
+			                   ? instanceVB_->GetStride() : 0;
 
 			VkPipeline pipeline = device_->GetPipelineCache()->GetOrCreate(
 				device_->GetDevice(), device_->GetPipelineLayout()->GetPipelineLayout(), key, vs_);
@@ -457,6 +460,25 @@ namespace aq
 			VkCommandBuffer cmd = device_->GetCommandBuffer();
 			vkCmdBindIndexBuffer(cmd, ib_->GetBuffer(), ib_->GetCurrentOffset(), ib_->GetIndexType());
 			vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, 0, 0);
+		}
+
+		/**
+		 * インデックス付きインスタンス描画。
+		 *
+		 * `IRenderContextImpl` の既定は no-op で、これを override していなかったため
+		 * Vulkan では **インスタンス描画が 1 つも発行されていなかった**
+		 * (路面リボン / 草 / コインリングが丸ごと消える)。
+		 * per-instance ストリーム(slot1)の束縛は FlushGraphics 側で行う。
+		 */
+		void VulkanRenderContextImpl::DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
+		                                                   uint32_t startIndexLocation, int32_t baseVertexLocation,
+		                                                   uint32_t startInstanceLocation)
+		{
+			if (!ib_ || instanceCount == 0 || !FlushGraphics()) return;
+			VkCommandBuffer cmd = device_->GetCommandBuffer();
+			vkCmdBindIndexBuffer(cmd, ib_->GetBuffer(), ib_->GetCurrentOffset(), ib_->GetIndexType());
+			vkCmdDrawIndexed(cmd, indexCount, instanceCount,
+			                 startIndexLocation, baseVertexLocation, startInstanceLocation);
 		}
 
 		void VulkanRenderContextImpl::DrawIndexed(uint32_t indexCount)                          { DrawIndexedInternal(indexCount, 0); }

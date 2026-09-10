@@ -208,9 +208,10 @@
    ネイティブ解像度で描く案(screenWidth/Height をドロウアブルに合わせ、renderWidth/Height は据え置いて
    最終パスで拡大)は、UI のヒットテスト座標系と ImGui の `DisplayFramebufferScale` まで巻き込むため
    **P4 以降**で扱う。実装は `PlatformMac.mm` の `UpdateLayerBacking`。
-14. **`-G Xcode` が未検証**(P2 で判明): 検証環境が Xcode Command Line Tools のみでフル Xcode.app が無く、
-   Xcode ジェネレータを起動できない。`macos-xcode` プリセットは残してあるが**動作未確認**。
-   Ninja 経路は通っているので、Xcode 側を必須にするか落とすかを決める必要がある。
+14. ~~**`-G Xcode` が未検証**~~ → **解決(P2)**。Xcode 26.6 を導入して確認した。configure・
+   ビルド・実行・終了まで Ninja と同じ結果になる。`macos-xcode-debug` /
+   `macos-xcode-release` のビルドプリセットを追加した。Xcode 導入直後は
+   `sudo xcodebuild -license accept` / `-runFirstLaunch` が必要な点だけ手順に追記済み。
 15. **ストレージイメージのフォーマット不一致警告 10 件**(P2 で判明。Mac 固有ではない): SPIR-V が
    `Rgba32f` を宣言している `RWTexture2D<float4>` に対して、実際のビューが `R16G16B16A16_SFLOAT` /
    `R8G8B8A8_UNORM` で束ねられている(Bloom の `g_Bright` / `g_Output` ほか)。**仕様上は
@@ -294,7 +295,7 @@
 - 入力 = Null、サウンド = `CoreAudioSoundBackend` の骨格(`Initialize` 成功・無音)、`ImageLoader` の `stb_image` 分岐。
 
 評価:
-- [x] Mac(Apple Silicon)で `-G Ninja` からビルド・リンクが通る(macOS 26.6.2 / M 系 / AppleClang 21.0.0)
+- [x] Mac(Apple Silicon)で `cmake -G Xcode` / `-G Ninja` の**両方**からビルド・リンクが通る(macOS 26.6.2 / M 系 / AppleClang 21.0.0)
       - `cmake --preset macos-ninja` の configure は**初回から無修正で成功**。ビルドで潰した問題は 6 件:
         1. **Bullet のインクルードパスが空**。`src/CMakeLists.txt` は `SUBDIRS` を並べるだけで、
            `INCLUDE_DIRECTORIES(${BULLET_PHYSICS_SOURCE_DIR}/src)` は読まないルート側にある。
@@ -321,8 +322,15 @@
         Cocoa の `typedef bool BOOL` と衝突し `@interface` が全滅する。`aq.h` で
         `__OBJC__` のときだけ DirectXTex を持ち込まないようにした(§10 の「`.mm` は
         Platform/Mac・HID/Mac・Sound/CoreAudio に閉じる」の帰結として、画像デコードには触らない)
-      - **`-G Xcode` は未検証**。この環境は Command Line Tools のみでフル Xcode.app が無く、
-        Xcode ジェネレータが使えない(§8-14)
+      - **`-G Xcode` も確認済み**(Xcode 26.6)。`macos-xcode` プリセットで configure →
+        `AquaDash.xcodeproj` 生成 → `** BUILD SUCCEEDED **` → 生成された `Game.app` の実行・
+        終了まで、Ninja と同じ結果(validation エラー 0 / 終了コード 0)。
+        ビルドプリセット `macos-xcode-debug` / `macos-xcode-release` が
+        `CMakePresets.json` に無かったので追加した(configure プリセットだけあって
+        `cmake --build --preset` が使えない状態だった)。
+        なお **Xcode を入れた直後はライセンス未同意でコンパイラが見つからない**
+        (`No CMAKE_C_COMPILER could be found`)。`sudo xcodebuild -license accept` と
+        `sudo xcodebuild -runFirstLaunch` を先に通す必要がある
       - クリーンビルドの警告は **35 件**。当初 939 件だったが、901 件は `vk_mem_alloc.h` からの
         `-Wnullability-completeness` だったため、`vma` の INTERFACE インクルードを `SYSTEM` に
         変更して黙らせた(Engine.vcxproj が ThirdParty を `/external:I` で渡しているのと同じ意図)。

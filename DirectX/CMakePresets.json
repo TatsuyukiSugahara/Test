@@ -116,6 +116,16 @@
       "name": "macos-ninja-release",
       "configurePreset": "macos-ninja",
       "configuration": "Release"
+    },
+    {
+      "name": "macos-xcode-debug",
+      "configurePreset": "macos-xcode",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-xcode-release",
+      "configurePreset": "macos-xcode",
+      "configuration": "Release"
     }
   ]
 }

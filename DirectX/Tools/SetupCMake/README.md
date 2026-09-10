@@ -99,8 +99,18 @@ macOS 26.6.2 / Apple Silicon / Xcode Command Line Tools + AppleClang 21.0.0 で
 Homebrew があれば `brew install cmake ninja` でよい。無い環境向けに、
 **sudo 不要でユーザーローカルに置く**手順を示す(検証環境はこちら)。
 
+Xcode ジェネレータ(`macos-xcode`)を使わないなら Command Line Tools だけでよい。
+フル Xcode.app を入れた場合は、**ライセンス同意と初回セットアップを先に済ませること**。
+これを飛ばすと `cmake --preset macos-xcode` が
+`No CMAKE_C_COMPILER could be found` で止まる(`xcrun clang` も同じ理由で弾かれる)。
+
 ```bash
-xcode-select --install          # 済んでいれば不要
+sudo xcodebuild -license accept
+sudo xcodebuild -runFirstLaunch
+```
+
+```bash
+xcode-select --install          # Command Line Tools だけで済ませる場合。Xcode.app があれば不要
 
 mkdir -p ~/.local/bin ~/.local/opt && cd ~/Downloads
 # CMake(macOS universal)。バージョンは cmake.org / GitHub Releases の最新に読み替える
@@ -148,6 +158,14 @@ cmake --build --preset macos-ninja-debug
 cd Game && ../build/macos-ninja/bin/Debug/Game.app/Contents/MacOS/Game
 ```
 
+Xcode プロジェクトが要るときは `macos-xcode` に読み替える。生成物は
+`build/macos-xcode/AquaDash.xcodeproj` と `build/macos-xcode/bin/<Config>/Game.app`。
+
+```bash
+cmake --preset macos-xcode
+cmake --build --preset macos-xcode-debug
+```
+
 - **CWD は `Game/` にすること。** `.app` から起動すると `GetContentRoot()` が
   `Contents/Resources` を返し、ソースツリーの上方探索が行われない。Assets を
   `Resources` へ同梱するのは P5 の作業なので、それまでは相対パス
@@ -162,8 +180,8 @@ cd Game && ../build/macos-ninja/bin/Debug/Game.app/Contents/MacOS/Game
   `AQ_GRAPHICS_API=Vulkan` のときだけ `.spv` 生成ターゲット(`aqCompileSpv`)が配線される。
   59 エントリすべてが生成でき、実行時は `.spv` だけでシェーダを作れている。
 - Bullet は Windows の prebuilt `.lib` ではなく `ThirdParty/BulletPhysics/src` をソースからビルド。
-- **`-G Xcode`(`macos-xcode` プリセット)は未検証**。フル Xcode.app が要る。
-  Command Line Tools だけの環境では使えない(設計書 §8-14)。
+- `-G Xcode`(`macos-xcode` プリセット)も Ninja と同じ結果になることを確認済み
+  (Xcode 26.6)。ただしフル Xcode.app が要る。
 
 ### 5.4 P2 で潰した Mac 固有の問題
 
@@ -183,6 +201,7 @@ cd Game && ../build/macos-ninja/bin/Debug/Game.app/Contents/MacOS/Game
 | 10 | 終了時に validation が `currently in use by VkCommandBuffer` を並べる | GPU の完了を待たずに破棄していた。`Application::Finalize` でレンダースレッド停止直後に `vkDeviceWaitIdle` |
 | 11 | 終了時に VMA が `Some allocations were not freed` でアサート | `void*` への `delete` でデストラクタが走らずテクスチャが漏れていた(リソース 4 型)。`delete static_cast<T*>(data_)` へ |
 | 12 | `vkDestroyDevice(): has 2 leaked objects` | 関数ローカル static(`FontAssetCache` / `GpuClusterCuller`)がデバイスより長生き。`Finalize` 時に明示的に手放す |
+| 13 | `macos-xcode` の configure で `No CMAKE_C_COMPILER could be found` | Xcode 導入直後でライセンス未同意。`sudo xcodebuild -license accept` と `-runFirstLaunch` を通す |
 
 ---
 

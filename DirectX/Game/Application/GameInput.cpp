@@ -46,7 +46,14 @@ namespace app
 		keyboardMap_.Bind(GameAction::LookUp,       BindKey(KeyBoardType::Up));
 		keyboardMap_.Bind(GameAction::LookDown,     BindKey(KeyBoardType::Down));
 		keyboardMap_.Bind(GameAction::Confirm,      BindKey(KeyBoardType::Space));
-		// キーボードマップ使用時 (デスクトップ既定) でもパッド 0 の左スティックを効かせる。
+		// キーボードマップ使用時 (デスクトップ既定) でもパッド 0 を併用できるように、
+		// スティックに加えてボタンも重ねて登録する (Bind は同一アクションへ複数積める)。
+		// これが無いとデスクトップでは A ボタン (Confirm) が一度も効かない。
+		keyboardMap_.Bind(GameAction::Confirm,      BindPad(PadButton::A));
+		keyboardMap_.Bind(GameAction::MoveLeft,     BindPad(PadButton::DLeft));
+		keyboardMap_.Bind(GameAction::MoveRight,    BindPad(PadButton::DRight));
+		keyboardMap_.Bind(GameAction::MoveForward,  BindPad(PadButton::DUp));
+		keyboardMap_.Bind(GameAction::MoveBackward, BindPad(PadButton::DDown));
 		keyboardMap_.BindStick(GameAction::Move,    BindLStick());
 
 		gamepadMap_.Bind(GameAction::MoveLeft,     BindPad(PadButton::DLeft));

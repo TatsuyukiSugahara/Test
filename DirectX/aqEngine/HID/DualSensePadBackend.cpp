@@ -37,7 +37,6 @@ namespace aq
 			/** ポーリング挙動 */
 			static constexpr uint64_t ENUMERATE_INTERVAL_MS = 1000;   // 抜き差し追従の再列挙間隔
 			static constexpr uint32_t MAX_READ_PER_POLL     = 8;      // 溜まったレポートを捨てて最新へ追いつく上限
-			static constexpr uint32_t WRITE_TIMEOUT_MS      = 10;
 
 			/** スティック正規化。中心 128、遊び幅は XInput の左スティックと同じ割合に合わせる */
 			static constexpr float STICK_CENTER    = 128.0f;
@@ -306,6 +305,10 @@ namespace aq
 				feature[0] = REPORT_ID_BT_CALIB;
 				HidD_GetFeature(handle, feature, sizeof(feature));
 			}
+
+			aq::StartupMarkf("[pad] DualSense: opened (%s, in=%u out=%u)",
+			                 device.connection == ConnectionType::Usb ? "USB" : "Bluetooth",
+			                 inputSize, outputSize);
 			return true;
 		}
 
@@ -314,7 +317,20 @@ namespace aq
 		{
 			if (device.handle != INVALID_HANDLE_VALUE)
 			{
-				if (device.readPending) { CancelIoEx(device.handle, &device.readOverlapped); }
+				// 飛行中の I/O は「キャンセル完了」まで待ってからでないと、OVERLAPPED と
+				// バッファ (Device のメンバ) を安全に潰せない。CancelIoEx は非同期で、
+				// 待たずに device をリセットするとカーネルが解放後の領域へ書き込む。
+				DWORD transferred = 0;
+				if (device.readPending)
+				{
+					CancelIoEx(device.handle, &device.readOverlapped);
+					GetOverlappedResult(device.handle, &device.readOverlapped, &transferred, TRUE);
+				}
+				if (device.writePending)
+				{
+					CancelIoEx(device.handle, &device.writeOverlapped);
+					GetOverlappedResult(device.handle, &device.writeOverlapped, &transferred, TRUE);
+				}
 				CloseHandle(device.handle);
 			}
 			if (device.readEvent)  { CloseHandle(device.readEvent);  }
@@ -352,6 +368,7 @@ namespace aq
 					{
 						if (GetLastError() != ERROR_IO_PENDING)
 						{
+							aq::StartupMarkf("[pad] DualSense: ReadFile failed (err=%lu) -> close", GetLastError());
 							CloseDevice(device);
 							return;
 						}
@@ -364,6 +381,7 @@ namespace aq
 				{
 					// まだ届いていないだけなら次フレームに持ち越す
 					if (GetLastError() == ERROR_IO_INCOMPLETE) { return; }
+					aq::StartupMarkf("[pad] DualSense: read completion failed (err=%lu) -> close", GetLastError());
 					CloseDevice(device);
 					return;
 				}
@@ -380,60 +398,70 @@ namespace aq
 
 		void DualSensePadBackend::SendOutputReport(Device& device)
 		{
-			if (device.handle == INVALID_HANDLE_VALUE || !device.outputDirty) { return; }
+			if (device.handle == INVALID_HANDLE_VALUE) { return; }
 
-			uint8_t  buffer[BT_OUTPUT_REPORT_SIZE]{};
+			// 前回の書き込みがまだ飛行中なら完了だけを確認する。未完なら今フレームは送らない
+			// (dirty は保持されるので、完了後のフレームで最新値が改めて送られる)。
+			// OVERLAPPED / バッファは Device 側に持ち、飛行中に破棄・再利用しない。
+			// スタック上の OVERLAPPED に対して CancelIoEx → 即 return すると、キャンセル完了時に
+			// カーネルが解放済みスタックへ書き込んでスタック破壊(/GS 失敗)になる。
+			if (device.writePending)
+			{
+				DWORD written = 0;
+				if (!GetOverlappedResult(device.handle, &device.writeOverlapped, &written, FALSE))
+				{
+					if (GetLastError() == ERROR_IO_INCOMPLETE) { return; }
+					aq::StartupMarkf("[pad] DualSense: write failed (err=%lu) -> close", GetLastError());
+					CloseDevice(device);
+					return;
+				}
+				device.writePending = false;
+			}
+
+			if (!device.outputDirty) { return; }
+
+			aq::memory::Clear(device.writeBuffer, sizeof(device.writeBuffer));
 			uint32_t size = 0;
 			if (device.connection == ConnectionType::Usb)
 			{
-				buffer[0] = REPORT_ID_USB_OUT;
-				BuildEffectsState(device, &buffer[1]);
+				device.writeBuffer[0] = REPORT_ID_USB_OUT;
+				BuildEffectsState(device, &device.writeBuffer[1]);
 				size = USB_OUTPUT_REPORT_SIZE;
 			}
 			else
 			{
 				// Bluetooth はレポート ID の後にシーケンス / タグの 1 バイトが入り、
 				// 末尾 4 バイトが CRC32(DS5W の BT 出力と同じ並び)。実機未確認。
-				buffer[0] = REPORT_ID_EXTENDED;
-				buffer[1] = 0x02;
-				BuildEffectsState(device, &buffer[2]);
+				device.writeBuffer[0] = REPORT_ID_EXTENDED;
+				device.writeBuffer[1] = 0x02;
+				BuildEffectsState(device, &device.writeBuffer[2]);
 
-				const uint32_t crc = ComputeReportCrc32(buffer, BT_CRC_OFFSET);
-				buffer[BT_CRC_OFFSET + 0] = static_cast<uint8_t>(crc         & 0xFF);
-				buffer[BT_CRC_OFFSET + 1] = static_cast<uint8_t>((crc >>  8) & 0xFF);
-				buffer[BT_CRC_OFFSET + 2] = static_cast<uint8_t>((crc >> 16) & 0xFF);
-				buffer[BT_CRC_OFFSET + 3] = static_cast<uint8_t>((crc >> 24) & 0xFF);
+				const uint32_t crc = ComputeReportCrc32(device.writeBuffer, BT_CRC_OFFSET);
+				device.writeBuffer[BT_CRC_OFFSET + 0] = static_cast<uint8_t>(crc         & 0xFF);
+				device.writeBuffer[BT_CRC_OFFSET + 1] = static_cast<uint8_t>((crc >>  8) & 0xFF);
+				device.writeBuffer[BT_CRC_OFFSET + 2] = static_cast<uint8_t>((crc >> 16) & 0xFF);
+				device.writeBuffer[BT_CRC_OFFSET + 3] = static_cast<uint8_t>((crc >> 24) & 0xFF);
 				size = BT_OUTPUT_REPORT_SIZE;
 			}
 
 			// デバイスが申告した長さがあればそちらを優先する(残りは 0 のまま送る)。
+			// OpenDevice で MAX_REPORT_SIZE 以下であることは検証済み。
 			if (device.outputReportSize > size) { size = device.outputReportSize; }
 
 			ResetEvent(device.writeEvent);
-			OVERLAPPED overlapped{};
-			overlapped.hEvent = device.writeEvent;
+			device.writeOverlapped        = {};
+			device.writeOverlapped.hEvent = device.writeEvent;
 
 			DWORD written = 0;
-			if (!WriteFile(device.handle, buffer, size, &written, &overlapped))
+			if (!WriteFile(device.handle, device.writeBuffer, size, &written, &device.writeOverlapped))
 			{
 				if (GetLastError() != ERROR_IO_PENDING)
 				{
+					aq::StartupMarkf("[pad] DualSense: WriteFile failed (err=%lu) -> close", GetLastError());
 					CloseDevice(device);
 					return;
 				}
-				// 数十バイトの書き込みなので通常は即完了する。抜かれた直後などで
-				// 返ってこないときはキャンセルして切断扱いにし、ゲームループを止めない。
-				if (WaitForSingleObject(device.writeEvent, WRITE_TIMEOUT_MS) != WAIT_OBJECT_0)
-				{
-					CancelIoEx(device.handle, &overlapped);
-					CloseDevice(device);
-					return;
-				}
-				if (!GetOverlappedResult(device.handle, &overlapped, &written, FALSE))
-				{
-					CloseDevice(device);
-					return;
-				}
+				device.writePending = true;   // 完了は次フレーム以降に回収する
 			}
 
 			device.outputDirty = false;

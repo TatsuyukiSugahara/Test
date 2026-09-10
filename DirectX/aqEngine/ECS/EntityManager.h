@@ -236,6 +236,21 @@ namespace aq
 				return &chunkList_[index];
 			}
 
+			// T を持つ最初のエンティティの T を返す（無ければ nullptr）。
+			// 走査するのは「T を含む Chunk（＝アーキタイプ）」の列だけで、最初の非空 Chunk の
+			// 先頭要素をそのまま返すため、コストはアーキタイプ数程度で済む。
+			// GetComponent と同じくロックは取らない（System 実行中の構造変更は遅延コマンド化される）。
+			template <typename T>
+			T* FindFirstComponent()
+			{
+				for (const uint32_t index : GetChunkIndices<T>()) {
+					Chunk* chunk = GetChunkByIndex(index);
+					if (!chunk || chunk->GetSize() == 0) { continue; }
+					return chunk->GetComponentArray<T>().begin();
+				}
+				return nullptr;
+			}
+
 			// EntityView::ForEach の IterationGuard が呼ぶ。
 			// shared_lock を返すので RAII でロック・アンロックが完結する。
 			std::shared_lock<std::shared_mutex> BeginIteration()

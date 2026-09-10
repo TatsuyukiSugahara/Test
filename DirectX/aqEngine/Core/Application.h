@@ -54,6 +54,13 @@ namespace aq
 		void SetSplitViews(const std::vector<SplitView>& views) { splitViews_ = views; }
 		void ClearSplitViews() { splitViews_.clear(); }
 
+		/**
+		 * レンダースレッドの提出済みフレームがすべて完了するまで待つ (GPU アイドル化)。
+		 * 自前 GPU バッファを持つエンティティを実行時に破棄する前に呼ぶと、
+		 * 在フライトのコマンドリストがそのリソースを参照したまま解放されるのを防げる。
+		 */
+		void WaitForRenderIdle() { if (renderThreadReady_) { renderThread_.WaitForCompletion(); } }
+
 	public:
 		bool Initialize(aq::graphics::RenderContext& renderContext) override;
 		void Finalize() override;

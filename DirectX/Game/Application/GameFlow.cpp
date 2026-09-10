@@ -14,6 +14,7 @@
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
+#include "ECS/SessionComponent.h"
 #include "ECS/EntityContext.h"
 #include "Terrain/HeightmapChunk.h"
 #include "Level/LevelManager.h"
@@ -413,12 +414,22 @@ namespace app
 
 	void GameFlow::Release()
 	{
-		if (instance_) { delete instance_; instance_ = nullptr; }
+		if (instance_) { instance_->Finalize(); delete instance_; instance_ = nullptr; }
 	}
 
 
 	void GameFlow::Initialize()
 	{
+		// セッション状態 (System / UI が読む共有データ) を載せるエンティティ。
+		// ステージ再入場でも破棄しないので stageEntities_ には積まない。
+		{
+			auto entity    = aq::ecs::EntityContext::Get().CreateEntity<app::ecs::SessionComponent>();
+			sessionHandle_ = entity.GetHandle();
+#ifdef AQ_DEBUG_IMGUI
+			entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Session");
+#endif
+		}
+
 		auto& screens = aq::ui::UIContext::Get().Screens();
 		screens.Register<TitleScreen>("Title",     "Assets/UI/Title.screen.json");
 		screens.Register<LoadingScreen>("Loading", "Assets/UI/Loading.screen.json");
@@ -431,6 +442,16 @@ namespace app
 		// フォント準備を待ってからタイトルを出す(BootState)。テキストを確実に表示するため。
 		current_ = std::make_unique<BootState>();
 		current_->OnEnter(*this);
+	}
+
+
+	void GameFlow::Finalize()
+	{
+		auto& ctx = aq::ecs::EntityContext::Get();
+		if (ctx.IsValid(sessionHandle_)) {
+			ctx.RequestDestroyEntity(sessionHandle_);
+		}
+		sessionHandle_ = aq::ecs::EntityHandle();
 	}
 
 
@@ -530,17 +551,13 @@ namespace app
 		// world(0,0) = terrain local(50,50)(XZ オフセット -50 適用後)
 		const float spawnY = terrainComp->GetChunk()->GetHeight(50.0f, 50.0f);
 
-		// メインカメラ(位置/注視点は CameraSteeringSystem が管理) + オフスクリーンカメラ + ライト
+		// メインカメラ(位置/注視点は CameraSteeringSystem が管理) + ライト。
+		// オフスクリーンカメラはミニマップ専用なので AquaDash 側 (コース確定時) が一本で設定する。
 		aq::Camera* const mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);
 		mainCamera->SetNear(0.01f);
 		mainCamera->SetViewportSize(
 			static_cast<float>(aq::Engine::Get().GetRenderWidth()),
 			static_cast<float>(aq::Engine::Get().GetRenderHeight()));
-
-		aq::Camera* offscreenCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);
-		offscreenCamera->SetPosition(aq::math::Vector3(0.0f, spawnY + 5.0f, -15.0f));
-		offscreenCamera->SetTarget(aq::math::Vector3(0.0f, spawnY, 5.0f));
-		offscreenCamera->SetNear(0.01f);
 
 		aq::graphics::LightManager::Get().SetDirectionalColor(aq::math::Vector3(1.0f, 0.6f, 0.6f));
 

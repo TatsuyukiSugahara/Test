@@ -37,6 +37,16 @@ namespace aq
 				entityManager_.FlushCommands();
 			}
 
+			/**
+			 * 積まれた遅延コマンド (RequestDestroyEntity 等) を即時フラッシュする。
+			 * System 反復の外 (OnUpdate など単一スレッドの安全点) からのみ呼ぶこと。
+			 * GPU アイドル化と組み合わせ、リソース所有エンティティを安全に即時破棄するのに使う。
+			 */
+			void FlushPendingCommands()
+			{
+				entityManager_.FlushCommands();
+			}
+
 
 			// --- Entity 操作 ---
 
@@ -178,6 +188,27 @@ namespace aq
 			EntityView<Cs...> GetView()
 			{
 				return entityManager_.GetView<Cs...>();
+			}
+
+			/**
+			 * T を持つ最初のエンティティの T を返す（見つからなければ nullptr）。
+			 * 「唯一であること」は強制しない。複数あっても最初の 1 件を返すだけなので、
+			 * 1 体しか生成しないと決めた共有状態コンポーネントの取得に使う。
+			 * T に const を付けて呼べば const ポインタで受け取れる。
+			 * 走査は T を含むアーキタイプの列だけを見るためコストはアーキタイプ数程度で、
+			 * 毎フレーム呼んで問題ない。返るのは Chunk 内実体へのポインタなので、
+			 * フレームをまたいで保持しないこと。
+			 */
+			template <typename T>
+			T* GetSingletonComponent()
+			{
+				return entityManager_.FindFirstComponent<std::remove_const_t<T>>();
+			}
+
+			template <typename T>
+			const T* GetSingletonComponent() const
+			{
+				return const_cast<EntityContext*>(this)->GetSingletonComponent<T>();
 			}
 
 			// EntityHandle から Entity を取得する。

@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "AutoCameraComponentSystem.h"
 #include "SpeedCharacterComponentSystem.h"
-#include "GameFlow.h"
+#include "SessionComponent.h"
 #include "Stage/StageData.h"
 
 
@@ -28,7 +28,12 @@ namespace app
 
 		void AutoCameraSystem::Update()
 		{
-			const auto stageData = GameFlow::Get().Context().activeStage;
+			// セッション状態はワーカースレッドから読むだけ (書き込みはメインスレッドの状態クラス)。
+			const auto* session =
+				aq::ecs::EntityContext::Get().GetSingletonComponent<const SessionComponent>();
+			if (!session) { return; }
+
+			const auto stageData = session->activeStage;
 			if (!stageData || !stageData->spline.IsValid()) { return; }
 
 			const float dt = aq::Engine::GetDeltaTime();
@@ -83,7 +88,7 @@ namespace app
 					// 速度連動 FOV (リザルト中は基準へ戻す)。急変を避けて平滑する。
 					{
 						float speedRate = 0.0f;
-						if (!GameFlow::Get().Context().gameplayPaused) {
+						if (!session->gameplayPaused) {
 							speedRate = aq::math::Clamp01(
 								aq::math::InverseLerp(FOV_SPEED_MIN, FOV_SPEED_MAX, character->speed));
 						}

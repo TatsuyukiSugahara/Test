@@ -96,8 +96,9 @@ namespace aq
 					FireClick(btn, target, screens);
 			}
 
-			// Cancel → Back
-			if (IsCancel())
+			// Cancel → Back (オプトイン。ゲームの状態機械が画面遷移を管理する構成では、
+			// ここで勝手に Pop するとゲーム状態と食い違い、空のスタックを作ってしまう)
+			if (IsCancel() && screens.IsBackNavigationEnabled())
 				screens.Back();
 
 			// 方向キーによるフォーカス移動 (Phase 3 拡張予定: シンプルな上下のみ実装)

@@ -32,6 +32,7 @@ namespace aq
 			A     = DIK_A,
 			S     = DIK_S,
 			D     = DIK_D,
+			G     = DIK_G,
 
 			Space  = DIK_SPACE,
 			Enter  = DIK_RETURN,
@@ -47,7 +48,7 @@ namespace aq
 		enum class KeyBoardType : uint32_t
 		{
 			Left, Right, Up, Down,
-			W, A, S, D,
+			W, A, S, D, G,
 			Space, Enter, Escape,
 			Num1, Num2, Num3, Num4,
 		};

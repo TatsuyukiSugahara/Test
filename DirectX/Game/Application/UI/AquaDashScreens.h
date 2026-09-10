@@ -3,6 +3,8 @@
 #include "Math/Vector.h"
 
 
+namespace aq { namespace graphics { class IShaderResourceView; } }
+
 namespace app
 {
 	namespace aquadash
@@ -12,8 +14,8 @@ namespace app
 
 
 		/**
-		 * タイトル画面 (R-14)。ロゴ / ステージ名 / PRESS 点滅を表示する。
-		 * ステージ名の内容は StageDefinition 側から SetStageName で流し込む。
+		 * タイトル画面 (R-14)。ロゴ / ステージサムネイル / ステージ名 / PRESS 点滅を表示する。
+		 * ステージ名とサムネイルの内容は StageDefinition 側から流し込む。
 		 */
 		class TitleScreen : public aq::ui::UIScreen
 		{
@@ -21,6 +23,7 @@ namespace app
 			float             elapsed_    = 0.0f;
 			aq::ui::UIObject* press_      = nullptr;
 			aq::ui::UIObject* stageLabel_ = nullptr;
+			aq::ui::UIObject* stageThumb_ = nullptr;
 
 
 		public:
@@ -29,6 +32,12 @@ namespace app
 
 			/** ステージ表示ラベルの内容を差し替える (例: "STAGE 01    GREEN COAST") */
 			void SetStageName(const char* text);
+
+			/**
+			 * ステージサムネイル画像を差し替える (StageList.json の thumbnail)。
+			 * パスが空 / ロードできない場合は枠ごと非表示のままにする。
+			 */
+			void SetStageThumbnail(const char* path);
 		};
 
 
@@ -46,11 +55,10 @@ namespace app
 			aq::ui::UIObject* coinText_  = nullptr;
 			aq::ui::UIObject* speedText_ = nullptr;
 
-			/** ミニマップ (枠 / 下地 / プレイヤーマーカー / コース点列プール) */
-			aq::ui::UIObject*              minimapFrame_  = nullptr;
-			aq::ui::UIObject*              minimap_       = nullptr;
-			aq::ui::UIObject*              minimapMarker_ = nullptr;
-			std::vector<aq::ui::UIObject*> minimapDots_;
+			/** ミニマップ (枠 / 俯瞰ベイク画像 / プレイヤーマーカー) */
+			aq::ui::UIObject* minimapFrame_  = nullptr;
+			aq::ui::UIObject* minimap_       = nullptr;
+			aq::ui::UIObject* minimapMarker_ = nullptr;
 
 
 		public:
@@ -65,10 +73,10 @@ namespace app
 			void SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh);
 
 			/**
-			 * ミニマップのコース形状を設定する (uv は 0-1。u=右+, v=下+)。
-			 * 点列はドットの UIObject プールとして生成・再利用する。空を渡すとミニマップ全体を隠す。
+			 * ミニマップに表示する俯瞰ベイク画像を差し替える。
+			 * nullptr を渡すとミニマップ全体を隠す。
 			 */
-			void SetMinimapCourse(const std::vector<aq::math::Vector2>& uvPoints);
+			void SetMinimapTexture(const std::shared_ptr<aq::graphics::IShaderResourceView>& texture);
 
 			/** ミニマップ上のプレイヤーマーカー位置。u,v は 0-1 (ミニマップ矩形ローカル。u=右+, v=下+) */
 			void SetMinimapMarker(const float u, const float v);

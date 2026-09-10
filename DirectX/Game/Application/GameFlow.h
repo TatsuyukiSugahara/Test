@@ -3,12 +3,26 @@
 #include "Level/LevelManager.h"   // aq::level::LevelLoadHandle
 #include "Math/Vector.h"
 #include "UI/Screen/UIScreen.h"
-#include "Flow/GameContext.h"
+#include "Stage/StageData.h"
 #include <memory>
 
 namespace app
 {
 	class GameFlow;
+
+
+	namespace aquadash
+	{
+		/**
+		 * 1 プレイの結果。InGame が書き込み、Result が評価に使う
+		 */
+		struct PlayResult
+		{
+			bool     cleared      = false;   // true=クリア / false=ゲームオーバー (落下)
+			float    clearTimeSec = 0.0f;    // ゴール (または終了) までの経過秒
+			uint32_t coinCount    = 0;       // 獲得コイン枚数
+		};
+	}
 
 
 	/**
@@ -103,8 +117,16 @@ namespace app
 		/** 状態間共有データ */
 		aq::ecs::EntityHandle       playerHandle_;
 		aq::level::LevelLoadHandle  loadHandle_;
-		aquadash::GameContext       context_;             // AquaDash のゲーム進行データ (選択ステージ / プレイ結果)
 		bool                        preloaded_ = false;   // UI テクスチャの事前ロードを一度だけ行う
+
+		/** セッションエンティティ (SessionComponent 1 体)。生成者として破棄責任を持つ */
+		aq::ecs::EntityHandle       sessionHandle_;
+
+		/** 状態機械の私有データ (System からは参照しない。System が読む共有分は SessionComponent 側) */
+		int                                selectedStageIndex_ = 0;   // タイトルで選んだステージ (StageList の並び順)
+		aquadash::PlayResult               playResult_;
+		std::vector<stage::StageListEntry> stageList_;                // タイトルで読む一覧
+		std::vector<aq::ecs::EntityHandle> stageEntities_;            // タイトル復帰時に破棄する生成物
 
 		static GameFlow* instance_;
 
@@ -125,7 +147,17 @@ namespace app
 		aq::level::LevelLoadHandle&       LoadHandle()       { return loadHandle_; }
 		void SetLoadHandle(const aq::level::LevelLoadHandle& handle) { loadHandle_ = handle; }
 
-		aquadash::GameContext& Context() { return context_; }
+		/** タイトルで選んだステージ (StageList の並び順) */
+		int& SelectedStageIndex() { return selectedStageIndex_; }
+
+		/** 直近のプレイ結果 (InGame が書き、Result が読む) */
+		aquadash::PlayResult& PlayResult() { return playResult_; }
+
+		/** ステージ一覧 (タイトルで一度だけ読む) */
+		std::vector<stage::StageListEntry>& StageList() { return stageList_; }
+
+		/** ステージ生成物のハンドル (タイトル復帰時にまとめて破棄する) */
+		std::vector<aq::ecs::EntityHandle>& StageEntities() { return stageEntities_; }
 
 		// 影の注視点 (GetFocusPosition) の対象を差し替える。
 		void SetPlayerHandle(const aq::ecs::EntityHandle& handle) { playerHandle_ = handle; }
@@ -139,7 +171,10 @@ namespace app
 		static GameFlow& Get() { return *instance_; }
 		static void      Release();
 
-		// UI 画面登録 + 初期状態 (タイトル) 開始。Create の後に一度呼ぶ。
+		// UI 画面登録 + セッションエンティティ生成 + 初期状態 (タイトル) 開始。Create の後に一度呼ぶ。
 		void Initialize();
+
+		// Initialize の対。セッションエンティティを破棄する (Release から呼ばれる)。
+		void Finalize();
 	};
 }

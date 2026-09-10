@@ -99,28 +99,35 @@
         {
             "name": "StagePanel",
             "components": {
-                "transform": { "position": [0, 150, 0], "sizeDelta": [1100, 96] },
+                "transform": { "position": [0, 150, 0], "sizeDelta": [1100, 140] },
                 "image": { "texture": "Assets/UI/Textures/white.png", "color": [1.0, 1.0, 1.0, 0.08] }
             }
         },
         {
             "name": "StageAccentL",
             "components": {
-                "transform": { "position": [-540, 150, 0], "sizeDelta": [8, 96] },
+                "transform": { "position": [-540, 150, 0], "sizeDelta": [8, 140] },
                 "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.35, 0.85, 1.0, 0.85] }
             }
         },
         {
             "name": "StageAccentR",
             "components": {
-                "transform": { "position": [540, 150, 0], "sizeDelta": [8, 96] },
+                "transform": { "position": [540, 150, 0], "sizeDelta": [8, 140] },
                 "image": { "texture": "Assets/UI/Textures/white.png", "color": [0.35, 0.85, 1.0, 0.85] }
+            }
+        },
+        {
+            "name": "StageThumb",
+            "components": {
+                "transform": { "position": [-420, 150, 0], "sizeDelta": [208, 117] },
+                "image": { "texture": "Assets/UI/Textures/white.png", "color": [1.0, 1.0, 1.0, 0.0] }
             }
         },
         {
             "name": "StageLabel",
             "components": {
-                "transform": { "position": [0, 150, 0], "sizeDelta": [1100, 70] },
+                "transform": { "position": [104, 150, 0], "sizeDelta": [850, 70] },
                 "text": {
                     "content": "STAGE 01    GREEN COAST",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",

@@ -536,6 +536,7 @@ namespace aq
 
 
 		RenderSystem* RenderSystem::instance_ = nullptr;
+		bool          RenderSystem::instanceGatherDone_    = false;
 		bool          RenderSystem::frustumCullingEnabled_ = true;
 		uint32_t      RenderSystem::cullingTotalCount_     = 0;
 		uint32_t      RenderSystem::cullingVisibleCount_   = 0;
@@ -567,6 +568,10 @@ namespace aq
 
 		void RenderSystem::Update()
 		{
+			// フレーム境界のリセット点。Update は毎フレーム 1 回だけ呼ばれ、
+			// 同フレームの BuildRenderFrame (オフスクリーン→メイン) より必ず先に走る。
+			instanceGatherDone_ = false;
+
 			aq::ecs::Foreach<TransformComponent, HierarchicalTransformComponent, BoxStaticMeshComponent>(
 				[](const aq::ecs::Entity&, TransformComponent*, HierarchicalTransformComponent* hierarchicalTransformComponent, BoxStaticMeshComponent* boxStaticMeshComponent)
 				{
@@ -753,8 +758,12 @@ namespace aq
 			// エンティティのワールド変換を掛ける(エンティティを回せば群全体が周回する)。
 			// ここで積むのは、確定済みの視錐台で per-instance 判定するため。登録メッシュは
 			// 最後に一括 Flush する(毎フレーム必ず1回)。
-			if (gatherInstances)
+			// 同一フレームで 2 回目以降の要求が来た場合 (オフスクリーンパス + メインパス等) は
+			// 1 回目の結果をそのまま使う。Flush は毎フレーム 1 回という不変条件を守るため。
+			if (gatherInstances && !instanceGatherDone_)
 			{
+				instanceGatherDone_ = true;
+
 				aq::ecs::Foreach<HierarchicalTransformComponent, InstancedStaticMeshComponent, InstancedPointListComponent>(
 					[&frustum, cullEnabled, camPos](const aq::ecs::Entity&, HierarchicalTransformComponent* hierarchicalTransformComponent,
 					   InstancedStaticMeshComponent* meshComponent, InstancedPointListComponent* pointList)

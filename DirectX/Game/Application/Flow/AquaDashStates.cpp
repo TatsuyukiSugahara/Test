@@ -1,11 +1,13 @@
 #include "stdafx.h"
 #include "AquaDashStates.h"
+#include "Application.h"
 #include "UI/AquaDashScreens.h"
 #include "GameInput.h"
 #include "GameAction.h"
 #include "ECS/SpeedCharacterComponentSystem.h"
 #include "ECS/AutoCameraComponentSystem.h"
 #include "ECS/CoinComponentSystem.h"
+#include "ECS/SessionComponent.h"
 #include "Component/TerrainComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
@@ -52,9 +54,21 @@ namespace app
 			// unityChan.tkm はメートル基準でない (素のままだと約 6m)。世界は 1m=1.0 なので縮めて使う。
 			static constexpr float PLAYER_MODEL_SCALE = 0.25f;
 
-			// 路面タイルをベイクするときの XZ セルの 1 辺 [m]。
-			// 小さいほど判定は細かくなるが、セル数 (判定回数) が増える。
-			static constexpr float ROAD_TILE_CELL_SIZE = 32.0f;
+			// 路面リボン (スプライン追従の連続メッシュ)。断面ピッチが細かいほどカーブが滑らかになるが頂点が増える。
+			static constexpr float ROAD_SECTION_STEP  = 2.0f;    // 断面の間隔 [m]
+			static constexpr float ROAD_THICKNESS     = 0.3f;    // 路面の厚み [m]
+			// 地形面 (y=0) より上面がわずかに出るよう断面中心を 0.1 下げる (厚み 0.3 → 上面 +0.05)。
+			// 深く沈めると平坦地形に埋まって見えなくなる。
+			static constexpr float ROAD_SINK          = 0.1f;    // 断面中心をスプラインから下げる量 [m]
+			static constexpr float ROAD_UV_LENGTH     = 20.0f;   // UV の v が 1 進む距離 [m]
+
+			// ライン装飾 (テクスチャ経路を使わずメッシュを分けて色で出す)。
+			static constexpr float ROAD_MARKING_LIFT  = 0.02f;   // 路面上面から浮かせる量 [m] (z-fight 回避)
+			static constexpr float ROAD_EDGE_INSET    = 0.35f;   // 路面端からエッジライン中心までの距離 [m]
+			static constexpr float ROAD_EDGE_WIDTH    = 0.25f;   // エッジラインの幅 [m]
+			static constexpr float ROAD_DASH_WIDTH    = 0.15f;   // センター破線の幅 [m]
+			static constexpr float ROAD_DASH_ON       = 4.0f;    // 破線の描き [m]
+			static constexpr float ROAD_DASH_OFF      = 4.0f;    // 破線の空き [m]
 
 			// コイン取得エフェクト (常駐エミッタを移動+Restart で使い回す)。
 			static const char* COLLECT_FX_PATH = "Assets/Particle/FX_Explosion.particle";
@@ -100,6 +114,14 @@ namespace app
 			// ハッシュ乱数のシードを作るときの XZ 量子化 (1m あたりの分割数)。
 			static constexpr float GRASS_SEED_QUANTIZE      = 4.0f;
 			static constexpr float GRASS_TWO_PI             = 6.28318530718f;
+
+
+			// セッション状態を取り出す。生成は GameFlow::Initialize なので通常は非 null。
+			// 状態クラスはメインスレッドで動くので、ここから得たポインタへは書き込んでよい。
+			app::ecs::SessionComponent* GetSession()
+			{
+				return aq::ecs::EntityContext::Get().GetSingletonComponent<app::ecs::SessionComponent>();
+			}
 
 
 			// 整数座標から 0-1 の決定的な擬似乱数を作る (SplatmapPainter の HashNoise と同じ式)。
@@ -178,8 +200,254 @@ namespace app
 			}
 
 
+			// 頂点を 1 個積む (路面系メッシュ共通)。接線はシェーダが使わないのでゼロのまま。
+			void PushRoadVertex(std::vector<aq::graphics::VertexData>& outVertices,
+			                    const aq::math::Vector3& position, const aq::math::Vector3& normal,
+			                    const float u, const float v)
+			{
+				aq::graphics::VertexData vertex;
+				vertex.position = position;
+				vertex.normal   = normal;
+				vertex.uv.Set(u, v);
+				vertex.tangent.Set(0.0f, 0.0f, 0.0f, 0.0f);
+				outVertices.push_back(vertex);
+			}
+
+
+			// 四角形 1 枚を三角形 2 枚のインデックスへ展開する。頂点は
+			// 「手前左 → 奥左 → 奥右 → 手前右」の順 (左 = -right / 奥 = +tangent) で渡す。
+			// この並びなら (b-a)×(d-a) が面法線と同じ向きになるので表面として描かれる。
+			void EmitRoadQuad(std::vector<uint32_t>& outIndices,
+			                  const uint32_t a, const uint32_t b, const uint32_t c, const uint32_t d)
+			{
+				outIndices.push_back(a);
+				outIndices.push_back(b);
+				outIndices.push_back(d);
+				outIndices.push_back(b);
+				outIndices.push_back(c);
+				outIndices.push_back(d);
+			}
+
+
+			// 頂点列からローカル AABB を作る。インスタンス点は原点・無回転・等倍で置くので、
+			// これがそのままカリング用のワールド AABB になる。
+			aq::math::AABB ComputeRoadMeshBounds(const std::vector<aq::graphics::VertexData>& vertices)
+			{
+				aq::math::AABBBuilder builder;
+				for (const auto& vertex : vertices) {
+					builder.Add(vertex.position);
+				}
+				return builder.Build();
+			}
+
+
+			// 断面を取る距離を刻む。終端は端数ぶんの断面を 1 枚足して、コース末端まで隙間なく閉じる。
+			// 路面本体とエッジラインで同じ列を使うので、両者の断面がずれない。
+			void BuildRoadSectionDistances(const float totalLength, std::vector<float>& outDistances)
+			{
+				outDistances.clear();
+				if (totalLength <= 0.0f) { return; }
+
+				outDistances.reserve(static_cast<size_t>(totalLength / ROAD_SECTION_STEP) + 2);
+				for (float d = 0.0f; d < totalLength; d += ROAD_SECTION_STEP) {
+					outDistances.push_back(d);
+				}
+				if (outDistances.back() < totalLength - 0.001f) {
+					outDistances.push_back(totalLength);
+				}
+			}
+
+
+			// 路面本体。断面ごとに上面 / 底面 / 左右側面ぶんの法線を分けた 8 頂点を積み、
+			// 隣り合う断面を 4 枚の面で閉じる。閉じ断面なのでループを巻いても裏面欠けが出ない。
+			// UV は将来のテクスチャ対応用に焼いておく (u = 横位置 0-1 / v = 距離 / ROAD_UV_LENGTH)。
+			void BuildRoadRibbonMesh(const stage::StageData& stageData, const std::vector<float>& distances,
+			                         std::vector<aq::graphics::VertexData>& outVertices,
+			                         std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+				if (distances.size() < 2) { return; }
+
+				const float halfWidth     = stageData.width * 0.5f;
+				const float halfThickness = ROAD_THICKNESS * 0.5f;
+
+				outVertices.reserve(distances.size() * 8);
+				for (const float d : distances)
+				{
+					const auto frame = stageData.spline.Evaluate(d);
+					const aq::math::Vector3 up    = frame.up;
+					const aq::math::Vector3 down  = frame.up * -1.0f;
+					const aq::math::Vector3 right = frame.right;
+					const aq::math::Vector3 left  = frame.right * -1.0f;
+
+					const aq::math::Vector3 center      = frame.position - up * ROAD_SINK;
+					const aq::math::Vector3 topLeft     = center + up   * halfThickness + left  * halfWidth;
+					const aq::math::Vector3 topRight    = center + up   * halfThickness + right * halfWidth;
+					const aq::math::Vector3 bottomLeft  = center + down * halfThickness + left  * halfWidth;
+					const aq::math::Vector3 bottomRight = center + down * halfThickness + right * halfWidth;
+					const float v = d / ROAD_UV_LENGTH;
+
+					PushRoadVertex(outVertices, topLeft,     up,    0.0f, v);   // +0 上面
+					PushRoadVertex(outVertices, topRight,    up,    1.0f, v);   // +1
+					PushRoadVertex(outVertices, bottomLeft,  down,  0.0f, v);   // +2 底面
+					PushRoadVertex(outVertices, bottomRight, down,  1.0f, v);   // +3
+					PushRoadVertex(outVertices, topLeft,     left,  1.0f, v);   // +4 左側面
+					PushRoadVertex(outVertices, bottomLeft,  left,  0.0f, v);   // +5
+					PushRoadVertex(outVertices, topRight,    right, 1.0f, v);   // +6 右側面
+					PushRoadVertex(outVertices, bottomRight, right, 0.0f, v);   // +7
+				}
+
+				outIndices.reserve((distances.size() - 1) * 24);
+				for (size_t i = 0; i + 1 < distances.size(); ++i)
+				{
+					const uint32_t s = static_cast<uint32_t>(i * 8);
+					const uint32_t n = static_cast<uint32_t>((i + 1) * 8);
+
+					EmitRoadQuad(outIndices, s + 0, n + 0, n + 1, s + 1);   // 上面 (+up)
+					EmitRoadQuad(outIndices, s + 3, n + 3, n + 2, s + 2);   // 底面 (-up)
+					EmitRoadQuad(outIndices, s + 5, n + 5, n + 4, s + 4);   // 左側面 (-right)
+					EmitRoadQuad(outIndices, s + 6, n + 6, n + 7, s + 7);   // 右側面 (+right)
+				}
+			}
+
+
+			// 左右のエッジライン。路面上面から少し浮かせた薄いストリップ 2 本を 1 メッシュにまとめる。
+			void BuildRoadEdgeLineMesh(const stage::StageData& stageData, const std::vector<float>& distances,
+			                           std::vector<aq::graphics::VertexData>& outVertices,
+			                           std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+				if (distances.size() < 2) { return; }
+
+				const float lift     = ROAD_THICKNESS * 0.5f + ROAD_MARKING_LIFT - ROAD_SINK;
+				const float lineMid  = stageData.width * 0.5f - ROAD_EDGE_INSET;
+				const float halfLine = ROAD_EDGE_WIDTH * 0.5f;
+
+				outVertices.reserve(distances.size() * 4);
+				for (const float d : distances)
+				{
+					const auto frame = stageData.spline.Evaluate(d);
+					const aq::math::Vector3 base = frame.position + frame.up * lift;
+					const float v = d / ROAD_UV_LENGTH;
+
+					// 横位置は -right 側から順に積む (EmitRoadQuad の「手前左」の並びに合わせる)。
+					PushRoadVertex(outVertices, base + frame.right * (-lineMid - halfLine), frame.up, 0.0f, v);   // +0 左ライン外
+					PushRoadVertex(outVertices, base + frame.right * (-lineMid + halfLine), frame.up, 1.0f, v);   // +1 左ライン内
+					PushRoadVertex(outVertices, base + frame.right * ( lineMid - halfLine), frame.up, 0.0f, v);   // +2 右ライン内
+					PushRoadVertex(outVertices, base + frame.right * ( lineMid + halfLine), frame.up, 1.0f, v);   // +3 右ライン外
+				}
+
+				outIndices.reserve((distances.size() - 1) * 12);
+				for (size_t i = 0; i + 1 < distances.size(); ++i)
+				{
+					const uint32_t s = static_cast<uint32_t>(i * 4);
+					const uint32_t n = static_cast<uint32_t>((i + 1) * 4);
+
+					EmitRoadQuad(outIndices, s + 0, n + 0, n + 1, s + 1);   // 左ライン
+					EmitRoadQuad(outIndices, s + 2, n + 2, n + 3, s + 3);   // 右ライン
+				}
+			}
+
+
+			// センター破線。描き区間だけを独立したクアッド列として同一メッシュへ積む
+			// (空き区間には頂点を作らないので、1 ドローのまま破線に見える)。
+			void BuildRoadCenterDashMesh(const stage::StageData& stageData,
+			                             std::vector<aq::graphics::VertexData>& outVertices,
+			                             std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+
+				const float total = stageData.spline.GetTotalLength();
+				if (total <= 0.0f) { return; }
+
+				const float lift     = ROAD_THICKNESS * 0.5f + ROAD_MARKING_LIFT - ROAD_SINK;
+				const float halfDash = ROAD_DASH_WIDTH * 0.5f;
+				const float period   = ROAD_DASH_ON + ROAD_DASH_OFF;
+
+				for (float start = 0.0f; start < total; start += period)
+				{
+					const float end = (start + ROAD_DASH_ON < total) ? start + ROAD_DASH_ON : total;
+					const float span = end - start;
+					if (span < 0.01f) { break; }
+
+					// 描き区間の中もカーブに沿わせたいので、断面ピッチで分割する。
+					const int stepCount = static_cast<int>(span / ROAD_SECTION_STEP) + 1;
+					const uint32_t base = static_cast<uint32_t>(outVertices.size());
+
+					for (int k = 0; k <= stepCount; ++k)
+					{
+						const float d     = start + span * static_cast<float>(k) / static_cast<float>(stepCount);
+						const auto  frame = stageData.spline.Evaluate(d);
+						const aq::math::Vector3 center = frame.position + frame.up * lift;
+						const float v = d / ROAD_UV_LENGTH;
+
+						PushRoadVertex(outVertices, center + frame.right * -halfDash, frame.up, 0.0f, v);
+						PushRoadVertex(outVertices, center + frame.right *  halfDash, frame.up, 1.0f, v);
+					}
+					for (int k = 0; k < stepCount; ++k)
+					{
+						const uint32_t s = base + static_cast<uint32_t>(k * 2);
+						EmitRoadQuad(outIndices, s + 0, s + 2, s + 3, s + 1);
+					}
+				}
+			}
+
+
+			/**
+			 * 手続き生成した路面メッシュを登録し、インスタンス点 1 個のエンティティとして置く。
+			 * 形状はワールド座標で焼き込んであるので、点は原点・無回転・等倍でよい。
+			 * メッシュ名が登録済みならそれが再利用される (RETRY やステージ再入場で作り直しにならない)。
+			 * @param meshName 登録名 兼 デバッグ表示名
+			 * @param color    per-instance color (InstancedSimple はこれで色分けする)
+			 */
+			void CreateRoadMeshEntity(GameFlow& flow, const char* meshName,
+			                          const std::vector<aq::graphics::VertexData>& vertices,
+			                          const std::vector<uint32_t>& indices,
+			                          const aq::math::Vector4& color)
+			{
+				if (vertices.empty() || indices.empty()) { return; }
+
+				auto* mesh = aq::graphics::InstancedStaticMesh::RegisterFromData(
+					meshName,
+					vertices.data(), static_cast<uint32_t>(vertices.size()), sizeof(aq::graphics::VertexData),
+					indices.data(),  static_cast<uint32_t>(indices.size()),
+					aq::graphics::StaticMesh::ShaderType::InstancedSimple);
+
+				// ローカル AABB が無いとセル AABB が点になりカリングが一切効かないので必ず持たせる。
+				const aq::math::AABB bounds = ComputeRoadMeshBounds(vertices);
+				if (mesh != nullptr) {
+					mesh->SetLocalBounds(bounds);
+				}
+
+				auto& ctx = aq::ecs::EntityContext::Get();
+				auto entity = ctx.CreateEntity<
+					aq::ecs::TransformComponent,
+					aq::ecs::HierarchicalTransformComponent,
+					aq::ecs::InstancedStaticMeshComponent,
+					aq::ecs::InstancedPointListComponent>();
+				entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh(meshName);
+
+				auto* pointList = entity.GetComponent<aq::ecs::InstancedPointListComponent>();
+				aq::ecs::InstancePoint p;
+				p.color = color;
+				pointList->AddInstancePoint(p);
+
+				// 配置後に一切動かない静的オブジェクトなのでベイク経路に載せる。点は 1 個しかないため
+				// セルサイズは 0 (= 全点を 1 セルにまとめる指定) にして、コース全長の AABB 1 個で判定する。
+				// maxDrawDistance は既定 (無制限) のまま — ミニマップの俯瞰ベイクに路面を映すのに要る。
+				pointList->BakeStatic(aq::math::Matrix4x4::Identity, bounds, 0.0f);
+#ifdef AQ_DEBUG_IMGUI
+				entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName(meshName);
+#endif
+				flow.StageEntities().push_back(entity.GetHandle());
+			}
+
+
 			// 地形 + プレイヤー + 自動カメラを生成する (ロード完了時に一度だけ)。
-			// 生成した Entity はタイトル復帰時の破棄用に context.stageEntities へ積む。
+			// 生成した Entity はタイトル復帰時の破棄用に GameFlow の stageEntities へ積む。
 			/** コースの XZ 範囲 (スプラインを 10m 刻みで粗くサンプリング)。地面サイズとミニマップ正規化に使う */
 			struct CourseExtents
 			{
@@ -375,8 +643,9 @@ namespace app
 			                      aq::ecs::BakedData* preparedGrass)
 			{
 				auto& ctx     = aq::ecs::EntityContext::Get();
-				auto& context = flow.Context();
-				context.stageEntities.clear();
+				auto* session = GetSession();
+				if (!session) { return; }
+				flow.StageEntities().clear();
 
 				const CourseExtents ext = ComputeCourseExtents(*stageData);
 				const float minX = ext.minX, maxX = ext.maxX, minZ = ext.minZ, maxZ = ext.maxZ;
@@ -401,7 +670,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("StageGround");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   terrain entity done");
 
@@ -419,57 +688,38 @@ namespace app
 				{
 					const float extentX = maxX - minX;
 					const float extentZ = maxZ - minZ;
-					context.minimapCenterXZ   = aq::math::Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
-					context.minimapHalfExtent = (extentX > extentZ ? extentX : extentZ) * 0.5f + 40.0f;
+					session->minimapCenterXZ   = aq::math::Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
+					session->minimapHalfExtent = (extentX > extentZ ? extentX : extentZ) * 0.5f + 40.0f;
 				}
 
-				// 路面タイル (スプラインに沿った薄い箱)。走行時の路面の見た目と、
-				// ミニマップ (俯瞰) に映るコース形状を兼ねる。ループでもタイル姿勢が路面に追従する。
+				// 路面 (スプラインに追従する連続リボン + ライン装飾)。走行時の路面の見た目と、
+				// ミニマップ (俯瞰) に映るコース形状を兼ねる。ループでも断面が路面に追従する。
 				{
-					// 全タイルを 1 エンティティのインスタンス描画にまとめる (約360枚=1ドロー)。
-					// per-instance フラスタムカリングは gather 側 (RenderSystem) が行う。
-					// 20m 間隔 (約360枚) はミニマップ形状とのバランスで維持。
-					constexpr float TILE_SPACING = 20.0f;
-					auto* roadMesh = aq::ecs::BoxStaticMeshComponent::RegisterInstancedMesh("RoadTile");
+					std::vector<float> sectionDistances;
+					BuildRoadSectionDistances(stageData->spline.GetTotalLength(), sectionDistances);
 
-					auto entity = ctx.CreateEntity<
-						aq::ecs::TransformComponent,
-						aq::ecs::HierarchicalTransformComponent,
-						aq::ecs::InstancedStaticMeshComponent,
-						aq::ecs::InstancedPointListComponent>();
-					entity.GetComponent<aq::ecs::InstancedStaticMeshComponent>()->SetMesh("RoadTile");
+					std::vector<aq::graphics::VertexData> roadVertices;
+					std::vector<uint32_t>                 roadIndices;
 
-					auto* pointList = entity.GetComponent<aq::ecs::InstancedPointListComponent>();
-					const float total = stageData->spline.GetTotalLength();
-					pointList->ReserveInstancePoints(static_cast<size_t>(total / TILE_SPACING) + 1);
-					for (float d = 0.0f; d < total; d += TILE_SPACING)
-					{
-						const auto frame = stageData->spline.Evaluate(d);
-						aq::ecs::InstancePoint p;
-						// 地形面 (y=0) より上面がわずかに出るよう -0.10 (厚み 0.3 → 上面 +0.05)。
-						// 深く沈めると平坦地形に埋まって見えなくなる。
-						p.position = frame.position - frame.up * 0.1f;
-						p.rotation = frame.ToRotation();
-						p.scale.Set(stageData->width, 0.3f, TILE_SPACING * 1.02f);
-						// 路面は青みグレー (仮アセット。専用モデル導入までの色分け)。
-						p.color = aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f);
-						pointList->AddInstancePoint(p);
-					}
+					// 本体は青みグレー (仮アセット。路面テクスチャ導入までの色分け)。
+					BuildRoadRibbonMesh(*stageData, sectionDistances, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RoadRibbon", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.30f, 0.34f, 0.42f, 1.0f));
+					const size_t ribbonVertexCount = roadVertices.size();
 
-					// 路面タイルは配置後に一切動かない静的オブジェクトなので、行列を焼き込んで
-					// セル単位でカリングする「ベイク経路」に載せる (ベイク経路の検証ケースも兼ねる)。
-					// エンティティは既定変換のままなので、織り込むワールド行列は単位行列でよい。
-					// maxDrawDistance は既定 (無制限) のまま — ミニマップのコース形状に遠方タイルが要る。
-					if (roadMesh != nullptr) {
-						pointList->BakeStatic(aq::math::Matrix4x4::Identity, roadMesh->GetLocalBounds(),
-						                      ROAD_TILE_CELL_SIZE);
-					}
-#ifdef AQ_DEBUG_IMGUI
-					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("RoadTiles");
-#endif
-					context.stageEntities.push_back(entity.GetHandle());
+					// 装飾は色を変えたいだけなので、テクスチャではなくメッシュを分けて出す。
+					BuildRoadEdgeLineMesh(*stageData, sectionDistances, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RoadEdgeLines", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.75f, 0.95f, 1.00f, 1.0f));
+
+					BuildRoadCenterDashMesh(*stageData, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RoadCenterDashes", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.95f, 0.97f, 1.00f, 1.0f));
+
+					aq::StartupMarkf("[load]   road ribbon %zu sections / %zu vertices",
+					                 sectionDistances.size(), ribbonVertexCount);
 				}
-				aq::StartupMark("[load]   road tiles done");
+				aq::StartupMark("[load]   road mesh done");
 
 				// 草 (手続き生成の房 + 風揺れ)。散布とベイクはワーカー (BuildGrassBakedData) 側で終えてあり、
 				// ここは GPU メッシュの登録・エンティティ生成・ベイク結果の move だけを行う。
@@ -518,7 +768,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Grass");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   grass done");
 
@@ -559,22 +809,22 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("SpeedPlayer");
 #endif
-					context.playerHandle = entity.GetHandle();
-					context.stageEntities.push_back(entity.GetHandle());
+					session->playerHandle = entity.GetHandle();
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
-				flow.SetPlayerHandle(context.playerHandle);   // 影の注視点用
+				flow.SetPlayerHandle(session->playerHandle);   // 影の注視点用
 				aq::StartupMark("[load]   player done");
 
 				// 自動カメラ。
 				{
 					auto entity = ctx.CreateEntity<app::ecs::AutoCameraComponent>();
 					auto* autoCam = entity.GetComponent<app::ecs::AutoCameraComponent>();
-					autoCam->targetHandle = context.playerHandle;
+					autoCam->targetHandle = session->playerHandle;
 					autoCam->cameraType   = aq::CameraType::Main;
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("AutoCamera");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 
 				// コイン (スプライン座標 → ワールドへ焼き込み。判定と回転は CoinSystem)。
@@ -596,7 +846,7 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coin");
 #endif
-					context.stageEntities.push_back(entity.GetHandle());
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 
 				aq::StartupMarkf("[load]   coin entities done (%zu)", stageData->coins.size());
@@ -631,8 +881,8 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Coins");
 #endif
-					context.coinInstancesHandle = entity.GetHandle();
-					context.stageEntities.push_back(entity.GetHandle());
+					session->coinInstancesHandle = entity.GetHandle();
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 				aq::StartupMark("[load]   coin ring mesh done");
 
@@ -648,8 +898,8 @@ namespace app
 #ifdef AQ_DEBUG_IMGUI
 					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("CollectFX");
 #endif
-					context.collectFxHandle = entity.GetHandle();
-					context.stageEntities.push_back(entity.GetHandle());
+					session->collectFxHandle = entity.GetHandle();
+					flow.StageEntities().push_back(entity.GetHandle());
 				}
 			}
 
@@ -657,13 +907,14 @@ namespace app
 			// プレイヤーをスポーン状態へ戻す (「もう一度」のロードなし再開用)。
 			void ResetPlayers(GameFlow& flow)
 			{
-				auto& context = flow.Context();
-				const auto stageData = context.activeStage;
+				auto* session = GetSession();
+				if (!session) { return; }
+				const auto stageData = session->activeStage;
 				if (!stageData) { return; }
 
 				auto& ctx = aq::ecs::EntityContext::Get();
-				if (ctx.IsValid(context.playerHandle)) {
-					if (auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle)) {
+				if (ctx.IsValid(session->playerHandle)) {
+					if (auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(session->playerHandle)) {
 						character->distance         = stageData->spawnDistance;
 						character->lateral          = stageData->spawnLanes.empty() ? 0.0f : stageData->spawnLanes[0];
 						character->height           = 0.0f;
@@ -673,12 +924,12 @@ namespace app
 						character->fallen           = false;
 						character->worldVelocity    = aq::math::Vector3(0.0f, 0.0f, 0.0f);
 					}
-					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle)) {
+					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(session->playerHandle)) {
 						score->coinCount = 0;
 						score->fallCount = 0;
 					}
 				}
-				context.playResult = PlayResult();
+				flow.PlayResult() = PlayResult();
 
 				// コインを全復活させる (取得済みフラグと表示を戻す)。
 				app::ecs::CoinSystem::ReactivateAll();
@@ -696,22 +947,33 @@ namespace app
 			void DestroyStageWorld(GameFlow& flow)
 			{
 				auto& ctx     = aq::ecs::EntityContext::Get();
-				auto& context = flow.Context();
-				for (const auto& handle : context.stageEntities) {
+				auto* session = GetSession();
+				for (const auto& handle : flow.StageEntities()) {
 					if (ctx.IsValid(handle)) {
 						ctx.RequestDestroyEntity(handle);
 					}
 				}
-				context.stageEntities.clear();
-				context.playerHandle        = aq::ecs::EntityHandle();
-				context.collectFxHandle     = aq::ecs::EntityHandle();
-				context.coinInstancesHandle = aq::ecs::EntityHandle();
-				context.activeStage.reset();
+				flow.StageEntities().clear();
+				if (session) {
+					session->playerHandle        = aq::ecs::EntityHandle();
+					session->collectFxHandle     = aq::ecs::EntityHandle();
+					session->coinInstancesHandle = aq::ecs::EntityHandle();
+					session->activeStage.reset();
+				}
 
 				if (flow.LoadHandle().IsValid()) {
 					aq::level::LevelManager::Get().Unload(flow.LoadHandle().GetLevelId());
 					flow.SetLoadHandle(aq::level::LevelLoadHandle());
 				}
+
+				// 破棄するエンティティ (地形など) は自前の GPU バッファを持つ。在フライトの
+				// 描画フレームがそれらを参照したまま解放すると device removed でクラッシュするため、
+				// レンダースレッドを完全にドレインして GPU アイドルにしてから、遅延コマンドを
+				// 即時フラッシュして破棄を確定させる (この時点で参照は自分だけなので安全に解放できる)。
+				if (app::Application::IsAvailable()) {
+					app::Application::Get().WaitForRenderIdle();
+				}
+				aq::ecs::EntityContext::Get().FlushPendingCommands();
 			}
 		}
 
@@ -722,18 +984,19 @@ namespace app
 		void TitleState::OnEnter(GameFlow& flow)
 		{
 			// ステージ一覧は初回のみ読む (小さな JSON なので同期でよい)。
-			if (flow.Context().stageList.empty()) {
-				flow.Context().stageList = stage::StageRegistry::LoadList(STAGE_LIST_PATH);
+			if (flow.StageList().empty()) {
+				flow.StageList() = stage::StageRegistry::LoadList(STAGE_LIST_PATH);
 			}
 
-			// 選択中ステージ名をタイトルへ反映する。
-			const auto& list = flow.Context().stageList;
+			// 選択中ステージ名とサムネイルをタイトルへ反映する。
+			const auto& list = flow.StageList();
 			if (!list.empty()) {
-				const int index = aq::math::Clamp(flow.Context().selectedStageIndex, 0, static_cast<int>(list.size()) - 1);
+				const int index = aq::math::Clamp(flow.SelectedStageIndex(), 0, static_cast<int>(list.size()) - 1);
 				if (auto* screen = static_cast<TitleScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
 					char buf[64];
 					std::snprintf(buf, sizeof(buf), "STAGE %02d    %s", index + 1, list[index].name.c_str());
 					screen->SetStageName(buf);
+					screen->SetStageThumbnail(list[index].thumbnailPath.c_str());
 				}
 			}
 		}
@@ -742,11 +1005,11 @@ namespace app
 		void TitleState::OnUpdate(GameFlow& flow, const float /*dt*/)
 		{
 			if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
-			if (flow.Context().stageList.empty()) { return; }   // 一覧が無ければ開始できない
+			if (flow.StageList().empty()) { return; }   // 一覧が無ければ開始できない
 
 			PlayDecisionSE();
 
-			flow.Context().playResult = PlayResult();
+			flow.PlayResult() = PlayResult();
 			aq::ui::UIContext::Get().Screens().Replace("Loading");
 			flow.ChangeState(std::make_unique<LoadingState>());
 		}
@@ -766,9 +1029,9 @@ namespace app
 			warmupFrames_ = 0;
 			timer_        = 0.0f;
 
-			const auto& context = flow.Context();
-			const int index = context.selectedStageIndex;
-			stagePath_ = context.stageList[index >= 0 && index < static_cast<int>(context.stageList.size()) ? index : 0].stagePath;
+			const auto& list = flow.StageList();
+			const int index = flow.SelectedStageIndex();
+			stagePath_ = list[index >= 0 && index < static_cast<int>(list.size()) ? index : 0].stagePath;
 			aq::StartupMarkf("[load] LoadingState enter (%s)", stagePath_.c_str());
 		}
 
@@ -825,7 +1088,7 @@ namespace app
 					break;
 				}
 
-				flow.Context().activeStage = stageData;
+				if (auto* session = GetSession()) { session->activeStage = stageData; }
 				aq::StartupMark("[load] worker result received");
 				CreateStageWorld(flow, stageData, &result.terrainCpu, &result.grassBaked);   // GPU 生成のみ (CPU 前計算はワーカー済み)
 				aq::StartupMark("[load] CreateStageWorld done (terrain/road/player/coins, sync)");
@@ -866,30 +1129,50 @@ namespace app
 		void InGameState::OnEnter(GameFlow& flow)
 		{
 			elapsed_ = 0.0f;
-			flow.Context().gameplayPaused = false;
+
+			auto* session = GetSession();
+			if (!session) { return; }
+			session->gameplayPaused = false;
 			ResetPlayers(flow);
 
-			// ミニマップ: コース形状をスプラインから等間隔サンプリングし、UI の点列として描く。
-			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
-				std::vector<aq::math::Vector2> uvPoints;
-				const auto& context   = flow.Context();
-				const auto  stageData = context.activeStage;
-				if (stageData && stageData->spline.IsValid() && context.minimapHalfExtent > 1.0f)
-				{
-					constexpr int SAMPLE_COUNT = 160;
-					const float span  = context.minimapHalfExtent * 2.0f;
-					const float total = stageData->spline.GetTotalLength();
-					uvPoints.reserve(SAMPLE_COUNT + 1);
-					for (int i = 0; i <= SAMPLE_COUNT; ++i)
-					{
-						const auto position =
-							stageData->spline.Evaluate(total * static_cast<float>(i) / SAMPLE_COUNT).position;
-						uvPoints.push_back(aq::math::Vector2(
-							0.5f + (position.x - context.minimapCenterXZ.x) / span,
-							0.5f - (position.z - context.minimapCenterXZ.y) / span));
-					}
+			// ミニマップ: 真上からの正射影でシーンを RT へ 1 回だけベイクし、その画像を貼る。
+			// 構図はマーカーの UV 式と同じ minimapCenterXZ ± minimapHalfExtent。
+			// up を +Z に取ると RT は「画面右=+X / 画面上=+Z」になり、
+			// SetMinimapMarker の u=+X / v=-Z (下+) と一致する。
+			auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top());
+			const bool minimapReady = session->minimapHalfExtent > 1.0f && app::Application::IsAvailable();
+			if (minimapReady)
+			{
+				// 俯瞰は正射影なので高さは構図に影響しない。地形 (最大約 31m) とループを
+				// 確実に前後クリップの内側へ収められる値にする。
+				constexpr float CAMERA_HEIGHT = 2000.0f;
+				constexpr float CAMERA_NEAR   = 1.0f;
+				constexpr float CAMERA_FAR    = 4000.0f;
+
+				const float centerX = session->minimapCenterXZ.x;
+				const float centerZ = session->minimapCenterXZ.y;
+				const float span    = session->minimapHalfExtent * 2.0f;
+
+				aq::Camera* const camera = aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);
+				camera->SetPosition(aq::math::Vector3(centerX, CAMERA_HEIGHT, centerZ));
+				camera->SetTarget(aq::math::Vector3(centerX, 0.0f, centerZ));
+				camera->SetUp(aq::math::Vector3(0.0f, 0.0f, 1.0f));
+				camera->SetNear(CAMERA_NEAR);
+				camera->SetFar(CAMERA_FAR);
+				camera->SetOrthographic(span, span);
+
+				// RETRY / ステージ再入場でもここを通るので毎回ベイクし直す。
+				app::Application& application = app::Application::Get();
+				application.RequestMinimapBake();
+
+				if (screen) {
+					screen->SetMinimapTexture(aq::graphics::GraphicsDevice::Get()
+						.GetRenderTargetSRVShared(application.GetMinimapRT()));
 				}
-				screen->SetMinimapCourse(uvPoints);
+			}
+			else if (screen)
+			{
+				screen->SetMinimapTexture(nullptr);
 			}
 		}
 
@@ -898,38 +1181,43 @@ namespace app
 		{
 			elapsed_ += dt;
 
-			auto& context = flow.Context();
-			const auto stageData = context.activeStage;
+			auto* session = GetSession();
+			if (!session) { return; }
+			const auto stageData = session->activeStage;
 			if (!stageData) { return; }
 
 			auto& ctx = aq::ecs::EntityContext::Get();
-			if (!ctx.IsValid(context.playerHandle)) { return; }
-			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle);
+			if (!ctx.IsValid(session->playerHandle)) { return; }
+			const auto* character = ctx.GetComponent<app::ecs::SpeedCharacterComponent>(session->playerHandle);
 			if (!character) { return; }
 
 			// HUD 更新 (時間 / コイン / 速度 / ミニマップマーカー)。
-			const auto* score    = ctx.GetComponent<app::ecs::PlayerScoreComponent>(context.playerHandle);
-			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(context.playerHandle);
+			const auto* score    = ctx.GetComponent<app::ecs::PlayerScoreComponent>(session->playerHandle);
+			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(session->playerHandle);
 			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
 				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f);
 
 				// 俯瞰カメラは 画面右=+X / 画面上=+Z。UI の v は下+なので Z を反転する。
-				if (playerTc && context.minimapHalfExtent > 1.0f) {
-					const float span = context.minimapHalfExtent * 2.0f;
-					const float u = 0.5f + (playerTc->position.x - context.minimapCenterXZ.x) / span;
-					const float v = 0.5f - (playerTc->position.z - context.minimapCenterXZ.y) / span;
+				if (playerTc && session->minimapHalfExtent > 1.0f) {
+					const float span = session->minimapHalfExtent * 2.0f;
+					const float u = 0.5f + (playerTc->position.x - session->minimapCenterXZ.x) / span;
+					const float v = 0.5f - (playerTc->position.z - session->minimapCenterXZ.y) / span;
 					screen->SetMinimapMarker(u, v);
 				}
 			}
 
 			// ゴール / 落下判定。
 			// 落下は「路面相対 height がしきい値未満」または「ループ脱落後に地面高さまで落ちた」。
-			const bool  goal     = character->distance >= stageData->goalDistance;
+			bool        goal     = character->distance >= stageData->goalDistance;
 			const bool  fall     = character->height < stageData->fallHeight
 			                    || (character->fallen && playerTc && playerTc->position.y < 0.5f);
+#ifdef _DEBUG
+			// デバッグ: G で即クリア (リザルト遷移や BACK TO TITLE のデバッグを走り切らずに試す)。
+			if (aq::hid::IsKeyTriggered(aq::hid::KeyBoardType::G)) { goal = true; }
+#endif
 			if (!goal && !fall) { return; }
 
-			PlayResult& result  = context.playResult;
+			PlayResult& result  = flow.PlayResult();
 			result.cleared      = goal;
 			result.clearTimeSec = elapsed_;
 			result.coinCount    = score ? score->coinCount : 0;
@@ -953,17 +1241,17 @@ namespace app
 			prevStickY_ = 0.0f;
 
 			// 走行と判定を停止する。描画/アニメ/カメラは動き続けるため背景は生きたまま。
-			flow.Context().gameplayPaused = true;
+			auto* session = GetSession();
+			if (session) { session->gameplayPaused = true; }
 
 			// Replace 済みの最前面がリザルト画面。結果と初期カーソルを反映する。
 			if (auto* screen = static_cast<ResultScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
-				const auto&       context = flow.Context();
-				const PlayResult& result  = context.playResult;
+				const PlayResult& result = flow.PlayResult();
 
 				// ランクはクリア時のみ (設計 03: ゲームオーバーはランクなし)。
 				std::string rank;
-				if (result.cleared && context.activeStage) {
-					rank = context.activeStage->CalcRank(result.coinCount, result.clearTimeSec);
+				if (result.cleared && session && session->activeStage) {
+					rank = session->activeStage->CalcRank(result.coinCount, result.clearTimeSec);
 				}
 				screen->SetResult(result.cleared, result.clearTimeSec, result.coinCount, rank.c_str());
 				screen->SetCursor(cursor_);
@@ -1017,7 +1305,7 @@ namespace app
 
 			case MENU_TITLE:
 				DestroyStageWorld(flow);
-				flow.Context().gameplayPaused = false;
+				if (auto* session = GetSession()) { session->gameplayPaused = false; }
 				screens.Replace("AquaDashTitle");
 				flow.ChangeState(std::make_unique<TitleState>());
 				break;

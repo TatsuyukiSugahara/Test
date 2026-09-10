@@ -45,9 +45,27 @@ namespace aq
 	}
 
 
+	void Camera::SetOrthographic(const float width, const float height)
+	{
+		EngineAssertMsg(width  > 0.0f, "Camera::SetOrthographic: width must be > 0");
+		EngineAssertMsg(height > 0.0f, "Camera::SetOrthographic: height must be > 0");
+		if (width > 0.0f && height > 0.0f)
+		{
+			orthographic_       = true;
+			orthographicWidth_  = width;
+			orthographicHeight_ = height;
+		}
+	}
+
+
 	void Camera::Update()
 	{
-		projectionMatrix_.MakeProjectionMatrix(viewAngle_, aspect_, near_, far_);
+		// 正射影は SetOrthographic を呼んだカメラのみ。未設定カメラは従来どおり透視投影。
+		if (orthographic_) {
+			projectionMatrix_.MakeOrthographic(orthographicWidth_, orthographicHeight_, near_, far_);
+		} else {
+			projectionMatrix_.MakeProjectionMatrix(viewAngle_, aspect_, near_, far_);
+		}
 
 		// ビュー行列計算
 		viewMatrix_.MakeLookAt(position_, targetPosition_, up_);

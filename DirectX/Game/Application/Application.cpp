@@ -7,6 +7,7 @@
 #include "ECS/SpeedCharacterComponentSystem.h"
 #include "ECS/AutoCameraComponentSystem.h"
 #include "ECS/CoinComponentSystem.h"
+#include "ECS/SessionComponent.h"
 #include "Component/AnimationComponentSystem.h"
 #include "UI/Font/FontResource.h"
 #include "Resource/ParticleSystemData.h"
@@ -23,19 +24,34 @@
 
 namespace app
 {
+	Application* Application::instance_ = nullptr;
+
+
 	// unique_ptr<aq::sound::SoundStream> の破棄に完全型が必要なため、ここで定義する。
-	Application::Application() = default;
-	Application::~Application() = default;
+	Application::Application()
+	{
+		instance_ = this;
+	}
+
+
+	Application::~Application()
+	{
+		instance_ = nullptr;
+	}
 
 
 	bool Application::OnInitialize()
 	{
-		// オフスクリーン RT を生成してオフスクリーンカメラのアスペクト比を設定する。
-		offscreenRTHandle_ = aq::graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(
-			static_cast<uint32_t>(kOffscreenRTWidth), static_cast<uint32_t>(kOffscreenRTHeight));
-		EngineAssertMsg(offscreenRTHandle_.IsValid(), "Failed to create offscreen render target");
+		// ミニマップ用の俯瞰オフスクリーンパス (縮小 GBuffer を内包するので
+		// メイン解像度の深度と混ざらない)。背景はミニマップ下地と同じ暗い青。
+		if (offscreenPass_.Create(OFFSCREEN_RT_WIDTH, OFFSCREEN_RT_HEIGHT)) {
+			offscreenPass_.SetClearColor(aq::math::Vector4(0.02f, 0.08f, 0.16f, 1.0f));
+		} else {
+			EngineAssertMsg(false, "Failed to create offscreen scene pass");
+		}
 		aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen)
-			->SetViewportSize(kOffscreenRTWidth, kOffscreenRTHeight);
+			->SetViewportSize(static_cast<float>(OFFSCREEN_RT_WIDTH),
+			                  static_cast<float>(OFFSCREEN_RT_HEIGHT));
 
 		GameInput::Initialize();
 
@@ -88,7 +104,7 @@ namespace app
 			const uint32_t renderW = aq::Engine::Get().GetRenderWidth();
 			const uint32_t renderH = aq::Engine::Get().GetRenderHeight();
 
-			auto bloom = std::make_unique<aq::rendering::BloomRenderer>();
+			auto bloom = std::make_unique<aq::rendering::PostProcessChain>();
 			if (bloom->Initialize(renderW, renderH))
 			{
 				// カメラモーションブラー用に GBuffer2 (worldPos) を渡す (ディファード有効時のみ)。
@@ -161,13 +177,15 @@ namespace app
 			constexpr float BLUR_MAX_STRENGTH  = 0.6f;    // 速度ベクトル (px) に掛けるスケール
 
 			float strength = 0.0f;
-			const auto& context = app::GameFlow::Get().Context();
-			if (context.activeStage && !context.gameplayPaused)
+			// セッション状態はここでは読み取りのみ (書き込みは GameFlow の状態クラス)。
+			const auto* session =
+				aq::ecs::EntityContext::Get().GetSingletonComponent<const app::ecs::SessionComponent>();
+			if (session && session->activeStage && !session->gameplayPaused)
 			{
 				auto& ctx = aq::ecs::EntityContext::Get();
-				if (ctx.IsValid(context.playerHandle)) {
+				if (ctx.IsValid(session->playerHandle)) {
 					if (const auto* character =
-							ctx.GetComponent<app::ecs::SpeedCharacterComponent>(context.playerHandle)) {
+							ctx.GetComponent<app::ecs::SpeedCharacterComponent>(session->playerHandle)) {
 						const float rate = aq::math::Clamp01(
 							aq::math::InverseLerp(BLUR_SPEED_MIN, BLUR_SPEED_MAX, character->speed));
 						strength = rate * BLUR_MAX_STRENGTH;
@@ -241,28 +259,33 @@ namespace app
 
 	void Application::OnPreRender()
 	{
-		// オフスクリーンパスは現在未使用のため停止する (シーン全体をもう一度描くため
-		// 路面タイル追加後は約2倍の描画コストになっていた)。
-		// なおディファード経路では 512²RTV と GBuffer 深度の寸法不一致で描けない既知の課題もある
-		// (設計書/README.md)。用途復活時はそこを直してから戻すこと。
-		return;
+		// ミニマップの俯瞰ベイク。要求が立ったフレームだけシーンをもう 1 回描く
+		// (ロード完了時の 1 回きりなので走行中のコストはゼロ)。
+		if (!minimapBakeRequested_) { return; }
+		minimapBakeRequested_ = false;
 
-		if (!offscreenRTHandle_.IsValid()) return;
+		if (!offscreenPass_.IsReady() || !aq::ecs::RenderSystem::IsAvailable()) { return; }
 
-		const float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-		auto offscreenCmdList = std::make_unique<aq::rendering::RenderCommandList>();
-		offscreenCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(offscreenRTHandle_);
-		offscreenCmdList->Enqueue<aq::rendering::ClearRenderTargetCommand>(0u, clearColor);
-		offscreenCmdList->Enqueue<aq::rendering::ClearDepthCommand>();
-		offscreenCmdList->Enqueue<aq::rendering::SetViewportCommand>(
-			0.0f, 0.0f, kOffscreenRTWidth, kOffscreenRTHeight);
+		const aq::Camera* offscreenCamera =
+			aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);
+		if (!offscreenCamera) { return; }
 
 		aq::rendering::RenderFrame offscreenFrame;
 		offscreenFrame.lighting = aq::graphics::LightManager::Get().GetLightingData();
-		aq::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, aq::CameraType::Offscreen);
-		renderer_.BuildCommandList(offscreenFrame, *offscreenCmdList,
-		                          offscreenRTHandle_, kOffscreenRTWidth, kOffscreenRTHeight, false);
+		// 影なしの素朴なライティングにする (シャドウマップはメインカメラのカスケード用)。
+		offscreenFrame.shadow = aq::rendering::OffscreenScenePass::MakeNeutralShadowCBData();
+
+		// 俯瞰は全景が入るのでフラスタムカリング不要。オクリュージョンは Hi-Z が
+		// メインカメラ由来で誤判定するため無効。統計はメインパスの値を潰さないよう無効。
+		// インスタンスの gather はこの先行呼び出しで済ませ、メインパスは同フレーム内で再利用する。
+		aq::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, *offscreenCamera,
+			false /*frustum*/, false /*occlusion*/, false /*stats*/, true /*gather*/);
+
+		auto offscreenCmdList = std::make_unique<aq::rendering::RenderCommandList>();
+		offscreenPass_.BuildCommandList(offscreenFrame, *offscreenCmdList);
+
+		// displayRT は INVALID。オフスクリーンなので Present しない。
 		renderThread_.Submit(std::move(offscreenCmdList), aq::rendering::RenderTargetHandle{},
-		                    offscreenFrame.lighting, offscreenFrame.shadow);
+		                     offscreenFrame.lighting, offscreenFrame.shadow);
 	}
 }

@@ -26,6 +26,11 @@ namespace aq
 		float viewAngle_;
 		float aspect_;
 
+		/** 正射影モード (SetOrthographic で有効化。未設定なら従来どおり透視投影) */
+		bool  orthographic_       = false;
+		float orthographicWidth_  = 0.0f;
+		float orthographicHeight_ = 0.0f;
+
 
 	public:
 		Camera();
@@ -71,6 +76,13 @@ namespace aq
 		void SetViewportSize(float width, float height);
 		/** アスペクト比を直接設定 */
 		void SetAspect(float aspect);
+		/**
+		 * 正射影モードにして描画範囲 (ワールド単位) を設定する。
+		 * 俯瞰ミニマップのように歪みなく全景を収めたいカメラで使う。
+		 * @param width  横方向の描画範囲 [m]
+		 * @param height 縦方向の描画範囲 [m]
+		 */
+		void SetOrthographic(const float width, const float height);
 
 		/** カメラ座標取得 */
 		const math::Vector3& GetPosition() const { return position_; }

@@ -31,7 +31,7 @@
 | `GoalComponent` | 発火済みフラグ | ゴールトリガー |
 | `PlayerScoreComponent` | コイン枚数、落下回数 | リザルト評価の集計元(R-11) |
 | `AutoCameraComponent` | 追従対象 EntityHandle、モード(追走/リザルト周回)、現在位置・注視点(平滑化用) | プレイヤー毎の自動カメラ(R-09)。ビュー番号を持ち分割画面と対応 |
-| (GameplayPause) | `GameContext.gameplayPaused` フラグ | ゲーム System の停止(Result 用)。P1 実装時にエンティティタグではなく GameFlow 保持のフラグへ変更(シングルトンエンティティより単純なため。並列化で問題が出たら再検討) |
+| `SessionComponent`(P16) | gameplayPaused / activeStage / playerHandle / collectFxHandle / coinInstancesHandle / ミニマップ正規化パラメータ | **セッションエンティティ(1体)に載せる共有進行状態**。書き込みはメインスレッド(GameFlow の状態クラス)のみ、System はワーカーから読み取り専用。旧 `GameContext`(GameFlow 保持のサービスロケータ)を置換 → §6 |
 
 - コインとゴールの判定はスプライン座標で行うため、コイン側にも
   ロード時に `(distance, lateral, height)` を焼いておく(毎フレームの逆変換を避ける)。
@@ -71,6 +71,44 @@
 | キャラスケール | unityChan 系 FBX は約 60 倍スケール要(既知)。ステージ側の単位は 1m = 1.0 で統一し、モデル側で吸収 |
 
 - 数値は `.stage.json` とキャラ定義に置き、コードに埋め込まない。
+
+## 6. セッション状態の ECS 化(P16: SessionComponent)
+
+> 設計 2026-09-09。挙動を変えない構造リファクタ。発端は 2026-09-06 の設計メモ
+> 「System からの `GameFlow::Get().Context()` 参照はサービスロケータ的で依存が見えない。
+> 読み取り専用はただの契約」(README 既知の課題)。加えて「GameFlow が状態の入れ物を
+> 兼ねるのも不自然」という指摘(2026-09-09)を反映し、**状態の持ち主を ECS ワールドにする**。
+
+### 6.1 分割方針
+
+旧 `GameContext` のフィールドを 2 つに分ける:
+
+| 行き先 | フィールド | 理由 |
+|---|---|---|
+| **`SessionComponent`**(ECS。セッションエンティティ 1 体) | `gameplayPaused` / `activeStage` / `playerHandle` / `collectFxHandle` / `coinInstancesHandle` / `minimapCenterXZ` / `minimapHalfExtent` | System・UI が読む共有状態 |
+| **GameFlow の私有メンバ** | `selectedStageIndex` / `playResult` / `stageList` / `stageEntities` | 状態機械の進行にしか使わない(System は読まない) |
+
+`GameContext.h` は廃止(PlayResult 等の型は GameFlow 側へ)。`GameFlow::Context()` も削除する。
+
+### 6.2 アクセス規約
+
+- セッションエンティティは `GameFlow::Initialize` で生成し、ステージ再入場でも破棄しない
+  (`stageEntities` に積まない)。`Finalize` で破棄。
+- **書き込みはメインスレッドのみ**(GameFlow の状態クラスと `Application::OnUpdate`
+  ではなく状態クラスに限定。OnUpdate は読み取りのみ)。
+- **System はワーカーから読み取り専用**: エンジンに追加する
+  `aq::ecs::EntityContext::GetSingletonComponent<T>()`(T を持つ唯一のエンティティを
+  走査して返す。無ければ nullptr)を **const ポインタで受ける**。
+- 実行順の安全性は従来と同じ「EntityContext::Update(ワーカー)完了後に
+  GameFlow::Update(メイン)が書く」に依る。本リファクタで変わるのは所有と経路の明示で、
+  スケジューラへの自動依存導出は将来課題(エンジンの依存宣言は AddSystem の明示のまま)。
+
+### 6.3 影響範囲
+
+- エンジン: `EntityContext::GetSingletonComponent<T>()` の追加のみ。
+- ゲーム: `SessionComponent`(`Application/ECS/SessionComponent.h` 新規)、
+  CoinSystem / SpeedCharacterSystem / AutoCameraSystem / PlayerInputSystem の参照置換
+  (System から `GameFlow.h` の include が消える)、状態クラスと Application.cpp の書き換え。
 
 ## チェックポイント
 

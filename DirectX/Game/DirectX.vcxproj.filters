@@ -83,11 +83,11 @@
     <ClInclude Include="Application\ECS\CoinComponentSystem.h">
       <Filter>ECS</Filter>
     </ClInclude>
+    <ClInclude Include="Application\ECS\SessionComponent.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
     <ClInclude Include="Application\Stage\StageData.h">
       <Filter>Stage</Filter>
-    </ClInclude>
-    <ClInclude Include="Application\Flow\GameContext.h">
-      <Filter>Flow</Filter>
     </ClInclude>
     <ClInclude Include="Application\Flow\AquaDashStates.h">
       <Filter>Flow</Filter>

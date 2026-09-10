@@ -42,11 +42,16 @@ Game/
 
 ## 既知の課題
 
-- **[設計メモ 2026-09-06] System からの `GameFlow::Get().Context()` 参照はサービスロケータ的で ECS の依存管理から見えない。**
-  現状は「EntityContext::Update(ワーカー並列)完了後に GameFlow::Update(メイン)」の順序と
-  「System は Context を読み取り専用」という契約(GameContext.h に明記)で安全だが、コードで強制されない。
-  あるべき形はシングルトンエンティティ+`SessionComponent` 化(共有状態を ECS に載せ、依存をスケジューラに見せる)。
-  リファクタは保留中 — 着手時は CoinSystem / SpeedCharacterSystem / AutoCameraSystem / 状態クラスが対象。
+- **(未修正 2026-09-09 検出)DualSense 実パッド接続時、走行中/リザルト操作中に
+  `[pad] DualSense: read completion failed (err=1167) -> close` の直後アクセス違反で落ちる**
+  (err=1167 = ERROR_DEVICE_NOT_CONNECTED)。P14 追補2 で直したのは出力/書き込み経路で、
+  読み取り完了/クローズ経路の overlapped I/O 寿命が未対応。P18 の評価中に検出したが
+  P18 起因ではない(stash した HEAD ビルドでも再現)。次フェーズで HID 読み取り側を修正する。
+
+- (解決済 2026-09-09)System からの `GameFlow::Get().Context()` 参照(サービスロケータ)は、
+  P16 で `GameContext` を廃止しセッションエンティティの `SessionComponent` 化して解消
+  (02_ECS設計.md §6)。GameFlow は状態を所有せず、メインスレッドで書くだけの立場になった。
+  スケジューラへの自動依存導出(Bevy の Resource 相当)は将来課題のまま。
 
 - 旧「残刃」フロー(GameFlow.cpp 内の TitleState / LoadingState / PlayingState と Title 画面)が
   未接続のまま残存。BootState も残刃用 CorporateLogo フォントの準備完了を待ち続けている。
@@ -57,11 +62,12 @@ Game/
 - エンジンの `Camera` に up ベクトル指定 API が無く、ループ中のカメラロールは不可。
   P4 で `SetUp` をエンジン側へ追加してから対応する(AutoCameraComponentSystem.cpp 参照)。
 - 走行アニメが無く idle 固定(unityChan の走りモーション未導入)。スピード感演出の一部として P6 で検討。
-- 路面の見た目が無い(平坦地形の上を見えないスプラインで走る P1 最小構成)。路面メッシュ生成は後続フェーズで検討。
+- (解決済 2026-09-09 P18)路面の見た目は P18 でスプライン追従の連続リボンメッシュ
+  (本体+左右エッジライン+センター破線の 3 メッシュ、手続き生成 1 ドローずつ)になった。
+  箱タイル方式は撤去。テクスチャ(アスファルト柄)は未対応だが UV は焼いてある。
 - unityChan.tkm はメートル基準でないため `PLAYER_MODEL_SCALE = 0.25` で縮小している。
-- コインは P11 でリング(コード生成トーラス+ランバート陰影)になった。路面タイルは箱のまま
-  (専用路面メッシュは今後の課題)。取得 SE は Decision.wav 流用の仮のままで、
-  専用アセット導入時に `CoinComponentSystem.cpp` のパスを差し替える。
+- コインは P11 でリング(コード生成トーラス+ランバート陰影)になった。取得 SE は
+  Decision.wav 流用の仮のままで、専用アセット導入時に `CoinComponentSystem.cpp` のパスを差し替える。
   (P8 の補足: 箱色の `Reflect` 登録は反射 Visitor に `Vector4` 対応が無く見送り —
    箱色はコード設定専用で Prefab JSON へ永続化できない)
 - 地面は P11 でベイク済みハイトマップ地形になった(コース回廊は平坦、外周はなだらかな丘。
@@ -79,5 +85,7 @@ Game/
 - (P11 追補で解決)丘の前後で路面が地形に埋まる問題(Catmull-Rom アンダーシュートで
   スプラインが最大約 2m 沈む)は、ベイク地形の回廊を「最寄り路面 y − 0.7m」追従にして解消。
   負の高さは `.stage.json` の `terrain.heightOffset`(地形エンティティの Y)で表現する。
-- 残刃用オフスクリーンパスは停止済み(未使用+シーン二重描画のコスト。Application::OnPreRender 冒頭 return)。
+- (解決済 2026-09-09)停止していた旧オフスクリーンパスは、P17 で俯瞰 RT ミニマップの
+  ベイク(ロード時 1 回だけ描く)として復活・置換した(エンジン設計書 01 §8 の
+  `OffscreenScenePass`。毎フレーム二重描画のコストは無い)。ミニマップの UI 点列方式は廃止。
 - (解決済) エンジンの `Quaternion::SetRotation` 代入バグは修正し、ゲーム側の回避実装も削除した。

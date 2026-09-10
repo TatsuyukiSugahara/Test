@@ -4,7 +4,7 @@
 			"id": "Stage01",
 			"name": "GREEN COAST",
 			"stage": "Assets/Stages/Stage01.stage.json",
-			"thumbnail": ""
+			"thumbnail": "Assets/UI/AquaDash/Stage01_thumb.png"
 		}
 	]
 }

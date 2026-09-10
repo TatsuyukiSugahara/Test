@@ -63,6 +63,9 @@ public:\
 			};
 
 		public:
+			// 実体は派生ごとの *Data 型。void* なので **delete する側が必ず元の型へ
+			// static_cast すること**(void* への delete はデストラクタを呼ばず、
+			// *Data が抱える SRV / シェーダ / 頂点配列がまるごと漏れる)。
 			void* data_;
 
 		private:
@@ -180,7 +183,7 @@ public:\
 
 			virtual ~MeshResource()
 			{
-				delete data_;
+				delete static_cast<MeshData*>(data_);
 				data_ = nullptr;
 			}
 
@@ -496,7 +499,7 @@ public:\
 			virtual ~PMDResource()
 			{
 				if (data_) {
-					delete data_;
+					delete static_cast<PMDData*>(data_);
 					data_ = nullptr;
 				}
 			}
@@ -583,7 +586,7 @@ public:\
 
 			virtual ~GPUResource()
 			{
-				delete data_;
+				delete static_cast<TextureData*>(data_);
 				data_ = nullptr;
 			}
 
@@ -639,7 +642,7 @@ public:\
 
 			virtual ~ShaderResource()
 			{
-				delete data_;
+				delete static_cast<ShaderData*>(data_);
 				data_ = nullptr;
 			}
 

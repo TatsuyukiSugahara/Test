@@ -20,6 +20,15 @@ namespace aq
 		}
 
 
+		void GpuClusterCuller::Finalize()
+		{
+			resetCS_.reset();
+			cullCS_.reset();
+			hiZSource_ = nullptr;
+			ready_     = false;
+		}
+
+
 		bool GpuClusterCuller::Initialize()
 		{
 			auto& gd = graphics::GraphicsDevice::Get();

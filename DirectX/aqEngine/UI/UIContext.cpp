@@ -3,6 +3,7 @@
 #include "UIObject.h"
 #include "Input/UIInputSystem.h"
 #include "Rendering/UIBatchRenderer.h"
+#include "Font/FontAssetCache.h"
 #include <cassert>
 #include <stdexcept>
 
@@ -29,6 +30,11 @@ namespace aq
 		{
 			delete sInstance_;
 			sInstance_ = nullptr;
+
+			// FontAssetCache は関数ローカル static なのでプロセス終了まで生き残る。
+			// 明示的に空にしないとフォントアトラスの参照が ResourceManager::Finalize を
+			// 越えて残り、GPU デバイス破棄後に解放される(= リークとして残る)。
+			FontAssetCache::Get().Clear();
 		}
 
 

@@ -31,6 +31,9 @@
 #include "Graphics/Vulkan/VulkanImGui.h"
 #endif
 #endif
+#ifdef ENGINE_GRAPHICS_VULKAN
+#include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"   // Finalize 前の vkDeviceWaitIdle 用
+#endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #include "Level/LevelComponentRegistry.h"
 #include "Level/LevelStreamSystem.h"
@@ -315,6 +318,20 @@ namespace aq
 			renderThreadReady_ = false;
 		}
 
+#ifdef ENGINE_GRAPHICS_VULKAN
+		// この下で ImGui / UIContext / ResourceManager / EntityContext が GPU リソースを
+		// 破棄していくが、RenderThread の完了待ちは CPU 側(コマンド積み)までしか見ないため、
+		// 最後のフレームがまだ GPU で走っていることがある。そのまま壊すと validation が
+		// 「currently in use by VkCommandBuffer」を並べ、VMA が未解放アロケーションで
+		// アサートして終了時にクラッシュする(Mac 実機の P2 で発覚)。
+		// D3D11/D3D12 は Present までに同期が入るためこの待ちを持たない。
+		if (auto* vulkanDevice = dynamic_cast<aq::graphics::VulkanGraphicsDeviceImpl*>(
+			    aq::graphics::GraphicsDevice::Get().GetImplRaw()))
+		{
+			vulkanDevice->WaitDeviceIdle();
+		}
+#endif
+
 #ifdef AQ_IMGUI
 		if (imguiReady_)
 		{
@@ -336,6 +353,9 @@ namespace aq
 #ifdef AQ_DEBUG_IMGUI
 		aq::DebugUI::Finalize();
 #endif
+		// 関数ローカル static のためプロセス終了まで生き残る。GraphicsDevice の破棄より
+		// 前にシェーダを手放さないと VkShaderModule がデバイスより長生きする。
+		aq::rendering::GpuClusterCuller::Get().Finalize();
 		aq::ui::UIContext::Finalize();
 		aq::graphics::LightManager::Finalize();
 		aq::ecs::EntityContext::Finalize();

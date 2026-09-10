@@ -335,8 +335,32 @@
         Vulkan バックエンド共通の問題で Mac 固有ではない → §8-15
       - HiDPI は当初 `VUID-VkRenderingInfo-pNext-06079/06080` の**エラー**として出た(スワップチェーン
         2560x1440 対 深度 1280x720)。§8-13 の決定で解消
-- [ ] 閉じるボタンで `PumpEvents` が false を返し、`Finalize` まで到達してプロセスが正常終了する
-      - **手動確認待ち**。合成クリック(`osascript` / System Events)は補助アクセス未許可で送れない
+- [x] 閉じるボタンで `PumpEvents` が false を返し、`Finalize` まで到達してプロセスが正常終了する
+      - 終了コード 0 / validation エラー 0(起動から終了まで通して)。補助アクセスを許可して
+        `osascript` で閉じるボタンをクリックする形で自動確認した
+      - ウィンドウを閉じる経路自体は最初から動いていたが、**終了処理が 3 つの理由でクラッシュしていた**。
+        いずれも Mac 固有ではなく、**Windows にも同じ地雷がある**(D3D は VMA のような
+        未解放アサートを持たないため表面化していなかっただけ):
+        1. **GPU の完了を待たずにリソースを破棄していた**。`RenderThread::WaitForCompletion` は
+           CPU 側(コマンド積み)の完了しか見ないため、最後のフレームが GPU で走ったまま
+           ImGui / UIContext / ResourceManager が壊しにいき、validation が
+           「currently in use by VkCommandBuffer」を 12 件並べた。`Application::Finalize` で
+           レンダースレッド停止直後に `vkDeviceWaitIdle` を挟んだ(Vulkan 構成のみ)
+        2. **`void*` に対する `delete` でデストラクタが走っていなかった**。`ResourceBase::data_` は
+           `void*` で、`MeshResource` / `PMDResource` / `GPUResource` / `ShaderResource` の 4 つが
+           `delete data_;` と書いていた。**メモリは解放されるがデストラクタは呼ばれない**ため、
+           `TextureData::~TextureData` が動かず SRV(= VkImage + VMA アロケーション)が
+           丸ごと漏れる。同じファイルの新しいリソース型(SkeletalMesh / Animation /
+           ParticleSystem / SoundClip)は既に `delete static_cast<T*>(data_)` と書いてあり、
+           **この 4 つだけ取り残されていた**ので揃えた
+        3. **関数ローカル static のキャッシュがデバイスより長生きしていた**。
+           `FontAssetCache`(フォントアトラスのテクスチャ)と `GpuClusterCuller`(compute
+           シェーダ 2 本)はプロセス終了まで生き残るため、`vkDestroyDevice` の後に解放される。
+           前者は `UIContext::Finalize` で `Clear()`、後者は `Finalize()` を新設して
+           `Application::Finalize` から呼ぶようにした
+      - **Windows 側の回帰確認が要る**。2 と 3 はプラットフォーム非依存の変更で、
+        「今まで呼ばれていなかったデストラクタが呼ばれるようになる」ため、
+        解放後のポインタを使っている箇所があれば Windows で表面化しうる
 - [x] `StartupLog` に portability subset の非対応項目が出力される
       - `[vulkan] VK_KHR_portability_subset enabled` に続き `unsupported: pointPolygons` /
         `tessellationIsolines` / `tessellationPointMode` の 3 件。いずれも本エンジンは未使用

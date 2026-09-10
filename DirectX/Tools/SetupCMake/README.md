@@ -180,6 +180,9 @@ cd Game && ../build/macos-ninja/bin/Debug/Game.app/Contents/MacOS/Game
 | 7 | `.mm` で `@interface` が壊れる / `BOOL` の typedef 衝突 | PCH(`aq.h`)→ DirectXTex → スタブ `basetsd.h` が `BOOL`/`interface` を定義。`aq.h` で `__OBJC__` のとき DirectXTex を外す |
 | 8 | `ImGui::NewFrame` で `Invalid DisplaySize` | `ImGui_ImplWin32_NewFrame` が非 Windows で呼ばれない。`Application.cpp` で `DisplaySize`/`DeltaTime` を自前で埋める(P4 で `imgui_impl_osx` へ) |
 | 9 | validation の `VUID-VkRenderingInfo-pNext-06079/06080` | Retina で drawableSize が 2560x1440。`contentsScale = 1` に固定して 1280x720 に揃える(設計書 §8-13) |
+| 10 | 終了時に validation が `currently in use by VkCommandBuffer` を並べる | GPU の完了を待たずに破棄していた。`Application::Finalize` でレンダースレッド停止直後に `vkDeviceWaitIdle` |
+| 11 | 終了時に VMA が `Some allocations were not freed` でアサート | `void*` への `delete` でデストラクタが走らずテクスチャが漏れていた(リソース 4 型)。`delete static_cast<T*>(data_)` へ |
+| 12 | `vkDestroyDevice(): has 2 leaked objects` | 関数ローカル static(`FontAssetCache` / `GpuClusterCuller`)がデバイスより長生き。`Finalize` 時に明示的に手放す |
 
 ---
 

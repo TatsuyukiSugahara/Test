@@ -47,6 +47,14 @@ namespace aq
 			static GpuClusterCuller& Get();
 
 			bool Initialize();   // compute シェーダをロード
+
+			/**
+			 * 保持しているシェーダを解放する。
+			 * 本クラスは関数ローカル static でプロセス終了まで生き残るため、明示的に呼ばないと
+			 * VkShaderModule が vkDestroyDevice より後まで残る(Vulkan validation がリークとして報告)。
+			 * Application::Finalize から GraphicsDevice の破棄より前に呼ぶ。
+			 */
+			void Finalize();
 			bool IsReady() const { return ready_; }
 
 			/** Hi-Z オクリュージョンを供給する (任意)。null ならクラスタ判定はフラスタム+バックフェースのみ。 */

@@ -353,7 +353,7 @@ namespace aq
 			// 対応時のみスワップチェーンに ALLOW_TEARING フラグを付け、Present でも同フラグを渡す。
 			// フリップモデルでは Present(0,0) だけでは vblank に同期し FPS が頭打ちになるため。
 			tearingSupported_ = false;
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			{
 				IDXGIFactory5* factory5 = nullptr;
 				if (SUCCEEDED(factory->QueryInterface(IID_PPV_ARGS(&factory5))))
@@ -368,7 +368,7 @@ namespace aq
 				}
 				aq::StartupLog(tearingSupported_ ? "    [swap] tearing supported" : "    [swap] tearing NOT supported");
 			}
-#endif
+#endif // AQ_PLATFORM_WIN32
 
 			DXGI_SWAP_CHAIN_DESC1 desc = {};
 			desc.BufferCount      = RENDER_TARGET_COUNT;

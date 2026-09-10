@@ -1,6 +1,9 @@
 #pragma once
+#include "Platform/Common/PlatformDefs.h"
 
+#if defined(AQ_PLATFORM_WINDOWS_FAMILY)
 #pragma warning (disable  : 4201)
+#endif
 
 // Graphics API selection.
 // Define one ENGINE_GRAPHICS_* macro in project settings to override the default.
@@ -25,17 +28,21 @@
 #include "RenderConfig.h"
 
 
+// ここから windows.h 系(Win32 / UWP)専用ブロック。
+// リンクするライブラリは Game/GraphicsApi.props と各 vcxproj の
+// AdditionalDependencies で指定する(#pragma comment(lib) は使わない)。
+#if defined(AQ_PLATFORM_WINDOWS_FAMILY)
+
 #define NOMINMAX
 #include <windows.h>
+#include <tchar.h>
 
 #ifdef ENGINE_GRAPHICS_D3D11
 #pragma warning(push)
 #pragma warning(disable:4005)
 #include <d3d11.h>
 #pragma warning(pop)
-#pragma comment(lib, "d3d11.lib")
 #include <d3dcompiler.h>
-#pragma comment(lib,"d3dcompiler.lib")
 #endif // ENGINE_GRAPHICS_D3D11
 
 #ifdef ENGINE_GRAPHICS_D3D12
@@ -44,42 +51,57 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #pragma warning(pop)
-#pragma comment(lib, "d3d12.lib")
-#pragma comment(lib, "dxgi.lib")
 #include <d3dcompiler.h>
-#pragma comment(lib,"d3dcompiler.lib")
 #endif // ENGINE_GRAPHICS_D3D12
 
 #ifdef ENGINE_GRAPHICS_VULKAN
 // Vulkan ヘッダ本体は Graphics/Vulkan/VulkanCommon.h 側で取り込む (VK_USE_PLATFORM_WIN32_KHR 定義込み)。
-// ここでは最終リンクへ vulkan-1.lib を要求する (ライブラリパスは Game vcxproj の $(VULKAN_SDK)\Lib)。
-#pragma comment(lib, "vulkan-1.lib")
+// vulkan-1.lib は Game/GraphicsApi.props の AqGraphicsApi=Vulkan 分岐でリンクする
+// (ライブラリパスは Game vcxproj の $(VULKAN_SDK)\Lib)。
 #endif // ENGINE_GRAPHICS_VULKAN
 
 
 //DirectInput
 #define	DIRECTINPUT_VERSION	0x0800
-#pragma comment(lib, "dinput8.lib")
-#pragma comment(lib, "dxguid.lib")
 #include <dinput.h>
 
 
-// DirectXTex:
+#endif // AQ_PLATFORM_WINDOWS_FAMILY
+
+
+// DirectXTex: 画像ローダ。Windows / Mac の両方で使う(Mac は非 Windows 経路 =
+// DDS/TGA/HDR + BC ソフトコーデック。PNG/JPG は Resource/ImageLoader が stb_image へ回す)。
 //  - デスクトップ: ThirdParty/DirectXTex のソースを aqEngine に同梱ビルドする
 //    (Engine.vcxproj の Debug/Release 構成でコンパイル)。各構成の CRT に自動一致するため
 //    prebuilt lib は不要・pragma comment(lib) も不要(シンボルは aqEngine.lib に含まれる)。
 //  - UWP(Xbox): /MD 必須のため NuGet パッケージ "directxtex_uwp" を使う。
 //    lib は NuGet の .targets が自動リンク。ヘッダは <DirectXTex.h>。
+//  - Mac: 同梱ソース。sal.h / dxgiformat.h 等は ThirdParty/DirectX-Headers が供給する。
+// 区切りは '/' にすること('\' は clang で解決できない)。
 #if defined(AQ_PLATFORM_UWP)
 #pragma warning(push)
 #pragma warning(disable:4065)
 #include <DirectXTex.h>            // NuGet: directxtex_uwp (/MD, WINAPI_FAMILY_APP)
 #pragma warning(pop)
-#else
+#elif defined(AQ_PLATFORM_WIN32)
 #pragma warning(push)
 #pragma warning(disable:4065)
-#include <DirectXTex\DirectXTex.h> // ソースは ThirdParty/DirectXTex を Engine に同梱ビルド
+#include <DirectXTex/DirectXTex.h> // ソースは ThirdParty/DirectXTex を Engine に同梱ビルド
 #pragma warning(pop)
+#elif defined(__OBJC__)
+// Objective-C++ TU(.mm)には持ち込まない。
+//
+// 非 Windows の DirectXTex は <wsl/winadapter.h> 経由で DirectX-Headers の
+// スタブ basetsd.h を読む。これが `BOOL` を uint32_t に typedef し `interface` を
+// struct に #define するため、Cocoa の `typedef bool BOOL` と衝突し、
+// `@interface` が `struct` に置換されて Foundation のヘッダが全滅する。
+// aq.h は PCH として全 TU に強制インクルードされるので、ここで切るしかない。
+//
+// .mm 側は Platform/Mac・HID/Mac・Sound/CoreAudio に閉じており(設計書 §10)、
+// 画像デコードには触らないため機能欠落は無い。.mm から DirectXTex が要るように
+// なったら、それは責務の置き場所を間違えているサインとして扱う。
+#else
+#include <DirectXTex/DirectXTex.h>
 #endif
 
 #include <vector>
@@ -100,13 +122,16 @@
 #include <atomic>
 #include <chrono>
 
-#include <tchar.h>
 #include <stdio.h>
 #include <cstdint>
 #include <cstring>
 #include <assert.h>
 
-#include <DirectXMath.h>
+// DirectXMath: macOS には Windows SDK が無いため、入手元を ThirdParty/DirectXMath の
+// 同梱ヘッダに一本化する(設計書 §0「数学」/ §6)。SDK 版との版ずれを避けるため
+// Windows も同梱側を使う。ThirdParty/DirectXMath/Inc もインクルードパスに入っており、
+// DirectXTex 等が書く無修飾の <DirectXMath.h> / <DirectXPackedVector.h> も同梱側に解決される。
+#include <DirectXMath/Inc/DirectXMath.h>
 
 #include "Math/Vector.h"
 #include "Math/Matrix.h"

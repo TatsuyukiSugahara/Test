@@ -168,7 +168,7 @@ namespace aq
 			std::lock_guard<std::mutex> lock(data.mutex);
 
 			if (data.sentinel.next == &data.sentinel) {
-				OutputDebugStringA("[MemoryTracker] No leaks detected.\n");
+				aq::debug::OutputString("[MemoryTracker] No leaks detected.\n");
 				return;
 			}
 
@@ -176,7 +176,7 @@ namespace aq
 			snprintf(buf, sizeof(buf),
 				"[MemoryTracker] ========== %zu leak(s) detected ==========\n",
 				g_liveCount.load(std::memory_order_relaxed));
-			OutputDebugStringA(buf);
+			aq::debug::OutputString(buf);
 
 			size_t totalBytes = 0;
 			for (const TrackHeader* h = data.sentinel.next; h != &data.sentinel; h = h->next) {
@@ -191,14 +191,14 @@ namespace aq
 						"  %p  %6zu bytes  (no source info -- use engineNewWith for tracking)\n",
 						userPtr, h->size);
 				}
-				OutputDebugStringA(buf);
+				aq::debug::OutputString(buf);
 			}
 
 			snprintf(buf, sizeof(buf),
 				"[MemoryTracker] Total leaked: %zu bytes\n"
 				"[MemoryTracker] =============================================\n",
 				totalBytes);
-			OutputDebugStringA(buf);
+			aq::debug::OutputString(buf);
 		}
 	}
 }

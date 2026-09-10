@@ -11,8 +11,6 @@
 #include <sstream>
 #include <thread>
 
-#pragma comment(lib, "d3dcompiler.lib")
-
 
 namespace aq
 {

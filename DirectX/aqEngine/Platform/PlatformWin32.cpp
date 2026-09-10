@@ -1,7 +1,7 @@
 #include "aq.h"
 // Win32 専用実装。UWP(Xbox)構成ではデスクトップ API(CreateWindow 等)が使えないため
-// 本体をガードして空 TU にする(PlatformUWP.cpp が代替)。
-#if !defined(AQ_PLATFORM_UWP)
+// 本体をガードして空 TU にする(UWP は PlatformUWP.cpp、Mac は PlatformMac.mm が代替)。
+#if defined(AQ_PLATFORM_WIN32)
 #include "Platform/PlatformWin32.h"
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
@@ -118,4 +118,4 @@ namespace aq
 		}
 	}
 }
-#endif // !AQ_PLATFORM_UWP
+#endif // AQ_PLATFORM_WIN32

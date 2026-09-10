@@ -11,12 +11,16 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
+#include "Graphics/InstancedStaticMesh.h"      // Finalize での名前レジストリ解放
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Occlusion/Debug/CullingDebugPanel.h"
 #endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
+#if defined(AQ_PLATFORM_WIN32)
 #include <imgui/imgui_impl_win32.h>
+#endif
+// TODO(P4): MAC は imgui_impl_osx.h を include し ImGui_ImplOSX_* を呼ぶ(設計書 §6)。
 #include "Rendering/ImGuiRenderCommand.h"
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
@@ -27,6 +31,9 @@
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 #include "Graphics/Vulkan/VulkanImGui.h"
 #endif
+#endif
+#ifdef ENGINE_GRAPHICS_VULKAN
+#include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"   // Finalize 前の vkDeviceWaitIdle 用
 #endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #include "Level/LevelComponentRegistry.h"
@@ -56,9 +63,10 @@ namespace aq
 		aq::res::ResourceManager::Initialize();
 		aq::ecs::EntityContext::Initialize();
 		aq::hid::InputManager::Initialize();
-		if (FAILED(aq::hid::InputManager::Get().Setup()))
+		// InputManager::Setup() は P1 の入力 Bridge 化で HRESULT → bool になった
+		if (!aq::hid::InputManager::Get().Setup())
 		{
-			EngineAssertMsg(false, "InputManager::Setup failed: DirectInput or device initialization failed");
+			EngineAssertMsg(false, "InputManager::Setup failed: keyboard/mouse backend initialization failed");
 			return false;
 		}
 		aq::StartupMark("  [app] input ok");
@@ -82,9 +90,10 @@ namespace aq
 				// 使用箇所は Debug パネルの一部ラベルのみだったため ASCII(+矢印/図形記号)に制限した。
 				// 日本語ラベルは "?" で表示される。必要なら kCustomRanges に範囲を足す。
 				{
+#if defined(AQ_PLATFORM_WIN32)
 					char winDir[MAX_PATH] = {};
 					if (GetWindowsDirectoryA(winDir, MAX_PATH) == 0)
-						strcpy_s(winDir, "C:\\Windows");
+						snprintf(winDir, sizeof(winDir), "%s", "C:\\Windows");
 
 					static const char* kJpFontNames[] = {
 						"meiryo.ttc",    // Meiryo (Vista+、推奨)
@@ -97,10 +106,10 @@ namespace aq
 					for (const char* name : kJpFontNames)
 					{
 						char path[MAX_PATH];
-						sprintf_s(path, "%s\\Fonts\\%s", winDir, name);
+						snprintf(path, sizeof(path), "%s\\Fonts\\%s", winDir, name);
 
-						FILE* f = nullptr;
-						if (fopen_s(&f, path, "rb") != 0 || !f) continue;
+						FILE* f = fopen(path, "rb");
+						if (!f) continue;
 						fclose(f);
 
 						// ASCII/Latin-1 + Arrows (U+2190-21FF) + Geometric Shapes (U+25A0-25FF) のみ。
@@ -119,9 +128,18 @@ namespace aq
 					}
 					if (!fontLoaded)
 						io.Fonts->AddFontDefault();
+#else
+					// TODO(P4): Mac は /System/Library/Fonts から読む。P2 では既定フォントで足りる。
+					ImGui::GetIO().Fonts->AddFontDefault();
+#endif
 				}
 
+#if defined(AQ_PLATFORM_WIN32)
 			const bool winOk = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
+#else
+			// TODO(P4): MAC は ImGui_ImplOSX_Init(NSView*) に差し替える(設計書 §6)。
+			const bool winOk = true;
+#endif
 			bool backendOk = false;
 #ifdef ENGINE_GRAPHICS_D3D11
 			auto* d3d = dynamic_cast<aq::graphics::D3D11GraphicsDeviceImpl*>(
@@ -139,7 +157,9 @@ namespace aq
 			}
 			else
 			{
+#if defined(AQ_PLATFORM_WIN32)
 				if (winOk) ImGui_ImplWin32_Shutdown();
+#endif
 				ImGui::DestroyContext();
 				EngineAssertMsg(false, "ImGui backend initialization failed");
 			}
@@ -299,6 +319,20 @@ namespace aq
 			renderThreadReady_ = false;
 		}
 
+#ifdef ENGINE_GRAPHICS_VULKAN
+		// この下で ImGui / UIContext / ResourceManager / EntityContext が GPU リソースを
+		// 破棄していくが、RenderThread の完了待ちは CPU 側(コマンド積み)までしか見ないため、
+		// 最後のフレームがまだ GPU で走っていることがある。そのまま壊すと validation が
+		// 「currently in use by VkCommandBuffer」を並べ、VMA が未解放アロケーションで
+		// アサートして終了時にクラッシュする(Mac 実機の P2 で発覚)。
+		// D3D11/D3D12 は Present までに同期が入るためこの待ちを持たない。
+		if (auto* vulkanDevice = dynamic_cast<aq::graphics::VulkanGraphicsDeviceImpl*>(
+			    aq::graphics::GraphicsDevice::Get().GetImplRaw()))
+		{
+			vulkanDevice->WaitDeviceIdle();
+		}
+#endif
+
 #ifdef AQ_IMGUI
 		if (imguiReady_)
 		{
@@ -309,7 +343,9 @@ namespace aq
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 			aq::graphics::VulkanImGui::Shutdown();
 #endif
+#if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_Shutdown();
+#endif
 			ImGui::DestroyContext();
 			imguiReady_ = false;
 		}
@@ -318,6 +354,11 @@ namespace aq
 #ifdef AQ_DEBUG_IMGUI
 		aq::DebugUI::Finalize();
 #endif
+		// 関数ローカル static のためプロセス終了まで生き残る。GraphicsDevice の破棄より
+		// 前にシェーダを手放さないと VkShaderModule がデバイスより長生きする。
+		aq::rendering::GpuClusterCuller::Get().Finalize();
+		// 名前レジストリもファイルスコープのグローバルで、頂点/インデックスバッファを抱えている。
+		aq::graphics::InstancedStaticMesh::ClearNamed();
 		aq::ui::UIContext::Finalize();
 		aq::graphics::LightManager::Finalize();
 		aq::ecs::EntityContext::Finalize();
@@ -425,7 +466,23 @@ namespace aq
 		ImDrawData* imguiDrawData = nullptr;
 		if (imguiReady_)
 		{
+#if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_NewFrame();
+#else
+			// TODO(P4): ImGui_ImplOSX_NewFrame へ差し替える(設計書 §6)。
+			// それまでは、プラットフォームバックエンドが埋めるべき最低限の 2 つを自前で入れる。
+			//  - DisplaySize: 0 のままだと ImGui::NewFrame のサニティチェックで停止する
+			//  - DeltaTime  : 0 以下だと同じくアサートに掛かる(初回フレームは実測値が無い)
+			// 入力(マウス/キー)は P4 で ImGui_ImplOSX_* に任せる。DisplayFramebufferScale は
+			// 既定の (1,1) のまま。Retina の扱いは設計書 §8-7 の未決事項。
+			{
+				ImGuiIO& io = ImGui::GetIO();
+				io.DisplaySize = ImVec2(static_cast<float>(Engine::Get().GetScreenWidth()),
+				                        static_cast<float>(Engine::Get().GetScreenHeight()));
+				const float deltaTime = Engine::GetDeltaTime();
+				io.DeltaTime = (deltaTime > 0.0f) ? deltaTime : (1.0f / 60.0f);
+			}
+#endif
 #ifdef ENGINE_GRAPHICS_D3D11
 			ImGui_ImplDX11_NewFrame();
 #elif defined(ENGINE_GRAPHICS_D3D12)

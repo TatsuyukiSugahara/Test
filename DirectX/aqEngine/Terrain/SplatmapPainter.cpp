@@ -8,6 +8,7 @@
 
 #include <imgui/imgui.h>
 #include <cmath>
+#include <cstdlib>
 
 namespace aq
 {
@@ -451,7 +452,7 @@ namespace aq
 				}
 			}
 
-#if !defined(AQ_PLATFORM_UWP)
+#if defined(AQ_PLATFORM_WIN32)
 			DirectX::Image img = {};
 			img.width = w;
 			img.height = h;
@@ -460,12 +461,15 @@ namespace aq
 			img.slicePitch = pixels.size();
 			img.pixels = pixels.data();
 
+			// DirectXTex にはワイド文字パスを渡す。終端は 0 初期化で担保する。
 			wchar_t wpath[512] = {};
-			mbstowcs_s(nullptr, wpath, path, 511);
+			if (std::mbstowcs(wpath, path, ArraySize(wpath) - 1) == static_cast<size_t>(-1)) {
+				wpath[0] = L'\0';   // 変換失敗時は空パス(mbstowcs_s と同じ扱い)
+			}
 			DirectX::SaveToWICFile(img, DirectX::WIC_FLAGS_NONE,
 			                       DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
 #else
-			(void)pixels; (void)path;   // UWP: DirectXTex 未リンク(保存無効)
+			(void)pixels; (void)path;   // UWP / Mac: DirectXTex の WIC 経路が無い(保存無効)
 #endif
 		}
 

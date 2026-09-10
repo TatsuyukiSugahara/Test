@@ -1,8 +1,10 @@
 #include "aq.h"
 #include "HeightmapChunk.h"
+#include "Resource/ImageLoader.h"
 
 #include <cmath>
 #include <cctype>
+#include <cstdlib>
 
 
 namespace aq
@@ -37,28 +39,13 @@ namespace aq
 			                      std::vector<float>& outHeights,
 			                      uint32_t& outW, uint32_t& outH)
 			{
-#if defined(AQ_PLATFORM_UWP)
-				(void)path; (void)outHeights; (void)outW; (void)outH;
-				return false;   // UWP: DirectXTex 未リンク(画像ロード無効)
-#else
 				if (!path || !path[0]) return false;
 
-				wchar_t wpath[512] = {};
-				size_t converted = 0;
-				if (mbstowcs_s(&converted, wpath, path, 511) != 0) return false;
-
+				// 拡張子ごとの振り分けとワイド文字パス変換は ImageLoader に集約したため、
+				// プラットフォーム分岐はここには要らない(Mac は stb_image 経由になる)。
 				DirectX::TexMetadata meta;
 				DirectX::ScratchImage raw;
-
-				std::string spath(path);
-				const auto dot = spath.rfind('.');
-				std::string ext = (dot != std::string::npos) ? spath.substr(dot) : "";
-				for (char& c : ext) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
-
-				HRESULT hr = (ext == ".dds")
-					? DirectX::LoadFromDDSFile(wpath, DirectX::DDS_FLAGS_NONE, &meta, raw)
-					: DirectX::LoadFromWICFile(wpath, DirectX::WIC_FLAGS_NONE, &meta, raw);
-				if (FAILED(hr)) return false;
+				if (!res::LoadImageFile(path, &meta, raw)) return false;
 
 				// RGBA8 に統一してRチャンネルだけ取り出す。
 				// DirectXTex の Convert は変換元と変換先が同一フォーマットだと失敗するため、
@@ -67,11 +54,11 @@ namespace aq
 				const DirectX::Image* img = raw.GetImage(0, 0, 0);
 				if (meta.format != DXGI_FORMAT_R8G8B8A8_UNORM)
 				{
-					hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
-					                      DXGI_FORMAT_R8G8B8A8_UNORM,
-					                      DirectX::TEX_FILTER_DEFAULT,
-					                      DirectX::TEX_THRESHOLD_DEFAULT,
-					                      rgba);
+					const HRESULT hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
+					                                    DXGI_FORMAT_R8G8B8A8_UNORM,
+					                                    DirectX::TEX_FILTER_DEFAULT,
+					                                    DirectX::TEX_THRESHOLD_DEFAULT,
+					                                    rgba);
 					if (FAILED(hr)) return false;
 					img = rgba.GetImage(0, 0, 0);
 				}
@@ -91,35 +78,19 @@ namespace aq
 					}
 				}
 				return true;
-#endif // !AQ_PLATFORM_UWP
 			}
 
 			bool LoadSplatValues(const char* path,
 			                     std::vector<math::Vector4>& outSplat,
 			                     uint32_t& outW, uint32_t& outH)
 			{
-#if defined(AQ_PLATFORM_UWP)
-				(void)path; (void)outSplat; (void)outW; (void)outH;
-				return false;   // UWP: DirectXTex 未リンク(画像ロード無効)
-#else
 				if (!path || !path[0]) return false;
 
-				wchar_t wpath[512] = {};
-				size_t converted = 0;
-				if (mbstowcs_s(&converted, wpath, path, 511) != 0) return false;
-
+				// 拡張子ごとの振り分けとワイド文字パス変換は ImageLoader に集約したため、
+				// プラットフォーム分岐はここには要らない(Mac は stb_image 経由になる)。
 				DirectX::TexMetadata meta;
 				DirectX::ScratchImage raw;
-
-				std::string spath(path);
-				const auto dot = spath.rfind('.');
-				std::string ext = (dot != std::string::npos) ? spath.substr(dot) : "";
-				for (char& c : ext) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
-
-				HRESULT hr = (ext == ".dds")
-					? DirectX::LoadFromDDSFile(wpath, DirectX::DDS_FLAGS_NONE, &meta, raw)
-					: DirectX::LoadFromWICFile(wpath, DirectX::WIC_FLAGS_NONE, &meta, raw);
-				if (FAILED(hr)) return false;
+				if (!res::LoadImageFile(path, &meta, raw)) return false;
 
 				// 同一フォーマットへの Convert は失敗するため、必要なときだけ変換する
 				// (LoadHeightValues と同じ理由)。
@@ -127,11 +98,11 @@ namespace aq
 				const DirectX::Image* img = raw.GetImage(0, 0, 0);
 				if (meta.format != DXGI_FORMAT_R8G8B8A8_UNORM)
 				{
-					hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
-					                      DXGI_FORMAT_R8G8B8A8_UNORM,
-					                      DirectX::TEX_FILTER_DEFAULT,
-					                      DirectX::TEX_THRESHOLD_DEFAULT,
-					                      rgba);
+					const HRESULT hr = DirectX::Convert(*raw.GetImage(0, 0, 0),
+					                                    DXGI_FORMAT_R8G8B8A8_UNORM,
+					                                    DirectX::TEX_FILTER_DEFAULT,
+					                                    DirectX::TEX_THRESHOLD_DEFAULT,
+					                                    rgba);
 					if (FAILED(hr)) return false;
 					img = rgba.GetImage(0, 0, 0);
 				}
@@ -152,7 +123,6 @@ namespace aq
 					}
 				}
 				return true;
-#endif // !AQ_PLATFORM_UWP
 			}
 
 

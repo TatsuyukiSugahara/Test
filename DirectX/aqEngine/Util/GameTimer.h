@@ -1,5 +1,5 @@
 #pragma once
-#include <windows.h>
+#include <chrono>
 
 
 namespace aq
@@ -9,18 +9,22 @@ namespace aq
 		/**
 		 * ゲームタイマー
 		 *
-		 * QueryPerformanceCounter ベースの高精度タイマー。
+		 * std::chrono::steady_clock ベースの高精度タイマー。
 		 * Tick() を毎フレーム呼ぶことでデルタタイムと経過時間を更新する。
 		 * SetFPSLimit() でフレームレートを制限できる。
 		 */
 		class GameTimer
 		{
 		private:
+			using Clock     = std::chrono::steady_clock;
+			using TimePoint = Clock::time_point;
+
+		private:
 			static constexpr float MAX_DELTA_TIME = 1.0f / 15.0f;
 
 		private:
-			LARGE_INTEGER frequency_;
-			LARGE_INTEGER lastCount_;
+			/** 前回 Tick() 時刻 */
+			TimePoint lastTime_;
 
 			float deltaTime_;
 			float totalTime_;
@@ -36,7 +40,7 @@ namespace aq
 			/** 初期化。Initialize() 前に SetFPSLimit() を呼んでも構わない。 */
 			void Initialize();
 
-			/** 毎フレーム呼ぶ。FPS 制限がある場合はここでスピンウェイト。 */
+			/** 毎フレーム呼ぶ。FPS 制限がある場合はここで待機 (sleep + スピン)。 */
 			void Tick();
 
 			/** 前フレームとの経過時間 [秒]。上限 MAX_DELTA_TIME でクランプ済み。 */

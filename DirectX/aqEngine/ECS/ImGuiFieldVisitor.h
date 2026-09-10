@@ -5,6 +5,7 @@
 #include <imgui/imgui.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <string>
 
 namespace aq
@@ -73,7 +74,8 @@ namespace aq
 			{
 				const char* label = Label(persistKey, displayLabel);
 				char buf[512];
-				strncpy_s(buf, sizeof(buf), path.c_str(), _TRUNCATE);
+				// snprintf は切り詰めても必ず NUL 終端する。
+				snprintf(buf, sizeof(buf), "%s", path.c_str());
 				const bool committed = ImGui::InputText(
 					label, buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue);
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))

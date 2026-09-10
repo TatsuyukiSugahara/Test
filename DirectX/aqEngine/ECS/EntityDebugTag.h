@@ -1,7 +1,7 @@
 #pragma once
 #ifdef AQ_DEBUG_IMGUI
 #include "IComponent.h"
-#include <cstring>
+#include <cstdio>
 
 namespace aq
 {
@@ -18,7 +18,8 @@ namespace aq
 
 			void SetName(const char* name)
 			{
-				strncpy_s(displayName, sizeof(displayName), name, _TRUNCATE);
+				// snprintf は切り詰めても必ず NUL 終端する。
+				snprintf(displayName, sizeof(displayName), "%s", name);
 			}
 		};
 	}

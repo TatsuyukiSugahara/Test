@@ -144,6 +144,13 @@ namespace aq
 			static void RegisterNamed(const char* name, std::shared_ptr<InstancedStaticMesh> mesh);
 			/** 名前で共有メッシュを引く。未登録なら nullptr。 */
 			static InstancedStaticMesh* GetByName(const char* name);
+			/**
+			 * 名前レジストリを空にする。
+			 * 実体はファイルスコープのグローバル(= プロセス終了まで生き残る)なので、
+			 * 明示的に呼ばないと頂点/インデックスバッファが GraphicsDevice の破棄より
+			 * 長生きする。`Application::Finalize` から GPU デバイス破棄より前に呼ぶ。
+			 */
+			static void ClearNamed();
 
 			/**
 			 * モデルパス(FBX/TKM 等)から名前付きインスタンスメッシュを登録する薄いヘルパ。

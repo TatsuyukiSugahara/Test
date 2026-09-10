@@ -17,6 +17,10 @@ namespace aq
 		// ※ 映像フレームのデコード/表示は別サブシステム（レンダ統合）として未実装。
 		//    本クラスは設計 §11 の「音声側 = プッシュ型ストリーム + media clock」を担う。
 		//    .wav/.mp3/.aac/.m4a/.mp4 等 MF が読める形式が対象。
+		//
+		// ※ Media Foundation 依存のため実装は Win32 / UWP 限定（Mac移植設計 §5）。
+		//    それ以外のプラットフォームでは Open() が false を返す Null 動作になる
+		//    （AVFoundation 実装は Mac 移植の範囲外）。
 		class VideoPlayer
 		{
 		public:
@@ -37,11 +41,13 @@ namespace aq
 			sound::MediaClock GetClock() const;
 
 		private:
+#if defined(AQ_PLATFORM_WIN32) || defined(AQ_PLATFORM_UWP)
 			std::unique_ptr<sound::MFDecoder>   audio_;
 			std::unique_ptr<sound::SoundStream> stream_;
 			sound::SoundFormat                  format_;
 			std::vector<uint8_t>                scratch_;
 			std::vector<uint8_t>                pending_;   // 背圧で押し戻された未供給分
+#endif
 			bool                                playing_ = false;
 		};
 	}

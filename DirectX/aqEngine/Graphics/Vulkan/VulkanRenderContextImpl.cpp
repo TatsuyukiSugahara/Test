@@ -92,6 +92,15 @@ namespace aq
 		void VulkanRenderContextImpl::IASetVertexBuffer(IVertexBuffer& vertexBuffer)
 		{
 			vb_ = static_cast<VulkanVertexBuffer*>(&vertexBuffer);
+			// slot0 を差し替えたら slot1 は持ち越さない(次の描画がインスタンスとは限らない)。
+			instanceVB_ = nullptr;
+		}
+		void VulkanRenderContextImpl::IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vertexBuffer)
+		{
+			// slot1 = per-instance ストリーム。slot0 は IASetVertexBuffer と同義。
+			// D3D12 は任意スロットを受けるが、本バックエンドが使うのは 0 と 1 だけ。
+			if (slot == 0) { vb_ = static_cast<VulkanVertexBuffer*>(&vertexBuffer); return; }
+			if (slot == 1) { instanceVB_ = static_cast<VulkanVertexBuffer*>(&vertexBuffer); }
 		}
 		void VulkanRenderContextImpl::IASetIndexBuffer(IIndexBuffer& indexBuffer)
 		{
@@ -289,6 +298,34 @@ namespace aq
 			if (!renderingActive_) return;
 			vkCmdEndRendering(device_->GetCommandBuffer());
 			renderingActive_ = false;
+
+			// パスで書いたカラー RT を SHADER_READ_ONLY へ戻す(proxy = スワップチェーンは除く。
+			// あちらは device が Present で扱う)。
+			//
+			// BarrierBeforePass は**パスの先頭でしか**走らない。dynamic rendering の scope 内では
+			// レイアウト遷移を打てないためで、これは正しい。ところが利用側は、パスの途中で
+			// オフスクリーン RT を SRV として束縛して描くことがある(UI がミニマップの
+			// ベイク結果を貼る等)。その場合バリアを打つ機会が無く、
+			// COLOR_ATTACHMENT のままサンプルされて validation の
+			// 「expects ... SHADER_READ_ONLY_OPTIMAL -- instead, current layout is
+			// COLOR_ATTACHMENT_OPTIMAL」になる。
+			//
+			// 生産側(書いたパスの終わり)で読み取り可能な状態に戻しておけば、
+			// 消費側がいつ束縛しても正しい。次にこの RT へ描くときは BarrierBeforePass が
+			// COLOR_ATTACHMENT へ戻すので、往復は従来どおり成立する。
+			{
+				VkCommandBuffer cmd = device_->GetCommandBuffer();
+				for (uint32_t i = 0; i < rtCount_; ++i)
+				{
+					VulkanRenderTarget* rt = curRTs_[i];
+					if (!rt || rt->IsProxy()) continue;
+					VkImageLayout* lp = rt->ColorLayoutPtr();
+					if (!lp || *lp != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) continue;
+					TransitionImg(cmd, rt->GetImage(), VK_IMAGE_ASPECT_COLOR_BIT,
+					              *lp, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+					*lp = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				}
+			}
 		}
 
 		// ── flush + draw ─────────────────────────────────────────
@@ -314,6 +351,12 @@ namespace aq
 			key.dsFormat = depthOnly ? VK_FORMAT_D32_SFLOAT
 			             : ((depthSrc_ && depthSrc_->HasDepth()) ? depthSrc_->GetDepthFormat() : VK_FORMAT_UNDEFINED);
 			key.vertexStride = vb_ ? vb_->GetStride() : 0;  // 実 VB stride (部分宣言 VS の誤読防止)
+			// VS がインスタンス属性を持ち、かつ slot1 が束縛されているときだけ binding 1 を作る
+			// (片方だけでは PSO と VB が食い違う)。stride は **実 VB のもの** を使う。
+			// リフレクション由来だと、未使用の per-instance 属性(例: I_COLOR)が DXC に
+			// 削られた分だけ短くなり、2 個目以降のインスタンスが 1 つずつずれて読まれる。
+			key.instanceStride = (instanceVB_ && vs_ && vs_->GetInstanceStride() > 0)
+			                   ? instanceVB_->GetStride() : 0;
 
 			VkPipeline pipeline = device_->GetPipelineCache()->GetOrCreate(
 				device_->GetDevice(), device_->GetPipelineLayout()->GetPipelineLayout(), key, vs_);
@@ -330,9 +373,18 @@ namespace aq
 			// 頂点バッファ
 			if (vb_)
 			{
-				VkBuffer vbuf = vb_->GetBuffer();
-				VkDeviceSize off = vb_->GetCurrentOffset();
-				vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &off);
+				// binding 0 = 共有ジオメトリ、binding 1 = per-instance ストリーム。
+				// 2 本あるときは 1 回の呼び出しでまとめて束ねる。
+				VkBuffer     bufs[2] = { vb_->GetBuffer(), VK_NULL_HANDLE };
+				VkDeviceSize offs[2] = { vb_->GetCurrentOffset(), 0 };
+				uint32_t     count   = 1;
+				if (key.instanceStride > 0 && instanceVB_)
+				{
+					bufs[1] = instanceVB_->GetBuffer();
+					offs[1] = instanceVB_->GetCurrentOffset();
+					count   = 2;
+				}
+				vkCmdBindVertexBuffers(cmd, 0, count, bufs, offs);
 			}
 
 			// ディスクリプタセット (UBO のみ。テクスチャ/サンプラは Phase 2)
@@ -408,6 +460,25 @@ namespace aq
 			VkCommandBuffer cmd = device_->GetCommandBuffer();
 			vkCmdBindIndexBuffer(cmd, ib_->GetBuffer(), ib_->GetCurrentOffset(), ib_->GetIndexType());
 			vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, 0, 0);
+		}
+
+		/**
+		 * インデックス付きインスタンス描画。
+		 *
+		 * `IRenderContextImpl` の既定は no-op で、これを override していなかったため
+		 * Vulkan では **インスタンス描画が 1 つも発行されていなかった**
+		 * (路面リボン / 草 / コインリングが丸ごと消える)。
+		 * per-instance ストリーム(slot1)の束縛は FlushGraphics 側で行う。
+		 */
+		void VulkanRenderContextImpl::DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
+		                                                   uint32_t startIndexLocation, int32_t baseVertexLocation,
+		                                                   uint32_t startInstanceLocation)
+		{
+			if (!ib_ || instanceCount == 0 || !FlushGraphics()) return;
+			VkCommandBuffer cmd = device_->GetCommandBuffer();
+			vkCmdBindIndexBuffer(cmd, ib_->GetBuffer(), ib_->GetCurrentOffset(), ib_->GetIndexType());
+			vkCmdDrawIndexed(cmd, indexCount, instanceCount,
+			                 startIndexLocation, baseVertexLocation, startInstanceLocation);
 		}
 
 		void VulkanRenderContextImpl::DrawIndexed(uint32_t indexCount)                          { DrawIndexedInternal(indexCount, 0); }

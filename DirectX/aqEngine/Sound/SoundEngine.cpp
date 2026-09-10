@@ -3,7 +3,7 @@
 #include "SoundClip.h"
 #include "SoundStream.h"
 #include "Decoder/WavStreamDecoder.h"
-#include "Decoder/MFDecoder.h"
+#include "Decoder/CompressedDecoder.h"
 
 
 namespace aq
@@ -27,10 +27,10 @@ namespace aq
 				if (endsWith(".wav")) {
 					return std::make_unique<WavStreamDecoder>();
 				}
-				// mp3/aac/wma/m4a 等は Media Foundation（Windows）。
+				// mp3/aac/wma/m4a 等は OS のコーデック（Windows=MF / Mac=ExtAudioFile）。
 				if (endsWith(".mp3") || endsWith(".aac") || endsWith(".m4a")
 					|| endsWith(".wma") || endsWith(".mp4") || endsWith(".flac")) {
-					return std::make_unique<MFDecoder>();
+					return std::make_unique<CompressedDecoder>();
 				}
 				return nullptr;
 			}

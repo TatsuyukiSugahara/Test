@@ -2,14 +2,16 @@
 #ifdef ENGINE_GRAPHICS_VULKAN
 #include "Graphics/Vulkan/VulkanShader.h"
 #include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
-#include <dxc/dxcapi.h>
 #include <spirv_reflect/spirv_reflect.h>
-#include <wrl/client.h>
+#include <cstdio>
 #include <filesystem>
 
-#pragma comment(lib, "dxcompiler.lib")
-
+#if defined(AQ_PLATFORM_WIN32)
+// DXC の実行時コンパイル経路は Windows 専用。Mac は事前ビルドした .spv だけを使う。
+#include <dxc/dxcapi.h>
+#include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
+#endif
 
 namespace aq
 {
@@ -17,6 +19,9 @@ namespace aq
 	{
 		namespace
 		{
+			// SPIR-V バイナリ先頭のマジックナンバー (リトルエンディアンで読んだ値)。
+			static constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
+
 			// ── パス解決 (D3D12Shader と同じ規則) ──
 			std::string FindProjectRoot()
 			{
@@ -54,6 +59,56 @@ namespace aq
 				return path;
 			}
 
+			// ステージ名 (.spv のファイル名と DXC プロファイルの接頭辞で共通)。
+			const char* StageSuffix(IShader::ShaderType t)
+			{
+				switch (t)
+				{
+				case IShader::ShaderType::VS: return "vs";
+				case IShader::ShaderType::PS: return "ps";
+				case IShader::ShaderType::CS: return "cs";
+				}
+				return "vs";
+			}
+
+			// 事前ビルドした SPIR-V の探索パス: <shaderDir>/spv/<stem>.<entry>.<stage>.spv
+			// Tools/ShaderCompile/compile_spv.cmake の出力名と一対一で対応させること。
+			// Mac 実機で確認済み(P2): dxc CLI 出力の .spv だけで全シェーダが生成でき、
+			// BuildInputLayout()(SPIRV-Reflect)も入力レイアウトを正しく返す。
+			// Mac は実行時 DXC を持たないため、失敗すれば起動できない = この経路が
+			// 使われている証明になる。Windows Vulkan 構成での「.spv あり/なし双方で
+			// 見た目が一致する」比較は Mac移植設計.md §9 P2 に残っている。
+			std::string BuildSpirvPath(const char* resolvedPath, const char* entry, IShader::ShaderType type)
+			{
+				const std::filesystem::path src(resolvedPath ? resolvedPath : "");
+				if (src.empty()) return std::string();
+				const std::string name = src.stem().string() + "."
+				                       + (entry && entry[0] ? entry : "main") + "."
+				                       + StageSuffix(type) + ".spv";
+				return (src.parent_path() / "spv" / name).generic_string();
+			}
+
+			// ファイル全体をバイト列として読む。
+			bool ReadWholeFile(const char* path, std::vector<char>& out)
+			{
+				out.clear();
+				std::FILE* fp = std::fopen(path, "rb");
+				if (!fp) return false;
+				std::fseek(fp, 0, SEEK_END);
+				const long sz = std::ftell(fp);
+				std::fseek(fp, 0, SEEK_SET);
+				if (sz < 0)
+				{
+					std::fclose(fp);
+					return false;
+				}
+				out.resize((size_t)sz);
+				const size_t read = (sz > 0) ? std::fread(out.data(), 1, (size_t)sz, fp) : 0;
+				std::fclose(fp);
+				return read == (size_t)sz;
+			}
+
+#if defined(AQ_PLATFORM_WIN32)
 			std::wstring ToWide(const std::string& s)
 			{
 				if (s.empty()) return std::wstring();
@@ -63,6 +118,8 @@ namespace aq
 				return w;
 			}
 
+			// プロファイルのシェーダモデルは Tools/ShaderCompile/dxc_args.txt の
+			// AQ_DXC_SHADER_MODEL と必ず一致させること (ビルド時生成と同じ SPIR-V にするため)。
 			const wchar_t* ProfileFor(IShader::ShaderType t)
 			{
 				switch (t)
@@ -73,6 +130,7 @@ namespace aq
 				}
 				return L"vs_6_0";
 			}
+#endif // AQ_PLATFORM_WIN32
 
 			// SPIRV-Reflect / Vulkan 共通フォーマットのバイトサイズ (頂点入力で使う範囲)。
 			uint32_t FormatByteSize(VkFormat f)
@@ -95,7 +153,27 @@ namespace aq
 			type_ = shaderType;
 
 			const std::string resolved = ResolveShaderPath(filePath);
-			if (!CompileToSpirv(resolved.c_str(), entryFuncName, shaderType)) return false;
+
+			// ビルド時に生成した .spv を最優先で使う (Mac はこの経路しか無い)。
+			if (!LoadSpirvBinary(resolved.c_str(), entryFuncName, shaderType))
+			{
+#if defined(AQ_PLATFORM_WIN32)
+				// Windows は従来どおり DXC の実行時コンパイルへフォールバックする。
+				if (!CompileToSpirv(resolved.c_str(), entryFuncName, shaderType)) return false;
+#else
+				// 実行時 DXC が無いプラットフォームでは .spv 不在は致命的。
+				// 原因が分かるようにパスと生成方法をログへ出す。
+				char msg[512];
+				std::snprintf(msg, sizeof(msg),
+					"[VulkanShader] .spv がありません: %s"
+					" (このプラットフォームは実行時 DXC 非対応。"
+					"cmake -P Tools/ShaderCompile/compile_spv.cmake でビルド時に生成してください)",
+					BuildSpirvPath(resolved.c_str(), entryFuncName, shaderType).c_str());
+				aq::StartupLog(msg);
+				EngineAssertMsg(false, "Vulkan シェーダの .spv が見つかりません");
+				return false;
+#endif
+			}
 
 			VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
 			ci.codeSize = spirv_.size() * sizeof(uint32_t);
@@ -108,23 +186,51 @@ namespace aq
 		}
 
 
+		bool VulkanShader::LoadSpirvBinary(const char* resolvedPath, const char* entry, ShaderType type)
+		{
+			const std::string spvPath = BuildSpirvPath(resolvedPath, entry, type);
+			if (spvPath.empty()) return false;
+
+			// 未生成なら黙って失敗させる (Windows は DXC へフォールバックする正常系)。
+			std::error_code ec;
+			if (!std::filesystem::exists(spvPath, ec) || ec) return false;
+
+			std::vector<char> bytes;
+			if (!ReadWholeFile(spvPath.c_str(), bytes)
+			    || bytes.size() < sizeof(uint32_t)
+			    || (bytes.size() % sizeof(uint32_t)) != 0)
+			{
+				char msg[512];
+				std::snprintf(msg, sizeof(msg), "[VulkanShader] .spv の読み込みに失敗: %s", spvPath.c_str());
+				aq::StartupLog(msg);
+				return false;
+			}
+
+			spirv_.resize(bytes.size() / sizeof(uint32_t));
+			std::memcpy(spirv_.data(), bytes.data(), bytes.size());
+
+			// 壊れた/別物のファイルを掴んだまま vkCreateShaderModule へ流さない。
+			if (spirv_[0] != SPIRV_MAGIC)
+			{
+				char msg[512];
+				std::snprintf(msg, sizeof(msg), "[VulkanShader] .spv のマジックが不正: %s", spvPath.c_str());
+				aq::StartupLog(msg);
+				spirv_.clear();
+				return false;
+			}
+			return true;
+		}
+
+
+#if defined(AQ_PLATFORM_WIN32)
 		bool VulkanShader::CompileToSpirv(const char* resolvedPath, const char* entry, ShaderType type)
 		{
 			// ファイル読み込み
-			std::string source;
+			std::vector<char> source;
+			if (!ReadWholeFile(resolvedPath, source))
 			{
-				FILE* fp = nullptr;
-				if (fopen_s(&fp, resolvedPath, "rb") != 0 || !fp)
-				{
-					EngineAssertMsg(false, "Vulkan シェーダファイルを開けません");
-					return false;
-				}
-				fseek(fp, 0, SEEK_END);
-				long sz = ftell(fp);
-				fseek(fp, 0, SEEK_SET);
-				source.resize((size_t)sz);
-				fread(source.data(), 1, (size_t)sz, fp);
-				fclose(fp);
+				EngineAssertMsg(false, "Vulkan シェーダファイルを開けません");
+				return false;
 			}
 
 			ComPtr<IDxcUtils>          utils;
@@ -139,23 +245,26 @@ namespace aq
 			const std::wstring includeDir = shaderPath.parent_path().wstring();
 			const std::wstring entryW     = ToWide(entry ? entry : "main");
 
+			// 固定引数は Tools/ShaderCompile/dxc_args.txt を単一ソースにする。
+			// 同じファイルを compile_spv.cmake (ビルド時 .spv 生成) も読むので、
+			// 実行時コンパイルとビルド時コンパイルで引数が食い違わない (Mac移植設計.md §4)。
+			// 実行時のファイル依存を増やさないよう、読み込みではなく #include で埋め込む。
+#define AQ_DXC_WIDEN_(x)    L ## x
+#define AQ_DXC_ARG(x)       AQ_DXC_WIDEN_(x),
+#if defined(_DEBUG)
+#define AQ_DXC_ARG_DEBUG(x) AQ_DXC_WIDEN_(x),
+#else
+#define AQ_DXC_ARG_DEBUG(x)
+#endif
 			std::vector<LPCWSTR> args = {
-				L"-spirv",
-				L"-fspv-entrypoint-name=main",   // SPIR-V エントリ名を main に固定
-				L"-fvk-use-dx-layout",           // cbuffer を D3D パッキングに合わせる (CPU 構造体と一致)
+#include "../../../Tools/ShaderCompile/dxc_args.txt"
 				L"-E", entryW.c_str(),
 				L"-T", ProfileFor(type),
-				// register→binding 写像 (設計 §5.1)
-				L"-fvk-b-shift", L"0",  L"all",
-				L"-fvk-t-shift", L"16", L"all",
-				L"-fvk-s-shift", L"32", L"all",
-				L"-fvk-u-shift", L"48", L"all",
 				L"-I", includeDir.c_str(),
 			};
-#ifdef _DEBUG
-			args.push_back(L"-Zi");
-			args.push_back(L"-Qembed_debug");
-#endif
+#undef AQ_DXC_ARG_DEBUG
+#undef AQ_DXC_ARG
+#undef AQ_DXC_WIDEN_
 
 			DxcBuffer srcBuf{};
 			srcBuf.Ptr      = source.data();
@@ -177,7 +286,7 @@ namespace aq
 				ComPtr<IDxcBlobUtf8> errors;
 				result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
 				if (errors && errors->GetStringLength() > 0)
-					OutputDebugStringA(errors->GetStringPointer());
+					aq::debug::OutputString(errors->GetStringPointer());
 				result->GetStatus(&hr);
 			}
 			if (FAILED(hr))
@@ -195,12 +304,54 @@ namespace aq
 			std::memcpy(spirv_.data(), object->GetBufferPointer(), words * sizeof(uint32_t));
 			return true;
 		}
+#endif // AQ_PLATFORM_WIN32
+
+
+		namespace
+		{
+			/**
+			 * per-instance 入力か。
+			 *
+			 * DXC は入力変数を **`in.var.<セマンティクス>`**(ドット区切り)と名付ける。
+			 * `spirv-dis` は表示のときにドットをアンダースコアへ直して
+			 * `%in_var_POSITION` と見せるので、逆アセンブル出力を見て
+			 * `in_var_` を期待すると一致しない(実際に一度そこで嵌まった)。
+			 * 念のため両方の綴りを受ける。
+			 *
+			 * 前置きを剥がしたセマンティクスが `I_` で始まれば per-instance
+			 * (D3D12Shader.cpp の perInstance 判定と同じ規約)。
+			 */
+			bool IsPerInstanceInput(const char* name)
+			{
+				if (name == nullptr) { return false; }
+
+				static constexpr char PREFIX_DOT[]   = "in.var.";
+				static constexpr char PREFIX_UNDER[] = "in_var_";
+
+				const char* semantic = nullptr;
+				if (std::strncmp(name, PREFIX_DOT, sizeof(PREFIX_DOT) - 1) == 0)
+				{
+					semantic = name + (sizeof(PREFIX_DOT) - 1);
+				}
+				else if (std::strncmp(name, PREFIX_UNDER, sizeof(PREFIX_UNDER) - 1) == 0)
+				{
+					semantic = name + (sizeof(PREFIX_UNDER) - 1);
+				}
+				else
+				{
+					semantic = name;   // 前置きが無い綴りにも一応対応する
+				}
+
+				return semantic[0] == 'I' && semantic[1] == '_';
+			}
+		}
 
 
 		void VulkanShader::BuildInputLayout()
 		{
 			attributes_.clear();
-			vertexStride_ = 0;
+			vertexStride_   = 0;
+			instanceStride_ = 0;
 
 			SpvReflectShaderModule mod{};
 			if (spvReflectCreateShaderModule(spirv_.size() * sizeof(uint32_t), spirv_.data(), &mod) != SPV_REFLECT_RESULT_SUCCESS)
@@ -221,18 +372,34 @@ namespace aq
 
 			// パック済みレイアウト (CPU の VertexData / SkinnedVertexData と一致) を仮定し
 			// location 順にオフセットを積む (D3D12 の APPEND_ALIGNED と同じ思想)。
-			uint32_t offset = 0;
+			//
+			// binding は 2 本に分ける。**セマンティクスが `I_` で始まる入力は per-instance
+			// ストリーム(binding 1)** という規約は D3D12 と共通(D3D12Shader.cpp の
+			// perInstance 判定と対になっている)。DXC は HLSL のセマンティクスを
+			// SPIR-V の変数名 `in_var_<セマンティクス>` として残すので、そこから判定する
+			// (`-fspv-reflect` を付けていないため UserSemantic 装飾は無い)。
+			//
+			// これを分けないと per-instance のワールド行列が binding 0 の頂点データとして
+			// 読まれ、インスタンス描画(路面リボン / 草 / コインリング)が姿勢を失って消える。
+			uint32_t vertexOffset   = 0;
+			uint32_t instanceOffset = 0;
 			for (auto* v : userInputs)
 			{
+				const bool perInstance = IsPerInstanceInput(v->name);
+
 				VkVertexInputAttributeDescription a{};
 				a.location = v->location;
-				a.binding  = 0;
+				a.binding  = perInstance ? 1u : 0u;
 				a.format   = (VkFormat)v->format;
-				a.offset   = offset;
+				a.offset   = perInstance ? instanceOffset : vertexOffset;
 				attributes_.push_back(a);
-				offset += FormatByteSize((VkFormat)v->format);
+
+				const uint32_t size = FormatByteSize((VkFormat)v->format);
+				if (perInstance) { instanceOffset += size; }
+				else             { vertexOffset   += size; }
 			}
-			vertexStride_ = offset;
+			vertexStride_   = vertexOffset;
+			instanceStride_ = instanceOffset;
 
 			spvReflectDestroyShaderModule(&mod);
 		}

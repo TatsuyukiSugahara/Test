@@ -1,16 +1,12 @@
 ﻿#pragma once
-// DirectInput / XInput はデスクトップ専用。UWP(Xbox 道A)では使えないため、
-// キーボード/マウスは当面 no-op(入力は Phase 4 の GameInput で対応)。
-#if !defined(AQ_PLATFORM_UWP)
-#define DIRECTINPUT_VERSION 0x0800
-#include <dinput.h>
-#include <Xinput.h>
-#endif
 #include <memory>
 #include <chrono>
 #include <atomic>
 #include "Math/Vector.h"
-#include "HID/IPadBackend.h"   // PadButton / PadAxis / PadState / IPadBackend
+#include "Graphics/GraphicsTypes.h"    // NativeWindowHandle
+#include "HID/IKeyboardBackend.h"      // KeyBoardType / KeyboardState / IKeyboardBackend
+#include "HID/IMouseBackend.h"         // MouseState / IMouseBackend
+#include "HID/IPadBackend.h"           // PadButton / PadAxis / PadState / IPadBackend
 
 namespace aq
 {
@@ -18,53 +14,19 @@ namespace aq
 	{
 		// ==========================================
 		// Keyboard
+		// 生のデバイス取得は IKeyboardBackend に委譲し、本体は中立状態(KeyboardState)に対する
+		// トリガー/長押し等の判定だけを持つ(プラットフォーム非依存)。
+		// KeyBoardType / KeyboardState は IKeyboardBackend.h で定義。
 		// ==========================================
-
-#if !defined(AQ_PLATFORM_UWP)
-		enum class KeyBoardType : uint32_t
-		{
-			Left  = DIK_LEFT,
-			Right = DIK_RIGHT,
-			Up    = DIK_UP,
-			Down  = DIK_DOWN,
-
-			W     = DIK_W,
-			A     = DIK_A,
-			S     = DIK_S,
-			D     = DIK_D,
-			G     = DIK_G,
-
-			Space  = DIK_SPACE,
-			Enter  = DIK_RETURN,
-			Escape = DIK_ESCAPE,
-
-			Num1 = DIK_1,
-			Num2 = DIK_2,
-			Num3 = DIK_3,
-			Num4 = DIK_4,
-		};
-#else
-		// UWP: DIK_ が無いため中立値。now_[256] のインデックスとして安全なら値は任意。
-		enum class KeyBoardType : uint32_t
-		{
-			Left, Right, Up, Down,
-			W, A, S, D, G,
-			Space, Enter, Escape,
-			Num1, Num2, Num3, Num4,
-		};
-#endif
-
 
 		class KeyBoard
 		{
 		public:
 			KeyBoard()  = default;
-			~KeyBoard();
+			~KeyBoard() = default;
 
-#if !defined(AQ_PLATFORM_UWP)
-			HRESULT Initialize(LPDIRECTINPUT8 input);
-#endif
-			void    Update(float dt);
+			void SetBackend(IKeyboardBackend* backend) { backend_ = backend; }
+			void Update(float dt);
 
 			bool IsTriggered(KeyBoardType key) const;
 			bool IsPressed  (KeyBoardType key) const;
@@ -72,19 +34,20 @@ namespace aq
 			bool IsLongPress(KeyBoardType key, float thresholdSec = 0.5f) const;
 
 		private:
-			static constexpr uint32_t KEY_COUNT = 256;
+			static constexpr uint32_t KEY_COUNT = KeyboardState::KEY_COUNT;
 
-#if !defined(AQ_PLATFORM_UWP)
-			LPDIRECTINPUTDEVICE8 device_ = nullptr;
-#endif
-			uint8_t              now_[KEY_COUNT]{};
-			uint8_t              old_[KEY_COUNT]{};
-			float                holdTimers_[KEY_COUNT]{};
+			IKeyboardBackend* backend_ = nullptr;
+			KeyboardState     now_{};
+			KeyboardState     old_{};
+			float             holdTimers_[KEY_COUNT]{};
 		};
 
 
 		// ==========================================
 		// Mouse
+		// 生のデバイス取得は IMouseBackend に委譲し、本体は中立状態(MouseState)に対する
+		// トリガー/長押し等の判定だけを持つ(プラットフォーム非依存)。
+		// MouseState は IMouseBackend.h で定義。
 		// ==========================================
 
 		enum class MouseButton : uint8_t
@@ -98,28 +61,14 @@ namespace aq
 		};
 
 
-#if defined(AQ_PLATFORM_UWP)
-		// UWP: DIMOUSESTATE2 が無いため、既存の判定コードが参照するフィールドだけ持つ
-		// 中立状態(全ゼロ=入力なし)。フィールド名は DIMOUSESTATE2 に合わせる。
-		struct MouseStateNeutral
-		{
-			long    lX = 0;
-			long    lY = 0;
-			long    lZ = 0;
-			uint8_t rgbButtons[8]{};
-		};
-#endif
-
 		class Mouse
 		{
 		public:
 			Mouse()  = default;
-			~Mouse();
+			~Mouse() = default;
 
-#if !defined(AQ_PLATFORM_UWP)
-			HRESULT Initialize(LPDIRECTINPUT8 input);
-#endif
-			void    Update(float dt);
+			void SetBackend(IMouseBackend* backend) { backend_ = backend; }
+			void Update(float dt);
 
 			bool          IsTriggered(MouseButton btn) const;
 			bool          IsPressed  (MouseButton btn) const;
@@ -129,15 +78,10 @@ namespace aq
 			math::Vector2 GetCursorPos() const;
 
 		private:
-#if !defined(AQ_PLATFORM_UWP)
-			LPDIRECTINPUTDEVICE8 device_ = nullptr;
-			DIMOUSESTATE2        now_{};
-			DIMOUSESTATE2        old_{};
-#else
-			MouseStateNeutral    now_{};
-			MouseStateNeutral    old_{};
-#endif
-			float                holdTimers_[3]{};
+			IMouseBackend* backend_ = nullptr;
+			MouseState     now_{};
+			MouseState     old_{};
+			float          holdTimers_[3]{};
 		};
 
 
@@ -223,7 +167,8 @@ namespace aq
 			InputManager();
 			~InputManager();
 
-			HRESULT   Setup();
+			/** キーボード / マウスのバックエンドを生成して初期化する。成功で true */
+			bool      Setup();
 			void      Update();
 
 			KeyBoard* GetKeyBoardPtr() { return keyBoard_.get(); }
@@ -244,13 +189,15 @@ namespace aq
 			static void          Finalize()   { if (sInstance_) { delete sInstance_; sInstance_ = nullptr; } }
 
 		private:
-#if !defined(AQ_PLATFORM_UWP)
-			LPDIRECTINPUT8               input_ = nullptr;
-#endif
-			std::unique_ptr<KeyBoard>    keyBoard_;
-			std::unique_ptr<Mouse>       mouse_;
-			std::unique_ptr<IPadBackend> padBackend_;
-			Pad                          pads_[MAX_PAD_COUNT];
+			// バックエンドは KeyBoard / Mouse / Pad より先に宣言する。
+			// これらが生ポインタで参照するため、破棄はバックエンドが後になる必要がある。
+			std::unique_ptr<IKeyboardBackend> keyboardBackend_;
+			std::unique_ptr<IMouseBackend>    mouseBackend_;
+			std::unique_ptr<IPadBackend>      padBackend_;
+
+			std::unique_ptr<KeyBoard>         keyBoard_;
+			std::unique_ptr<Mouse>            mouse_;
+			Pad                               pads_[MAX_PAD_COUNT];
 
 			using Clock = std::chrono::high_resolution_clock;
 			Clock::time_point lastTime_;

@@ -1,6 +1,6 @@
 #pragma once
-// XInput / HID 直読みはデスクトップ専用。UWP は WinRTGamepadBackend が担当する。
-#if !defined(AQ_PLATFORM_UWP)
+// XInput / HID 直読みは Win32 デスクトップ専用。UWP は WinRTGamepadBackend が担当する。
+#if defined(AQ_PLATFORM_WIN32)
 #include "HID/XInputPadBackend.h"
 #include "HID/DualSensePadBackend.h"
 
@@ -39,4 +39,4 @@ namespace aq
 		};
 	}
 }
-#endif // !AQ_PLATFORM_UWP
+#endif // AQ_PLATFORM_WIN32

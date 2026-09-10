@@ -4,7 +4,7 @@
 
 
 // グローバル operator new/delete をエンジンアロケータにルーティング。
-// MemoryManager 未初期化時はフォールバックの HeapAllocator (_aligned_malloc) を使用。
+// MemoryManager 未初期化時はフォールバックの HeapAllocator (AlignedAlloc) を使用。
 
 void* operator new(std::size_t size)
 {

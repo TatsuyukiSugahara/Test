@@ -74,11 +74,11 @@ namespace aq
 			// --- 基本情報 ---
 			{
 				char buf[256];
-				strncpy_s(buf, sizeof(buf), current_.name.c_str(), _TRUNCATE);
+				std::snprintf(buf, sizeof(buf), "%s", current_.name.c_str());
 				if (ImGui::InputText("Name##style", buf, sizeof(buf)))
 					current_.name = buf;
 
-				strncpy_s(buf, sizeof(buf), current_.fontPath.c_str(), _TRUNCATE);
+				std::snprintf(buf, sizeof(buf), "%s", current_.fontPath.c_str());
 				if (ImGui::InputText("Font (atlas.json)##style", buf, sizeof(buf)))
 					current_.fontPath = buf;
 

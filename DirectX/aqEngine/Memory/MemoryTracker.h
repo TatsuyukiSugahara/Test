@@ -19,7 +19,7 @@ namespace aq
 		struct TrackHeader
 		{
 			uint32_t     magic;        // TRACK_MAGIC: 本アロケータのブロックである印。解放時に 0 にして二重解放を検出
-			uint32_t     headerOffset; // ユーザー領域先頭 - _aligned_malloc が返した先頭(アラインメント調整込み)
+			uint32_t     headerOffset; // ユーザー領域先頭 - AlignedAlloc が返した先頭(アラインメント調整込み)
 			size_t       size;         // ユーザー要求サイズ
 			const char*  file;         // nullptr = ソース情報なし(通常の new)
 			const char*  func;
@@ -55,7 +55,7 @@ namespace aq
 		// 現在未解放のアロケーションを確保サイトごとに集計して out に返す(bytes 未ソート)。
 		void CaptureUsageBySource(std::vector<MemoryUsageEntry>& out) noexcept;
 
-		// プログラム終了時のリーク出力 (OutputDebugStringA)
+		// プログラム終了時のリーク出力 (aq::debug::OutputString)
 		void ReportLeaks() noexcept;
 
 		// engineNewWith マクロから呼ばれる: 次の Allocate に紐付けるソース情報をスレッドローカルにセット

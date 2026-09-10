@@ -1,0 +1,44 @@
+// ============================================================================
+//  DXC 引数の単一ソース
+//
+//  この 1 ファイルを 2 か所が参照する:
+//    - aqEngine/Graphics/Vulkan/VulkanShader.cpp … #include して実行時 DXC の引数に埋め込む
+//    - Tools/ShaderCompile/compile_spv.cmake     … 正規表現で読んでビルド時 dxc の引数にする
+//  こうすることで「実行時コンパイルした SPIR-V」と「ビルド時に生成した .spv」で
+//  引数が食い違わない (Mac移植設計.md §4)。
+//
+//  書式ルール:
+//    - 1 引数 = AQ_DXC_ARG("...") 1 個。dxc の argv 1 要素に対応するので
+//      "-fvk-b-shift 0 all" のような複数トークンは 3 個に分けて書く。
+//    - デバッグ構成でのみ渡す引数は AQ_DXC_ARG_DEBUG("...") に書く。
+//      VulkanShader.cpp は _DEBUG のときだけ展開し、compile_spv.cmake は
+//      AQ_SPV_DEBUG_INFO=ON のときだけ拾う。
+//    - コメントは行頭 "//" のみ (compile_spv.cmake は行頭 // の行を読み飛ばす)。
+//      不要になった引数はコメントアウトではなく削除すること。
+//    - 可変引数 (-E <entry> / -T <profile> / -I <shaderDir> / -Fo <out>) はここに書かない。
+//      呼び出し側がエントリごとに組み立てる。
+//
+//  シェーダモデル (下の行は compile_spv.cmake が -T <stage>_<model> の生成に使う)。
+//  VulkanShader.cpp の ProfileFor() のプロファイル文字列と必ず一致させること。
+//  AQ_DXC_SHADER_MODEL 6_0
+// ============================================================================
+
+// SPIR-V を出力する
+AQ_DXC_ARG("-spirv")
+
+// SPIR-V のエントリ名を "main" に固定する (VkPipeline の pName は常に "main")
+AQ_DXC_ARG("-fspv-entrypoint-name=main")
+
+// cbuffer を D3D パッキングに合わせる (CPU 側の構造体レイアウトと一致させる)
+AQ_DXC_ARG("-fvk-use-dx-layout")
+
+// register -> binding の機械写像 (VulkanBackend設計.md §5.1)
+//   b# -> 0+#, t# -> 16+#, s# -> 32+#, u# -> 48+#
+AQ_DXC_ARG("-fvk-b-shift") AQ_DXC_ARG("0")  AQ_DXC_ARG("all")
+AQ_DXC_ARG("-fvk-t-shift") AQ_DXC_ARG("16") AQ_DXC_ARG("all")
+AQ_DXC_ARG("-fvk-s-shift") AQ_DXC_ARG("32") AQ_DXC_ARG("all")
+AQ_DXC_ARG("-fvk-u-shift") AQ_DXC_ARG("48") AQ_DXC_ARG("all")
+
+// デバッグ情報 (実行時コンパイルは _DEBUG 構成のみ、ビルド時生成は AQ_SPV_DEBUG_INFO=ON のみ)
+AQ_DXC_ARG_DEBUG("-Zi")
+AQ_DXC_ARG_DEBUG("-Qembed_debug")

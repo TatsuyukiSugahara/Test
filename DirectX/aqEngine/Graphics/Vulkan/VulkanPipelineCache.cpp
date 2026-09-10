@@ -108,12 +108,23 @@ namespace aq
 			if (vsShader) vsShader->GetInputLayout(attrs, attrCount, reflStride);
 			const uint32_t stride = key.vertexStride ? key.vertexStride : reflStride;
 
-			VkVertexInputBindingDescription binding{ 0, stride, VK_VERTEX_INPUT_RATE_VERTEX };
+			// binding 0 = per-vertex、binding 1 = per-instance(あるときだけ)。
+			// 属性側の binding 振り分けは VulkanShader::BuildInputLayout が
+			// 「セマンティクスが I_ で始まるか」で決めている。
+			VkVertexInputBindingDescription bindings[2]{};
+			bindings[0] = { 0, stride, VK_VERTEX_INPUT_RATE_VERTEX };
+			uint32_t bindingCount = 1;
+			if (key.instanceStride > 0)
+			{
+				bindings[1] = { 1, key.instanceStride, VK_VERTEX_INPUT_RATE_INSTANCE };
+				bindingCount = 2;
+			}
+
 			VkPipelineVertexInputStateCreateInfo vi{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 			if (stride > 0 && attrCount > 0)
 			{
-				vi.vertexBindingDescriptionCount   = 1;
-				vi.pVertexBindingDescriptions      = &binding;
+				vi.vertexBindingDescriptionCount   = bindingCount;
+				vi.pVertexBindingDescriptions      = bindings;
 				vi.vertexAttributeDescriptionCount = attrCount;
 				vi.pVertexAttributeDescriptions    = attrs;
 			}

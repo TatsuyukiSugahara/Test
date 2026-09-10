@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- グラフィックス API の選択(aqEngine / Game / GameUWP が共有)。
+     プロパティ AqGraphicsApi(D3D11 / D3D12 / Vulkan、既定 D3D12)から
+     ENGINE_GRAPHICS_* の定義と API 別ライブラリのリンクをまとめて決める。
+     Vulkan のライブラリは AqGraphicsApi=Vulkan のときだけ並ぶため、
+     Vulkan SDK 未導入の環境でも他構成のリンクは壊れない。 -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(AqGraphicsApi)'==''">
+    <AqGraphicsApi>D3D12</AqGraphicsApi>
+  </PropertyGroup>
+  <!-- Direct3D 11。D3D11GraphicsDeviceImpl.cpp は UWP 分岐で D3D12 サポートを probe するため
+       d3d12/dxgi も要る(撤去した #pragma comment(lib) と同じ組み合わせ) -->
+  <ItemDefinitionGroup Condition="'$(AqGraphicsApi)'=='D3D11'">
+    <ClCompile>
+      <PreprocessorDefinitions>ENGINE_GRAPHICS_D3D11;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Direct3D 12(既定) -->
+  <ItemDefinitionGroup Condition="'$(AqGraphicsApi)'=='D3D12'">
+    <ClCompile>
+      <PreprocessorDefinitions>ENGINE_GRAPHICS_D3D12;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Vulkan(ライブラリパスは各 vcxproj の $(VULKAN_SDK)\Lib)。dxcompiler は HLSL→SPIR-V 変換用 -->
+  <ItemDefinitionGroup Condition="'$(AqGraphicsApi)'=='Vulkan'">
+    <ClCompile>
+      <PreprocessorDefinitions>ENGINE_GRAPHICS_VULKAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>vulkan-1.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

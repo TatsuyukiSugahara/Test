@@ -75,6 +75,8 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <!-- グラフィックス API の選択(AqGraphicsApi)と API 別ライブラリ -->
+  <Import Project="..\Game\GraphicsApi.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
@@ -118,7 +120,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;AQ_PLATFORM_WIN32;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -129,7 +131,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;AQ_PLATFORM_WIN32;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -138,30 +140,30 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;AQ_DEBUG_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;AQ_PLATFORM_WIN32;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;AQ_DEBUG_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DebugXbox|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_PLATFORM_UWP;WINAPI_FAMILY=WINAPI_FAMILY_APP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_PLATFORM_UWP;WINAPI_FAMILY=WINAPI_FAMILY_APP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -170,15 +172,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;AQ_PLATFORM_WIN32;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseXbox|x64'">
@@ -187,15 +189,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_PLATFORM_UWP;WINAPI_FAMILY=WINAPI_FAMILY_APP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;BT_USE_DOUBLE_PRECISION;BT_THREADSAFE=1;AQ_PLATFORM_UWP;WINAPI_FAMILY=WINAPI_FAMILY_APP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>false</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>aq.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -231,6 +233,7 @@
     <ClCompile Include="Engine.cpp" />
     <ClCompile Include="Platform\PlatformWin32.cpp" />
     <ClCompile Include="Platform\PlatformUWP.cpp" />
+    <ClCompile Include="Platform\Common\DebugOutputWin32.cpp" />
     <ClCompile Include="Memory\MemoryManager.cpp" />
     <ClCompile Include="Memory\MemoryTracker.cpp" />
     <ClCompile Include="Memory\GlobalNew.cpp" />
@@ -251,6 +254,8 @@
     <ClCompile Include="HID\XInputPadBackend.cpp" />
     <ClCompile Include="HID\DualSensePadBackend.cpp" />
     <ClCompile Include="HID\Win32PadBackend.cpp" />
+    <ClCompile Include="HID\Win32\DirectInputKeyboardBackend.cpp" />
+    <ClCompile Include="HID\Win32\DirectInputMouseBackend.cpp" />
     <ClCompile Include="HID\WinRTGamepadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
@@ -302,6 +307,7 @@
     <ClCompile Include="Component\ParticleComponentSystem.cpp" />
     <ClCompile Include="Resource\ParticleLoader.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
+    <ClCompile Include="Resource\ImageLoader.cpp" />
     <ClCompile Include="Rendering\DrawItemCommand.cpp" />
     <ClCompile Include="Rendering\InstancedDrawItemCommand.cpp" />
     <ClCompile Include="Rendering\FrameCommands.cpp" />
@@ -368,10 +374,12 @@
     <ClCompile Include="UI\Resource\UIDocumentLoader.cpp" />
     <ClCompile Include="UI\Resource\UIDocumentSerializer.cpp" />
     <ClCompile Include="Sound\SoundEngine.cpp" />
+    <ClCompile Include="Sound\NullSoundBackend.cpp" />
     <ClCompile Include="Sound\SoundClip.cpp" />
     <ClCompile Include="Sound\SoundStream.cpp" />
     <ClCompile Include="Sound\SoundSource.cpp" />
     <ClCompile Include="Sound\Mixer3D.cpp" />
+    <ClCompile Include="Sound\Mixer\SoftwareMixer.cpp" />
     <ClCompile Include="Sound\Component\AudioSourceComponent.cpp" />
     <ClCompile Include="Sound\Component\AudioEventEmitterComponent.cpp" />
     <ClCompile Include="Sound\Component\SoundSystem.cpp" />
@@ -457,6 +465,9 @@
     <ClInclude Include="Platform\PlatformBudget.h" />
     <ClInclude Include="Platform\PlatformUWP.h" />
     <ClInclude Include="Platform\PlatformWin32.h" />
+    <ClInclude Include="Platform\Common\PlatformDefs.h" />
+    <ClInclude Include="Platform\Common\DebugOutput.h" />
+    <ClInclude Include="Platform\Common\AlignedAlloc.h" />
     <ClInclude Include="aq.h" />
     <ClInclude Include="RenderConfig.h" />
     <ClInclude Include="Graphics\AnimationClip.h" />
@@ -518,6 +529,14 @@
     <ClInclude Include="HID\Input.h" />
     <ClInclude Include="HID\InputBinding.h" />
     <ClInclude Include="HID\PadBackend.h" />
+    <ClInclude Include="HID\IKeyboardBackend.h" />
+    <ClInclude Include="HID\IMouseBackend.h" />
+    <ClInclude Include="HID\KeyboardMouseBackend.h" />
+    <ClInclude Include="HID\NullKeyboardBackend.h" />
+    <ClInclude Include="HID\NullMouseBackend.h" />
+    <ClInclude Include="HID\NullPadBackend.h" />
+    <ClInclude Include="HID\Win32\DirectInputKeyboardBackend.h" />
+    <ClInclude Include="HID\Win32\DirectInputMouseBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />
     <ClInclude Include="HID\DualSensePadBackend.h" />
     <ClInclude Include="HID\Win32PadBackend.h" />
@@ -586,6 +605,7 @@
     <ClInclude Include="Resource\ParticleSystemData.h" />
     <ClInclude Include="Resource\ParticleLoader.h" />
     <ClInclude Include="Resource\Resource.h" />
+    <ClInclude Include="Resource\ImageLoader.h" />
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Terrain\HeightmapPainter.h" />
     <ClInclude Include="Terrain\SplatmapPainter.h" />
@@ -665,6 +685,7 @@
     <ClInclude Include="Sound\SoundListener.h" />
     <ClInclude Include="Sound\SoundSource.h" />
     <ClInclude Include="Sound\Mixer3D.h" />
+    <ClInclude Include="Sound\Mixer\SoftwareMixer.h" />
     <ClInclude Include="Sound\VolumeEnvelope.h" />
     <ClInclude Include="Sound\Component\AudioListenerComponent.h" />
     <ClInclude Include="Sound\Component\AudioSourceComponent.h" />
@@ -676,11 +697,14 @@
     <ClInclude Include="Sound\Authoring\Audio.h" />
     <ClInclude Include="Sound\Authoring\Debug\AudioAuthoringPanel.h" />
     <ClInclude Include="Sound\SoundEngine.h" />
+    <ClInclude Include="Sound\NullSoundBackend.h" />
     <ClInclude Include="Sound\SoundBackend.h" />
     <ClInclude Include="Sound\Decoder\ISoundDecoder.h" />
     <ClInclude Include="Sound\Decoder\WavDecoder.h" />
     <ClInclude Include="Sound\Decoder\WavStreamDecoder.h" />
     <ClInclude Include="Sound\Decoder\MFDecoder.h" />
+    <ClInclude Include="Sound\Decoder\CompressedDecoder.h" />
+    <ClInclude Include="Sound\Decoder\NullDecoder.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundBackend.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundVoice.h" />
     <ClInclude Include="Sound\Video\VideoPlayer.h" />

@@ -1,6 +1,6 @@
 #pragma once
-// HID 直読み(SetupAPI / hid.dll)はデスクトップ専用。UWP からは使えないため丸ごと除外する。
-#if !defined(AQ_PLATFORM_UWP)
+// HID 直読み(SetupAPI / hid.dll)は Win32 デスクトップ専用。他プラットフォームからは使えないため丸ごと除外する。
+#if defined(AQ_PLATFORM_WIN32)
 #include "HID/IPadBackend.h"
 
 namespace aq
@@ -104,4 +104,4 @@ namespace aq
 		};
 	}
 }
-#endif // !AQ_PLATFORM_UWP
+#endif // AQ_PLATFORM_WIN32

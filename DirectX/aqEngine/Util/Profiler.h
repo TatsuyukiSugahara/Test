@@ -45,7 +45,7 @@ namespace aq
 			int         parentIndex = -1;  // 同一スレッド samples 内の親インデックス (-1 = ルート)
 			int         depth        = 0;
 			double      durationMs   = 0.0;
-			int64_t     startTick     = 0;  // 内部用 (QueryPerformanceCounter 値)
+			int64_t     startTick     = 0;  // 内部用 (steady_clock 由来のナノ秒値)
 		};
 
 
@@ -88,7 +88,7 @@ namespace aq
 			/** 全スレッドの display を out へコピーする */
 			void CaptureSnapshot(std::vector<ThreadFrame>& out);
 
-			/** QueryPerformanceCounter の 1 tick あたりのミリ秒。startTick の差分換算に使う。 */
+			/** 1 tick あたりのミリ秒。startTick の差分換算に使う。 */
 			double MsPerTick() const { return ticksToMs_; }
 
 			/**
@@ -119,7 +119,7 @@ namespace aq
 			std::mutex                               registryMutex_;
 			std::vector<std::shared_ptr<ThreadData>> threads_;
 			std::atomic<int>                         nextOrderIndex_ { 0 };
-			double                                   ticksToMs_ = 0.0;  // QPC frequency 由来
+			double                                   ticksToMs_ = 0.0;  // steady_clock の tick (ns) 由来
 
 			// フレーム時間計測 (メインスレッドのみが PublishWorkers() で更新・読み取り)
 			int64_t                                  lastFramePublishTick_ = 0;

@@ -108,8 +108,8 @@ namespace aq
 				return false;
 			}
 
-			FILE* fp = nullptr;
-			if (fopen_s(&fp, path, "rb") != 0 || fp == nullptr) {
+			FILE* fp = std::fopen(path, "rb");
+			if (fp == nullptr) {
 				return false;
 			}
 

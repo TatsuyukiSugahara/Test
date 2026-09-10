@@ -94,9 +94,16 @@ namespace aq
 			/** imgui の描画データを受け取り、CopyToBackBuffer 後に swapchain へ描く (AQ_IMGUI 時)。 */
 			void SetImGuiDrawData(ImDrawData* d) { imguiDrawData_ = d; }
 
+			/**
+			 * 提出済みの全 GPU 作業が終わるまで待つ(vkDeviceWaitIdle)。
+			 * RenderThread::WaitForCompletion は CPU 側(コマンド積み)の完了までしか見ないため、
+			 * GPU リソースを破棄する前段ではこちらで在フライトのコマンドバッファを空にする。
+			 */
+			void WaitDeviceIdle();
+
 		private:
 			bool CreateInstance();
-			bool CreateSurface(void* hwnd);
+			bool CreateSurface(void* nativeWindow);  // Win32 = HWND / Mac = CAMetalLayer*
 			bool PickPhysicalDeviceAndQueues();
 			bool CreateLogicalDevice();
 			bool CreateAllocator();
@@ -106,7 +113,6 @@ namespace aq
 			                     VkImageLayout oldLayout, VkImageLayout newLayout,
 			                     VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
 			                     VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
-			void WaitDeviceIdle();
 
 		private:
 			static constexpr uint32_t FRAME_COUNT = 2;

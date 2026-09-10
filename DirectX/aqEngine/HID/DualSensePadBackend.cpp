@@ -1,11 +1,9 @@
 #include "aq.h"
-// HID 直読みはデスクトップ専用。UWP(Xbox)ではパッドは WinRTGamepadBackend が担当するため空 TU。
-#if !defined(AQ_PLATFORM_UWP)
+// HID 直読みは Win32 デスクトップ専用。UWP(Xbox)ではパッドは WinRTGamepadBackend が担当するため空 TU。
+#if defined(AQ_PLATFORM_WIN32)
 #include "HID/DualSensePadBackend.h"
 #include <setupapi.h>
 #include <hidsdi.h>
-#pragma comment(lib, "setupapi.lib")
-#pragma comment(lib, "hid.lib")
 
 namespace aq
 {
@@ -559,4 +557,4 @@ namespace aq
 		}
 	}
 }
-#endif // !AQ_PLATFORM_UWP
+#endif // AQ_PLATFORM_WIN32

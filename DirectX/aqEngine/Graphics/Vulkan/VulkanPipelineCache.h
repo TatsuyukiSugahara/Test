@@ -25,6 +25,7 @@ namespace aq
 			uint8_t           rtCount  = 0;
 			uint8_t           _pad     = 0;
 			uint32_t          vertexStride = 0;  // 実際の VB stride (リフレクション値でなく)
+			uint32_t          instanceStride = 0;  // per-instance ストリーム(binding 1)の stride。0 なら非インスタンス
 			VkFormat          rtFormats[8] = {};
 			VkFormat          dsFormat = VK_FORMAT_UNDEFINED;
 

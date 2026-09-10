@@ -1,7 +1,7 @@
 #include "aq.h"
 #include "SoundClip.h"
 #include "Decoder/WavDecoder.h"
-#include "Decoder/MFDecoder.h"
+#include "Decoder/CompressedDecoder.h"
 #include <filesystem>
 
 
@@ -46,8 +46,8 @@ namespace aq
 				ok = WavDecoder::DecodeFile(requestPath_.c_str(), dst->format, dst->pcm);
 			}
 			else {
-				// mp3/aac/wma/m4a 等は Media Foundation（Windows）。
-				ok = MFDecoder::DecodeFileFully(requestPath_.c_str(), dst->format, dst->pcm);
+				// mp3/aac/wma/m4a 等は OS のコーデック（Windows=MF / Mac=ExtAudioFile）。
+				ok = CompressedDecoder::DecodeFileFully(requestPath_.c_str(), dst->format, dst->pcm);
 			}
 			if (!ok) {
 				return false;

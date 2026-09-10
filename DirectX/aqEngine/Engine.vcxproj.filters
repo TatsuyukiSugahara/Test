@@ -28,6 +28,9 @@
     <Filter Include="HID">
       <UniqueIdentifier>{8a076a85-db57-43bd-8ad9-3bd36c05730f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="HID\Win32">
+      <UniqueIdentifier>{4a446be3-ee6c-44b2-bc88-e92fffcd8a60}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Math">
       <UniqueIdentifier>{d82d44da-0ab1-4f75-adf2-fb752d3d839c}</UniqueIdentifier>
     </Filter>
@@ -54,6 +57,9 @@
     </Filter>
     <Filter Include="Sound">
       <UniqueIdentifier>{a7d1c2e3-4f50-4a6b-8c9d-0e1f2a3b4c5d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound\Mixer">
+      <UniqueIdentifier>{f8eeee57-7f21-4153-902c-25146e4a7dcc}</UniqueIdentifier>
     </Filter>
     <Filter Include="Sound\Decoder">
       <UniqueIdentifier>{b8e2d3f4-5061-4b7c-9d0e-1f2a3b4c5d6e}</UniqueIdentifier>
@@ -362,6 +368,12 @@
     <ClCompile Include="HID\Win32PadBackend.cpp">
       <Filter>HID</Filter>
     </ClCompile>
+    <ClCompile Include="HID\Win32\DirectInputMouseBackend.cpp">
+      <Filter>HID\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="HID\Win32\DirectInputKeyboardBackend.cpp">
+      <Filter>HID\Win32</Filter>
+    </ClCompile>
     <ClCompile Include="HID\WinRTGamepadBackend.cpp">
       <Filter>HID</Filter>
     </ClCompile>
@@ -462,6 +474,9 @@
       <Filter>Resource</Filter>
     </ClCompile>
     <ClCompile Include="Resource\Resource.cpp">
+      <Filter>Resource</Filter>
+    </ClCompile>
+    <ClCompile Include="Resource\ImageLoader.cpp">
       <Filter>Resource</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\DrawItemCommand.cpp">
@@ -673,6 +688,9 @@
     </ClCompile>
     <ClCompile Include="Sound\Mixer3D.cpp">
       <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound\Mixer\SoftwareMixer.cpp">
+      <Filter>Sound\Mixer</Filter>
     </ClCompile>
     <ClCompile Include="Sound\Component\AudioSourceComponent.cpp">
       <Filter>Sound\Component</Filter>
@@ -1051,6 +1069,27 @@
     <ClInclude Include="HID\PadBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
+    <ClInclude Include="HID\Win32\DirectInputMouseBackend.h">
+      <Filter>HID\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\Win32\DirectInputKeyboardBackend.h">
+      <Filter>HID\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\NullMouseBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\NullKeyboardBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\KeyboardMouseBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\IMouseBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\IKeyboardBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
     <ClInclude Include="HID\XInputPadBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
@@ -1253,6 +1292,9 @@
       <Filter>Resource</Filter>
     </ClInclude>
     <ClInclude Include="Resource\Resource.h">
+      <Filter>Resource</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\ImageLoader.h">
       <Filter>Resource</Filter>
     </ClInclude>
     <ClInclude Include="Terrain\HeightmapChunk.h">
@@ -1490,6 +1532,9 @@
     <ClInclude Include="Sound\Mixer3D.h">
       <Filter>Sound</Filter>
     </ClInclude>
+    <ClInclude Include="Sound\Mixer\SoftwareMixer.h">
+      <Filter>Sound\Mixer</Filter>
+    </ClInclude>
     <ClInclude Include="Sound\VolumeEnvelope.h">
       <Filter>Sound</Filter>
     </ClInclude>
@@ -1536,6 +1581,9 @@
       <Filter>Sound\Decoder</Filter>
     </ClInclude>
     <ClInclude Include="Sound\Decoder\MFDecoder.h">
+      <Filter>Sound\Decoder</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Decoder\CompressedDecoder.h">
       <Filter>Sound\Decoder</Filter>
     </ClInclude>
     <ClInclude Include="Sound\XAudio2\XAudio2SoundBackend.h">

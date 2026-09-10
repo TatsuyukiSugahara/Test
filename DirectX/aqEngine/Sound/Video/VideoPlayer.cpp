@@ -1,5 +1,11 @@
 #include "aq.h"
 #include "VideoPlayer.h"
+
+
+// Media Foundation 依存のため本体は Win32 / UWP 限定（Mac移植設計 §5）。
+// それ以外は Open() が false を返す Null 実装（ファイル末尾）。
+#if defined(AQ_PLATFORM_WIN32) || defined(AQ_PLATFORM_UWP)
+
 #include "Sound/Decoder/MFDecoder.h"
 #include "Sound/SoundEngine.h"
 #include "Sound/SoundStream.h"
@@ -105,3 +111,45 @@ namespace aq
 		}
 	}
 }
+
+#else   // AQ_PLATFORM_WIN32 || AQ_PLATFORM_UWP
+
+
+namespace aq
+{
+	namespace video
+	{
+		/**
+		 * Null 実装（Media Foundation 非対応プラットフォーム）
+		 * 呼び出し側は Open() の false で「動画音声なし」を判断する。
+		 */
+		VideoPlayer::VideoPlayer() = default;
+
+
+		VideoPlayer::~VideoPlayer() = default;
+
+
+		bool VideoPlayer::Open(const char* /*path*/, sound::SoundBusId /*bus*/)
+		{
+			return false;
+		}
+
+
+		void VideoPlayer::Update(float /*deltaTime*/)
+		{
+		}
+
+
+		void VideoPlayer::Stop()
+		{
+		}
+
+
+		sound::MediaClock VideoPlayer::GetClock() const
+		{
+			return sound::MediaClock{};
+		}
+	}
+}
+
+#endif  // AQ_PLATFORM_WIN32 || AQ_PLATFORM_UWP

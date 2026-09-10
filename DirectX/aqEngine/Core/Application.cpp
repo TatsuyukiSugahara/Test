@@ -16,7 +16,10 @@
 #endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
+#if defined(AQ_PLATFORM_WIN32)
 #include <imgui/imgui_impl_win32.h>
+#endif
+// TODO(P4): MAC は imgui_impl_osx.h を include し ImGui_ImplOSX_* を呼ぶ(設計書 §6)。
 #include "Rendering/ImGuiRenderCommand.h"
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
@@ -56,9 +59,10 @@ namespace aq
 		aq::res::ResourceManager::Initialize();
 		aq::ecs::EntityContext::Initialize();
 		aq::hid::InputManager::Initialize();
-		if (FAILED(aq::hid::InputManager::Get().Setup()))
+		// InputManager::Setup() は P1 の入力 Bridge 化で HRESULT → bool になった
+		if (!aq::hid::InputManager::Get().Setup())
 		{
-			EngineAssertMsg(false, "InputManager::Setup failed: DirectInput or device initialization failed");
+			EngineAssertMsg(false, "InputManager::Setup failed: keyboard/mouse backend initialization failed");
 			return false;
 		}
 		aq::StartupMark("  [app] input ok");
@@ -121,7 +125,12 @@ namespace aq
 						io.Fonts->AddFontDefault();
 				}
 
+#if defined(AQ_PLATFORM_WIN32)
 			const bool winOk = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
+#else
+			// TODO(P4): MAC は ImGui_ImplOSX_Init(NSView*) に差し替える(設計書 §6)。
+			const bool winOk = true;
+#endif
 			bool backendOk = false;
 #ifdef ENGINE_GRAPHICS_D3D11
 			auto* d3d = dynamic_cast<aq::graphics::D3D11GraphicsDeviceImpl*>(
@@ -139,7 +148,9 @@ namespace aq
 			}
 			else
 			{
+#if defined(AQ_PLATFORM_WIN32)
 				if (winOk) ImGui_ImplWin32_Shutdown();
+#endif
 				ImGui::DestroyContext();
 				EngineAssertMsg(false, "ImGui backend initialization failed");
 			}
@@ -309,7 +320,9 @@ namespace aq
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 			aq::graphics::VulkanImGui::Shutdown();
 #endif
+#if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_Shutdown();
+#endif
 			ImGui::DestroyContext();
 			imguiReady_ = false;
 		}
@@ -425,7 +438,9 @@ namespace aq
 		ImDrawData* imguiDrawData = nullptr;
 		if (imguiReady_)
 		{
+#if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_NewFrame();
+#endif
 #ifdef ENGINE_GRAPHICS_D3D11
 			ImGui_ImplDX11_NewFrame();
 #elif defined(ENGINE_GRAPHICS_D3D12)

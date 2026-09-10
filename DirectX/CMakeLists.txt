@@ -109,6 +109,9 @@ add_subdirectory(ThirdParty)
 add_subdirectory(aqEngine)
 add_subdirectory(Game)
 
+# 開発用ツール(CMake 専用。vcxproj は用意しない)
+add_subdirectory(Tools/MixerTest)
+
 # VS 生成時のスタートアッププロジェクト
 if(CMAKE_GENERATOR MATCHES "Visual Studio")
 	set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT Game)

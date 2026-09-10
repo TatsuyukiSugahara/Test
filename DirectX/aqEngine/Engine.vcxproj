@@ -254,6 +254,8 @@
     <ClCompile Include="HID\XInputPadBackend.cpp" />
     <ClCompile Include="HID\DualSensePadBackend.cpp" />
     <ClCompile Include="HID\Win32PadBackend.cpp" />
+    <ClCompile Include="HID\Win32\DirectInputKeyboardBackend.cpp" />
+    <ClCompile Include="HID\Win32\DirectInputMouseBackend.cpp" />
     <ClCompile Include="HID\WinRTGamepadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
@@ -305,6 +307,7 @@
     <ClCompile Include="Component\ParticleComponentSystem.cpp" />
     <ClCompile Include="Resource\ParticleLoader.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
+    <ClCompile Include="Resource\ImageLoader.cpp" />
     <ClCompile Include="Rendering\DrawItemCommand.cpp" />
     <ClCompile Include="Rendering\InstancedDrawItemCommand.cpp" />
     <ClCompile Include="Rendering\FrameCommands.cpp" />
@@ -375,6 +378,7 @@
     <ClCompile Include="Sound\SoundStream.cpp" />
     <ClCompile Include="Sound\SoundSource.cpp" />
     <ClCompile Include="Sound\Mixer3D.cpp" />
+    <ClCompile Include="Sound\Mixer\SoftwareMixer.cpp" />
     <ClCompile Include="Sound\Component\AudioSourceComponent.cpp" />
     <ClCompile Include="Sound\Component\AudioEventEmitterComponent.cpp" />
     <ClCompile Include="Sound\Component\SoundSystem.cpp" />
@@ -524,6 +528,13 @@
     <ClInclude Include="HID\Input.h" />
     <ClInclude Include="HID\InputBinding.h" />
     <ClInclude Include="HID\PadBackend.h" />
+    <ClInclude Include="HID\IKeyboardBackend.h" />
+    <ClInclude Include="HID\IMouseBackend.h" />
+    <ClInclude Include="HID\KeyboardMouseBackend.h" />
+    <ClInclude Include="HID\NullKeyboardBackend.h" />
+    <ClInclude Include="HID\NullMouseBackend.h" />
+    <ClInclude Include="HID\Win32\DirectInputKeyboardBackend.h" />
+    <ClInclude Include="HID\Win32\DirectInputMouseBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />
     <ClInclude Include="HID\DualSensePadBackend.h" />
     <ClInclude Include="HID\Win32PadBackend.h" />
@@ -592,6 +603,7 @@
     <ClInclude Include="Resource\ParticleSystemData.h" />
     <ClInclude Include="Resource\ParticleLoader.h" />
     <ClInclude Include="Resource\Resource.h" />
+    <ClInclude Include="Resource\ImageLoader.h" />
     <ClInclude Include="Terrain\HeightmapChunk.h" />
     <ClInclude Include="Terrain\HeightmapPainter.h" />
     <ClInclude Include="Terrain\SplatmapPainter.h" />
@@ -671,6 +683,7 @@
     <ClInclude Include="Sound\SoundListener.h" />
     <ClInclude Include="Sound\SoundSource.h" />
     <ClInclude Include="Sound\Mixer3D.h" />
+    <ClInclude Include="Sound\Mixer\SoftwareMixer.h" />
     <ClInclude Include="Sound\VolumeEnvelope.h" />
     <ClInclude Include="Sound\Component\AudioListenerComponent.h" />
     <ClInclude Include="Sound\Component\AudioSourceComponent.h" />
@@ -687,6 +700,7 @@
     <ClInclude Include="Sound\Decoder\WavDecoder.h" />
     <ClInclude Include="Sound\Decoder\WavStreamDecoder.h" />
     <ClInclude Include="Sound\Decoder\MFDecoder.h" />
+    <ClInclude Include="Sound\Decoder\CompressedDecoder.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundBackend.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundVoice.h" />
     <ClInclude Include="Sound\Video\VideoPlayer.h" />

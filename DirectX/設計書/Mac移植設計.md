@@ -94,7 +94,7 @@
 | `aqEngine/HID/IMouseBackend.h` **(新規)** | `struct MouseState { int32_t dx, dy, wheel; uint8_t buttons[8]; float cursorX, cursorY; }`(`DIMOUSESTATE2` の中立版。現行 `MouseStateNeutral` を昇格)、`class IMouseBackend { Initialize / Poll(MouseState&) }` |
 | `aqEngine/HID/KeyboardMouseBackend.h` **(新規)** | `PadBackend.h` と同じ選択ヘッダ。WIN32 = `DirectInputKeyboardBackend`/`DirectInputMouseBackend`、UWP = `NullKeyboardBackend`/`NullMouseBackend`、MAC = `CocoaKeyboardBackend`/`CocoaMouseBackend` |
 | `aqEngine/HID/Input.h` / `.cpp` | `KeyBoard`/`Mouse` から `LPDIRECTINPUT*`/`HRESULT`/`<dinput.h>`/`<Xinput.h>` を除去し、`IKeyboardBackend*`/`IMouseBackend*` を持つ。`Update` は `Poll` → `old_/now_` 入替 → 長押しタイマ、の現行ロジックのみ。`InputManager::Setup` は `HRESULT`→`bool`。`GetCursorPos` はバックエンドの `cursorX/Y` を返す |
-| `aqEngine/HID/Win32/DirectInputKeyboardBackend.{h,cpp}` / `DirectInputMouseBackend.{h,cpp}` **(新規・移設)** | 現 `Input.cpp` の DirectInput 部分。`DirectInput8Create`/`SetCooperativeLevel(HWND)`/`GetDeviceState` と、**DIK → `KeyBoardType` の変換表**。`::GetCursorPos`+`ScreenToClient` もここ |
+| `aqEngine/HID/Win32/DirectInputKeyboardBackend.{h,cpp}` / `DirectInputMouseBackend.{h,cpp}` **(新規・移設)**<br>※ 既存の `Win32PadBackend` / `XInputPadBackend` / `DualSensePadBackend` は `HID/` 直下のまま。`HID/Win32/` への集約は別途 `<Build>` で行う | 現 `Input.cpp` の DirectInput 部分。`DirectInput8Create`/`SetCooperativeLevel(HWND)`/`GetDeviceState` と、**DIK → `KeyBoardType` の変換表**。`::GetCursorPos`+`ScreenToClient` もここ |
 | `aqEngine/HID/NullKeyboardBackend.h` / `NullMouseBackend.h` **(新規)** | 全ゼロを返す。UWP と、Mac の P2〜P3 で使う |
 
 ### 3.2 Mac 実装
@@ -177,8 +177,21 @@
 7. **clang が出す警告の扱い**(P0 の clang-cl 検証で判明。ビルドは通るので P0 の完了条件からは外した):
    - `-Wdelete-abstract-non-virtual-dtor` 2 件 — `aq::IApplication`(`Engine.cpp:115`)と `app::actor::IState`(`StateMachine.cpp:117`)を、仮想デストラクタ無しの抽象基底ポインタ経由で `delete` している。**派生のデストラクタが走らない未定義動作**なので P1 で潰す
    - `-Wnontrivial-memcall` 6 件 — `MaterialCBData` / `Matrix4x4` への `memcpy`。実体はトリビアルに扱える見込みだが要確認
-   - `-Wreorder-ctor` 1 件(`Graphics/Camera.cpp:10`)、`-Winconsistent-missing-override` 4 件、`-Wmicrosoft-exception-spec` 16 件
-8. **HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係(Retina で 2 倍になる)。P2 で決める。
+   - `-Wreorder-ctor` 1 件(`Graphics/Camera.cpp:10`)、`-Winconsistent-missing-override` 5 件、`-Wmicrosoft-exception-spec` 16 件<br>`-Wdelete-abstract-non-virtual-dtor` の 2 件は解消済み(コミット e5eecf2)
+8. **`CompressedDecoder.h` の Mac 分岐が未定義**(P1 で判明): 設計では `ExtAudioFileDecoder` を P4 で足すことになっているが、
+   **P2 は「Mac でビルド・リンクが通る」ことが到達点**なので、P2 の時点で `SoundClip.cpp` / `SoundEngine.cpp` が
+   コンパイルできない。P2 で Mac 分岐に Null デコーダを置き、P4 で `ExtAudioFileDecoder` に差し替える。
+9. **`ISoundVoice::SetOutputMatrix` のコメントと実装が逆**(P1 で判明): ヘッダは「入力ch × 出力ch, row-major」だが、
+   `XAudio2SoundVoice` は XAudio2 の並び(出力ch × 入力ch)でそのまま渡している。`SoftwareMixer` は Windows と
+   音が一致する方(XAudio2 の並び)に合わせた。唯一の呼び出し元(`SoundSource.cpp:138`、src=1/dst=2)は
+   どちらの解釈でも同値なので実害はないが、**コメントの修正が要る**。
+10. **UWP のハイトマップ挙動が変わる**(P1 で判明): `HeightmapChunk` の UWP 分岐は「DirectXTex 未リンク」を理由に
+   無条件 `return false` していたが、現在 UWP は NuGet の `directxtex_uwp` を使っており記述が古い。
+   `ImageLoader` への集約で分岐を畳んだため、**Xbox で地形が「読めない」→「読める」に変わる**(ユーザー承認済み)。
+   Xbox 実機での確認は次に Xbox を触るときに行う。
+11. **`SoftwareMixer` と XAudio2 の差異**(P4 への申し送り): リサンプルは線形補間のみ / `GetConsumedFrames` が
+   先読み分 +2 進む(`SoundStream` の A/V 同期に影響しうる) / ピッチ比の上限なし / エフェクト・フィルタ・submix なし。
+12. **HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係(Retina で 2 倍になる)。P2 で決める。
 
 ---
 
@@ -221,22 +234,31 @@
 - §3.1 の `IKeyboardBackend`/`IMouseBackend`/選択ヘッダ/Null 実装、DirectInput の移設、`Input.h` の DirectInput 型除去。
 - §5 の `SoftwareMixer`(可搬部分のみ。CoreAudio 出力はまだ)+ 単体テスト相当のツール(`Tools/MixerTest`: WAV を読ませてミックス結果を WAV に書く)。`CompressedDecoder.h` 選択ヘッダ。`VideoPlayer` の Windows ブロック化。
 - §6 の `ImageLoader` 新設(Windows は WIC のまま)。`stb_image` 同梱(Mac 分岐は空で置く)。
-- §4 の `.spv` 読み込み経路と `compile_spv.cmake`/`shader_entries.txt`。Windows Vulkan 構成で `.spv` 有無の両方を検証。
+- `Core/Application.cpp` の `ImGui_ImplWin32_*` に `AQ_PLATFORM_WIN32` ガードを被せる(§6)。
+- ~~§4 の `.spv` 読み込み経路~~ → **P2 へ移動**。Vulkan SDK が未導入だと `AqGraphicsApi=Vulkan` の
+  コンパイル自体が通らず、書いても検証できないため。Mac 側でも Vulkan SDK for macOS が必要になるので、
+  P2 で Windows/macOS 両方まとめて導入・検証する。
 
 評価:
 - [ ] キーボード/マウス/パッドの全操作(AquaDash のタイトル〜ステージ)が P0 と同一に動く
-- [ ] `Input.h` に `dinput.h`/`Xinput.h`/`HRESULT`/`LPDIRECTINPUT*` が現れない
-- [ ] UWP 構成が Null 入力でビルド・起動する
-- [ ] `Tools/MixerTest` で 2 ボイス(片方ピッチ 1.5、出力行列で左右反転)のミックス結果が期待波形になる
-- [ ] Windows Vulkan 構成で `.spv` あり/なし双方で全シーンが描画され、見た目が一致する
-- [ ] `ImageLoader` 経由で PNG/JPG/DDS/TGA のテクスチャが従来どおり表示される
+      - **手動確認待ち**。合成入力は DirectInput に届かないため自動化不可(P0 と同じ事情)
+- [x] `Input.h` に `dinput.h`/`Xinput.h`/`HRESULT`/`LPDIRECTINPUT*` が現れない
+      - `Input.h`/`Input.cpp` とも該当シンボル 0 件。`AQ_PLATFORM_*` 分岐も消え、正味 -139 行
+- [x] UWP 構成が Null 入力でビルドできる(DebugXbox|x64 = 0 エラー。実機起動は Xbox 実機作業時に確認)
+- [x] `Tools/MixerTest` で 2 ボイス(片方ピッチ 1.5、出力行列で左右反転)のミックス結果が期待波形になる
+      - `--selftest` が解析解と一致(maxError L=R=0.000e+00 / underrun=0 / retireOverflow=0)
+- [x] `ImageLoader` 経由で PNG/JPG/DDS/TGA のテクスチャが従来どおり表示される
+      - タイトル画面でステージサムネイル(PNG)・海/地形(DDS/TGA)・フォントアトラスが従来どおり描画
+- [x] MSVC / clang-cl 双方で Debug/Release がビルドでき、AquaDash が P0 と同じ見た目で動く
+      - MSVC Release|x64 = 0 エラー(警告は C4244 x102 + C4267 x2 で P0 から変化なし)、clang-cl Debug = 0 エラー
 
 ### P2: Mac でウィンドウとクリア画面(Mac 実機)
 
 実装:
 - `MacMain.mm`、`PlatformMac.{h,mm}`、`PlatformBudget` の MAC プロファイル。
 - CMake の Xcode/Ninja 生成。ThirdParty(Bullet/DirectXTex 非 Windows/ufbx/spirv_reflect/vma)の Mac ビルド。
-- Vulkan §4 の Mac 分岐(Metal surface / portability)。Vulkan SDK for macOS の導入手順を `Tools/SetupVulkan/README.md` に追記。
+- Vulkan §4 の Mac 分岐(Metal surface / portability)。Vulkan SDK の導入手順を `Tools/SetupVulkan/README.md` に追記(Windows / macOS 両方)。
+- **§4 の `.spv` 読み込み経路と `compile_spv.cmake`/`shader_entries.txt`(P1 から移動)**。まず Windows Vulkan 構成で `.spv` 有無の両方を検証してから Mac へ持っていく。
 - 入力 = Null、サウンド = `CoreAudioSoundBackend` の骨格(`Initialize` 成功・無音)、`ImageLoader` の `stb_image` 分岐。
 
 評価:
@@ -244,6 +266,7 @@
 - [ ] ウィンドウが開き、Vulkan(MoltenVK)でクリア色が出る。Vulkan validation layer でエラー 0
 - [ ] 閉じるボタンで `PumpEvents` が false を返し、`Finalize` まで到達してプロセスが正常終了する
 - [ ] `StartupLog` に portability subset の非対応項目が出力される
+- [ ] Windows Vulkan 構成で `.spv` あり/なし双方で全シーンが描画され、見た目が一致する(P1 から移動)
 - [ ] Retina 環境での `drawableSize` と描画解像度の扱いを §8-7 に記録した
 
 ### P3: Mac で実シーン(Mac 実機)

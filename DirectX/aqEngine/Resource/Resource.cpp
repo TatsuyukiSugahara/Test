@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "Resource.h"
+#include "ImageLoader.h"
 #include "Platform/PlatformBudget.h"
 #include <cctype>
 #include <cstdio>
@@ -1598,34 +1599,20 @@ namespace aq
 				}
 			}
 
-			// DirectXTex にはワイド文字パスを渡す。mbstowcs は失敗時に (size_t)-1 を返し、
-			// 切り詰め時は終端を書かないため、どちらも呼び出し側で担保する。
-			wchar_t filePath[256] = {};
-			const size_t converted = std::mbstowcs(filePath, requestPath_.c_str(), ArraySize(filePath));
-			if (converted == static_cast<size_t>(-1)) {
-				return false;
-			}
-			filePath[ArraySize(filePath) - 1] = L'\0';
-
 			DirectX::TexMetadata info;
 			std::unique_ptr<DirectX::ScratchImage> image = std::make_unique<DirectX::ScratchImage>();
 
-			// DDS は tkm マテリアルで多用。TGA は WIC 非対応のため専用ローダ。
-			// それ以外 (.png/.jpg 等) は WIC。
-			const std::string extension = GetLowerExtension(requestPath_);
+			// 拡張子による振り分け (DDS/TGA/WIC) とワイド文字パス変換は ImageLoader に集約。
+			// Mac では PNG/JPG が stb_image 経由になるが、呼び出し側は変わらない。
 			const auto decodeStart = std::chrono::steady_clock::now();
-			HRESULT hr =
-				  extension == ".dds" ? DirectX::LoadFromDDSFile(filePath, DirectX::DDS_FLAGS_NONE, &info, *image)
-				: extension == ".tga" ? DirectX::LoadFromTGAFile(filePath, DirectX::TGA_FLAGS_NONE, &info, *image)
-				:                       DirectX::LoadFromWICFile(filePath, DirectX::WIC_FLAGS_NONE, &info, *image);
-			if (FAILED(hr)) {
+			if (!LoadImageFile(requestPath_, &info, *image)) {
 				info = {};
 				return false;
 			}
 			const auto mipStart = std::chrono::steady_clock::now();
 			if (info.mipLevels == 1) {
 				std::unique_ptr<DirectX::ScratchImage> mipImage = std::make_unique<DirectX::ScratchImage>();
-				hr = DirectX::GenerateMipMaps(image->GetImages(), image->GetImageCount(), image->GetMetadata(), DirectX::TEX_FILTER_DEFAULT, 0, *mipImage);
+				const HRESULT hr = DirectX::GenerateMipMaps(image->GetImages(), image->GetImageCount(), image->GetMetadata(), DirectX::TEX_FILTER_DEFAULT, 0, *mipImage);
 				if (SUCCEEDED(hr)) {
 					image = std::move(mipImage);
 				}

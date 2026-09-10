@@ -33,6 +33,7 @@ namespace aq
 			const char*   GetEntryPoint() const { return "main"; }
 
 			// PSO 用入力レイアウト (VS のみ。VS 以外は count=0)。
+			// outStride は binding 0(per-vertex)の stride。
 			void GetInputLayout(const VkVertexInputAttributeDescription*& outAttrs, uint32_t& outCount,
 			                    uint32_t& outStride) const
 			{
@@ -40,6 +41,14 @@ namespace aq
 				outCount  = (uint32_t)attributes_.size();
 				outStride = vertexStride_;
 			}
+
+			/**
+			 * binding 1(per-instance ストリーム)の stride。インスタンス属性が無ければ 0。
+			 *
+			 * D3D12 と同じく「セマンティクスが `I_` で始まる入力は per-instance(slot1)」
+			 * という規約で分けている(D3D12Shader.cpp の perInstance 判定と対)。
+			 */
+			uint32_t GetInstanceStride() const { return instanceStride_; }
 
 		private:
 			// 事前ビルドされた .spv を読む (見つからなければ false)。
@@ -54,7 +63,8 @@ namespace aq
 			std::vector<uint32_t>                          spirv_;
 			VkShaderModule                                 module_ = VK_NULL_HANDLE;
 			std::vector<VkVertexInputAttributeDescription> attributes_;
-			uint32_t                                       vertexStride_ = 0;
+			uint32_t                                       vertexStride_   = 0;   // binding 0 (per-vertex)
+			uint32_t                                       instanceStride_ = 0;   // binding 1 (per-instance)
 		};
 	}
 }

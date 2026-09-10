@@ -48,6 +48,7 @@ namespace aq
 
 			// ── 入力アセンブラ ──
 			void IASetVertexBuffer(IVertexBuffer& vertexBuffer) override;
+			void IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vertexBuffer) override;
 			void IASetIndexBuffer(IIndexBuffer& indexBuffer) override;
 			void IASetPrimitiveTopology(PrimitiveTopology topology) override;
 			void IASetInputLayout(IShader& vsShader) override;
@@ -105,6 +106,8 @@ namespace aq
 			VulkanShader*        vs_ = nullptr;
 			VulkanShader*        ps_ = nullptr;
 			VulkanVertexBuffer*  vb_ = nullptr;
+			/** slot1 = per-instance ストリーム(インスタンス描画のときだけ設定される) */
+			VulkanVertexBuffer*  instanceVB_ = nullptr;
 			VulkanIndexBuffer*   ib_ = nullptr;
 			VulkanConstantBuffer* cbs_[MAX_CBV] = {};
 			VulkanSRV*            srvs_[MAX_SRV] = {};

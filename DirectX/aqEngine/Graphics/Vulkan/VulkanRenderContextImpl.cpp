@@ -92,6 +92,15 @@ namespace aq
 		void VulkanRenderContextImpl::IASetVertexBuffer(IVertexBuffer& vertexBuffer)
 		{
 			vb_ = static_cast<VulkanVertexBuffer*>(&vertexBuffer);
+			// slot0 を差し替えたら slot1 は持ち越さない(次の描画がインスタンスとは限らない)。
+			instanceVB_ = nullptr;
+		}
+		void VulkanRenderContextImpl::IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vertexBuffer)
+		{
+			// slot1 = per-instance ストリーム。slot0 は IASetVertexBuffer と同義。
+			// D3D12 は任意スロットを受けるが、本バックエンドが使うのは 0 と 1 だけ。
+			if (slot == 0) { vb_ = static_cast<VulkanVertexBuffer*>(&vertexBuffer); return; }
+			if (slot == 1) { instanceVB_ = static_cast<VulkanVertexBuffer*>(&vertexBuffer); }
 		}
 		void VulkanRenderContextImpl::IASetIndexBuffer(IIndexBuffer& indexBuffer)
 		{
@@ -342,6 +351,9 @@ namespace aq
 			key.dsFormat = depthOnly ? VK_FORMAT_D32_SFLOAT
 			             : ((depthSrc_ && depthSrc_->HasDepth()) ? depthSrc_->GetDepthFormat() : VK_FORMAT_UNDEFINED);
 			key.vertexStride = vb_ ? vb_->GetStride() : 0;  // 実 VB stride (部分宣言 VS の誤読防止)
+			// per-instance ストリームの stride。VS がインスタンス属性を持ち、かつ実際に
+			// slot1 が束縛されているときだけ binding 1 を作る(片方だけでは PSO と VB が食い違う)。
+			key.instanceStride = (instanceVB_ && vs_) ? vs_->GetInstanceStride() : 0;
 
 			VkPipeline pipeline = device_->GetPipelineCache()->GetOrCreate(
 				device_->GetDevice(), device_->GetPipelineLayout()->GetPipelineLayout(), key, vs_);
@@ -358,9 +370,18 @@ namespace aq
 			// 頂点バッファ
 			if (vb_)
 			{
-				VkBuffer vbuf = vb_->GetBuffer();
-				VkDeviceSize off = vb_->GetCurrentOffset();
-				vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &off);
+				// binding 0 = 共有ジオメトリ、binding 1 = per-instance ストリーム。
+				// 2 本あるときは 1 回の呼び出しでまとめて束ねる。
+				VkBuffer     bufs[2] = { vb_->GetBuffer(), VK_NULL_HANDLE };
+				VkDeviceSize offs[2] = { vb_->GetCurrentOffset(), 0 };
+				uint32_t     count   = 1;
+				if (key.instanceStride > 0 && instanceVB_)
+				{
+					bufs[1] = instanceVB_->GetBuffer();
+					offs[1] = instanceVB_->GetCurrentOffset();
+					count   = 2;
+				}
+				vkCmdBindVertexBuffers(cmd, 0, count, bufs, offs);
 			}
 
 			// ディスクリプタセット (UBO のみ。テクスチャ/サンプラは Phase 2)

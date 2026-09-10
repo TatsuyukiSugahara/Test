@@ -307,10 +307,26 @@ namespace aq
 #endif // AQ_PLATFORM_WIN32
 
 
+		namespace
+		{
+			/**
+			 * per-instance 入力か。DXC は入力変数を `in_var_<セマンティクス>` と名付けるので、
+			 * セマンティクスが `I_` で始まるかをその名前から見る。
+			 */
+			bool IsPerInstanceInput(const char* name)
+			{
+				if (name == nullptr) { return false; }
+				static constexpr char PREFIX[] = "in_var_I_";
+				return std::strncmp(name, PREFIX, sizeof(PREFIX) - 1) == 0;
+			}
+		}
+
+
 		void VulkanShader::BuildInputLayout()
 		{
 			attributes_.clear();
-			vertexStride_ = 0;
+			vertexStride_   = 0;
+			instanceStride_ = 0;
 
 			SpvReflectShaderModule mod{};
 			if (spvReflectCreateShaderModule(spirv_.size() * sizeof(uint32_t), spirv_.data(), &mod) != SPV_REFLECT_RESULT_SUCCESS)
@@ -331,18 +347,34 @@ namespace aq
 
 			// パック済みレイアウト (CPU の VertexData / SkinnedVertexData と一致) を仮定し
 			// location 順にオフセットを積む (D3D12 の APPEND_ALIGNED と同じ思想)。
-			uint32_t offset = 0;
+			//
+			// binding は 2 本に分ける。**セマンティクスが `I_` で始まる入力は per-instance
+			// ストリーム(binding 1)** という規約は D3D12 と共通(D3D12Shader.cpp の
+			// perInstance 判定と対になっている)。DXC は HLSL のセマンティクスを
+			// SPIR-V の変数名 `in_var_<セマンティクス>` として残すので、そこから判定する
+			// (`-fspv-reflect` を付けていないため UserSemantic 装飾は無い)。
+			//
+			// これを分けないと per-instance のワールド行列が binding 0 の頂点データとして
+			// 読まれ、インスタンス描画(路面リボン / 草 / コインリング)が姿勢を失って消える。
+			uint32_t vertexOffset   = 0;
+			uint32_t instanceOffset = 0;
 			for (auto* v : userInputs)
 			{
+				const bool perInstance = IsPerInstanceInput(v->name);
+
 				VkVertexInputAttributeDescription a{};
 				a.location = v->location;
-				a.binding  = 0;
+				a.binding  = perInstance ? 1u : 0u;
 				a.format   = (VkFormat)v->format;
-				a.offset   = offset;
+				a.offset   = perInstance ? instanceOffset : vertexOffset;
 				attributes_.push_back(a);
-				offset += FormatByteSize((VkFormat)v->format);
+
+				const uint32_t size = FormatByteSize((VkFormat)v->format);
+				if (perInstance) { instanceOffset += size; }
+				else             { vertexOffset   += size; }
 			}
-			vertexStride_ = offset;
+			vertexStride_   = vertexOffset;
+			instanceStride_ = instanceOffset;
 
 			spvReflectDestroyShaderModule(&mod);
 		}

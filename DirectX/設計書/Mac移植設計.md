@@ -218,11 +218,6 @@
    `[[vk::image_format("rgba16f")]]` を付けるか、ビュー側のフォーマットを揃える必要がある。
    Vulkan バックエンド共通の問題なので Windows Vulkan 構成でも同じはず。**`.fx` 無改変**の方針に触れるため、
    対処方針は別途決める。
-17. **Mac は VSync 固定でフレーム時間を比較できない**(P3 で判明): スワップチェーンが
-   `VK_PRESENT_MODE_FIFO_KHR` 決め打ちで、60Hz ディスプレイでは 60fps に張り付く。
-   Windows(VSync オフ)との比較には present mode の選択(`IMMEDIATE` / `MAILBOX` の
-   対応可否を見て選ぶ)か、GPU タイムスタンプによる計測が要る。どちらも Vulkan
-   バックデンド共通の話なので Windows 側とまとめて決める。
 16. **`.app` の `GetContentRoot` が P5 まで機能しない**(P2 で判明): `.app` から起動すると
    `GetContentRoot()` が `Contents/Resources` を返し、`FindProjectRoot()` はそこで確定してソースツリーの
    上方探索を行わない。しかし P5 まで `Resources` に Assets は入らないため、**実際に読めているのは
@@ -230,6 +225,21 @@
    アセットを読めない(`.app` / 素の実行ファイルの双方で確認)。P5 で Assets を `Resources` へ
    同梱すれば解消する。それまでは CWD を `Game/` にして起動する。
 
+17. **`Model.fx` / `SimpleBox.fx` の頂点オフセットがずれている**(P3 で判明。未修正):
+   DXC は**未使用の頂点入力を SPIR-V から削る**。この 2 つは NORMAL(location 1)が消えて
+   `0:SV_Position 2:TEXCOORD0` になるが、`VulkanShader::BuildInputLayout` は
+   「存在する属性を location 順に詰める」ので TEXCOORD0 のオフセットが 12 になる。
+   CPU の `VertexData` では uv は 24 なので**法線の位置から UV を読む**。
+   影響はこの 2 経路(`NormalModel` = ライト無しの後方互換パスと、デバッグ用の当たり判定ボックス)だけで、
+   主経路(`ModelLit` / `GBufferLit` / PBR / Terrain / Skeletal)は属性が連続しているため無事。
+   正しく直すには「頂点レイアウトの真実をシェーダのリフレクションではなくエンジン側
+   (`VertexData` / `SkinnedVertexData` / UI 頂点のどれか)から与える」必要があり、
+   `IASetInputLayout` の引数を変えることになるため別途決める。
+18. **Mac は VSync 固定でフレーム時間を比較できない**(P3 で判明): スワップチェーンが
+   `VK_PRESENT_MODE_FIFO_KHR` 決め打ちで、60Hz ディスプレイでは 60fps に張り付く。
+   Windows(VSync オフ)との比較には present mode の選択(`IMMEDIATE` / `MAILBOX` の
+   対応可否を見て選ぶ)か、GPU タイムスタンプによる計測が要る。どちらも Vulkan
+   バックデンド共通の話なので Windows 側とまとめて決める。
 ---
 
 ## 9. フェーズ計画
@@ -472,6 +482,8 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
 - [ ] タイトル〜ステージまで Windows Vulkan 構成と同じ見た目(海・キャラ・影・Bloom・UI・デカール・草)
       - **目視確認待ち**。この環境では画面収録の権限が無く `screencapture` が使えないため、
         スクリーンショットでの比較ができない
+      - 目視で「路面などが表示されない」と報告があり、**Vulkan バックエンドにインスタンス描画が
+        丸ごと欠けていた**ことが判明した(下記)。修正済みで再確認待ち
 - [x] validation layer エラー 0(タイトル〜ステージを通して)
       - ステージに入って初めて出ていた **2 件を潰した**:
         1. **レンダーターゲットが `COLOR_ATTACHMENT` のままサンプルされていた**。

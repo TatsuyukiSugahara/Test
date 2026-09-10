@@ -5,7 +5,10 @@
 #include <mutex>
 #include <string>
 
-#if defined(_WIN32)
+// クラッシュスタックロガーはデスクトップ専用。dbghelp(StackWalk64/SymFromAddr)は
+// WINAPI_PARTITION_DESKTOP のみで、UWP(AppContainer)では使えない。
+// _WIN32 は UWP でも定義されるため、必ず AQ_PLATFORM_WIN32 で判定すること。
+#if defined(AQ_PLATFORM_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -27,27 +30,35 @@ namespace aq
 	{
 		static std::mutex mtx;
 		static double lastMs = 0.0;
-		static FILE* fp = nullptr;
-		static bool opened = false;
 
 		const double ms = std::chrono::duration<double, std::milli>(
 			std::chrono::steady_clock::now() - g_startupT0).count();
 
 		std::lock_guard<std::mutex> lk(mtx);
+
+		char line[512];
+		snprintf(line, sizeof(line), "[startup] %9.1f ms  (+%8.1f)  %s", ms, ms - lastMs, label ? label : "");
+		lastMs = ms;
+
+#if defined(AQ_PLATFORM_UWP)
+		// UWP は CWD がパッケージの読み取り専用フォルダで、ここにファイルを作れない
+		// (作れないまま黙って捨てられ、実機で何も分からなくなる)。書き込める
+		// LocalState へ回す。Xbox 実機はデバッガを繋げないのでこのログが頼りになる。
+		StartupLog(line);
+#else
+		static FILE* fp = nullptr;
+		static bool  opened = false;
 		if (!opened)
 		{
 			// カレントディレクトリ(VS 既定は Game/)に毎回上書きで作る。
 			opened = true;
 			fp = fopen("startup_timing.log", "w");
 		}
-
-		char line[512];
-		snprintf(line, sizeof(line), "[startup] %9.1f ms  (+%8.1f)  %s\n", ms, ms - lastMs, label ? label : "");
-		lastMs = ms;
-
-		if (fp) { fputs(line, fp); fflush(fp); }
+		if (fp) { fputs(line, fp); fputc('\n', fp); fflush(fp); }
+#endif
 #if defined(_WIN32)
 		OutputDebugStringA(line);
+		OutputDebugStringA("\n");
 #endif
 	}
 
@@ -63,7 +74,7 @@ namespace aq
 	}
 
 
-#if defined(_WIN32)
+#if defined(AQ_PLATFORM_WIN32)
 	namespace
 	{
 		/**

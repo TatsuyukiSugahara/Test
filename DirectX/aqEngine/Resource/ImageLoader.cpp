@@ -102,8 +102,13 @@ namespace aq
 				return false;
 			}
 
+			// DirectXTex はパスを OS へ丸投げするため、ここで実在パスへ解決しておく。
+			// CWD 相対のままだと UWP で破綻する(CWD = パッケージの読み取り専用ルートで、
+			// ゲームアセットは <package>/Game/Assets/... に入る)。
+			const std::string resolved = ResolveExistingResourcePath(path);
+
 			wchar_t widePath[WIDE_PATH_BUFFER_COUNT] = {};
-			if (!ToWidePath(path, widePath, WIDE_PATH_BUFFER_COUNT)) {
+			if (!ToWidePath(resolved, widePath, WIDE_PATH_BUFFER_COUNT)) {
 				return false;
 			}
 
@@ -119,7 +124,16 @@ namespace aq
 
 			// それ以外 (.png/.jpg 等) は WIC。Mac には WIC が無いので stb_image を使う。
 #if defined(AQ_PLATFORM_WINDOWS_FAMILY)
-			return SUCCEEDED(DirectX::LoadFromWICFile(widePath, DirectX::WIC_FLAGS_NONE, outMetadata, outImage));
+			{
+				const HRESULT hr = DirectX::LoadFromWICFile(widePath, DirectX::WIC_FLAGS_NONE, outMetadata, outImage);
+				if (FAILED(hr)) {
+					// 失敗は黙って握り潰すとテクスチャ無しで進んでしまい原因が分からなくなる
+					// (UWP はデバッガを繋げないので特に)。hr とパスを必ず残す。
+					aq::StartupMarkf("[img] WIC load failed hr=0x%08X path=%s",
+						static_cast<unsigned int>(hr), path.c_str());
+				}
+				return SUCCEEDED(hr);
+			}
 #elif defined(AQ_PLATFORM_MAC)
 			return LoadWithStbImage(path, outMetadata, outImage);
 #else

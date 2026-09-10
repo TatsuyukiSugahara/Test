@@ -316,6 +316,23 @@ namespace aq
 				return paths;
 			}
 
+		}
+
+
+		std::string ResolveExistingResourcePath(const std::string& path)
+		{
+			std::error_code ec;
+			for (const std::string& candidate : BuildResourcePathCandidates(path)) {
+				if (std::filesystem::exists(candidate, ec) && !ec) {
+					return candidate;
+				}
+			}
+			return path;
+		}
+
+
+		namespace
+		{
 			bool OpenBinaryReadWithFallback(
 				const std::string& filePath,
 				FILE** fp,

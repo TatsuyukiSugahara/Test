@@ -31,6 +31,18 @@ public:\
 
 
 		/**
+		 * リソースの相対パス("Assets/..." 等)を、実在する絶対パスへ解決する。
+		 * 見つからなければ入力をそのまま返す(呼び出し側で従来どおり失敗させる)。
+		 *
+		 * CWD 相対で開ける前提のコードは UWP で破綻する(CWD がパッケージの読み取り専用
+		 * ルートで、ゲームアセットは <package>/Game/Assets/... に入るため)。ファイルを
+		 * 自前で開かず OS の API へパスを丸投げするローダー(DirectXTex 等)は、
+		 * これを通してから渡すこと。
+		 */
+		std::string ResolveExistingResourcePath(const std::string& path);
+
+
+		/**
 		 * FBX 内のアニメーションスタック名を列挙する (エディタのクリップ候補表示用)。
 		 * geometry/embedded をスキップして軽量ロードする。失敗時は out は空。
 		 * 名前は "path.fbx#<名前>" の <名前> として AnimationComponent に使える。

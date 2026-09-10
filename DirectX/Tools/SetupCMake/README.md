@@ -89,20 +89,46 @@ cmake --preset windows-vs2026 -D AQ_GRAPHICS_API=Vulkan
   ファイル冒頭の `#ifdef ENGINE_GRAPHICS_VULKAN` により空 TU になるだけで、
   Vulkan SDK のヘッダは要求されない(既存 `Engine.vcxproj` と同じ方針)。
 
-## 5. Mac(P2 で検証)
+## 5. Mac(P2 検証中)
+
+### 5.1 手順(これだけ)
 
 ```bash
-cmake --preset macos-ninja      # または macos-xcode
-cmake --build --preset macos-ninja-debug
+# 初回のみ
+xcode-select --install
+brew install cmake ninja
+# + Vulkan SDK for macOS(LunarG)を導入し、echo $VULKAN_SDK が通ることを確認
+
+git checkout feature/mac-port && git pull
+cd DirectX
+cmake --preset macos-ninja                  # または macos-xcode
+cmake --build --preset macos-ninja-debug 2>&1 | head -60
+./build/macos-ninja/bin/Debug/Game
 ```
 
-- `AQ_GRAPHICS_API` は `Vulkan` 固定(道A = MoltenVK)。
-  Vulkan SDK for macOS の導入手順は P2 で `Tools/SetupVulkan/README.md` に追記する。
-- Bullet は Windows の prebuilt `.lib` ではなく
-  `ThirdParty/BulletPhysics/src` をソースからビルドする。
-- `ThirdParty/DirectXMath` と `ThirdParty/DirectX-Headers`(非 Windows 用 `sal.h`)の
-  同梱、`stb_image`、`Platform/Mac` 一式は P1〜P2 の作業。**現時点の Mac 構成は
-  まだ通らない**(ビルド定義だけ先に置いてある)。
+**まだ Mac 実機で一度も通していない**ので、エラーが出るのが前提。
+先頭のエラーから順に潰す。
+
+### 5.2 前提と構成
+
+- `AQ_GRAPHICS_API` は `Vulkan` 固定(道A = MoltenVK)。`dxc` は Vulkan SDK 同梱で、
+  `AQ_GRAPHICS_API=Vulkan` のときだけ `.spv` 生成ターゲット(`aqCompileSpv`)が配線される。
+- Bullet は Windows の prebuilt `.lib` ではなく `ThirdParty/BulletPhysics/src` をソースからビルド。
+- P2 までで揃っているもの: `ThirdParty/DirectXMath`(3.21b)/ `DirectX-Headers`(v1.619.5)/
+  `stb_image` の同梱、`Platform/Mac/PlatformMac.{h,mm}`、`Game/Application/MacMain.mm`、
+  Vulkan の Metal サーフェス分岐、`.spv` 読み込み経路、Null 実装一式(入力/パッド/サウンド/デコーダ)。
+
+### 5.3 落ちそうな箇所(優先度順・実機で最初に見るところ)
+
+| # | 箇所 | 内容 |
+|---|---|---|
+| 1 | `aq.h` を `.mm` から | PCH が Objective-C++ TU にも強制インクルードされる。DirectXMath / STL が ObjC++ 下で通るか |
+| 2 | ARC の前提 | `-fobjc-arc` が無いので手動参照カウント(MRR)前提で実装。誤りなら `PlatformMac.mm` 冒頭の `#if __has_feature(objc_arc)` → `#error` で即判明 |
+| 3 | MoltenVK の Vulkan 1.3 | `VkPhysicalDeviceVulkan13Features` を要求している。`VK_KHR_maintenance4` 未対応で `vkCreateDevice` が `VK_ERROR_FEATURE_NOT_PRESENT` になりうる → 1.2 + 個別拡張へ分解 |
+| 4 | HiDPI | Retina で `drawableSize` = 2560x1440、エンジンのレンダーターゲットは 1280x720。設計書 §8-12 の未決事項 |
+| 5 | `.spv` 生成 | `shader_entries.txt` の 59 エントリのうち 11 個はコードから未参照で、DXC を一度も通っていない可能性がある。構文エラーが出たら該当行を削除(`.fx` は無改変) |
+
+コード中の `// TODO(Mac実機): 要確認` を grep すると、実機確認が要る箇所が全部出る。
 
 ---
 

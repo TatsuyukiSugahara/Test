@@ -418,6 +418,19 @@ namespace aq
 	}
 
 
+	void Application::WaitForRenderIdle()
+	{
+		// CPU 側: 提出済みコマンドリストの実行と Present の呼び出しが終わるまで待つ。
+		if (renderThreadReady_) {
+			renderThread_.WaitForCompletion();
+		}
+		// GPU 側: D3D12/Vulkan の Present はフェンスを Signal するだけで完了を待たないため、
+		// ここまで来ても GPU はまだリソースを参照していることがある。実行中の全コマンドの
+		// 完了を待って初めて、在フライト参照なしで破棄できる状態になる (D3D11 は no-op)。
+		aq::graphics::GraphicsDevice::Get().WaitIdle();
+	}
+
+
 	void Application::Register()
 	{
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::HierarcicalTransformSystem>();

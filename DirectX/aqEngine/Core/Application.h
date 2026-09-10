@@ -55,11 +55,15 @@ namespace aq
 		void ClearSplitViews() { splitViews_.clear(); }
 
 		/**
-		 * レンダースレッドの提出済みフレームがすべて完了するまで待つ (GPU アイドル化)。
+		 * 提出済みの描画が CPU・GPU とも完了するまで待つ。
 		 * 自前 GPU バッファを持つエンティティを実行時に破棄する前に呼ぶと、
 		 * 在フライトのコマンドリストがそのリソースを参照したまま解放されるのを防げる。
+		 *
+		 * レンダースレッドのドレインだけでは足りない。D3D12/Vulkan は Present がフェンスを
+		 * Signal するだけで GPU 完了を待たないため、ドレイン後も GPU はまだリソースを
+		 * 読んでいることがある。GraphicsDevice::WaitIdle まで込みで初めて破棄が安全になる。
 		 */
-		void WaitForRenderIdle() { if (renderThreadReady_) { renderThread_.WaitForCompletion(); } }
+		void WaitForRenderIdle();
 
 	public:
 		bool Initialize(aq::graphics::RenderContext& renderContext) override;

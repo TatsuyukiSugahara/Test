@@ -35,7 +35,8 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
 2. Mac で見つけた「Mac 固有ではない」不具合(いずれも Windows にも同じものがある):
    - `void*` への `delete` でデストラクタが走らずリソースが漏れていた(リソース 4 型)
    - 終了時に GPU の完了を待たずにリソースを破棄していた(Vulkan で発見。D3D12 でも同根の
-     クラッシュがあり Windows 回帰確認で修正 → §8-19)
+     クラッシュがあり Windows 回帰確認で修正 → §8-19)。**同じ穴が実行時のステージ破棄にもあり
+     `WaitForRenderIdle` が CPU 側しか待っていなかった** → §8-20
    - 関数ローカル static / グローバルなキャッシュが GPU デバイスより長生きしていた(3 例)
    - **Vulkan バックエンドにインスタンス描画が丸ごと欠けていた**(路面・草・コインが出ない)
    - パス途中で SRV に束縛される RT のレイアウト遷移が抜けていた
@@ -292,6 +293,23 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
    Vulkan=`WaitDeviceIdle()` で override、`GraphicsDevice::WaitIdle()` 経由で `Application::Finalize`
    が API を問わず呼ぶ(Vulkan 限定の `dynamic_cast` 分岐を撤去)。修正後 D3D12 ×5 / Vulkan ×2 /
    D3D11 ×1 の起動→終了がすべて終了コード 0。
+20. **同じ穴が「実行時のリソース破棄」にもあった(19 の続き・修正済)**: 19 は終了処理の話だが、
+   ステージ退出のようにゲーム中に GPU リソース所有エンティティを破棄する経路も同じ理由で壊れる。
+   `Application::WaitForRenderIdle()` は doc コメントで「GPU アイドル化」と謳いながら実装は
+   `renderThread_.WaitForCompletion()` だけで、**レンダースレッドがコマンドを積み終えて `Present` を
+   呼んだ(= CPU 側)ことしか保証していなかった**。19 のとおり `Present` は GPU 完了を待たないので、
+   ドレイン後も GPU は解放対象の VB/IB を読んでいる最中で、破棄すると device removed / ハング / AV。
+   AquaDash の BACK TO TITLE で顕在化した(地形で止まったりプレイヤーで止まったりと**非決定的**なのは
+   GPU 実行との競合だから)。修正: `WaitForRenderIdle()` をヘッダ inline から `Application.cpp` へ出し、
+   ドレインの後に `GraphicsDevice::WaitIdle()`(19 で足した抽象IF)を呼ぶようにした。
+   - **順序は入れ替えられない**。`D3D12GraphicsDeviceImpl::fenceValue_` は非 atomic な `uint64_t` で、
+     レンダースレッドの `Present` も `++fenceValue_` する。先にドレインしてレンダースレッドを
+     止めてから `WaitForGPU()` を呼ぶことで、同じカウンタと `commandQueue_` の同時アクセスを避けている。
+   - 直列モードでは毎フレーム末尾の `FlushRender` が既にドレイン済みなので `WaitForCompletion` は
+     即返り(実測 0.0ms)、防御は `WaitIdle`(実測 8.0ms)だけが担う。非同期(`AQ_RENDER_PIPELINED`)では
+     `FlushRender` = `WaitForPipelinedFrame` が前フレームしか待たないためドレイン側も実際にブロックする。
+     **両モードで BACK TO TITLE → タイトル → 再入場を実機確認済み**。
+   - D3D11 は実行時破棄でも `WaitIdle` が no-op でよい(ランタイムがリソース参照を追跡して遅延解放する)。
 ---
 
 ## 9. フェーズ計画

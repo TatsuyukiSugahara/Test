@@ -158,13 +158,46 @@ cmake --build --preset macos-ninja-debug
 cd Game && ../build/macos-ninja/bin/Debug/Game.app/Contents/MacOS/Game
 ```
 
-Xcode プロジェクトが要るときは `macos-xcode` に読み替える。生成物は
-`build/macos-xcode/AquaDash.xcodeproj` と `build/macos-xcode/bin/<Config>/Game.app`。
+### 5.2.1 Xcode でビルド・実行する
+
+**Xcode プロジェクトは CMake が生成する**。`.xcodeproj` はリポジトリに入っていないので、
+まず生成してから開く(ソースを追加したときも同じ手順でよい)。
 
 ```bash
-cmake --preset macos-xcode
-cmake --build --preset macos-xcode-debug
+source ~/.local/aq-mac-env.sh
+cd <repo>/DirectX
+cmake --preset macos-xcode          # build/macos-xcode/AquaDash.xcodeproj を生成
+open build/macos-xcode/AquaDash.xcodeproj
 ```
+
+Xcode が開いたら:
+
+1. ツールバー左のスキーム選択(実行ボタンの右)で **`Game`** を選ぶ。
+   CMake は ALL_BUILD / ZERO_CHECK / aqEngine など**全ターゲット分のスキームを作る**ので、
+   既定では別のものが選ばれていることがある。
+2. その右のターゲット選択は **`My Mac`**。
+3. **⌘B でビルド**、**⌘R でビルドして実行**。
+   構成(Debug / Release)は Product > Scheme > Edit Scheme… > Run > Build Configuration。
+
+コマンドラインから同じものをビルドしたいときは:
+
+```bash
+cmake --build --preset macos-xcode-debug     # または macos-xcode-release
+```
+
+生成物は `build/macos-xcode/bin/<Config>/Game.app`。
+
+**⌘R で動くように 2 つをスキームへ焼き込んである**(`Game/CMakeLists.txt`)。
+手で設定する必要は無いが、動かないときはここを疑う:
+
+| 設定 | 値 | 無いとどうなるか |
+|---|---|---|
+| Working Directory | `<repo>/DirectX/Game` | アセットが見つからない(§5.2 と同じ理由) |
+| 環境変数 `VK_ICD_FILENAMES` ほか | Vulkan SDK の `setup-env.sh` と同じ値 | **`vkCreateInstance` が `VK_ERROR_INCOMPATIBLE_DRIVER`(-9)で落ちる**。Xcode はターミナルの環境を引き継がないため、MoltenVK の ICD を見つけられない |
+
+確認は Product > Scheme > Edit Scheme… > Run > Options(作業ディレクトリ)と
+Arguments(環境変数)。
+
 
 - **CWD は `Game/` にすること。** `.app` から起動すると `GetContentRoot()` が
   `Contents/Resources` を返し、ソースツリーの上方探索が行われない。Assets を
@@ -202,6 +235,8 @@ cmake --build --preset macos-xcode-debug
 | 11 | 終了時に VMA が `Some allocations were not freed` でアサート | `void*` への `delete` でデストラクタが走らずテクスチャが漏れていた(リソース 4 型)。`delete static_cast<T*>(data_)` へ |
 | 12 | `vkDestroyDevice(): has 2 leaked objects` | 関数ローカル static(`FontAssetCache` / `GpuClusterCuller`)がデバイスより長生き。`Finalize` 時に明示的に手放す |
 | 13 | `macos-xcode` の configure で `No CMAKE_C_COMPILER could be found` | Xcode 導入直後でライセンス未同意。`sudo xcodebuild -license accept` と `-runFirstLaunch` を通す |
+| 14 | Xcode の ⌘R で `vkCreateInstance` が -9 で落ちる | スキームに Vulkan の環境変数が無い。`cmake --preset macos-xcode` を実行し直してスキームを作り直す(`Game/CMakeLists.txt` が焼き込む) |
+| 15 | Xcode でビルドはできるが実行するとアセットが見つからない | スキームの Working Directory が `DirectX/Game` になっていない。同じく再 configure で直る |
 
 ---
 

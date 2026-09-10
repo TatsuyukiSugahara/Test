@@ -86,6 +86,27 @@ set_target_properties(Game PROPERTIES
 	VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Game"
 )
 
+# Xcode も同じ扱いにする。加えて、Xcode から実行(⌘R)するときは
+# ターミナルの環境を引き継がないため、Vulkan の環境変数をスキームに焼き込む。
+# これが無いと MoltenVK の ICD が見つからず vkCreateInstance が
+# VK_ERROR_INCOMPATIBLE_DRIVER(-9)で落ちる(実機確認済み)。
+# 値は Vulkan SDK の setup-env.sh が設定するものと同じ。
+if(CMAKE_GENERATOR STREQUAL "Xcode")
+	set_target_properties(Game PROPERTIES
+		XCODE_GENERATE_SCHEME         ON
+		XCODE_SCHEME_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Game"
+	)
+	if(AQ_VULKAN_SDK)
+		set_property(TARGET Game PROPERTY XCODE_SCHEME_ENVIRONMENT
+			"VULKAN_SDK=${AQ_VULKAN_SDK}"
+			"VK_ICD_FILENAMES=${AQ_VULKAN_SDK}/share/vulkan/icd.d/MoltenVK_icd.json"
+			"VK_DRIVER_FILES=${AQ_VULKAN_SDK}/share/vulkan/icd.d/MoltenVK_icd.json"
+			"VK_ADD_LAYER_PATH=${AQ_VULKAN_SDK}/share/vulkan/explicit_layer.d"
+			"DYLD_LIBRARY_PATH=${AQ_VULKAN_SDK}/lib"
+		)
+	endif()
+endif()
+
 
 # ----------------------------------------------------------------------------
 #  Vulkan 構成の実行時 DLL

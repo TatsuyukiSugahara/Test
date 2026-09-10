@@ -112,6 +112,20 @@ add_subdirectory(Game)
 # 開発用ツール(CMake 専用。vcxproj は用意しない)
 add_subdirectory(Tools/MixerTest)
 
+# ----------------------------------------------------------------------------
+#  ビルド時 SPIR-V 生成(設計書 Mac移植設計.md §4)
+#
+#  Mac は実行時 DXC 経路を持たないので .spv の事前生成が必須。
+#  Windows Vulkan 構成では「.spv あり/なし」の比較検証に使う。
+#  dxc は Vulkan SDK 同梱のため、SDK を要求しない構成(既定の D3D12 等)では
+#  配線しない(compile_spv.cmake は dxc が無いと FATAL_ERROR で止まるため)。
+# ----------------------------------------------------------------------------
+if(AQ_GRAPHICS_API STREQUAL "Vulkan")
+	include(${CMAKE_CURRENT_SOURCE_DIR}/Tools/ShaderCompile/compile_spv.cmake)
+	aq_add_compile_spv_target(aqCompileSpv)
+	add_dependencies(Game aqCompileSpv)
+endif()
+
 # VS 生成時のスタートアッププロジェクト
 if(CMAKE_GENERATOR MATCHES "Visual Studio")
 	set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT Game)

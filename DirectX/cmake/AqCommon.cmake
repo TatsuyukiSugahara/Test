@@ -44,6 +44,10 @@ function(aq_apply_common_compile_options targetName)
 		)
 	else()
 		target_compile_options(${targetName} PRIVATE -Wall)
+		# MSVC は /MTd などが _DEBUG を定義するが、Apple Clang の CMAKE_CXX_FLAGS_DEBUG は
+		# -g だけで _DEBUG を付けない。EngineAssert / EnginePrintf(Utility.h)と
+		# Vulkan の validation layer が Debug で無効になってしまうため明示する。
+		target_compile_definitions(${targetName} PRIVATE $<$<CONFIG:Debug>:_DEBUG>)
 	endif()
 endfunction()
 

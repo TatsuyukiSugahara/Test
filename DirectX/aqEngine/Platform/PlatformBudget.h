@@ -43,14 +43,22 @@ namespace aq
 				/*threadPoolWorkerCount*/  0u,
 				/*maxSingleFileBytes*/     0
 			};
+#elif defined(AQ_PLATFORM_MAC)
+			// デスクトップ(Mac): Win32 と同値。上限なし・論理コア数・ファイル制限なし。
+			// 参照: 設計書/Mac移植設計.md §2.2。
+			return ResourceBudget{
+				/*memoryBudgetBytes*/      0,
+				/*stackSizeBytes*/         static_cast<size_t>(4) * 1024 * 1024,
+				/*threadPoolWorkerCount*/  0u,
+				/*maxSingleFileBytes*/     0
+			};
 #else
-			// Mac(AQ_PLATFORM_MAC)のプロファイルは P2 で追加する。
 #error "GetResourceBudget: 未対応のプラットフォームです"
 #endif
 		}
 
 		// 単一ファイルのバイト数が予算(maxSingleFileBytes)内か。0(無制限)なら常に true。
-		// Win32 は 0 のため常に true = チェック無効。UWP(2GB)でのみ実効。
+		// Win32 / Mac は 0 のため常に true = チェック無効。UWP(2GB)でのみ実効。
 		constexpr bool IsWithinSingleFileBudget(size_t fileBytes)
 		{
 			constexpr size_t maxBytes = GetResourceBudget().maxSingleFileBytes;

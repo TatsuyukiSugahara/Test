@@ -4,7 +4,8 @@
 //  パッドバックエンドの選択(SoundBackend.h と同じ流儀)。
 //    Win32(デスクトップ)  : XInput + DualSense(HID 直読み)の合成
 //    UWP(Xbox / PC-UWP)  : Windows.Gaming.Input(WinRTGamepadBackend)
-//    Mac                   : GameController.framework(P2 で追加)
+//    Mac                   : 入力なし(Null)。GameController.framework 実装
+//                            (GameControllerPadBackend)は P4 で追加する
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -30,7 +31,18 @@ namespace aq
 		using DefaultPadBackend = WinRTGamepadBackend;
 	}
 }
+#elif defined(AQ_PLATFORM_MAC)
+#include "HID/NullPadBackend.h"
+
+namespace aq
+{
+	namespace hid
+	{
+		// Mac: P2〜P3 はパッド入力なしで進める(常に未接続)。
+		// TODO(P4): HID/Mac/GameControllerPadBackend へ差し替える。
+		using DefaultPadBackend = NullPadBackend;
+	}
+}
 #else
-// Mac(GameControllerPadBackend)は P2 で追加する。
 #error "DefaultPadBackend: 未対応のプラットフォームです"
 #endif

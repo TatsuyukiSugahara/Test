@@ -86,6 +86,7 @@ namespace aq
 				// 使用箇所は Debug パネルの一部ラベルのみだったため ASCII(+矢印/図形記号)に制限した。
 				// 日本語ラベルは "?" で表示される。必要なら kCustomRanges に範囲を足す。
 				{
+#if defined(AQ_PLATFORM_WIN32)
 					char winDir[MAX_PATH] = {};
 					if (GetWindowsDirectoryA(winDir, MAX_PATH) == 0)
 						snprintf(winDir, sizeof(winDir), "%s", "C:\\Windows");
@@ -123,6 +124,10 @@ namespace aq
 					}
 					if (!fontLoaded)
 						io.Fonts->AddFontDefault();
+#else
+					// TODO(P4): Mac は /System/Library/Fonts から読む。P2 では既定フォントで足りる。
+					ImGui::GetIO().Fonts->AddFontDefault();
+#endif
 				}
 
 #if defined(AQ_PLATFORM_WIN32)

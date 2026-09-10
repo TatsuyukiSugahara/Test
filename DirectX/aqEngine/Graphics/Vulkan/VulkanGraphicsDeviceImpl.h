@@ -96,7 +96,7 @@ namespace aq
 
 		private:
 			bool CreateInstance();
-			bool CreateSurface(void* hwnd);
+			bool CreateSurface(void* nativeWindow);  // Win32 = HWND / Mac = CAMetalLayer*
 			bool PickPhysicalDeviceAndQueues();
 			bool CreateLogicalDevice();
 			bool CreateAllocator();

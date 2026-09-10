@@ -3,7 +3,8 @@
 // ============================================================
 //  「wav 以外」用デコーダの選択(PadBackend.h / SoundBackend.h と同じ流儀)。
 //    Win32 / UWP : Media Foundation(MFDecoder)
-//    Mac         : AudioToolbox ExtAudioFile(ExtAudioFileDecoder。P4 で追加)
+//    Mac         : 空デコーダ(NullDecoder)。AudioToolbox ExtAudioFile 実装
+//                  (ExtAudioFileDecoder)は P4 で追加する
 //
 //  mp3 / aac / wma / m4a / mp4 / flac など、OS のコーデックに任せる形式が対象。
 //  .wav は可搬な WavDecoder / WavStreamDecoder が直接扱うので本ヘッダは通さない。
@@ -25,13 +26,19 @@ namespace aq
 	}
 }
 #elif defined(AQ_PLATFORM_MAC)
+#include "Sound/Decoder/NullDecoder.h"
 
-// TODO(P4): Sound/Decoder/ExtAudioFileDecoder.{h,mm} を追加し、下記を有効化する。
-//   #include "Sound/Decoder/ExtAudioFileDecoder.h"
-//   namespace aq { namespace sound { using CompressedDecoder = ExtAudioFileDecoder; } }
-//
-// P1 時点では Mac 向けの実コンパイルを行わないため、ここでは #error にせず
-// エイリアス未定義のまま通す(Mac移植設計 §9 P1 / P4)。CompressedDecoder を
-// 参照する SoundClip.cpp / SoundEngine.cpp は P4 で ExtAudioFileDecoder と同時に通る。
-
+namespace aq
+{
+	namespace sound
+	{
+		// Mac: P2〜P3 は圧縮音源をデコードしない(Open / DecodeFileFully が常に false)。
+		// エイリアスを定義しておくことで SoundClip.cpp / SoundEngine.cpp が無改修で通る
+		// (Mac移植設計 §8-8)。
+		// TODO(P4): ExtAudioFileDecoder に差し替える。
+		using CompressedDecoder = NullDecoder;
+	}
+}
+#else
+#error "CompressedDecoder: 未対応のプラットフォームです"
 #endif

@@ -677,6 +677,9 @@
     <ClCompile Include="Sound\SoundEngine.cpp">
       <Filter>Sound</Filter>
     </ClCompile>
+    <ClCompile Include="Sound\NullSoundBackend.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
     <ClCompile Include="Sound\SoundClip.cpp">
       <Filter>Sound</Filter>
     </ClCompile>
@@ -1076,6 +1079,9 @@
       <Filter>HID\Win32</Filter>
     </ClInclude>
     <ClInclude Include="HID\NullMouseBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\NullPadBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\NullKeyboardBackend.h">
@@ -1568,6 +1574,9 @@
     <ClInclude Include="Sound\SoundEngine.h">
       <Filter>Sound</Filter>
     </ClInclude>
+    <ClInclude Include="Sound\NullSoundBackend.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
     <ClInclude Include="Sound\SoundBackend.h">
       <Filter>Sound</Filter>
     </ClInclude>
@@ -1584,6 +1593,9 @@
       <Filter>Sound\Decoder</Filter>
     </ClInclude>
     <ClInclude Include="Sound\Decoder\CompressedDecoder.h">
+      <Filter>Sound\Decoder</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Decoder\NullDecoder.h">
       <Filter>Sound\Decoder</Filter>
     </ClInclude>
     <ClInclude Include="Sound\XAudio2\XAudio2SoundBackend.h">

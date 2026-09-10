@@ -20,6 +20,55 @@ endif()
 
 
 # ----------------------------------------------------------------------------
+#  DirectXMath(ヘッダオンリ・同梱)
+#
+#  microsoft/DirectXMath の jun2026(3.21b / DIRECTX_MATH_VERSION 321)の Inc/ のみ。
+#  macOS には Windows SDK が無く <DirectXMath.h> の入手元が無いため同梱する。
+#  版ずれで挙動差が出るのを避けるため、Windows も SDK 版ではなく同梱側に一本化する
+#  (設計書 §0「数学」/ §6)。
+#
+#  公開ディレクトリは 2 つ。
+#   - ThirdParty 自身      … aq.h が書く <DirectXMath/Inc/DirectXMath.h> 用
+#                            (他の同梱ライブラリと同じ書き方)
+#   - DirectXMath/Inc 自身 … DirectXTex(<DirectXMath.h> / <DirectXPackedVector.h>)と
+#                            aqEngine/Math/Vector.h が書く「無修飾」の include 用。
+#                            こちらを通さないと Windows では SDK 版が拾われ、同梱版と
+#                            2 種類の DirectXMath.h が同一 TU に入って多重定義になる。
+# ----------------------------------------------------------------------------
+add_library(directxmath INTERFACE)
+target_include_directories(directxmath INTERFACE
+	"${AQ_THIRDPARTY_ROOT}"
+	"${AQ_THIRDPARTY_ROOT}/DirectXMath/Inc"
+)
+
+
+# ----------------------------------------------------------------------------
+#  DirectX-Headers(ヘッダオンリ・同梱。非 Windows でのみインクルードパスに載せる)
+#
+#  microsoft/DirectX-Headers v1.619.5 から、非 Windows 経路に要るものだけを抜粋。
+#  DirectXTex の非 Windows 分岐が要求するのは以下で、これで閉じている。
+#   - DirectXTex.h   : <directx/dxgiformat.h> / <wsl/winadapter.h>
+#   - DirectXTexP.h  : <wsl/winadapter.h> / <wsl/wrladapter.h> / <directx/d3d12.h>
+#  d3d12.h からの推移的な依存として d3d12sdklayers.h / d3dcommon.h / dxgicommon.h と
+#  wsl/stubs/(rpc.h・rpcndr.h・basetsd.h・unknwn(base).h・oaidl.h・ocidl.h・
+#  winapifamily.h・wrl/)が要る。d3dx12*・dxcore・DirectML・video 系は誰も見ないため入れない。
+#  SAL 注釈(_In_ 等)と COM_NO_WINDOWS_H は wsl/stubs/basetsd.h が定義する
+#  (このバージョンに sal.h という名前のファイルは無い)。
+#
+#  Windows では載せない。stubs/ の basetsd.h・unknwn.h・ocidl.h 等が Windows SDK の
+#  同名ヘッダを隠してしまうため、公開すると Windows 側の挙動を壊す。
+# ----------------------------------------------------------------------------
+add_library(directx-headers INTERFACE)
+
+if(NOT WIN32)
+	target_include_directories(directx-headers INTERFACE
+		"${AQ_THIRDPARTY_ROOT}/DirectX-Headers/include"
+		"${AQ_THIRDPARTY_ROOT}/DirectX-Headers/include/wsl/stubs"
+	)
+endif()
+
+
+# ----------------------------------------------------------------------------
 #  DirectXTex
 #
 #  Windows は同梱されている cpp を全てビルドする(Engine.vcxproj と同一集合)。
@@ -28,8 +77,8 @@ endif()
 #  ※ 同梱ソースには BCDirectCompute.cpp / DirectXTexD3D11.cpp /
 #     DirectXTexD3D12.cpp が最初から含まれていないため、追加の除外は不要。
 #
-#  非 Windows でのビルドには sal.h 互換ヘッダ(ThirdParty/DirectX-Headers/
-#  include/wsl)と同梱 DirectXMath が要る。これらの同梱は P2 の作業。
+#  非 Windows でのビルドには SAL 互換ヘッダ(ThirdParty/DirectX-Headers/
+#  include/wsl)と同梱 DirectXMath が要る。どちらも上で INTERFACE ターゲットにしてある。
 # ----------------------------------------------------------------------------
 file(GLOB AQ_DIRECTXTEX_SOURCES CONFIGURE_DEPENDS "${AQ_THIRDPARTY_ROOT}/DirectXTex/*.cpp")
 
@@ -44,6 +93,10 @@ endif()
 add_library(directxtex STATIC ${AQ_DIRECTXTEX_SOURCES})
 target_include_directories(directxtex PUBLIC "${AQ_THIRDPARTY_ROOT}")
 target_compile_features(directxtex PRIVATE cxx_std_20)
+
+# PUBLIC。DirectXTex の公開ヘッダ(DirectXTex.h)が XMFLOAT4 等と DXGI_FORMAT を
+# 型に使うため、利用側(aqEngine → Game)も同じヘッダを見る必要がある。
+target_link_libraries(directxtex PUBLIC directxmath directx-headers)
 
 if(MSVC)
 	# 第三者ソースなので警告レベルは下げる(vcxproj では /external:I 相当)

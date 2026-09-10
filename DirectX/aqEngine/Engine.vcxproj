@@ -147,8 +147,8 @@
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DebugXbox|x64'">
@@ -162,8 +162,8 @@
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -179,8 +179,8 @@
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseXbox|x64'">
@@ -196,8 +196,8 @@
       <AdditionalIncludeDirectories>$(ProjectDir);$(FBXSDK_DIR)\include;$(SolutionDir)ThirdParty;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -374,6 +374,7 @@
     <ClCompile Include="UI\Resource\UIDocumentLoader.cpp" />
     <ClCompile Include="UI\Resource\UIDocumentSerializer.cpp" />
     <ClCompile Include="Sound\SoundEngine.cpp" />
+    <ClCompile Include="Sound\NullSoundBackend.cpp" />
     <ClCompile Include="Sound\SoundClip.cpp" />
     <ClCompile Include="Sound\SoundStream.cpp" />
     <ClCompile Include="Sound\SoundSource.cpp" />
@@ -533,6 +534,7 @@
     <ClInclude Include="HID\KeyboardMouseBackend.h" />
     <ClInclude Include="HID\NullKeyboardBackend.h" />
     <ClInclude Include="HID\NullMouseBackend.h" />
+    <ClInclude Include="HID\NullPadBackend.h" />
     <ClInclude Include="HID\Win32\DirectInputKeyboardBackend.h" />
     <ClInclude Include="HID\Win32\DirectInputMouseBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />
@@ -695,12 +697,14 @@
     <ClInclude Include="Sound\Authoring\Audio.h" />
     <ClInclude Include="Sound\Authoring\Debug\AudioAuthoringPanel.h" />
     <ClInclude Include="Sound\SoundEngine.h" />
+    <ClInclude Include="Sound\NullSoundBackend.h" />
     <ClInclude Include="Sound\SoundBackend.h" />
     <ClInclude Include="Sound\Decoder\ISoundDecoder.h" />
     <ClInclude Include="Sound\Decoder\WavDecoder.h" />
     <ClInclude Include="Sound\Decoder\WavStreamDecoder.h" />
     <ClInclude Include="Sound\Decoder\MFDecoder.h" />
     <ClInclude Include="Sound\Decoder\CompressedDecoder.h" />
+    <ClInclude Include="Sound\Decoder\NullDecoder.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundBackend.h" />
     <ClInclude Include="Sound\XAudio2\XAudio2SoundVoice.h" />
     <ClInclude Include="Sound\Video\VideoPlayer.h" />

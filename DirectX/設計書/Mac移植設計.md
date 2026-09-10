@@ -113,13 +113,13 @@
 
 | ファイル | 変更 |
 |---|---|
-| `aqEngine/Graphics/Vulkan/VulkanCommon.h` | `VK_USE_PLATFORM_WIN32_KHR` を `AQ_PLATFORM_WIN32` 限定に。MAC では `VK_USE_PLATFORM_METAL_EXT` |
+| `aqEngine/Graphics/Vulkan/VulkanCommon.h` | `VK_USE_PLATFORM_WIN32_KHR` を `AQ_PLATFORM_WIN32` 限定に。MAC では `VK_USE_PLATFORM_METAL_EXT` + **`VK_ENABLE_BETA_EXTENSIONS`**(これが無いと portability subset の識別子が一切引けない)。`#pragma warning` は `AQ_PLATFORM_WINDOWS_FAMILY` で囲む(clang は解さない) |
 | `VulkanGraphicsDeviceImpl.cpp` `CreateInstance` | インスタンス拡張: WIN32 = `VK_KHR_win32_surface`、MAC = `VK_EXT_metal_surface` + `VK_KHR_portability_enumeration`、flags に `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR` |
 | 同 `CreateSurface(void*)` | MAC では `vkCreateMetalSurfaceEXT`(`pLayer = static_cast<CAMetalLayer*>(handle)`)。引数名 `hwnd` → `nativeWindow` |
-| 同 `CreateDevice` | MAC ではデバイス拡張に `VK_KHR_portability_subset` を追加。`VkPhysicalDevicePortabilitySubsetFeaturesKHR` を照会し、非対応項目(`triangleFans`, `imageViewFormatSwizzle`, `separateStencilMaskRef` 等)を `StartupLog` に出す |
+| 同 `CreateLogicalDevice`(設計書の旧称 `CreateDevice`) | MAC ではデバイス拡張に `VK_KHR_portability_subset` を追加。`VkPhysicalDevicePortabilitySubsetFeaturesKHR` を照会し、非対応項目(`triangleFans`, `imageViewFormatSwizzle`, `separateStencilMaskRef` 等)を `StartupLog` に出す。**照会した構造体はそのまま `VkDeviceCreateInfo::pNext` に繋いで対応分を有効化する**(繋がないと `mutableComparisonSamplers` が無効のままになり P3 の影描画(`SampleCmp`)が壊れる)。照会結果は書き換えないこと(非対応項目を要求すると `vkCreateDevice` が `VK_ERROR_FEATURE_NOT_PRESENT` で落ちる) |
 | 同 スワップチェーン | `VK_PRESENT_MODE_FIFO_KHR` を第一候補に(MoltenVK は MAILBOX を返さない場合がある)。`minImageCount` は capabilities 準拠(既存どおり) |
 | `VulkanShader.{h,cpp}` | **`.spv` 読み込み経路を追加**: `CreateShader(path, entry, type)` はまず `<shaderDir>/spv/<stem>.<entry>.<type>.spv` を探し、あれば `vkCreateShaderModule` + SPIRV-Reflect(既存)。無ければ従来の DXC 実行時コンパイル(`#if defined(AQ_PLATFORM_WIN32)` 内)。`<wrl/client.h>`/`MultiByteToWideChar` は DXC 分岐内に閉じる |
-| `Tools/ShaderCompile/compile_spv.cmake` **(新規)** | `.fx` × エントリ一覧 → `dxc -spirv -fspv-entrypoint-name=main -E <entry> -T <vs\|ps\|cs>_6_0 -fvk-b-shift 0 all -fvk-t-shift 16 all -fvk-s-shift 32 all -fvk-u-shift 48 all -I <shaderDir>`(VulkanShader.cpp と**同じ引数**。引数は `dxc_args.txt` 1 ファイルに集約し両者が参照)。エントリ一覧は `Game/Assets/Shader/shader_entries.txt`(新規、`<file> <entry> <stage>` 行) |
+| `Tools/ShaderCompile/compile_spv.cmake` **(新規)** | `.fx` × エントリ一覧 → `dxc -spirv -fspv-entrypoint-name=main -fvk-use-dx-layout -E <entry> -T <vs\|ps\|cs>_6_0 -fvk-b-shift 0 all -fvk-t-shift 16 all -fvk-s-shift 32 all -fvk-u-shift 48 all -I <shaderDir>`(+ `_DEBUG` 時のみ `-Zi -Qembed_debug`)。**`-fvk-use-dx-layout` は必須**(cbuffer を D3D パッキングにする。抜けると CPU 構造体とレイアウトがズレる)。引数は `Tools/ShaderCompile/dxc_args.txt` 1 ファイルに集約し、`VulkanShader.cpp` は `#include` で埋め込み、`compile_spv.cmake` は行単位で読む(実行時のファイル依存を増やさない)。エントリ一覧は `Game/Assets/Shader/shader_entries.txt`(新規、`<file> <entry> <stage>` 行)。**`.fx` は 40 本・エントリ 59 個**(うち 11 個はコードから未参照) |
 
 抽象IF(`IGraphicsDeviceImpl`/`IRenderContextImpl`)・呼び出し側・`.fx` の変更は **0**。
 
@@ -133,7 +133,7 @@
 | `aqEngine/Sound/CoreAudio/CoreAudioSoundBackend.{h,mm}` **(新規)** | `ISoundBackend` 実装。`AudioUnit`(`kAudioUnitSubType_DefaultOutput`)を 1 つ開き、render callback で `SoftwareMixer::Render`。`GetOutputClock` は render callback の `AudioTimeStamp.mHostTime` + 累積フレームから算出。`CreateVoice` は `SoftwareMixer` に論理ボイスを追加して `CoreAudioSoundVoice` を返す |
 | `aqEngine/Sound/CoreAudio/CoreAudioSoundVoice.{h,cpp}` **(新規)** | `ISoundVoice` 実装。全メソッドを `SoftwareMixer` の論理ボイス操作に委譲する薄いアダプタ |
 | `aqEngine/Sound/Decoder/ExtAudioFileDecoder.{h,mm}` **(新規)** | `ISoundDecoder` 実装(AudioToolbox `ExtAudioFile`)。mp3/aac/m4a を PCM へ。`MFDecoder` と同じ静的 `DecodeFileFully` も提供 |
-| `aqEngine/Sound/SoundBackend.h` | `#elif defined(AQ_PLATFORM_MAC)` → `SOUND_BACKEND_COREAUDIO` |
+| `aqEngine/Sound/SoundBackend.h` | `#elif defined(AQ_PLATFORM_MAC)` → P2 では `SOUND_BACKEND_NULL`(`NullSoundBackend` = 無音)。P4 で `SOUND_BACKEND_COREAUDIO` へ差し替える。実体と名前が食い違わないよう段階を分ける |
 | `aqEngine/Sound/Decoder/CompressedDecoder.h` **(新規)** | 「wav 以外」用デコーダの選択ヘッダ。WIN32/UWP = `MFDecoder`、MAC = `ExtAudioFileDecoder`。`SoundClip.cpp:50`・`SoundEngine.cpp:33` の `MFDecoder` 直参照をこれ経由に |
 | `aqEngine/Sound/Video/VideoPlayer.{h,cpp}` | 本体を `#if defined(AQ_PLATFORM_WIN32) \|\| defined(AQ_PLATFORM_UWP)` で囲み、MAC は `Open` が false を返す Null 動作 |
 
@@ -148,8 +148,8 @@
 | `ThirdParty/stb/stb_image.h` **(新規・同梱)** | PNG/JPG デコード |
 | `aqEngine/Resource/ImageLoader.{h,cpp}` **(新規)** | `LoadImageFile(path) → ScratchImage`(DirectXTex 型は維持)。拡張子で DDS/TGA は DirectXTex、PNG/JPG は WIN32/UWP なら `LoadFromWICFile`、MAC なら `stb_image` → `Image` 構造体へ詰めて `ScratchImage::InitializeFromImage`。`Resource.cpp:1607-1625`・`Terrain/HeightmapChunk.cpp:50-133` の直呼びをこれに集約。引数は `std::string`(UTF-8)で受け、呼び出し元の `mbstowcs_s` による `wchar_t` パス変換(`Resource.cpp:1605`・`HeightmapChunk.cpp:47`)を本ローダ内へ吸収する |
 | `ThirdParty/DirectXTex` | 非 Windows 経路(`DirectXTexDDS/TGA/HDR/Convert/Resize/Mipmaps/BC*`)を CMake で選択。`DirectXTexWIC.cpp`・`BCDirectCompute`・D3D11/12 系 cpp は Windows のみ。`sal.h` 互換は `ThirdParty/DirectX-Headers/include/wsl/` を同梱 |
-| `ThirdParty/DirectXMath` **(新規・同梱)** | Mac には Windows SDK が無いため、`<DirectXMath.h>` の入手元を SDK から同梱ソースへ移す(Microsoft/DirectXMath)。コードは無改変。Windows は従来どおり SDK 版を使ってもよいが、版ずれを避けるため同梱側に一本化する |
-| `ThirdParty/DirectX-Headers` **(新規・同梱)** | 非 Windows 用の `sal.h`(`include/wsl/`)と `directx/dxgiformat.h`。DirectXTex と、`DXGI_FORMAT` が D3D バックエンド外へ漏れている 4 ファイル(`Resource.cpp`・`Terrain/HeightmapChunk.cpp`・`HeightmapPainter.cpp`・`SplatmapPainter.cpp`)が要求する |
+| `ThirdParty/DirectXMath` **(新規・同梱)** | 3.21b(jun2026)/ MIT。`Inc/` 一式 10 ファイル。コードは無改変。**`aq.h` の include を書き換えるだけでは足りない**: `Math/Vector.h` と DirectXTex のヘッダが無修飾の `<DirectXMath.h>` を書くため、`ThirdParty/DirectXMath/Inc` 自体をインクルードパスに載せて SDK 版を隠す必要がある(vcxproj は `/external:I`、CMake は INTERFACE ターゲット)。Windows SDK 版は 3.19(UWP は 3.18) |
+| `ThirdParty/DirectX-Headers` **(新規・同梱)** | v1.619.5 / MIT。**現行版に `sal.h` というファイルは無く**、SAL 注釈は `include/wsl/stubs/basetsd.h` が定義する。DirectXTex の非 Windows 経路が要求するのは `directx/dxgiformat.h` + `wsl/winadapter.h` + `wsl/wrladapter.h` + `directx/d3d12.h` とその推移依存(`dxgicommon.h`/`d3dcommon.h`/`d3d12sdklayers.h`/`wsl/stubs/*`)。`d3dx12_*` や `dxguids` 等は不要なので入れない。**インクルードパスへ載せるのは非 Windows のときだけ**(`wsl/stubs/` が Windows SDK の同名ヘッダを隠すため) |
 | `ThirdParty/BulletPhysics` | Mac は `add_subdirectory(src)`(`BT_USE_DOUBLE_PRECISION`/`BT_THREADSAFE=1`)。Windows は既存 prebuilt `.lib` 維持 |
 | `ThirdParty/imgui/imgui_impl_osx.{h,mm}` **(新規・同梱)** | imgui 本体(1.92 WIP)と同じ版のものを取得 |
 | `aqEngine/Core/Application.cpp` | `ImGui_ImplWin32_*` を `#if defined(AQ_PLATFORM_WIN32)`、MAC は `ImGui_ImplOSX_Init(NSView*)`(`CAMetalLayer` の `delegate`/`superview` から取得するため `PlatformMac` に `GetNSView()` を持たせ、`static_cast<PlatformMac*>` は Mac ブロック内でのみ行う)。描画は既存 `VulkanImGui`(自前) |
@@ -189,9 +189,14 @@
    無条件 `return false` していたが、現在 UWP は NuGet の `directxtex_uwp` を使っており記述が古い。
    `ImageLoader` への集約で分岐を畳んだため、**Xbox で地形が「読めない」→「読める」に変わる**(ユーザー承認済み)。
    Xbox 実機での確認は次に Xbox を触るときに行う。
-11. **`SoftwareMixer` と XAudio2 の差異**(P4 への申し送り): リサンプルは線形補間のみ / `GetConsumedFrames` が
+11. **MoltenVK が Vulkan 1.3 を advertise するか**(P2 の最大リスク): 既存コードは `apiVersion = VK_API_VERSION_1_3` かつ
+   `VkPhysicalDeviceVulkan13Features`(dynamicRendering / synchronization2)を pNext に繋いでいる。MoltenVK は両機能を
+   個別拡張として実装済みだが `VK_KHR_maintenance4` 未対応との情報があり、**`vkCreateDevice` が
+   `VK_ERROR_FEATURE_NOT_PRESENT` で落ちる可能性**がある。落ちたら 1.2 + 個別拡張
+   (`VkPhysicalDeviceDynamicRenderingFeatures` / `Synchronization2Features`)へ分解する。Mac 実機で最初に確認する。
+12. **`SoftwareMixer` と XAudio2 の差異**(P4 への申し送り): リサンプルは線形補間のみ / `GetConsumedFrames` が
    先読み分 +2 進む(`SoundStream` の A/V 同期に影響しうる) / ピッチ比の上限なし / エフェクト・フィルタ・submix なし。
-12. **HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係(Retina で 2 倍になる)。P2 で決める。
+13. **HiDPI**: `CAMetalLayer.drawableSize` と `InitializeParameter` の描画解像度の関係(Retina で 2 倍になる)。P2 で決める。
 
 ---
 

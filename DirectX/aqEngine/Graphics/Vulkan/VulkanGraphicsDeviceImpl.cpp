@@ -143,8 +143,8 @@ namespace aq
 				                : (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) ? "WARN" : "INFO";
 				char line[2048];
 				std::snprintf(line, sizeof(line), "[VK %s] %s\n", sev, data->pMessage ? data->pMessage : "");
-				OutputDebugStringA(line);
-				if (FILE* fp = nullptr; fopen_s(&fp, "vk_debug.log", "a") == 0 && fp)
+				aq::debug::OutputString(line);  // Win32/UWP = OutputDebugStringA, Mac = stderr
+				if (FILE* fp = std::fopen("vk_debug.log", "a"); fp)
 				{
 					std::fputs(line, fp);
 					std::fclose(fp);
@@ -171,11 +171,23 @@ namespace aq
 			app.pApplicationName = "aqEngine";
 			app.apiVersion       = VK_API_VERSION_1_3;
 
-			std::vector<const char*> exts = { VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME };
+			// VK_KHR_surface はプラットフォーム非依存側。サーフェス拡張だけを OS 別に足す。
+			std::vector<const char*> exts = { VK_KHR_SURFACE_EXTENSION_NAME };
+#if defined(AQ_PLATFORM_MAC)
+			exts.push_back(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
+			// MoltenVK は portability driver として列挙されるため、この拡張と
+			// ENUMERATE_PORTABILITY フラグが無いと Loader 経由で物理デバイスが 1 台も見えない。
+			exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#else
+			exts.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#endif
 			std::vector<const char*> layers;
 
 			VkInstanceCreateInfo ci{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
 			ci.pApplicationInfo = &app;
+#if defined(AQ_PLATFORM_MAC)
+			ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 #ifdef _DEBUG
 			const bool validation = HasValidationLayer();
 			if (validation)
@@ -211,12 +223,22 @@ namespace aq
 			return true;
 		}
 
-		bool VulkanGraphicsDeviceImpl::CreateSurface(void* hwnd)
+		bool VulkanGraphicsDeviceImpl::CreateSurface(void* nativeWindow)
 		{
+#if defined(AQ_PLATFORM_MAC)
+			// PlatformMac は NativeWindowHandle.handle に CAMetalLayer* を入れて返す (設計書 §2.2)。
+			// vulkan_metal.h は非 Objective-C の TU では CAMetalLayer を void に typedef するため
+			// (`#ifdef __OBJC__ @class CAMetalLayer; #else typedef void CAMetalLayer; #endif`)、
+			// pLayer は実質 const void* になり .cpp のまま渡せる (.mm 化は不要)。
+			VkMetalSurfaceCreateInfoEXT ci{ VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT };
+			ci.pLayer = static_cast<const CAMetalLayer*>(nativeWindow);
+			return VK_VERIFY(vkCreateMetalSurfaceEXT(instance_, &ci, nullptr, &surface_));
+#else
 			VkWin32SurfaceCreateInfoKHR ci{ VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
 			ci.hinstance = GetModuleHandle(nullptr);
-			ci.hwnd      = (HWND)hwnd;
+			ci.hwnd      = (HWND)nativeWindow;
 			return VK_VERIFY(vkCreateWin32SurfaceKHR(instance_, &ci, nullptr, &surface_));
+#endif
 		}
 
 		bool VulkanGraphicsDeviceImpl::PickPhysicalDeviceAndQueues()
@@ -262,6 +284,70 @@ namespace aq
 			return physicalDevice_ != VK_NULL_HANDLE;
 		}
 
+#if defined(AQ_PLATFORM_MAC)
+		namespace
+		{
+			// 物理デバイスが指定のデバイス拡張に対応しているか。
+			bool HasDeviceExtension(VkPhysicalDevice pd, const char* name)
+			{
+				uint32_t count = 0;
+				vkEnumerateDeviceExtensionProperties(pd, nullptr, &count, nullptr);
+				std::vector<VkExtensionProperties> props(count);
+				vkEnumerateDeviceExtensionProperties(pd, nullptr, &count, props.data());
+				for (const auto& p : props)
+					if (std::strcmp(p.extensionName, name) == 0) return true;
+				return false;
+			}
+
+			// portability subset の対応状況を照会し、非対応項目を StartupLog へ出す (P2 評価項目)。
+			// MoltenVK が Metal 上で再現できない Vulkan 機能を起動時に洗い出すため。
+			// 戻り値は VkDeviceCreateInfo::pNext へそのまま繋ぐ (呼び出し側で書き換えないこと)。
+			VkPhysicalDevicePortabilitySubsetFeaturesKHR QueryAndLogPortabilitySubsetFeatures(VkPhysicalDevice pd)
+			{
+				VkPhysicalDevicePortabilitySubsetFeaturesKHR portability{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR };
+				VkPhysicalDeviceFeatures2 features2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+				features2.pNext = &portability;
+				vkGetPhysicalDeviceFeatures2(pd, &features2);
+
+				struct Item { const char* name; VkBool32 supported; };
+				const Item items[] = {
+					{ "constantAlphaColorBlendFactors",         portability.constantAlphaColorBlendFactors },
+					{ "events",                                 portability.events },
+					{ "imageViewFormatReinterpretation",        portability.imageViewFormatReinterpretation },
+					{ "imageViewFormatSwizzle",                 portability.imageViewFormatSwizzle },
+					{ "imageView2DOn3DImage",                   portability.imageView2DOn3DImage },
+					{ "multisampleArrayImage",                  portability.multisampleArrayImage },
+					{ "mutableComparisonSamplers",              portability.mutableComparisonSamplers },
+					{ "pointPolygons",                          portability.pointPolygons },
+					{ "samplerMipLodBias",                      portability.samplerMipLodBias },
+					{ "separateStencilMaskRef",                 portability.separateStencilMaskRef },
+					{ "shaderSampleRateInterpolationFunctions", portability.shaderSampleRateInterpolationFunctions },
+					{ "tessellationIsolines",                   portability.tessellationIsolines },
+					{ "tessellationPointMode",                  portability.tessellationPointMode },
+					{ "triangleFans",                           portability.triangleFans },
+					{ "vertexAttributeAccessBeyondStride",      portability.vertexAttributeAccessBeyondStride },
+				};
+
+				aq::StartupLog("  [vulkan] VK_KHR_portability_subset enabled");
+				uint32_t unsupportedCount = 0;
+				for (const auto& it : items)
+				{
+					if (it.supported) continue;
+					char buf[256];
+					std::snprintf(buf, sizeof(buf), "  [vulkan]   unsupported: %s", it.name);
+					aq::StartupLog(buf);
+					++unsupportedCount;
+				}
+				if (unsupportedCount == 0)
+					aq::StartupLog("  [vulkan]   (no unsupported feature)");
+
+				// pNext は照会用に使い終わっているのでチェーン末尾として nullptr に戻す。
+				portability.pNext = nullptr;
+				return portability;
+			}
+		}
+#endif // AQ_PLATFORM_MAC
+
 		bool VulkanGraphicsDeviceImpl::CreateLogicalDevice()
 		{
 			float priority = 1.0f;
@@ -283,14 +369,33 @@ namespace aq
 			VkPhysicalDeviceFeatures baseFeatures{};
 			baseFeatures.samplerAnisotropy = VK_TRUE;
 
-			const char* devExts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+			std::vector<const char*> devExts = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+#if defined(AQ_PLATFORM_MAC)
+			// 照会結果は vkCreateDevice が読むまで生きている必要があるため、if の中ではなく
+			// CreateLogicalDevice のスコープに置く (pNext は生ポインタで繋ぐだけ)。
+			VkPhysicalDevicePortabilitySubsetFeaturesKHR portability{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR };
+
+			// portability subset は「対応していれば必ず有効化する」規約の拡張 (Loader 経由の MoltenVK)。
+			if (HasDeviceExtension(physicalDevice_, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME))
+			{
+				devExts.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+
+				// 照会結果をそのまま pNext へ繋ぎ、「MoltenVK が対応している項目は全部有効化、
+				// 非対応はそのまま無効」にする。繋がないと mutableComparisonSamplers (影の
+				// コンパリソンサンプラ) 等が無効のままになる。VK_FALSE の項目を VK_TRUE に
+				// 書き換えると vkCreateDevice が VK_ERROR_FEATURE_NOT_PRESENT で失敗するため、
+				// 照会値は一切変更しない。
+				portability  = QueryAndLogPortabilitySubsetFeatures(physicalDevice_);
+				feat12.pNext = &portability;
+			}
+#endif
 
 			VkDeviceCreateInfo ci{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 			ci.pNext                   = &feat13;
 			ci.queueCreateInfoCount    = 1;
 			ci.pQueueCreateInfos       = &q;
-			ci.enabledExtensionCount   = (uint32_t)std::size(devExts);
-			ci.ppEnabledExtensionNames = devExts;
+			ci.enabledExtensionCount   = (uint32_t)devExts.size();
+			ci.ppEnabledExtensionNames = devExts.data();
 			ci.pEnabledFeatures        = &baseFeatures;
 			if (!VK_VERIFY(vkCreateDevice(physicalDevice_, &ci, nullptr, &device_))) return false;
 

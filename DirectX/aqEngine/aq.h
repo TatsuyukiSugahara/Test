@@ -66,25 +66,31 @@
 #include <dinput.h>
 
 
-// DirectXTex:
+#endif // AQ_PLATFORM_WINDOWS_FAMILY
+
+
+// DirectXTex: 画像ローダ。Windows / Mac の両方で使う(Mac は非 Windows 経路 =
+// DDS/TGA/HDR + BC ソフトコーデック。PNG/JPG は Resource/ImageLoader が stb_image へ回す)。
 //  - デスクトップ: ThirdParty/DirectXTex のソースを aqEngine に同梱ビルドする
 //    (Engine.vcxproj の Debug/Release 構成でコンパイル)。各構成の CRT に自動一致するため
 //    prebuilt lib は不要・pragma comment(lib) も不要(シンボルは aqEngine.lib に含まれる)。
 //  - UWP(Xbox): /MD 必須のため NuGet パッケージ "directxtex_uwp" を使う。
 //    lib は NuGet の .targets が自動リンク。ヘッダは <DirectXTex.h>。
+//  - Mac: 同梱ソース。sal.h / dxgiformat.h 等は ThirdParty/DirectX-Headers が供給する。
+// 区切りは '/' にすること('\' は clang で解決できない)。
 #if defined(AQ_PLATFORM_UWP)
 #pragma warning(push)
 #pragma warning(disable:4065)
 #include <DirectXTex.h>            // NuGet: directxtex_uwp (/MD, WINAPI_FAMILY_APP)
 #pragma warning(pop)
-#else
+#elif defined(AQ_PLATFORM_WIN32)
 #pragma warning(push)
 #pragma warning(disable:4065)
-#include <DirectXTex\DirectXTex.h> // ソースは ThirdParty/DirectXTex を Engine に同梱ビルド
+#include <DirectXTex/DirectXTex.h> // ソースは ThirdParty/DirectXTex を Engine に同梱ビルド
 #pragma warning(pop)
+#else
+#include <DirectXTex/DirectXTex.h>
 #endif
-
-#endif // AQ_PLATFORM_WINDOWS_FAMILY
 
 #include <vector>
 #include <array>
@@ -109,7 +115,11 @@
 #include <cstring>
 #include <assert.h>
 
-#include <DirectXMath.h>
+// DirectXMath: macOS には Windows SDK が無いため、入手元を ThirdParty/DirectXMath の
+// 同梱ヘッダに一本化する(設計書 §0「数学」/ §6)。SDK 版との版ずれを避けるため
+// Windows も同梱側を使う。ThirdParty/DirectXMath/Inc もインクルードパスに入っており、
+// DirectXTex 等が書く無修飾の <DirectXMath.h> / <DirectXPackedVector.h> も同梱側に解決される。
+#include <DirectXMath/Inc/DirectXMath.h>
 
 #include "Math/Vector.h"
 #include "Math/Matrix.h"

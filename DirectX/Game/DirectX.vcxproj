@@ -174,8 +174,8 @@
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(EngineDir);$(EngineDir)aqEngine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -201,8 +201,8 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(EngineDir);$(EngineDir)aqEngine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -231,8 +231,8 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(EngineDir);$(EngineDir)aqEngine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -261,8 +261,8 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Application;$(EngineDir);$(EngineDir)aqEngine;$(FBXSDK_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'!='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(RunCodeAnalysis)'=='true'">/utf-8 /external:I "$(SolutionDir)ThirdParty" /external:I "$(SolutionDir)ThirdParty\DirectXMath\Inc" /analyze:external- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

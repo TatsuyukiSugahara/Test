@@ -1,0 +1,86 @@
+# ============================================================================
+#  シェーダエントリ一覧 (ビルド時 SPIR-V 生成用)
+#
+#  Tools/ShaderCompile/compile_spv.cmake がこのファイルを読み、1 行 1 エントリを
+#  dxc で <このディレクトリ>/spv/<stem>.<entry>.<stage>.spv にコンパイルする。
+#  出力名の規則は aqEngine/Graphics/Vulkan/VulkanShader.cpp の BuildSpirvPath() と
+#  一対一で対応している (どちらか一方だけを変えないこと)。
+#
+#  書式: <file> <entry> <stage>      stage = vs | ps | cs
+#  "#" 始まりの行と空行は無視される。
+#
+#  内容は Game/Assets/Shader/*.fx の実体 (エントリ関数の定義) を全走査して作成した。
+#  .fx = 40 本 / うちエントリを持つもの 35 本 / インクルード専用 5 本
+#  (Common.fx, Lighting.fx, PBRFunctions.fx, ShadowSampling.fx, Tonemap.fx)。
+#  エントリ総数 = 59。
+#
+#  [参照] 印の無い行は、現状 C++ 側の CreateShader / LoadShader から呼ばれていない
+#  エントリ (旧フォワード/GBuffer 系の残置)。Mac移植設計.md §9 P3 の
+#  「全 .fx × エントリの .spv がビルド時に生成される」に従い網羅的に列挙している。
+#  ビルドから外したい場合はこのファイルから行を削るだけでよい。
+#
+#  TODO(Mac実機): 要確認 — [未参照] のエントリは D3D 時代から一度も DXC に通って
+#    いない可能性がある (実行時コンパイルは CreateShader された分しか走らないため)。
+#    この環境には dxc が無く未検証。ビルド時生成で構文エラーが出たら、その .fx が
+#    現役かを確認し、不要なら行ごと削除すること (.fx 自体は改変しない)。
+# ============================================================================
+
+BloomBrightExtract.fx main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
+BloomComposite.fx     main       cs   # [参照] Rendering/PostProcess/Passes/TonemapPass.cpp
+ClusterCull.fx        main       cs   # [参照] Rendering/Occlusion/GpuClusterCuller.cpp
+ClusterCullReset.fx   main       cs   # [参照] Rendering/Occlusion/GpuClusterCuller.cpp
+Decal.fx              VSMain     vs   # [参照] Rendering/Deferred/DeferredRenderer.cpp
+Decal.fx              PSMain     ps   # [参照] Rendering/Deferred/DeferredRenderer.cpp
+DeferredLighting.fx   VSMain     vs   # [未参照]
+DeferredLighting.fx   PSMain     ps   # [未参照]
+DualBlurDown.fx       main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
+DualBlurUp.fx         main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
+DualBlurUpAccum.fx    main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
+GBufferLit.fx         VSMain     vs   # [未参照]
+GBufferLit.fx         PSMain     ps   # [未参照]
+HiZDownsample.fx      main       cs   # [参照] Rendering/Occlusion/HiZRenderer.cpp
+HiZReconstruct.fx     main       cs   # [参照] Rendering/Occlusion/HiZRenderer.cpp
+ImGuiVK.fx            VSMain     vs   # [参照] Graphics/Vulkan/VulkanImGui.cpp
+ImGuiVK.fx            PSMain     ps   # [参照] Graphics/Vulkan/VulkanImGui.cpp
+InstancedGrass.fx     VSMain     vs   # [参照] Graphics/InstancedStaticMesh.cpp
+InstancedGrass.fx     PSMain     ps   # [参照] Graphics/InstancedStaticMesh.cpp
+InstancedModelTex.fx  VSMain     vs   # [参照] Graphics/StaticMesh.cpp / InstancedStaticMesh.cpp
+InstancedModelTex.fx  PSMain     ps   # [参照] Graphics/StaticMesh.cpp / InstancedStaticMesh.cpp
+InstancedSimple.fx    VSMain     vs   # [参照] Graphics/StaticMesh.cpp / InstancedStaticMesh.cpp
+InstancedSimple.fx    PSMain     ps   # [参照] Graphics/StaticMesh.cpp / InstancedStaticMesh.cpp
+Model.fx              VSMain     vs   # [参照] Graphics/StaticMesh.cpp
+Model.fx              PSMain     ps   # [参照] Graphics/StaticMesh.cpp
+ModelLit.fx           VSMain     vs   # [参照] Graphics/StaticMesh.cpp
+ModelLit.fx           PSMain     ps   # [参照] Graphics/StaticMesh.cpp
+ModelPS.fx            PSMain     ps   # [未参照]
+MotionBlur.fx         main       cs   # [参照] Rendering/PostProcess/Passes/MotionBlurPass.cpp
+OceanLit.fx           VSMain     vs   # [参照] Graphics/StaticMesh.cpp
+OceanLit.fx           PSMain     ps   # [参照] Graphics/StaticMesh.cpp
+PBRGBuffer.fx         VSMain     vs   # [未参照]
+PBRGBuffer.fx         PSMain     ps   # [参照] Graphics/StaticMesh.cpp
+PBRLighting.fx        VSMain     vs   # [参照] Rendering/Deferred/DeferredRenderer.cpp
+PBRLighting.fx        PSMain     ps   # [参照] Rendering/Deferred/DeferredRenderer.cpp
+Particle.fx           VSMain     vs   # [参照] Component/ParticleComponentSystem.cpp
+Particle.fx           PSMain     ps   # [参照] Component/ParticleComponentSystem.cpp
+Particle.fx           PSTextured ps   # [参照] Component/ParticleComponentSystem.cpp
+ShadowDepth.fx        VSMain     vs   # [参照] Rendering/Shadow/HardShadowRenderer.cpp
+SimpleBox.fx          VSMain     vs   # [参照] Graphics/StaticMesh.cpp
+SimpleBox.fx          PSMain     ps   # [参照] Graphics/StaticMesh.cpp
+SkeletalGBufferLit.fx VSMain     vs   # [未参照]
+SkeletalGBufferLit.fx PSMain     ps   # [未参照]
+SkeletalModelLit.fx   VSMain     vs   # [参照] Graphics/SkeletalMesh.cpp
+SkeletalModelLit.fx   PSMain     ps   # [参照] Graphics/SkeletalMesh.cpp
+SkeletalPBRGBuffer.fx VSMain     vs   # [未参照]
+SkeletalPBRGBuffer.fx PSMain     ps   # [参照] Graphics/SkeletalMesh.cpp
+TerrainGBufferLit.fx  VSMain     vs   # [未参照]
+TerrainGBufferLit.fx  PSMain     ps   # [未参照]
+TerrainLit.fx         VSMain     vs   # [参照] Graphics/StaticMesh.cpp
+TerrainLit.fx         PSMain     ps   # [参照] Graphics/StaticMesh.cpp
+TerrainPBRGBuffer.fx  VSMain     vs   # [未参照]
+TerrainPBRGBuffer.fx  PSMain     ps   # [参照] Graphics/StaticMesh.cpp
+UICircleGauge.fx      VSMain     vs   # [未参照]
+UICircleGauge.fx      PSMain     ps   # [参照] UI/Rendering/UIRenderPipeline.cpp
+UISDFText.fx          VSMain     vs   # [未参照]
+UISDFText.fx          PSMain     ps   # [参照] UI/Rendering/UIRenderPipeline.cpp
+UISprite.fx           VSMain     vs   # [参照] UI/Rendering/UIRenderPipeline.cpp
+UISprite.fx           PSMain     ps   # [参照] UI/Rendering/UIRenderPipeline.cpp

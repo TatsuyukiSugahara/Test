@@ -187,13 +187,15 @@ cmake --build --preset macos-xcode-debug     # または macos-xcode-release
 
 生成物は `build/macos-xcode/bin/<Config>/Game.app`。
 
-**⌘R で動くように 2 つをスキームへ焼き込んである**(`Game/CMakeLists.txt`)。
-手で設定する必要は無いが、動かないときはここを疑う:
+**Xcode はターミナルの環境を引き継がない**。これが 3 箇所に効くので、いずれも
+CMake が configure 時に解決して焼き込んである(手で設定する必要は無い)。
+動かないときはここを疑う:
 
 | 設定 | 値 | 無いとどうなるか |
 |---|---|---|
 | Working Directory | `<repo>/DirectX/Game` | アセットが見つからない(§5.2 と同じ理由) |
-| 環境変数 `VK_ICD_FILENAMES` ほか | Vulkan SDK の `setup-env.sh` と同じ値 | **`vkCreateInstance` が `VK_ERROR_INCOMPATIBLE_DRIVER`(-9)で落ちる**。Xcode はターミナルの環境を引き継がないため、MoltenVK の ICD を見つけられない |
+| 環境変数 `VK_ICD_FILENAMES` ほか | Vulkan SDK の `setup-env.sh` と同じ値 | 実行時に **`vkCreateInstance` が `VK_ERROR_INCOMPATIBLE_DRIVER`(-9)で落ちる**。MoltenVK の ICD を見つけられない |
+| `dxc` のパス | configure 時に解決した絶対パス | ビルド時に **`aqCompileSpv` が `PhaseScriptExecution failed with a nonzero exit code` で落ちる**(`Tools/ShaderCompile/compile_spv.cmake`) |
 
 確認は Product > Scheme > Edit Scheme… > Run > Options(作業ディレクトリ)と
 Arguments(環境変数)。
@@ -237,6 +239,7 @@ Arguments(環境変数)。
 | 13 | `macos-xcode` の configure で `No CMAKE_C_COMPILER could be found` | Xcode 導入直後でライセンス未同意。`sudo xcodebuild -license accept` と `-runFirstLaunch` を通す |
 | 14 | Xcode の ⌘R で `vkCreateInstance` が -9 で落ちる | スキームに Vulkan の環境変数が無い。`cmake --preset macos-xcode` を実行し直してスキームを作り直す(`Game/CMakeLists.txt` が焼き込む) |
 | 15 | Xcode でビルドはできるが実行するとアセットが見つからない | スキームの Working Directory が `DirectX/Game` になっていない。同じく再 configure で直る |
+| 16 | Xcode の ⌘B が `aqCompileSpv` の `Command PhaseScriptExecution failed with a nonzero exit code` で落ちる | `.spv` 生成スクリプトが dxc をビルド時に `$VULKAN_SDK` から探しており、Xcode にはその環境が無い。configure 時に絶対パスを焼き込むよう直したので、`cmake --preset macos-xcode` を実行し直す |
 
 ---
 

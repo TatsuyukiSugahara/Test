@@ -264,6 +264,14 @@ endfunction()
 function(aq_add_compile_spv_target targetName)
 	aq_spv_resolve_defaults()
 
+	# dxc は **configure 時に** 解決して絶対パスを焼き込む。
+	# スクリプト側の探索は $ENV{VULKAN_SDK} を見るが、ビルドを起動する環境が
+	# 必ずしもそれを持っているとは限らない。特に **Xcode はターミナルの環境を
+	# 引き継がない**ため、ここで渡さないと ⌘B が
+	# 「PhaseScriptExecution failed with a nonzero exit code」で落ちる。
+	# configure 時は AQ_GRAPHICS_API=Vulkan が VULKAN_SDK を要求済みなので確実に解決できる。
+	aq_spv_resolve_dxc(AQ_SPV_DXC)
+
 	set(scriptArgs
 		-D "AQ_SPV_SHADER_DIR=${AQ_SPV_SHADER_DIR}"
 		-D "AQ_SPV_ENTRIES=${AQ_SPV_ENTRIES}"
@@ -271,9 +279,7 @@ function(aq_add_compile_spv_target targetName)
 		-D "AQ_SPV_ARGS_FILE=${AQ_SPV_ARGS_FILE}"
 		-D "AQ_SPV_DEBUG_INFO=${AQ_SPV_DEBUG_INFO}"
 	)
-	if(AQ_SPV_DXC)
-		list(APPEND scriptArgs -D "AQ_SPV_DXC=${AQ_SPV_DXC}")
-	endif()
+	list(APPEND scriptArgs -D "AQ_SPV_DXC=${AQ_SPV_DXC}")
 
 	add_custom_target(${targetName}
 		COMMAND ${CMAKE_COMMAND} ${scriptArgs} -P "${AQ_SPV_LIST_DIR}/compile_spv.cmake"

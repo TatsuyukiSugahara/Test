@@ -47,6 +47,15 @@ namespace aq
 			/** このフレームの drawable とコマンドバッファ。どちらも autorelease なので retain して持つ */
 			id<CAMetalDrawable>  currentDrawable      = nil;
 			id<MTLCommandBuffer> currentCommandBuffer = nil;
+
+			/**
+			 * CopyToBackBuffer のフルスクリーン変換描画用(設計書 §7)。
+			 * 起動時に 1 度だけ作り、宛先フォーマットが変わったときだけ作り直す。
+			 */
+			id<MTLLibrary>             blitLibrary   = nil;
+			id<MTLRenderPipelineState> blitPipeline  = nil;
+			id<MTLSamplerState>        blitSampler   = nil;
+			MTLPixelFormat             blitDstFormat = MTLPixelFormatInvalid;
 		};
 
 
@@ -58,8 +67,164 @@ namespace aq
 			/** CreateOffscreenRenderTarget の失敗値(IGraphicsDeviceImpl の契約) */
 			static constexpr uint32_t INVALID_RT_INDEX = ~0u;
 
-			/** CopyToBackBuffer の不一致ログ。毎フレーム出ると使い物にならないので 1 度だけ出す */
-			bool g_copyMismatchLogged = false;
+			/** CopyToBackBuffer のフォールバックログ。毎フレーム出ると使い物にならないので 1 度だけ出す */
+			bool g_copyFallbackLogged = false;
+
+			/** CopyToBackBuffer の失敗ログ(PSO が作れなかった等)。同上 */
+			bool g_copyFailureLogged = false;
+
+			/**
+			 * CopyToBackBuffer のフルスクリーン変換描画に使う MSL。
+			 *
+			 * **なぜ .fx ではなく .mm への埋め込みなのか**
+			 * この描画は「バックバッファのフォーマットが表示 RT と違うときに変換して出す」という
+			 * **Metal バックエンド内部の都合**で、エンジンのシェーダ資産ではない。.fx を増やすと
+			 *  (a) 設計の「.fx は無改変で移植する」が崩れ、
+			 *  (b) shader_entries.txt に載せる必要が出て Vulkan / D3D 側のビルドにも波及し、
+			 *  (c) 起動時のシェーダコンパイル本数(§13-2 で問題視している)がさらに増える。
+			 * ソース文字列を newLibraryWithSource: に通せば追加ファイルなしで完結するので、
+			 * ここに直接置いている。コンパイルは起動時の 1 回だけ。
+			 *
+			 * **頂点バッファは使わない**。vertex_id からクリップ空間を覆う大三角形
+			 * (-1,-1)-(3,-1)-(-1,3) を作る。全画面を 2 枚の三角形で覆うより
+			 * 対角線上の重複シェーディングが無い分だけ速く、頂点記述子も要らない。
+			 *
+			 * **Y 反転について**(ここを間違えると上下逆さまになる)
+			 *  - Metal のクリップ空間は D3D と同じく **y = +1 が画面の上端**
+			 *    (OpenGL/Vulkan のような下端ではない)。
+			 *  - Metal のテクスチャ座標は **v = 0 がテクスチャの先頭行(上端)**。
+			 *  - よって「画面の上端 (y=+1)」に「テクスチャの上端 (v=0)」を貼るには
+			 *    v = (1 - y) * 0.5 とする。u はそのまま u = (x + 1) * 0.5。
+			 *  - src テクスチャはエンジンが同じ Metal のラスタライズ規約で描いたものなので、
+			 *    blit 経路(生バイトコピー)と同じ向きで出る。**追加の反転は不要**。
+			 */
+			static const char* const FULLSCREEN_BLIT_MSL = R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+struct FullscreenVSOut
+{
+	float4 position [[position]];
+	float2 uv;
+};
+
+vertex FullscreenVSOut aqFullscreenBlitVS(uint vertexId [[vertex_id]])
+{
+	// クリップ空間を覆う大三角形。頂点バッファは要らない。
+	const float2 positions[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
+
+	const float2 p = positions[vertexId];
+	FullscreenVSOut out;
+	out.position = float4(p, 0.0, 1.0);
+
+	// クリップ空間は y = +1 が上端、テクスチャは v = 0 が上端。よって v は反転して取る。
+	out.uv = float2((p.x + 1.0) * 0.5, (1.0 - p.y) * 0.5);
+	return out;
+}
+
+fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
+                                   texture2d<float> src [[texture(0)]],
+                                   sampler          samp [[sampler(0)]])
+{
+	// 変換はフォーマット間の読み替えだけ。トーンマップは既にポストプロセスが済ませている。
+	return src.sample(samp, in.uv);
+}
+)MSL";
+
+
+			/**
+			 * フルスクリーン変換描画の PSO / ライブラリ / サンプラを用意する
+			 *
+			 * 宛先フォーマットが前回と同じなら何もしない。起動時に 1 度だけ通るのが正常系で、
+			 * ここが毎フレーム走るようなら宛先フォーマットが揺れている。
+			 * @param objects   デバイスオブジェクト群
+			 * @param dstFormat 宛先(バックバッファ)のピクセルフォーマット
+			 * @return 使える状態になったら true
+			 */
+			bool EnsureFullscreenBlitPipeline(MetalDeviceObjects* objects, MTLPixelFormat dstFormat)
+			{
+				if (objects == nullptr || objects->device == nil || dstFormat == MTLPixelFormatInvalid) {
+					return false;
+				}
+				if (objects->blitPipeline != nil && objects->blitDstFormat == dstFormat) {
+					return true;
+				}
+
+				@autoreleasepool
+				{
+					// ライブラリは宛先フォーマットに依存しないので 1 度だけ作る。
+					if (objects->blitLibrary == nil)
+					{
+						NSError* error  = nil;
+						NSString* source = [NSString stringWithUTF8String:FULLSCREEN_BLIT_MSL];
+						// new... なので既に +1。追加の retain は要らない(付けると解放されない)。
+						objects->blitLibrary = [objects->device newLibraryWithSource:source
+						                                                     options:nil
+						                                                       error:&error];  // MRR: +1
+						if (objects->blitLibrary == nil)
+						{
+							aq::StartupMarkf("  [metal] fullscreen blit library failed: %s",
+							                 (error != nil) ? [[error localizedDescription] UTF8String] : "unknown");
+							return false;
+						}
+					}
+
+					// サンプラも 1 度だけ。解像度が違う場合(リサイズ)に備えて線形補間 + クランプ。
+					if (objects->blitSampler == nil)
+					{
+						MTLSamplerDescriptor* samplerDesc = [[MTLSamplerDescriptor alloc] init];
+						samplerDesc.minFilter    = MTLSamplerMinMagFilterLinear;
+						samplerDesc.magFilter    = MTLSamplerMinMagFilterLinear;
+						samplerDesc.mipFilter    = MTLSamplerMipFilterNotMipmapped;
+						samplerDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+						samplerDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+
+						objects->blitSampler = [objects->device newSamplerStateWithDescriptor:samplerDesc];  // MRR: +1
+						[samplerDesc release];
+						if (objects->blitSampler == nil) {
+							aq::StartupMark("  [metal] fullscreen blit sampler failed");
+							return false;
+						}
+					}
+
+					// PSO は colorAttachments[0].pixelFormat を持つので宛先フォーマットごとに要る。
+					id<MTLFunction> vertexFunction   = [objects->blitLibrary newFunctionWithName:@"aqFullscreenBlitVS"];
+					id<MTLFunction> fragmentFunction = [objects->blitLibrary newFunctionWithName:@"aqFullscreenBlitPS"];
+					if (vertexFunction == nil || fragmentFunction == nil)
+					{
+						[vertexFunction release];
+						[fragmentFunction release];
+						aq::StartupMark("  [metal] fullscreen blit functions not found");
+						return false;
+					}
+
+					MTLRenderPipelineDescriptor* pipelineDesc = [[MTLRenderPipelineDescriptor alloc] init];
+					pipelineDesc.vertexFunction                  = vertexFunction;
+					pipelineDesc.fragmentFunction                = fragmentFunction;
+					pipelineDesc.colorAttachments[0].pixelFormat = dstFormat;
+					// 頂点記述子は付けない(頂点バッファを読まないため)。深度も使わない。
+
+					NSError* error = nil;
+					id<MTLRenderPipelineState> pipeline =
+						[objects->device newRenderPipelineStateWithDescriptor:pipelineDesc error:&error];  // MRR: +1
+
+					[pipelineDesc release];
+					[vertexFunction release];
+					[fragmentFunction release];
+
+					if (pipeline == nil)
+					{
+						aq::StartupMarkf("  [metal] fullscreen blit pipeline failed: %s",
+						                 (error != nil) ? [[error localizedDescription] UTF8String] : "unknown");
+						return false;
+					}
+
+					[objects->blitPipeline release];
+					objects->blitPipeline  = pipeline;
+					objects->blitDstFormat = dstFormat;
+				}
+				return true;
+			}
 
 			/** 素の C++ ヘッダ越しに持っている MTLDevice を取り出す */
 			inline id<MTLDevice> ToMTLDevice(const MetalGraphicsDeviceImpl* impl)
@@ -130,17 +295,16 @@ namespace aq
 				aq::StartupMark("  [metal] command queue ok");
 			}
 
-			// compute の対応表明。
+			// compute の対応表明(P4)。
 			//
-			// TODO(P5): compute を実装したら true にする(Dispatch / CS* は P5 まで no-op)。
+			// P1〜P3 は false にしていた。true にすると Renderer::GetDisplayRTHandle() が
+			// displayRT をポストプロセスチェーンの最終 RT(Tonemap の出力)に切り替えるため、
+			// compute パスが動いていない段階では「誰も書いていない RT」が画面へ出てしまうからだった。
+			// P4 でポストプロセス一式を通すので true へ戻す。これが無いとトーンマップが走らず、
+			// 照明面が暗く・空が飽和したままになる(設計書 §12 の P4 / §13-9)。
 			//
-			// Metal のハードウェアは当然 compute に対応しているが、**バックエンドの実装がまだ無い**。
-			// ここで true を返すと Renderer が displayRT をポストプロセスチェーンの最終 RT
-			// (Tonemap の compute 出力) にしてしまい、誰も書かない RT が CopyToBackBuffer で
-			// 画面へ出る。false にすると Renderer はシーン RT を直接表示する経路に落ちるので、
-			// P1〜P4 の「描いたものがそのまま見える」状態を保てる(Renderer::GetDisplayRTHandle)。
-			// メイン RT を LDR の BGRA8Unorm で作っている現状とも整合する(設計書 §13-9)。
-			aq::graphics::SetComputeSupported(false);
+			// あわせてメイン RT も HDR(R16G16B16A16_Float)へ変えている(下の主 RT 生成を参照)。
+			aq::graphics::SetComputeSupported(true);
 
 			// スワップチェーン(CAMetalLayer)。PlatformMac が生成済みのものを設定するだけ(設計書 §7)。
 			@autoreleasepool
@@ -177,17 +341,33 @@ namespace aq
 			}
 
 			// メイン RT。RenderTargetHandle と ToggleMainRenderTarget が 2 枚前提(設計書 §7)。
+			//
+			// **HDR(R16G16B16A16_Float)+ 深度付き**。Vulkan 版(VK_FORMAT_R16G16B16A16_SFLOAT)/
+			// D3D12 版と同じ構成で、LDR へ落とすのは最後の CopyToBackBuffer だけにする(設計書 §13-9)。
+			// P0 では SWAPCHAIN_PIXEL_FORMAT(BGRA8Unorm)で作っていたが、それだと Bloom と
+			// トーンマップの入力が 8bit に切り詰められ、Vulkan と明るさが合わない。
 			{
+				const MTLPixelFormat mainColorFormat = metal::ToMTLPixelFormat(PixelFormat::R16G16B16A16_Float);
 				for (auto& renderTarget : mainRTs_)
 				{
 					renderTarget = std::make_unique<MetalRenderTarget>();
 					if (!renderTarget->CreateOffscreen(objects_->device, width_, height_,
-					                                   metal::SWAPCHAIN_PIXEL_FORMAT, /*hasDepth*/true)) {
+					                                   mainColorFormat, /*hasDepth*/true)) {
 						aq::StartupMark("  [metal] main render target creation failed");
 						return false;
 					}
 				}
-				aq::StartupMarkf("  [metal] main render targets ok (x%u, %ux%u)", MAIN_RT_COUNT, width_, height_);
+				aq::StartupMarkf("  [metal] main render targets ok (x%u, %ux%u, HDR RGBA16Float)",
+				                 MAIN_RT_COUNT, width_, height_);
+			}
+
+			// CopyToBackBuffer のフルスクリーン変換描画。メイン RT が HDR、トーンマップ最終 RT が
+			// RGBA8Unorm、drawable が BGRA8Unorm と**どの経路でもフォーマットが一致しない**ので、
+			// 起動時に作っておく(失敗しても起動は続ける。CopyToBackBuffer 側で 1 度だけログを出す)。
+			{
+				if (EnsureFullscreenBlitPipeline(objects_, metal::SWAPCHAIN_PIXEL_FORMAT)) {
+					aq::StartupMark("  [metal] fullscreen blit pipeline ok");
+				}
 			}
 			return true;
 		}
@@ -236,6 +416,15 @@ namespace aq
 
 				[objects_->lastCommandBuffer release];
 				objects_->lastCommandBuffer = nil;
+
+				// フルスクリーン変換描画のキャッシュ(生成と逆順)。
+				[objects_->blitPipeline release];
+				objects_->blitPipeline  = nil;
+				objects_->blitDstFormat = MTLPixelFormatInvalid;
+				[objects_->blitSampler release];
+				objects_->blitSampler = nil;
+				[objects_->blitLibrary release];
+				objects_->blitLibrary = nil;
 
 				// レイヤの所有者は PlatformMac。こちらの retain 分だけを返す。
 				[objects_->layer release];
@@ -521,8 +710,7 @@ namespace aq
 				return;  // drawable 自身が渡された。写す必要が無い
 			}
 
-			// ブリットはエンコーダの外でしか積めない。保留クリアもここで畳んでおく
-			// (P1 は描画が 1 本も無いので、実際に画面を塗るのはこの flush)。
+			// エンコーダは入れ子にできない。保留クリアを畳み、開いているエンコーダを閉じてから積む。
 			if (activeContext_ != nullptr) {
 				activeContext_->FlushPendingClears();
 				activeContext_->EndEncodingIfActive();
@@ -534,17 +722,43 @@ namespace aq
 				return;
 			}
 
-			// TODO(P4): サイズ / フォーマットが違う場合はフルスクリーン描画へフォールバックする(設計書 §7)。
-			//           ウィンドウのリサイズ(CAMetalLayer.drawableSize とメイン RT のずれ)もここに来る。
-			//           P1 は落とさないことだけを担保し、1 度だけログを出してスキップする。
-			if ([srcTexture pixelFormat] != [dstTexture pixelFormat] ||
-			    [srcTexture width]       != [dstTexture width]       ||
-			    [srcTexture height]      != [dstTexture height])
+			// **blit は生バイトコピー**。フォーマットも寸法も完全一致するときだけ使える。
+			//
+			//  - RGBA8Unorm → BGRA8Unorm: copyFromTexture: は「通してしまう」が中身はバイト列の
+			//    移送なので **R と B が入れ替わる**(実機で確認済み。赤が青になる)。
+			//    compute 有効時の表示 RT はトーンマップ最終 RT(RGBA8Unorm)、drawable は
+			//    BGRA8Unorm なので、**この組み合わせが常用**。つまり実際にはほぼ常に下の描画へ落ちる。
+			//  - RGBA16Float → BGRA8Unorm: Validation がアサートで落とす。
+			//  - 寸法違い(ウィンドウのリサイズ)は blit では縮尺できない。
+			//
+			// よって一致しないときはフルスクリーン描画で変換する(設計書 §7)。
+			const bool canBlit = ([srcTexture pixelFormat] == [dstTexture pixelFormat]) &&
+			                     ([srcTexture width]       == [dstTexture width])       &&
+			                     ([srcTexture height]      == [dstTexture height]);
+
+			@autoreleasepool
 			{
-				if (!g_copyMismatchLogged)
+				if (canBlit)
 				{
-					g_copyMismatchLogged = true;
-					aq::StartupMarkf("  [metal] CopyToBackBuffer skipped: src %lux%lu fmt %lu / dst %lux%lu fmt %lu",
+					id<MTLBlitCommandEncoder> blit = [objects_->currentCommandBuffer blitCommandEncoder];
+					[blit copyFromTexture:srcTexture
+					          sourceSlice:0
+					          sourceLevel:0
+					         sourceOrigin:MTLOriginMake(0, 0, 0)
+					           sourceSize:MTLSizeMake([srcTexture width], [srcTexture height], 1)
+					            toTexture:dstTexture
+					     destinationSlice:0
+					     destinationLevel:0
+					    destinationOrigin:MTLOriginMake(0, 0, 0)];
+					[blit endEncoding];
+					return;
+				}
+
+				// ここからフォールバックのフルスクリーン変換描画。
+				if (!g_copyFallbackLogged)
+				{
+					g_copyFallbackLogged = true;
+					aq::StartupMarkf("  [metal] CopyToBackBuffer uses fullscreen draw: src %lux%lu fmt %lu / dst %lux%lu fmt %lu",
 					                 static_cast<unsigned long>([srcTexture width]),
 					                 static_cast<unsigned long>([srcTexture height]),
 					                 static_cast<unsigned long>([srcTexture pixelFormat]),
@@ -552,22 +766,36 @@ namespace aq
 					                 static_cast<unsigned long>([dstTexture height]),
 					                 static_cast<unsigned long>([dstTexture pixelFormat]));
 				}
-				return;
-			}
 
-			@autoreleasepool
-			{
-				id<MTLBlitCommandEncoder> blit = [objects_->currentCommandBuffer blitCommandEncoder];
-				[blit copyFromTexture:srcTexture
-				          sourceSlice:0
-				          sourceLevel:0
-				         sourceOrigin:MTLOriginMake(0, 0, 0)
-				           sourceSize:MTLSizeMake([srcTexture width], [srcTexture height], 1)
-				            toTexture:dstTexture
-				     destinationSlice:0
-				     destinationLevel:0
-				    destinationOrigin:MTLOriginMake(0, 0, 0)];
-				[blit endEncoding];
+				if (!EnsureFullscreenBlitPipeline(objects_, [dstTexture pixelFormat]))
+				{
+					if (!g_copyFailureLogged)
+					{
+						g_copyFailureLogged = true;
+						aq::StartupMark("  [metal] CopyToBackBuffer skipped: fullscreen blit pipeline unavailable");
+					}
+					return;
+				}
+
+				// 全画素を三角形が覆うので、宛先の読み出しは要らない(DontCare で帯域を節約する)。
+				MTLRenderPassDescriptor* passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+				passDesc.colorAttachments[0].texture     = dstTexture;
+				passDesc.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
+				passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+				id<MTLRenderCommandEncoder> encoder =
+					[objects_->currentCommandBuffer renderCommandEncoderWithDescriptor:passDesc];
+				if (encoder == nil) {
+					return;
+				}
+
+				// ビューポートはアタッチメント全面が既定。src と寸法が違う場合は
+				// サンプラの線形補間が縮尺を吸収する。
+				[encoder setRenderPipelineState:objects_->blitPipeline];
+				[encoder setFragmentTexture:srcTexture atIndex:0];
+				[encoder setFragmentSamplerState:objects_->blitSampler atIndex:0];
+				[encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+				[encoder endEncoding];
 			}
 		}
 
@@ -649,6 +877,48 @@ namespace aq
 			auto depthMap = std::make_unique<MetalDepthMap>();
 			depthMap->Create(ToMTLDevice(this), width);
 			return depthMap;
+		}
+
+
+		/**
+		 * GPU 駆動用バッファ
+		 *
+		 * 上の各ファクトリーと違い、**失敗時は nullptr を返す**。呼び出し元の
+		 * GpuClusterBuffers::Create() が 4 本すべて非 null であることを条件に
+		 * clusterCount を立てるので、空オブジェクトを返すとカリングが壊れた状態で走る。
+		 */
+		std::unique_ptr<IGpuBuffer> MetalGraphicsDeviceImpl::CreateStructuredBuffer(uint32_t stride, uint32_t count, const void* data)
+		{
+			if (stride == 0 || count == 0) {
+				return nullptr;
+			}
+
+			const uint32_t byteSize = stride * count;
+
+			auto gpuBuffer = std::make_unique<MetalGpuBuffer>();
+			if (!gpuBuffer->Create(ToMTLDevice(this), byteSize, stride,
+			                       /*srv*/true, /*uav*/false, data, byteSize)) {
+				return nullptr;
+			}
+			return gpuBuffer;
+		}
+
+
+		std::unique_ptr<IGpuBuffer> MetalGraphicsDeviceImpl::CreateRawBuffer(uint32_t byteSize, bool srv, bool uav, const void* initData)
+		{
+			if (byteSize == 0) {
+				return nullptr;
+			}
+
+			// RAW ビューは 4 バイト要素。間接引数(20 バイト)のような半端な大きさが来るので、
+			// D3D12 版と同じく 16 バイト境界へ切り上げて安全側に倒す。
+			const uint32_t alignedSize = (byteSize + 15u) & ~15u;
+
+			auto gpuBuffer = std::make_unique<MetalGpuBuffer>();
+			if (!gpuBuffer->Create(ToMTLDevice(this), alignedSize, /*stride*/0, srv, uav, initData, byteSize)) {
+				return nullptr;
+			}
+			return gpuBuffer;
 		}
 	}
 }

@@ -8,6 +8,8 @@
 #include "Graphics/IRenderTarget.h"
 #include "Graphics/IShaderResourceView.h"
 #include "Graphics/IUnorderedAccessView.h"
+// MetalSRVBase / MetalUAVBase(compute パス側との契約となる共通基底)。
+#include "Graphics/Metal/MetalResources.h"
 
 
 namespace aq
@@ -36,13 +38,16 @@ namespace aq
 			 */
 		public:
 			/** カラーをサンプルするための SRV */
-			class ColorSRV final : public IShaderResourceView
+			class ColorSRV final : public MetalSRVBase
 			{
 			public:
 				MetalRenderTarget* owner = nullptr;
 
 				/** 実体のテクスチャ(プロキシならその時点の drawable) */
-				inline id<MTLTexture> GetTexture() const { return (owner != nullptr) ? owner->GetTexture() : nil; }
+				id<MTLTexture> GetTexture() const override { return (owner != nullptr) ? owner->GetTexture() : nil; }
+
+				/** テクスチャ SRV なのでバッファは持たない */
+				id<MTLBuffer> GetBuffer() const override { return nil; }
 
 				/** Metal では id<MTLTexture> をネイティブハンドルとして返す(ImGui / 描画側が直接使える) */
 				void* GetNativeHandle() const override { return GetTexture(); }
@@ -51,13 +56,21 @@ namespace aq
 			};
 
 
-			/** compute が RT へ書き込むための UAV(MTLTexture の ShaderWrite 使用) */
-			class ColorUAV final : public IUnorderedAccessView
+			/**
+			 * compute が RT へ書き込むための UAV
+			 *
+			 * 実体のテクスチャは CreateOffscreen() が MTLTextureUsageShaderWrite 込みで作っている。
+			 * これが無いと compute の write が Validation エラーになる(設計書 §7)。
+			 */
+			class ColorUAV final : public MetalUAVBase
 			{
 			public:
 				MetalRenderTarget* owner = nullptr;
 
-				inline id<MTLTexture> GetTexture() const { return (owner != nullptr) ? owner->GetTexture() : nil; }
+				id<MTLTexture> GetTexture() const override { return (owner != nullptr) ? owner->GetTexture() : nil; }
+
+				/** テクスチャ UAV なのでバッファは持たない */
+				id<MTLBuffer> GetBuffer() const override { return nil; }
 
 				void Release() override {}  // owner が所有
 			};

@@ -5,6 +5,7 @@
 // (MetalCommon.h が __OBJC__ を要求する)。エンジンから見える口は IDepthMap だけ。
 #if defined(ENGINE_GRAPHICS_METAL)
 #include "Graphics/Metal/MetalCommon.h"
+#include "Graphics/Metal/MetalResources.h"   // MetalSRVBase
 #include "Graphics/IDepthMap.h"
 #include "Graphics/IShaderResourceView.h"
 #include "Graphics/ISamplerState.h"
@@ -36,12 +37,14 @@ namespace aq
 			 */
 		public:
 			/** 深度テクスチャ(全スライス配列 or 単一スライス)を指す SRV。所有はしない */
-			class DepthSRV final : public IShaderResourceView
+			class DepthSRV final : public MetalSRVBase
 			{
 			public:
 				id<MTLTexture> texture = nil;
 
-				inline id<MTLTexture> GetTexture() const { return texture; }
+				/** MetalSRVBase。深度は常にテクスチャ SRV なのでバッファ側は nil */
+				id<MTLTexture> GetTexture() const override { return texture; }
+				id<MTLBuffer>  GetBuffer()  const override { return nil; }
 
 				/** Metal では id<MTLTexture> をネイティブハンドルとして返す */
 				void* GetNativeHandle() const override { return texture; }

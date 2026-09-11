@@ -6,6 +6,7 @@
 #include "Graphics/Metal/MetalCommon.h"
 #include "Graphics/IRenderContextImpl.h"
 #include <memory>
+#include <unordered_map>
 
 
 namespace aq
@@ -80,17 +81,53 @@ namespace aq
 
 
 		/**
-		 * Metal RenderContext Implementor — P2(描画パスとバインド)
+		 * Dispatch 時に flush する compute の保留ステート (設計書 §3.3 / §5.3)
+		 *
+		 * 描画側(PendingGraphicsState)と同じ「保留してまとめて流す」方式にする。
+		 * Metal は描画用と compute 用でエンコーダが別物なので、CSSet* の時点では
+		 * 流す先が存在しないことがあり、どのみち保留せざるを得ない。
+		 *
+		 * 実際にエンコーダへ流すのは MetalRenderContextImpl::FlushComputeState()。
+		 */
+		struct PendingComputeState
+		{
+			// 配列長。CS の実レジスタ使用は b <= 0 / t <= 2 / s <= 0 / u <= 1 だが、
+			// 描画側と同じく余裕を持たせる(u は Vulkan 版の MAX_UAV に合わせて 8)。
+			static constexpr uint32_t MAX_CONSTANT_COUNT = 16;  // b0..b15
+			static constexpr uint32_t MAX_SRV_COUNT      = 16;  // t0..t15
+			static constexpr uint32_t MAX_SAMPLER_COUNT  = 16;  // s0..s15
+			static constexpr uint32_t MAX_UAV_COUNT      = 8;   // u0..u7
+
+			/** compute PSO を引くための CS。未設定なら Dispatch を捨てる */
+			MetalShader* cs = nullptr;
+
+			IConstantBuffer*      cb[MAX_CONSTANT_COUNT]  = {};
+			IShaderResourceView*  srv[MAX_SRV_COUNT]      = {};
+			ISamplerState*        sampler[MAX_SAMPLER_COUNT] = {};
+			IUnorderedAccessView* uav[MAX_UAV_COUNT]      = {};
+		};
+
+
+
+
+		/**
+		 * Metal RenderContext Implementor — P2(描画パスとバインド)/ P4(compute)
 		 *
 		 * P1 のアタッチメント保持とクリア予約の上に、**Draw 時 flush** を載せた段階。
 		 * Draw* が来た時点で「エンコーダを開く → PSO / 深度ステートを引く →
 		 * ビューポート・シザー → 頂点 / 定数バッファ・テクスチャ・サンプラを束ねる →
 		 * 描画コマンド」を行う(設計書 §3.2)。
-		 * P3 で**深度のみパス(シャドウ)**を足した。compute(Dispatch)は P5。
+		 * P3 で**深度のみパス(シャドウ)**を足し、P4 で **compute(Dispatch)**を足した。
 		 *
 		 * **エンコーダの寿命** (設計書 §3.1): Metal は 1 レンダーパス = 1 エンコーダで、
 		 * 開いた後にレンダーターゲットを差し替えられない。アタッチメントが変わる操作
 		 * (OMSet* / Clear* / Dispatch)が来たらエンコーダを閉じ、次の描画で開き直す。
+		 *
+		 * **描画用と compute 用のエンコーダは同時に開けない**(P4)。Metal は
+		 * MTLRenderCommandEncoder と MTLComputeCommandEncoder を別物として扱い、
+		 * 一方を開いたまま他方を開こうとするとその場で落ちる。したがって
+		 * 「Dispatch は描画エンコーダを閉じてから」「Draw は compute エンコーダを閉じてから」を
+		 * 不変条件とし、**どちらも EndEncodingIfActive() 1 本で閉じられる**ようにしてある。
 		 *
 		 * **アタッチメントを差し替えるときは予約クリアを先に確定させる**(設計書への追加)。
 		 * エンジンの Clear は D3D11 由来の即時実行の意味なので、描画が 1 本も無いまま
@@ -116,6 +153,27 @@ namespace aq
 			static constexpr uint32_t BIND_SRV_COUNT     = 12;  // t0..t11
 			static constexpr uint32_t BIND_SAMPLER_COUNT = 2;   // s0..s1
 
+			/**
+			 * Dispatch ごとに見る UAV のスロット数。
+			 *
+			 * **UAV にフォールバックは入れない**。SRV / サンプラと違い UAV は compute の
+			 * **書き込み先**なので、適当なテクスチャで埋めると「Validation は通るのに
+			 * 結果がどこにも残らない」形で静かに壊れる。未バインドのスロットは束ねず、
+			 * 1 本も束ならなければ Dispatch ごと捨ててログを出す。
+			 */
+			static constexpr uint32_t BIND_UAV_COUNT = PendingComputeState::MAX_UAV_COUNT;
+
+			/**
+			 * threadsPerThreadgroup が .spv から取れなかったときの暫定値。
+			 *
+			 * **決め打ちなので、使ったら必ずログへ出す**(シェーダ側の [numthreads(...)] と
+			 * 食い違うと結果が静かに壊れるため)。現行 10 本の CS のうち 9 本が 8x8x1 で、
+			 * 残りは ClusterCull(64,1,1)/ ClusterCullReset(1,1,1) の P5 分。
+			 */
+			static constexpr uint32_t FALLBACK_THREADGROUP_X = 8;
+			static constexpr uint32_t FALLBACK_THREADGROUP_Y = 8;
+			static constexpr uint32_t FALLBACK_THREADGROUP_Z = 1;
+
 
 		private:
 			/** 所属デバイス。エンコーダ / drawable / コマンドバッファはここから取る */
@@ -123,6 +181,9 @@ namespace aq
 
 			/** 保留ステート (設計書 §3.2) */
 			PendingGraphicsState pending_;
+
+			/** compute の保留ステート (設計書 §5.3)。Dispatch で確定させる */
+			PendingComputeState pendingCompute_;
 
 			/** 現在のアタッチメント構成。エンコーダを開くときの MTLRenderPassDescriptor の素 */
 			MetalRenderTarget* colorRTs_[MAX_MRT];
@@ -146,6 +207,15 @@ namespace aq
 			 * MRR だが commandBuffer から得るエンコーダは autorelease なので retain して保持する。
 			 */
 			id<MTLRenderCommandEncoder> encoder_;
+
+			/**
+			 * 開いている compute コマンドエンコーダ。無ければ nil。
+			 *
+			 * **encoder_ と同時に非 nil にならない**(設計書 §3.1。Metal が許さない)。
+			 * 連続 Dispatch の間は開いたままにし、描画やアタッチメント変更で閉じる。
+			 * MRR。commandBuffer から得るエンコーダは autorelease なので retain して保持する。
+			 */
+			id<MTLComputeCommandEncoder> computeEncoder_;
 
 			/**
 			 * クリアの予約 (設計書 §3.1)。
@@ -179,6 +249,26 @@ namespace aq
 			uint32_t fallbackTextureLoggedMask_;
 			uint32_t fallbackSamplerLoggedMask_;
 
+			/** 同上の compute 側。描画側とは別に数える(どちらの経路かログで分かるように) */
+			uint32_t csFallbackTextureLoggedMask_;
+			uint32_t csFallbackSamplerLoggedMask_;
+
+			/** UAV 未バインドで Dispatch を捨てたことを 1 回だけログしたか */
+			bool missingUavLogged_;
+
+			/**
+			 * CS の threadsPerThreadgroup(= HLSL の [numthreads(...)])。MetalShader* で索く。
+			 *
+			 * **Metal の dispatchThreadgroups:threadsPerThreadgroup: は
+			 * スレッドグループサイズを実行時に要求する**が、MSL にはその情報が入らない
+			 * (spirv-cross が落とす)。値は .metal の隣に残っている .spv の
+			 * OpExecutionMode LocalSize にあるので、初回 Dispatch のときだけ読んでここへ憶える。
+			 *
+			 * MTLComputePipelineState の threadExecutionWidth / maxTotalThreadsPerThreadgroup から
+			 * **推測してはいけない**(あれはハードウェアの都合の値で、シェーダの宣言とは無関係)。
+			 */
+			std::unordered_map<const void*, MTLSize> threadGroupSizes_;
+
 
 		public:
 			explicit MetalRenderContextImpl(MetalGraphicsDeviceImpl* device);
@@ -202,11 +292,23 @@ namespace aq
 			 */
 			void FlushPendingClears();
 
-			/** 開いているエンコーダがあれば閉じる。アタッチメントが変わる操作と Present の前に呼ぶ */
+			/**
+			 * 開いているエンコーダがあれば閉じる。アタッチメントが変わる操作と Present の前に呼ぶ。
+			 *
+			 * **描画用と compute 用の両方を閉じる**(P4)。Metal は種類の違うエンコーダを
+			 * 同時に開けず、閉じ忘れたまま次を開くとその場で落ちるので、
+			 * 「閉じる」経路は常にこの 1 本を通す(呼び出し側が種類を意識しなくてよい)。
+			 */
 			void EndEncodingIfActive();
 
 
 		private:
+			/** 描画エンコーダだけを閉じる。EndEncodingIfActive() と compute への切り替えから呼ぶ */
+			void EndRenderEncodingIfActive();
+
+			/** compute エンコーダだけを閉じる。EndEncodingIfActive() と描画への切り替えから呼ぶ */
+			void EndComputeEncodingIfActive();
+
 			/**
 			 * 現在のアタッチメント構成から MTLRenderPassDescriptor を組む。
 			 * **保留クリアの予約はここで消費する**(このパスが実際にクリアを行うため)。
@@ -238,6 +340,28 @@ namespace aq
 			 * @return 描画できる状態なら true。false なら Draw を捨てる
 			 */
 			bool FlushGraphicsState();
+
+			/**
+			 * compute エンコーダが開いていなければ開く(設計書 §3.1)。
+			 * **描画エンコーダは先に閉じる**。Metal は両方を同時に開けない。
+			 */
+			void OpenComputeEncoderIfNeeded();
+
+			/**
+			 * Dispatch 直前に compute の保留ステートを確定させる(設計書 §5.3)。
+			 * @param outThreadsPerThreadgroup CS の [numthreads(...)] に対応するスレッドグループサイズ
+			 * @return ディスパッチできる状態なら true。false なら Dispatch を捨てる
+			 */
+			bool FlushComputeState(MTLSize& outThreadsPerThreadgroup);
+
+			/**
+			 * CS の threadsPerThreadgroup を求める(初回だけ .spv を読み、以後はキャッシュ)。
+			 *
+			 * 取得できなければ FALLBACK_THREADGROUP_* を返し、**その旨をログへ出す**。
+			 * @param cs 対象の CS
+			 * @return スレッドグループサイズ
+			 */
+			MTLSize GetThreadGroupSize(MetalShader* cs);
 
 			/**
 			 * DrawIndexed 系の共通処理。
@@ -334,6 +458,17 @@ namespace aq
 			                          uint32_t startIndexLocation, int32_t baseVertexLocation,
 			                          uint32_t startInstanceLocation) override;
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
+
+			/**
+			 * compute の書き込みを後続の読み取りへ可視化する(設計書 §8)。
+			 *
+			 * **Metal では実質 no-op でよい**。エンコーダを跨ぐ依存は MTLCommandBuffer が
+			 * 順序を保証し、同一エンコーダ内も MTLDispatchTypeSerial で開いている限り
+			 * Dispatch 同士が順に実行されてメモリが同期される。
+			 * memoryBarrierWithScope: は MTLDispatchTypeConcurrent のエンコーダ専用なので、
+			 * serial のまま呼ぶと逆に Validation エラーになる(詳細は .mm 側のコメント)。
+			 */
+			void UavBarrier(IGpuBuffer& buffer) override;
 
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;
 

@@ -1,5 +1,5 @@
 #include "aq.h"
-// Metal のテクスチャ / サンプラ / UAV。他構成では本体をガードして空 TU にする。
+// Metal のテクスチャ / サンプラ / UAV / GPU 駆動用バッファ。他構成では本体をガードして空 TU にする。
 #if defined(ENGINE_GRAPHICS_METAL)
 #include "Graphics/Metal/MetalResources.h"
 #include <cstdio>
@@ -296,7 +296,6 @@ namespace aq
 
 		void MetalUAV::Release()
 		{
-			// TODO(P5): compute を入れる段で、RT / 構造化バッファからの生成経路を足す。
 			[texture_ release];
 			texture_ = nil;
 			[buffer_ release];
@@ -317,6 +316,91 @@ namespace aq
 			[buffer retain];
 			[buffer_ release];
 			buffer_ = buffer;
+		}
+
+
+		/************************************/
+
+
+
+
+		/**
+		 * GPU 駆動処理用の汎用バッファ
+		 */
+		MetalGpuBuffer::MetalGpuBuffer()
+			: buffer_(nil)
+			, byteSize_(0)
+			, stride_(0)
+			, srvValid_(false)
+			, uavValid_(false)
+		{
+			srv_.owner = this;
+			uav_.owner = this;
+		}
+
+
+		MetalGpuBuffer::~MetalGpuBuffer()
+		{
+			Release();
+		}
+
+
+		bool MetalGpuBuffer::Create(id<MTLDevice>  device,
+		                            const uint32_t byteSize,
+		                            const uint32_t stride,
+		                            const bool     srv,
+		                            const bool     uav,
+		                            const void*    initData,
+		                            const uint32_t initDataSize)
+		{
+			Release();
+			if (device == nil || byteSize == 0) {
+				return false;
+			}
+
+			@autoreleasepool
+			{
+				// ユニファイドメモリなので Shared 1 本で CPU 初期化も GPU 読み書きも賄える。
+				// D3D12 の UPLOAD / DEFAULT ヒープの使い分けに相当するものは要らない(設計書 §6)。
+				//
+				// 確保は常に newBufferWithLength: + ゼロ埋めで行う。
+				//  - 出力用(間接引数 / compact インデックス)は compute が書く前に読まれても
+				//    破滅しないようゼロにしておきたい(newBufferWithLength: の中身は未定義)。
+				//  - 入力用でも byteSize は 16 バイト境界へ切り上げられていることがあり、
+				//    newBufferWithBytes:length:byteSize では **initData の終端より先を読んでしまう**。
+				buffer_ = [device newBufferWithLength:byteSize
+				                              options:MTLResourceStorageModeShared];  // MRR: +1
+				if (buffer_ == nil) {
+					Release();
+					return false;
+				}
+
+				memset([buffer_ contents], 0, byteSize);
+				if (initData != nullptr && initDataSize > 0) {
+					memcpy([buffer_ contents], initData, (initDataSize < byteSize) ? initDataSize : byteSize);
+				}
+			}
+
+			byteSize_ = byteSize;
+			stride_   = stride;
+			srvValid_ = srv;
+			uavValid_ = uav;
+
+			srv_.owner = this;
+			uav_.owner = this;
+			return true;
+		}
+
+
+		void MetalGpuBuffer::Release()
+		{
+			[buffer_ release];
+			buffer_ = nil;
+
+			byteSize_ = 0;
+			stride_   = 0;
+			srvValid_ = false;
+			uavValid_ = false;
 		}
 	}
 }

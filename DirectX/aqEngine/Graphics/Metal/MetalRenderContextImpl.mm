@@ -10,7 +10,9 @@
 #include "Graphics/Metal/MetalShader.h"
 #include "Graphics/Metal/MetalPipelineCache.h"
 #include "Graphics/Metal/MetalDepthStencilCache.h"
+#include <spirv_reflect/spirv_reflect.h>
 #include <cstdio>
+#include <filesystem>
 
 // 本 TU は手動参照カウント(MRR)前提で書いている。CMake は -fobjc-arc を渡していない。
 #if __has_feature(objc_arc)
@@ -22,15 +24,161 @@ namespace aq
 {
 	namespace graphics
 	{
+		namespace
+		{
+			/** SPIR-V バイナリ先頭のマジックナンバー(MetalShader.mm と同じ) */
+			static constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
+
+			/**
+			 * dxc へ -fspv-entrypoint-name=main を渡しているので、SPIR-V 側のエントリ名は常にこれ。
+			 * (MSL 側は spirv-cross が main0 へ改名するが、.spv は main のまま)
+			 */
+			static constexpr char SPIRV_ENTRY_NAME[] = "main";
+
+
+			// ────────────────────────────────────────────────────────────
+			//  CS のスレッドグループサイズを .spv から読む
+			//
+			//  **本来の置き場所は MetalShader**(既に .spv を spirv_reflect で読んでいる)。
+			//  P4 の担当範囲が MetalShader を含まないため、いったんここへ置いている。
+			//  MetalShader に GetThreadGroupSize() 相当が生えたら、この無名名前空間の
+			//  4 関数と GetThreadGroupSize() / threadGroupSizes_ はまるごと消せる。
+			//
+			//  パス解決は MetalShader.mm の FindProjectRoot / ResolveShaderPath /
+			//  BuildSpirvPath の**写し**。片方だけ変えないこと。
+			// ────────────────────────────────────────────────────────────
+
+			std::string FindProjectRoot()
+			{
+				static std::string cached;
+				if (!cached.empty()) { return cached; }
+
+				std::error_code ec;
+				std::filesystem::path dir = std::filesystem::current_path(ec);
+				if (ec) { return std::string(); }
+
+				while (!dir.empty()) {
+					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
+						cached = dir.generic_string();
+						return cached;
+					}
+					if (dir == dir.root_path()) { break; }
+					dir = dir.parent_path();
+				}
+
+				cached = std::filesystem::current_path(ec).generic_string();
+				return cached;
+			}
+
+
+			std::string ResolveShaderPath(const char* filePath)
+			{
+				std::string path = filePath ? filePath : "";
+				std::replace(path.begin(), path.end(), '\\', '/');
+				if (std::filesystem::path(path).is_absolute()) { return path; }
+
+				const std::filesystem::path root(FindProjectRoot());
+				std::filesystem::path candidate;
+				if (path.rfind("Assets/", 0) == 0)           { candidate = root / "Game" / path; }
+				else if (path.rfind("Game/Assets/", 0) == 0) { candidate = root / path; }
+				else                                         { candidate = root / path; }
+
+				std::error_code ec;
+				if (std::filesystem::exists(candidate, ec)) { return candidate.generic_string(); }
+				return path;
+			}
+
+
+			/** CS の中間生成物 .spv の探索パス: <shaderDir>/msl/<stem>.<entry>.cs.spv */
+			std::string BuildComputeSpirvPath(const char* resolvedPath, const char* entry)
+			{
+				const std::filesystem::path src(resolvedPath ? resolvedPath : "");
+				if (src.empty()) { return std::string(); }
+
+				const std::string name = src.stem().string() + "."
+				                       + ((entry && entry[0]) ? entry : "main") + ".cs.spv";
+				return (src.parent_path() / "msl" / name).generic_string();
+			}
+
+
+			/** ファイル全体を 32bit ワード列として読む(SPIR-V 用。MetalShader.mm と同じ) */
+			bool ReadWholeFileWords(const char* path, std::vector<uint32_t>& out)
+			{
+				out.clear();
+
+				std::FILE* fp = std::fopen(path, "rb");
+				if (!fp) { return false; }
+
+				std::fseek(fp, 0, SEEK_END);
+				const long size = std::ftell(fp);
+				std::fseek(fp, 0, SEEK_SET);
+				if (size <= 0 || (size % static_cast<long>(sizeof(uint32_t))) != 0) {
+					std::fclose(fp);
+					return false;
+				}
+
+				out.resize(static_cast<size_t>(size) / sizeof(uint32_t));
+				const size_t read = std::fread(out.data(), 1, static_cast<size_t>(size), fp);
+				std::fclose(fp);
+				return read == static_cast<size_t>(size);
+			}
+
+
+			/**
+			 * .spv の OpExecutionMode LocalSize を読む。
+			 *
+			 * MSL には [numthreads(...)] 相当の情報が**入らない**(spirv-cross が落とす)ため、
+			 * dispatchThreadgroups:threadsPerThreadgroup: に渡す値はここからしか取れない。
+			 * MTLComputePipelineState の threadExecutionWidth 等はハードウェアの都合の値なので
+			 * 代わりにはならない。
+			 *
+			 * @param spirvPath 読む .spv のパス
+			 * @param outSize   成功時に [numthreads(x,y,z)] が入る
+			 * @return 読めたら true
+			 */
+			bool ReadLocalSizeFromSpirv(const std::string& spirvPath, MTLSize& outSize)
+			{
+				std::vector<uint32_t> spirv;
+				if (spirvPath.empty() || !ReadWholeFileWords(spirvPath.c_str(), spirv) || spirv[0] != SPIRV_MAGIC) {
+					return false;
+				}
+
+				SpvReflectShaderModule reflectModule{};
+				if (spvReflectCreateShaderModule(spirv.size() * sizeof(uint32_t), spirv.data(), &reflectModule)
+				    != SPV_REFLECT_RESULT_SUCCESS) {
+					return false;
+				}
+
+				// エントリ名で引けなければ先頭のエントリで代用する(SPIR-V のエントリは 1 本だけ)。
+				const SpvReflectEntryPoint* entryPoint = spvReflectGetEntryPoint(&reflectModule, SPIRV_ENTRY_NAME);
+				if (entryPoint == nullptr && reflectModule.entry_point_count > 0) {
+					entryPoint = &reflectModule.entry_points[0];
+				}
+
+				bool ok = false;
+				if (entryPoint != nullptr
+				    && entryPoint->local_size.x > 0 && entryPoint->local_size.y > 0 && entryPoint->local_size.z > 0) {
+					outSize = MTLSizeMake(entryPoint->local_size.x, entryPoint->local_size.y, entryPoint->local_size.z);
+					ok      = true;
+				}
+
+				spvReflectDestroyShaderModule(&reflectModule);
+				return ok;
+			}
+		}
+
+
 		MetalRenderContextImpl::MetalRenderContextImpl(MetalGraphicsDeviceImpl* device)
 			: device_(device)
 			, pending_()
+			, pendingCompute_()
 			, colorRTs_()
 			, colorRTCount_(0)
 			, depthRT_(nullptr)
 			, depthOnlyMap_(nullptr)
 			, depthOnlySlice_(0)
 			, encoder_(nil)
+			, computeEncoder_(nil)
 			, clearColorMask_(0)
 			, clearColors_()
 			, clearDepthPending_(false)
@@ -40,6 +188,10 @@ namespace aq
 			, fallbackSampler_(nil)
 			, fallbackTextureLoggedMask_(0)
 			, fallbackSamplerLoggedMask_(0)
+			, csFallbackTextureLoggedMask_(0)
+			, csFallbackSamplerLoggedMask_(0)
+			, missingUavLogged_(false)
+			, threadGroupSizes_()
 		{
 			// PSO / 深度ステートのキャッシュとフォールバックは MTLDevice が要る。
 			// SetupRenderContext は Initialize の後に呼ばれるので、ここで揃えられる。
@@ -117,6 +269,17 @@ namespace aq
 		 */
 		void MetalRenderContextImpl::EndEncodingIfActive()
 		{
+			// **描画用と compute 用の両方を閉じる**(設計書 §3.1)。Metal は種類の違う
+			// エンコーダを同時に開けず、閉じ忘れたまま次を開くとその場で落ちる。
+			// 「閉じる」経路を 1 本に集約しておくことで、Present / CopyToBackBuffer /
+			// OMSet* / Clear* といった既存の呼び出し側が種類を意識しなくて済む。
+			EndRenderEncodingIfActive();
+			EndComputeEncodingIfActive();
+		}
+
+
+		void MetalRenderContextImpl::EndRenderEncodingIfActive()
+		{
 			if (encoder_ == nil) {
 				return;
 			}
@@ -124,6 +287,18 @@ namespace aq
 			[encoder_ endEncoding];
 			[encoder_ release];
 			encoder_ = nil;
+		}
+
+
+		void MetalRenderContextImpl::EndComputeEncodingIfActive()
+		{
+			if (computeEncoder_ == nil) {
+				return;
+			}
+
+			[computeEncoder_ endEncoding];
+			[computeEncoder_ release];
+			computeEncoder_ = nil;
 		}
 
 
@@ -206,6 +381,11 @@ namespace aq
 			if (encoder_ != nil || device_ == nullptr) {
 				return;
 			}
+
+			// **compute エンコーダが開いていれば先に閉じる**(設計書 §3.1)。Metal は
+			// MTLRenderCommandEncoder と MTLComputeCommandEncoder を同時に開けない。
+			// ポストプロセスは Dispatch の直後に UI を描くので、ここは実際に通る経路。
+			EndComputeEncodingIfActive();
 
 			// 描画にもコマンドバッファが要る。まだフレームが始まっていなければここで始める(設計書 §2.3)。
 			device_->BeginFrameIfNeeded();
@@ -664,49 +844,71 @@ namespace aq
 		 */
 		void MetalRenderContextImpl::CSSetShader(IShader& shader)
 		{
-			// TODO(P5): compute PSO を保留する。
+			// compute PSO はここでは引かない。Dispatch までエンコーダが無いかもしれないうえ、
+			// 描画側と同じく「保留して Dispatch でまとめて流す」ほうが経路が 1 本になる(設計書 §3.3)。
+			pendingCompute_.cs = static_cast<MetalShader*>(&shader);
 		}
 
 
 		void MetalRenderContextImpl::CSUnsetShader()
 		{
-			// TODO(P5): compute の保留を落とす。
+			// CS が無い状態で Dispatch が来たら捨てる(FlushComputeState が弾く)。
+			pendingCompute_.cs = nullptr;
 		}
 
 
-		void MetalRenderContextImpl::CSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer)
+		void MetalRenderContextImpl::CSSetConstantBuffer(const uint32_t startSlot, IConstantBuffer& constantBuffer)
 		{
-			// TODO(P5): MTLComputeCommandEncoder の setBuffer:offset:atIndex: へ流す。
+			// b レジスタはシフト 0 なので、スロット番号がそのまま buffer index になる(設計書 §5.1)。
+			if (startSlot < PendingComputeState::MAX_CONSTANT_COUNT) {
+				pendingCompute_.cb[startSlot] = &constantBuffer;
+			}
 		}
 
 
-		void MetalRenderContextImpl::CSSetSampler(uint32_t startSlot, ISamplerState& samplerState)
+		void MetalRenderContextImpl::CSSetSampler(const uint32_t startSlot, ISamplerState& samplerState)
 		{
-			// TODO(P5): MTLComputeCommandEncoder の setSamplerState:atIndex: へ流す。
+			// s レジスタもシフト 0。スロット番号がそのまま sampler index になる。
+			if (startSlot < PendingComputeState::MAX_SAMPLER_COUNT) {
+				pendingCompute_.sampler[startSlot] = &samplerState;
+			}
 		}
 
 
-		void MetalRenderContextImpl::CSSetShaderResource(uint32_t startSlot, IShaderResourceView& shaderResourceView)
+		void MetalRenderContextImpl::CSSetShaderResource(const uint32_t startSlot, IShaderResourceView& shaderResourceView)
 		{
-			// TODO(P5): MTLComputeCommandEncoder の setTexture:atIndex: へ流す。
+			// **実体の解決は Dispatch 時**に GetNativeHandle() で行う(描画側の PSSetShaderResource と同じ理由。
+			// ロード完了で中身が差し替わるラッパがあるため、ここで id<MTLTexture> にすると nil が残る)。
+			if (startSlot < PendingComputeState::MAX_SRV_COUNT) {
+				pendingCompute_.srv[startSlot] = &shaderResourceView;
+			}
 		}
 
 
-		void MetalRenderContextImpl::CSUnsetShaderResource(uint32_t slot)
+		void MetalRenderContextImpl::CSUnsetShaderResource(const uint32_t slot)
 		{
-			// TODO(P5): 該当スロットの保留を落とす。
+			if (slot < PendingComputeState::MAX_SRV_COUNT) {
+				pendingCompute_.srv[slot] = nullptr;
+			}
 		}
 
 
-		void MetalRenderContextImpl::CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& unorderedAccessView)
+		void MetalRenderContextImpl::CSSetUnorderedAccessView(const uint32_t startSlot, IUnorderedAccessView& unorderedAccessView)
 		{
-			// TODO(P5): テクスチャ UAV は setTexture、バッファ UAV は setBuffer(index は metal::UAV_INDEX_SHIFT + slot)。
+			// テクスチャ UAV か バッファ UAV かの振り分けは Dispatch 時に MetalUAVBase 経由で行う
+			// (RT の ColorUAV はプロキシだと実体が毎フレーム変わるので、ここで確定させられない)。
+			if (startSlot < PendingComputeState::MAX_UAV_COUNT) {
+				pendingCompute_.uav[startSlot] = &unorderedAccessView;
+			}
 		}
 
 
-		void MetalRenderContextImpl::CSUnsetUnorderedAccessView(uint32_t slot)
+		void MetalRenderContextImpl::CSUnsetUnorderedAccessView(const uint32_t slot)
 		{
-			// TODO(P5): 該当スロットの保留を落とす。
+			// **UAV にフォールバックは無い**。外したスロットは次の Dispatch で束ねられない。
+			if (slot < PendingComputeState::MAX_UAV_COUNT) {
+				pendingCompute_.uav[slot] = nullptr;
+			}
 		}
 
 
@@ -954,9 +1156,269 @@ namespace aq
 		}
 
 
-		void MetalRenderContextImpl::Dispatch(uint32_t x, uint32_t y, uint32_t z)
+		void MetalRenderContextImpl::OpenComputeEncoderIfNeeded()
 		{
-			// TODO(P5): エンコーダを compute へ切り替えて dispatchThreadgroups:threadsPerThreadgroup:。
+			// 連続 Dispatch では開いたままにする(開き直すと束ね直しが要るうえ、
+			// エンコーダ境界ごとに GPU の同期点が入る)。
+			if (computeEncoder_ != nil || device_ == nullptr) {
+				return;
+			}
+
+			// **描画エンコーダを先に閉じる**(設計書 §3.1)。Metal は両方を同時に開けない。
+			EndRenderEncodingIfActive();
+
+			// compute にもコマンドバッファが要る。まだフレームが始まっていなければここで始める(設計書 §2.3)。
+			device_->BeginFrameIfNeeded();
+			id<MTLCommandBuffer> commandBuffer =
+				static_cast<id<MTLCommandBuffer>>(device_->GetCurrentCommandBufferHandle());
+			if (commandBuffer == nil) {
+				// drawable が取れずフレームを捨てた。このフレームの compute も丸ごと捨てる。
+				return;
+			}
+
+			// **MTLDispatchTypeSerial を明示する**(引数無しの computeCommandEncoder と同じ既定)。
+			// serial なら同一エンコーダ内の Dispatch 同士が順に実行され、前の書き込みが
+			// 次の読み取りから見える。UavBarrier() を no-op にできるのはこのため(設計書 §8)。
+			@autoreleasepool
+			{
+				computeEncoder_ = [[commandBuffer computeCommandEncoderWithDispatchType:MTLDispatchTypeSerial] retain];
+			}
+		}
+
+
+		MTLSize MetalRenderContextImpl::GetThreadGroupSize(MetalShader* cs)
+		{
+			const void* key = static_cast<const void*>(cs);
+
+			std::unordered_map<const void*, MTLSize>::const_iterator it = threadGroupSizes_.find(key);
+			if (it != threadGroupSizes_.end()) {
+				return it->second;
+			}
+
+			// **MSL には [numthreads(...)] 相当の情報が入らない**ので、隣の .spv の
+			// OpExecutionMode LocalSize から拾う(設計書 §9.3 と同じ「.metal の隣の .spv」規約)。
+			MTLSize size = MTLSizeMake(FALLBACK_THREADGROUP_X, FALLBACK_THREADGROUP_Y, FALLBACK_THREADGROUP_Z);
+
+			const std::string resolved = ResolveShaderPath(cs->GetFilePath());
+			const std::string spvPath  = BuildComputeSpirvPath(resolved.c_str(), cs->GetEntryFuncName());
+
+			char msg[512];
+			if (ReadLocalSizeFromSpirv(spvPath, size)) {
+				// 1 シェーダにつき 1 行。10 本しか無いので、実際の値が追えるほうが得。
+				std::snprintf(msg, sizeof(msg),
+				              "[MetalRenderContext] CS threadsPerThreadgroup = %ux%ux%u  %s (%s)",
+				              static_cast<uint32_t>(size.width), static_cast<uint32_t>(size.height),
+				              static_cast<uint32_t>(size.depth), cs->GetFilePath(), cs->GetEntryFuncName());
+				aq::StartupLog(msg);
+			} else {
+				// **決め打ちに落ちたことを必ず残す**。シェーダ側の [numthreads(...)] と食い違うと、
+				// エラーも Validation も出ないまま結果だけが静かに壊れる(いちばん追いにくい形)。
+				std::snprintf(msg, sizeof(msg),
+				              "[MetalRenderContext] CS の .spv から [numthreads] を読めません。"
+				              "**暫定で %ux%ux%u を使います**(シェーダ側と食い違うと結果が壊れます): %s",
+				              FALLBACK_THREADGROUP_X, FALLBACK_THREADGROUP_Y, FALLBACK_THREADGROUP_Z,
+				              spvPath.empty() ? cs->GetFilePath() : spvPath.c_str());
+				aq::StartupLog(msg);
+			}
+
+			threadGroupSizes_[key] = size;
+			return size;
+		}
+
+
+		bool MetalRenderContextImpl::FlushComputeState(MTLSize& outThreadsPerThreadgroup)
+		{
+			if (device_ == nullptr || pipelineCache_ == nullptr) {
+				return false;
+			}
+
+			MetalShader* cs = pendingCompute_.cs;
+			if (cs == nullptr || cs->GetFunction() == nil) {
+				return false;
+			}
+
+			// ── UAV の有無を先に見る ──
+			// **UAV にフォールバックを入れてはいけない**。UAV は compute の書き込み先なので、
+			// 適当なテクスチャで埋めると「Validation は通るのに結果がどこにも残らない」形で
+			// 静かに壊れる。1 本も束ねられないなら Dispatch ごと捨てるほうが安全。
+			bool hasUav = false;
+			for (uint32_t i = 0; i < BIND_UAV_COUNT && !hasUav; ++i) {
+				hasUav = (pendingCompute_.uav[i] != nullptr);
+			}
+			if (!hasUav)
+			{
+				if (!missingUavLogged_)
+				{
+					missingUavLogged_ = true;
+					char msg[512];
+					std::snprintf(msg, sizeof(msg),
+					              "[MetalRenderContext] UAV が 1 本も束ねられていないため Dispatch を捨てました: %s (%s)",
+					              cs->GetFilePath(), cs->GetEntryFuncName());
+					aq::StartupLog(msg);
+				}
+				return false;
+			}
+
+			id<MTLComputePipelineState> pipelineState = pipelineCache_->GetOrCreateCompute(cs->GetFunction());
+			if (pipelineState == nil) {
+				return false;
+			}
+
+			OpenComputeEncoderIfNeeded();
+			if (computeEncoder_ == nil) {
+				return false;
+			}
+
+			[computeEncoder_ setComputePipelineState:pipelineState];
+
+			// ── 定数バッファ(b はシフト 0。スロット番号がそのまま index)──
+			// offset は **GetCurrentOffset()**。CB は Update ごとに別スライスへ確保されるので、
+			// ここを 0 にすると最後に Update した内容で全 Dispatch が走る(設計書 §13-7)。
+			for (uint32_t i = 0; i < PendingComputeState::MAX_CONSTANT_COUNT; ++i)
+			{
+				MetalConstantBuffer* constantBuffer = static_cast<MetalConstantBuffer*>(pendingCompute_.cb[i]);
+				if (constantBuffer == nullptr || constantBuffer->GetBuffer() == nil) {
+					continue;
+				}
+				[computeEncoder_ setBuffer:constantBuffer->GetBuffer()
+				                    offset:constantBuffer->GetCurrentOffset()
+				                   atIndex:i];
+			}
+
+			// ── テクスチャ / サンプラ(t はシフト 8、s はシフト 0)──
+			// 描画側と同じく**未バインドのスロットもフォールバックで埋める**。
+			// Metal API Validation は「シェーダが宣言している引数が nil」をエラーにするため。
+			for (uint32_t i = 0; i < BIND_SRV_COUNT; ++i)
+			{
+				IShaderResourceView* srv = pendingCompute_.srv[i];
+
+				// テクスチャ SRV。GetNativeHandle() が id<MTLTexture> を返す規約(設計書 §5.1)。
+				id<MTLTexture> texture = (srv != nullptr)
+					? static_cast<id<MTLTexture>>(srv->GetNativeHandle())
+					: nil;
+				if (texture != nil) {
+					[computeEncoder_ setTexture:texture atIndex:(metal::SRV_INDEX_SHIFT + i)];
+					continue;
+				}
+
+				// バッファ SRV(StructuredBuffer / ByteAddressBuffer)は texture ではなく
+				// **buffer 空間の同じ index** へ落ちる(設計書 §5.3)。GetNativeHandle() は
+				// テクスチャ用の口なので nullptr しか返せず、MetalSRVBase 経由で取り直す。
+				// 現在は Metal の SRV 実装すべて(MetalTexture / ColorSRV / BufferSRV / DepthSRV)が
+				// MetalSRVBase を継承しているので static_cast でも通るが、基底を持たない実装が
+				// 足されたときに静かに壊れるより nullptr が返るほうがよいので dynamic_cast のままにする
+				// (ここはディスパッチごとに数回なのでコストは問題にならない)。
+				MetalSRVBase* srvBase = (srv != nullptr) ? dynamic_cast<MetalSRVBase*>(srv) : nullptr;
+				id<MTLBuffer> buffer  = (srvBase != nullptr) ? srvBase->GetBuffer() : nil;
+				if (buffer != nil) {
+					[computeEncoder_ setBuffer:buffer offset:0 atIndex:(metal::SRV_INDEX_SHIFT + i)];
+					continue;
+				}
+
+				// 未バインド。シェーダが宣言している引数が nil だと Validation がエラーにするので、
+				// 描画側と同じく白テクスチャで埋める(**UAV と違い読み取り専用なので無害**)。
+				if ((csFallbackTextureLoggedMask_ & (1u << i)) == 0)
+				{
+					csFallbackTextureLoggedMask_ |= (1u << i);
+					char msg[128];
+					std::snprintf(msg, sizeof(msg),
+					              "[MetalRenderContext] CS の t%u が未バインドのため白テクスチャで埋めました", i);
+					aq::StartupLog(msg);
+				}
+				[computeEncoder_ setTexture:fallbackTexture_ atIndex:(metal::SRV_INDEX_SHIFT + i)];
+			}
+			for (uint32_t i = 0; i < BIND_SAMPLER_COUNT; ++i)
+			{
+				MetalSampler*       sampler      = static_cast<MetalSampler*>(pendingCompute_.sampler[i]);
+				id<MTLSamplerState> samplerState = (sampler != nullptr) ? sampler->GetSampler() : nil;
+
+				if (samplerState == nil)
+				{
+					samplerState = fallbackSampler_;
+					if ((csFallbackSamplerLoggedMask_ & (1u << i)) == 0)
+					{
+						csFallbackSamplerLoggedMask_ |= (1u << i);
+						char msg[128];
+						std::snprintf(msg, sizeof(msg),
+						              "[MetalRenderContext] CS の s%u が未バインドのため既定サンプラで埋めました", i);
+						aq::StartupLog(msg);
+					}
+				}
+				[computeEncoder_ setSamplerState:samplerState atIndex:i];
+			}
+
+			// ── UAV(u はシフト 24)──
+			// HLSL の型次第でテクスチャにもバッファにもなるので、MetalUAVBase 経由で振り分ける
+			// (テクスチャとバッファは Metal では別の番号空間。設計書 §5.3)。
+			for (uint32_t i = 0; i < BIND_UAV_COUNT; ++i)
+			{
+				MetalUAVBase* uav = static_cast<MetalUAVBase*>(pendingCompute_.uav[i]);
+				if (uav == nullptr) {
+					continue;
+				}
+
+				id<MTLTexture> texture = uav->GetTexture();
+				if (texture != nil) {
+					[computeEncoder_ setTexture:texture atIndex:(metal::UAV_INDEX_SHIFT + i)];
+					continue;
+				}
+
+				// バッファ UAV(RWByteAddressBuffer / RWStructuredBuffer)。
+				// offset はビュー側が持たないので 0 固定でよい。
+				id<MTLBuffer> buffer = uav->GetBuffer();
+				if (buffer != nil) {
+					[computeEncoder_ setBuffer:buffer offset:0 atIndex:(metal::UAV_INDEX_SHIFT + i)];
+				}
+			}
+
+			outThreadsPerThreadgroup = GetThreadGroupSize(cs);
+			return true;
+		}
+
+
+		void MetalRenderContextImpl::Dispatch(const uint32_t x, const uint32_t y, const uint32_t z)
+		{
+			if (x == 0 || y == 0 || z == 0) {
+				return;
+			}
+
+			// 毎フレーム通る経路なので autorelease を溜めない(MRR。設計書 §10)。
+			@autoreleasepool
+			{
+				// **予約中のクリアは「今のアタッチメント構成」宛て**なので、compute へ移る前に確定させる。
+				// 予約を持ち越したまま compute が RT へ書くと、後続の描画が開くパスの
+				// loadAction = Clear で compute の結果ごと消える。
+				// 予約が無ければ即 return するので、通常は何も起きない(設計書 §3.1 への追加)。
+				FlushPendingClears();
+
+				MTLSize threadsPerThreadgroup = MTLSizeMake(1, 1, 1);
+				if (!FlushComputeState(threadsPerThreadgroup)) {
+					return;
+				}
+
+				// 抽象の Dispatch(x,y,z) は D3D の Dispatch と同じく**スレッドグループ数**。
+				// Metal の dispatchThreadgroups: も同じ意味なので、そのまま渡してよい
+				// (threadsPerThreadgroup のほうが HLSL の [numthreads(...)] に対応する)。
+				[computeEncoder_ dispatchThreadgroups:MTLSizeMake(x, y, z)
+				                threadsPerThreadgroup:threadsPerThreadgroup];
+			}
+		}
+
+
+		void MetalRenderContextImpl::UavBarrier(IGpuBuffer& /*buffer*/)
+		{
+			// **Metal では no-op で足りる**(設計書 §8)。
+			//
+			// - エンコーダを跨ぐ依存(compute → graphics など)は MTLCommandBuffer の
+			//   レベルで順序が保証される。追跡対象のリソース(MTLHeap を使っていない
+			//   通常の MTLTexture / MTLBuffer)は Metal が自動で同期する。
+			// - 同一エンコーダ内も、本バックエンドは MTLDispatchTypeSerial で開いているので
+			//   Dispatch 同士が順に実行され、前の書き込みが次の読み取りから見える。
+			//
+			// 設計書は「同一エンコーダ内は memoryBarrierWithScope:」としているが、
+			// **あれは MTLDispatchTypeConcurrent のエンコーダ専用の API** で、
+			// serial のまま呼ぶと Metal API Validation がエラーにする。serial を選んでいる限り
+			// バリアは不要なので、ここは意図的に何もしない(設計との差分。報告済み)。
 		}
 
 

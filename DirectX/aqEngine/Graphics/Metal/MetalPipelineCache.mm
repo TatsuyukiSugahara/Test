@@ -231,21 +231,35 @@ namespace aq
 
 		id<MTLComputePipelineState> MetalPipelineCache::GetOrCreateCompute(id<MTLFunction> cs)
 		{
-			if (cs == nil) { return nil; }
+			if (cs == nil) {
+				aq::StartupLog("[MetalPipelineCache] CS が nil のため compute PSO を生成できません");
+				return nil;
+			}
 
 			const void* functionKey = static_cast<const void*>(cs);
 
 			ComputeMap::const_iterator it = computeMap_.find(functionKey);
 			if (it != computeMap_.end()) { return it->second; }
 
+			if (device_ == nil) {
+				aq::StartupLog("[MetalPipelineCache] MTLDevice が無いため compute PSO を生成できません");
+				return nil;
+			}
+
 			id<MTLComputePipelineState> pipeline = nil;
 
 			@autoreleasepool {
+				// 描画側と違い compute は記述子を組む必要がない(Metal の PSO は関数 1 本で決まる)。
 				NSError* error = nil;
 				pipeline = [device_ newComputePipelineStateWithFunction:cs error:&error];
 
 				if (pipeline == nil) {
-					aq::StartupLog("[MetalPipelineCache] compute PSO の生成に失敗");
+					// **ここを出さないと原因が分からない**。どの関数で落ちたかが要るのでシェーダ名も添える
+					// (MetalShader のコンパイル失敗時 / 描画 PSO 失敗時と同じ親切さ)。
+					char msg[512];
+					std::snprintf(msg, sizeof(msg), "[MetalPipelineCache] compute PSO の生成に失敗: %s",
+						([cs name] != nil) ? [[cs name] UTF8String] : "(名前不明)");
+					aq::StartupLog(msg);
 					if (error != nil) {
 						LogMultiLine("[MetalPipelineCache]   ", [[error localizedDescription] UTF8String]);
 					}
@@ -253,6 +267,7 @@ namespace aq
 				}
 			}
 
+			// 失敗も記憶する。毎 Dispatch で作り直してログが溢れるのを防ぐため(nil が返り続ける)。
 			computeMap_[functionKey] = pipeline;
 			return pipeline;
 		}

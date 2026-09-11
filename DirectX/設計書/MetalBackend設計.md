@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: 52dbca0 / 最終更新: 2026-09-11
+> 対象コミット: 0241d90 / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -531,6 +531,63 @@ namespace aq { namespace graphics {
 
 ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
 当初見込んだ pimpl の定型は 1 クラス分に収まった。
+
+### P4 の結果(2026-09-11)
+
+- [x] **ステージが Vulkan 構成と同じ見た目・同じ明るさになった**。
+      地面の画素比較は P3 の 36.3/255 から **1.8/255** へ。サンプル点は**完全一致**:
+
+      | 位置 | Vulkan | Metal |
+      |---|---|---|
+      | 空 | (205,205,205) | **(205,205,205)** |
+      | 道路 | (110,119,136) | **(110,119,136)** |
+      | 草 | (57,83,32) | **(57,83,32)** |
+
+      残る 1.8 は草とキャラクターの位置が別フレームである分。
+- [x] **Metal API Validation エラー 0 / 終了コード 0 / Metal 由来の警告 0** / Vulkan 構成 0 エラー
+- [x] compute の `threadsPerThreadgroup` は**全 7 本が `.spv` から実測**で解決
+      (暫定値フォールバックの発火 0 件)
+- [x] UAV 未バインドで捨てた Dispatch 0 件
+- [ ] Windows の回帰確認 — **この Mac では不可**
+
+**`CopyToBackBuffer` が P4 の核心だった。** 実装前に実機で 2 つ確かめてある:
+
+- compute を有効にすると画面へ出るのは**トーンマップ最終 RT(`R8G8B8A8_Unorm`)**、
+  drawable は `BGRA8Unorm`。
+- Metal の `copyFromTexture:` は **RGBA8 → BGRA8 を「通してしまう」が生バイトコピー**で、
+  **R と B が入れ替わる**(4x4 の赤テクスチャで実測。赤が青になる)。
+  `RGBA16Float → BGRA8` のほうは Validation がアサートで止める。
+  **前者は黙って壊れる種類の罠。**
+
+D3D12 はスワップチェーンが `R8G8B8A8_UNORM` でトーンマップ RT と一致するため
+`CopyResource` で済んでいる。Metal は `CAMetalLayer` の都合で同じ手が使えないので、
+**フォーマットか寸法が一致しないときはフルスクリーン描画で変換する**ことにした。
+compute 有効時は不一致が常態なので、**実質いつも描画経路**になる(§7 の記述は主従が逆だった)。
+
+変換用のシェーダは **`.mm` に MSL を文字列で埋め込み、`newLibraryWithSource:` で
+起動時に 1 度だけコンパイル**する。`.fx` を増やさずに済み、`shader_entries.txt`
+(Vulkan と共用)に載せて他構成のビルドへ波及させることもない。
+Y 反転は頂点側の UV 生成 1 か所(`v = (1 - y) * 0.5`)で吸収した。
+
+その他:
+
+- **メイン RT を `R16G16B16A16_Float` + 深度付き**へ(Vulkan / D3D12 と同構成)。§13-9 解消。
+- **`SetComputeSupported(true)`**。P1 で入れた回避を撤去した。
+- **`CreateStructuredBuffer` / `CreateRawBuffer` を実装**した。Metal では単なる `MTLBuffer`。
+  `newBufferWithBytes:` ではなく確保 + ゼロ埋め + `memcpy` にしてある。`CreateRawBuffer` は
+  D3D12 版と同様 16 バイト境界へ切り上げるので、`newBufferWithBytes:` だと
+  **`initData` の終端より先を読む**ため。
+- **UAV / SRV に共通基底**(`MetalUAVBase` / `MetalSRVBase`)を入れ、Metal の全ビュー実装を
+  その派生に揃えた。バッファ SRV(StructuredBuffer / ByteAddressBuffer)は
+  テクスチャではなく `buffer(8+n)` へ落ちるため、`GetNativeHandle()` だけでは足りない。
+- **`UavBarrier` は no-op**。`memoryBarrierWithScope:` は `MTLDispatchTypeConcurrent` 専用で、
+  serial のまま呼ぶと Validation がエラーにする。compute エンコーダは serial で開いており、
+  同一エンコーダ内の Dispatch は順に実行される。エンコーダを跨ぐ依存は
+  `MTLCommandBuffer` が順序を保証する。**つまり両方とも no-op で正しい**
+  (concurrent へ変えるなら同時にバリアを入れること)。
+- **`FlushPendingClears()` の呼び出し元が 4 か所目(`Dispatch` の先頭)**に増えた。
+  予約クリアを持ち越したまま compute が RT へ書くと、後続の描画が開くパスの
+  `loadAction = Clear` で**compute の結果ごと消える**。
 
 ### P3 の結果(2026-09-11)
 

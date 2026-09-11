@@ -26,10 +26,10 @@ namespace aq
 
 
 		/**
-		 * Metal Concrete Implementor (Bridge Pattern) — P1(drawable 取得・クリア・Present)
+		 * Metal Concrete Implementor (Bridge Pattern) — P4(HDR メイン RT・compute 有効化)
 		 *
-		 * P1 の到達目標は「エンジンが指定したクリア色で画面が塗られる」こと
-		 * (設計書/MetalBackend設計.md §12)。描画コマンド(Draw / Dispatch)はまだ no-op。
+		 * メイン RT は Vulkan / D3D12 と同じ HDR(R16G16B16A16_Float)+ 深度付きで、
+		 * トーンマップ後の LDR を CopyToBackBuffer でバックバッファへ出す(設計書 §13-9)。
 		 *
 		 * 設計: 設計書/MetalBackend設計.md §1(全体像) / §2(フレーム) / §7(RT・深度) / §10(ヘッダ規約)
 		 * - スワップチェーンは CAMetalLayer。PlatformMac が生成済みのレイヤを受け取って設定するだけ。
@@ -150,6 +150,18 @@ namespace aq
 			std::unique_ptr<ISamplerState>       CreateSamplerState(const SamplerDesc& desc) override;
 			std::unique_ptr<IShaderResourceView> CreateTexture2D(const Texture2DDesc& desc, const ImageData& data) override;
 			std::unique_ptr<IDepthMap>           CreateDepthMap(uint32_t width, uint32_t height) override;
+
+			/**
+			 * GPU 駆動クラスタカリング用のバッファ(設計書 §6)。
+			 *
+			 * compute を有効にすると GpuClusterBuffers::Create() がこれらを要求する。
+			 * Metal では単なる MTLBuffer(MTLStorageModeShared)で、D3D12 のような
+			 * ディスクリプタヒープの確保は要らない。**生成に失敗したら nullptr を返す**
+			 * (呼び出し元の Meshlet.cpp が 4 本すべて揃ったかを見て clusterCount を立てるため、
+			 * 他のファクトリーのように空オブジェクトを返してはいけない)。
+			 */
+			std::unique_ptr<IGpuBuffer>          CreateStructuredBuffer(uint32_t stride, uint32_t count, const void* data) override;
+			std::unique_ptr<IGpuBuffer>          CreateRawBuffer(uint32_t byteSize, bool srv, bool uav, const void* initData) override;
 
 
 			/**

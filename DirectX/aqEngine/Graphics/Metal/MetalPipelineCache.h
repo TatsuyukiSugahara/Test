@@ -108,7 +108,20 @@ namespace aq
 			 */
 			id<MTLRenderPipelineState> GetOrCreate(const MetalPipelineKey& key, MTLVertexDescriptor* vertexDesc);
 
-			/** compute 用。P5 で使うが器だけ先に作ってある */
+			/**
+			 * compute 用(P4)。無ければ作ってキャッシュする。
+			 *
+			 * 描画側と違い**キーは MTLFunction のポインタだけ**。Metal の compute PSO は
+			 * 関数 1 本で決まり、アタッチメントもブレンドも頂点レイアウトも関与しないため。
+			 *
+			 * なお **threadsPerThreadgroup はここから取れない**。
+			 * MTLComputePipelineState の threadExecutionWidth / maxTotalThreadsPerThreadgroup は
+			 * ハードウェアの都合の値で、HLSL の [numthreads(...)] とは無関係
+			 * (MetalRenderContextImpl が .spv のリフレクションで別途求める)。
+			 *
+			 * @param cs 対象の MTLFunction
+			 * @return 生成済みの compute PSO。失敗したら nil(エラーの本文はログへ出す)
+			 */
 			id<MTLComputePipelineState> GetOrCreateCompute(id<MTLFunction> cs);
 
 			/** 保持している PSO をすべて捨てる(シェーダを作り直す前に呼ぶこと) */

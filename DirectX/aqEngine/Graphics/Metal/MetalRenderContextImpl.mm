@@ -2,6 +2,8 @@
 // Metal の RenderContext Implementor。他構成では本体をガードして空 TU にする。
 #if defined(ENGINE_GRAPHICS_METAL)
 #include "Graphics/Metal/MetalRenderContextImpl.h"
+#include "Graphics/Metal/MetalGraphicsDeviceImpl.h"
+#include "Graphics/Metal/MetalRenderTarget.h"
 #include "Graphics/Metal/MetalBuffers.h"
 #include "Graphics/Metal/MetalShader.h"
 
@@ -18,30 +20,206 @@ namespace aq
 		MetalRenderContextImpl::MetalRenderContextImpl(MetalGraphicsDeviceImpl* device)
 			: device_(device)
 			, pending_()
+			, colorRTs_()
+			, colorRTCount_(0)
+			, depthRT_(nullptr)
+			, encoder_(nil)
+			, clearColorMask_(0)
+			, clearColors_()
+			, clearDepthPending_(false)
 		{
-			// P0 では device_ を保持するだけで、メソッドは呼ばない
-			// (MetalGraphicsDeviceImpl は別担当で API が未確定のため)。
+		}
+
+
+		MetalRenderContextImpl::~MetalRenderContextImpl()
+		{
+			// エンコーダを開いたまま壊れるとコマンドバッファが不正になる。必ず閉じてから解放する。
+			EndEncodingIfActive();
+		}
+
+
+		/**
+		 * エンコーダ / 保留クリア
+		 */
+		void MetalRenderContextImpl::EndEncodingIfActive()
+		{
+			if (encoder_ == nil) {
+				return;
+			}
+
+			[encoder_ endEncoding];
+			[encoder_ release];
+			encoder_ = nil;
+		}
+
+
+		MTLRenderPassDescriptor* MetalRenderContextImpl::BuildRenderPassDescriptor()
+		{
+			if (colorRTCount_ == 0) {
+				// TODO(P4): OMSetDepthOnlyTarget のシャドウパスは color 0 本 + depth だけになる。
+				return nil;
+			}
+
+			MTLRenderPassDescriptor* descriptor = [MTLRenderPassDescriptor renderPassDescriptor];  // autorelease
+			for (uint32_t i = 0; i < colorRTCount_; ++i)
+			{
+				// プロキシ RT は drawable を取れていないと実体が nil になる。
+				// 中途半端なパスを開くと Metal が検証エラーを出すので、まるごと諦める。
+				id<MTLTexture> texture = (colorRTs_[i] != nullptr) ? colorRTs_[i]->GetTexture() : nil;
+				if (texture == nil) {
+					return nil;
+				}
+
+				MTLRenderPassColorAttachmentDescriptor* attachment = descriptor.colorAttachments[i];
+				attachment.texture     = texture;
+				attachment.storeAction = MTLStoreActionStore;
+				if ((clearColorMask_ & (1u << i)) != 0) {
+					attachment.loadAction = MTLLoadActionClear;
+					attachment.clearColor = MTLClearColorMake(clearColors_[i][0], clearColors_[i][1],
+					                                          clearColors_[i][2], clearColors_[i][3]);
+				} else {
+					// 予約が無ければ既存内容を残す。DontCare にすると前のパスの結果が消える。
+					attachment.loadAction = MTLLoadActionLoad;
+				}
+			}
+
+			// 深度は自前深度を持つ RT か、OMSetRenderTargetWithDepth で渡された相手から取る。
+			// ポストプロセスの RT のように深度を持たない構成もある。
+			if (depthRT_ != nullptr && depthRT_->HasDepth())
+			{
+				MTLRenderPassDepthAttachmentDescriptor* attachment = descriptor.depthAttachment;
+				attachment.texture     = depthRT_->GetDepthTexture();
+				attachment.storeAction = MTLStoreActionStore;
+				attachment.loadAction  = clearDepthPending_ ? MTLLoadActionClear : MTLLoadActionLoad;
+				attachment.clearDepth  = DEPTH_CLEAR_VALUE;
+			}
+
+			// このパスが実際にクリアを行うので、予約はここで消費する。
+			clearColorMask_    = 0;
+			clearDepthPending_ = false;
+			return descriptor;
+		}
+
+
+		void MetalRenderContextImpl::FlushPendingClears()
+		{
+			// 描画があるときは Draw がエンコーダを開くついでに loadAction = Clear へ畳むので、
+			// ここへ来た時点で予約は空になっている(= この空エンコーダは出ない)。
+			// P1 は描画が 1 本も無く、予約が残ったままフレームが終わるため、ここで実際に塗る。
+			if (clearColorMask_ == 0 && !clearDepthPending_) {
+				return;
+			}
+
+			// 予約が残るのはエンコーダが開かれなかったときだけだが(Clear* は必ず閉じる)、念のため。
+			EndEncodingIfActive();
+
+			if (device_ == nullptr) {
+				return;
+			}
+
+			// クリアもコマンドバッファが要る。まだフレームが始まっていなければここで始める(設計書 §2.3)。
+			device_->BeginFrameIfNeeded();
+			id<MTLCommandBuffer> commandBuffer =
+				static_cast<id<MTLCommandBuffer>>(device_->GetCurrentCommandBufferHandle());
+			if (commandBuffer == nil) {
+				// drawable が取れずフレームを捨てた。予約は次のフレームへ持ち越す。
+				return;
+			}
+
+			@autoreleasepool
+			{
+				MTLRenderPassDescriptor* descriptor = BuildRenderPassDescriptor();
+				if (descriptor == nil) {
+					return;
+				}
+
+				// 空のエンコーダ。実際に塗るのは loadAction = Clear なので描画コマンドは要らない。
+				id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:descriptor];
+				[encoder endEncoding];
+			}
+		}
+
+
+		void MetalRenderContextImpl::SetAttachments(MetalRenderTarget* const* colorTargets,
+		                                            const uint32_t            count,
+		                                            MetalRenderTarget*        depthTarget)
+		{
+			const uint32_t colorCount = (count < MAX_MRT) ? count : MAX_MRT;
+
+			// 構成が同一ならエンコーダを開いたまま維持する(設計書 §3.1)。
+			bool sameConfig = (colorCount == colorRTCount_) && (depthTarget == depthRT_);
+			for (uint32_t i = 0; sameConfig && i < colorCount; ++i) {
+				sameConfig = (colorTargets[i] == colorRTs_[i]);
+			}
+			if (sameConfig) {
+				return;
+			}
+
+			// 予約中のクリアは「今の構成」宛て。差し替える前にここで確定させる。
+			// エンジンの Clear は D3D11 由来で即時実行の意味なので、描画が 1 本も無いまま
+			// RT を切り替えても、クリアだけは効いていなければならない。
+			// 描画があるときは Draw がエンコーダを開くついでに畳むので、ここで空パスは出ない。
+			FlushPendingClears();
+			EndEncodingIfActive();
+
+			for (uint32_t i = 0; i < MAX_MRT; ++i) {
+				colorRTs_[i] = (i < colorCount) ? colorTargets[i] : nullptr;
+			}
+			colorRTCount_ = colorCount;
+			depthRT_      = depthTarget;
+
+			// PSO キーにも反映する(設計書 §4.1)。P2 の Draw 時 flush がここを見る。
+			for (uint32_t i = 0; i < MAX_MRT; ++i) {
+				pending_.colorFormat[i] = (colorRTs_[i] != nullptr) ? colorRTs_[i]->GetPixelFormat()
+				                                                   : MTLPixelFormatInvalid;
+			}
+			pending_.colorCount    = colorCount;
+			pending_.depthFormat   = (depthRT_ != nullptr) ? depthRT_->GetDepthPixelFormat() : MTLPixelFormatInvalid;
+			pending_.pipelineDirty = true;
 		}
 
 
 		/**
 		 * レンダーターゲット / クリア
 		 */
-		void MetalRenderContextImpl::OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget)
+		void MetalRenderContextImpl::OMSetRenderTargets(const uint32_t numViews, IRenderTarget* renderTarget)
 		{
-			// TODO(P1): エンコーダを閉じ、MTLRenderPassDescriptor の colorAttachments[0] を組み直す(設計書 §3.1)。
+			MetalRenderTarget* target = (numViews > 0) ? static_cast<MetalRenderTarget*>(renderTarget) : nullptr;
+
+			// 自前深度を持つ RT ならそれを深度ソースにする(ポストプロセスの RT は深度なし)。
+			MetalRenderTarget* depthTarget = (target != nullptr && target->HasDepth()) ? target : nullptr;
+			SetAttachments(&target, (target != nullptr) ? 1u : 0u, depthTarget);
 		}
 
 
-		void MetalRenderContextImpl::OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets)
+		void MetalRenderContextImpl::OMSetMRTRenderTargets(const uint32_t numViews, IRenderTarget* const* renderTargets)
 		{
-			// TODO(P4): 同上を MRT (SV_Target0..7) へ広げる。
+			// TODO(P4): MRT 描画そのもの (SV_Target0..7) は P4。ここで構成だけ憶えておかないと、
+			//           GBuffer 宛てのクリア予約が直前の RT へ紛れ込む。
+			if (renderTargets == nullptr) {
+				SetAttachments(nullptr, 0u, nullptr);
+				return;
+			}
+
+			MetalRenderTarget* targets[MAX_MRT] = {};
+			MetalRenderTarget* depthTarget      = nullptr;
+			const uint32_t     count            = (numViews < MAX_MRT) ? numViews : MAX_MRT;
+			for (uint32_t i = 0; i < count; ++i)
+			{
+				targets[i] = static_cast<MetalRenderTarget*>(renderTargets[i]);
+				if (depthTarget == nullptr && targets[i] != nullptr && targets[i]->HasDepth()) {
+					depthTarget = targets[i];
+				}
+			}
+			SetAttachments(targets, count, depthTarget);
 		}
 
 
 		void MetalRenderContextImpl::OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT)
 		{
-			// TODO(P4): color 1 本 + depthAttachment に相手 RT の深度テクスチャを差す。
+			// TODO(P4): フォワードパスの本実装は P4。P1 は構成の記録だけ。
+			MetalRenderTarget* target = static_cast<MetalRenderTarget*>(&colorRT);
+			SetAttachments(&target, 1u, static_cast<MetalRenderTarget*>(&depthSourceRT));
 		}
 
 
@@ -95,15 +273,37 @@ namespace aq
 		}
 
 
-		void MetalRenderContextImpl::ClearRenderTargetView(uint32_t index, float* clearColor)
+		void MetalRenderContextImpl::ClearRenderTargetView(const uint32_t index, float* clearColor)
 		{
-			// TODO(P1): エンコーダを閉じ、次に開くパスの loadAction = Clear + clearColor として予約する(設計書 §3.1)。
+			// Metal には「エンコーダ内で RT をクリアする」コマンドが無い。即実行はせず、
+			// 次にこのアタッチメントでエンコーダを開くときの loadAction = Clear へ予約する(設計書 §3.1)。
+			if (index >= colorRTCount_ || index >= MAX_MRT) {
+				return;
+			}
+
+			// 開いているパスの loadAction はもう変えられないので、いったん閉じて開き直させる。
+			EndEncodingIfActive();
+
+			if (clearColor != nullptr) {
+				for (uint32_t i = 0; i < 4; ++i) {
+					clearColors_[index][i] = clearColor[i];
+				}
+			}
+			clearColorMask_ |= (1u << index);
 		}
 
 
 		void MetalRenderContextImpl::ClearDepthBuffer()
 		{
-			// TODO(P3): 次に開くパスの depthAttachment.loadAction = Clear として予約する。
+			// 深度を持たない構成(ポストプロセスの RT 等)では予約しない。
+			// 予約したまま誰にも消費されないと、後続の別パスが巻き添えでクリアされる。
+			if (depthRT_ == nullptr || !depthRT_->HasDepth()) {
+				return;
+			}
+
+			// カラーと同じく、次に開くパスの depthAttachment.loadAction = Clear として予約する。
+			EndEncodingIfActive();
+			clearDepthPending_ = true;
 		}
 
 
@@ -294,7 +494,10 @@ namespace aq
 		 */
 		void MetalRenderContextImpl::OMSetDepthOnlyTarget(IDepthMap& depthMap)
 		{
-			// TODO(P4): color 0 本 + depthAttachment のみのパスを組む(設計書 §3.3)。
+			// TODO(P4): color 0 本 + depthAttachment に MetalDepthMap のスライスを差す(設計書 §3.3)。
+			//           P1 は構成を空にするだけ。こうしないと、シャドウパスに入る直前の RT 宛ての
+			//           クリア予約がパスを跨いで生き残る。
+			SetAttachments(nullptr, 0u, nullptr);
 		}
 
 

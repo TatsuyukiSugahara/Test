@@ -26,15 +26,17 @@ namespace aq
 
 
 		/**
-		 * Metal Concrete Implementor (Bridge Pattern) — P0(足場)
+		 * Metal Concrete Implementor (Bridge Pattern) — P1(drawable 取得・クリア・Present)
 		 *
-		 * P0 の到達目標は「ビルドが通り、黒いウィンドウで起動して終了コード 0 で終わる」こと
-		 * (設計書/MetalBackend設計.md §12)。drawable 取得・クリア・Present は P1 で入れる。
+		 * P1 の到達目標は「エンジンが指定したクリア色で画面が塗られる」こと
+		 * (設計書/MetalBackend設計.md §12)。描画コマンド(Draw / Dispatch)はまだ no-op。
 		 *
 		 * 設計: 設計書/MetalBackend設計.md §1(全体像) / §2(フレーム) / §7(RT・深度) / §10(ヘッダ規約)
 		 * - スワップチェーンは CAMetalLayer。PlatformMac が生成済みのレイヤを受け取って設定するだけ。
 		 * - MTLRenderPass / Framebuffer 相当のオブジェクトは無く、描画毎に
 		 *   MTLRenderPassDescriptor を組み立てる(MetalRenderContextImpl の担当)。
+		 * - 抽象 IF に BeginFrame/EndFrame が無いため、フレームの開始は Vulkan 版と同じく
+		 *   BeginFrameIfNeeded() の**遅延発火**で吸収する(設計書 §2.3)。
 		 */
 		class MetalGraphicsDeviceImpl : public IGraphicsDeviceImpl
 		{
@@ -57,8 +59,20 @@ namespace aq
 			std::unique_ptr<MetalRenderTarget>              mainRTs_[MAIN_RT_COUNT];
 			std::vector<std::unique_ptr<MetalRenderTarget>> offscreenRTs_;
 
+			/**
+			 * スワップチェーンプロキシ。実体は毎フレームの nextDrawable のテクスチャ(設計書 §7)。
+			 * GetRenderTarget() の並びには入れない(エンジンからは見えず、CopyToBackBuffer の宛先専用)。
+			 */
+			std::unique_ptr<MetalRenderTarget> swapchainRT_;
+
 			/** 現在の描画コンテキスト(所有は RenderContext 側。Present でエンコーダを閉じるため保持) */
 			MetalRenderContextImpl* activeContext_;
+
+			/** フレーム状態。BeginFrameIfNeeded で立て、Present で倒す(設計書 §2.2) */
+			bool frameOpen_;
+
+			/** このフレームは nextDrawable が nil で捨てた。Present までの再取得を 1 回に抑える */
+			bool frameAcquireFailed_;
 
 
 		public:
@@ -87,6 +101,25 @@ namespace aq
 
 			void Present() override;
 			void CopyToBackBuffer(IRenderTarget& src) override;
+
+
+			/**
+			 * フレーム
+			 */
+		public:
+			/**
+			 * このフレームがまだ始まっていなければ開始する(設計書 §2.2 / §2.3)。
+			 *
+			 * セマフォで frames-in-flight を待ってから nextDrawable とコマンドバッファを取る。
+			 * 抽象 IF に BeginFrame が無いため、最初に必要になった時点
+			 * (クリアの flush / 描画 / CopyToBackBuffer / Present)で呼ぶ。
+			 * nextDrawable は nil を返しうる(ウィンドウが隠れている等)。その場合は
+			 * セマフォを戻してフレームを捨て、フレーム未開始のまま戻る。
+			 */
+			void BeginFrameIfNeeded();
+
+			/** フレームが開始済みか(捨てたフレームでは false のまま) */
+			inline bool IsFrameOpen() const { return frameOpen_; }
 
 
 			/**
@@ -120,6 +153,12 @@ namespace aq
 
 			/** CAMetalLayer* */
 			void* GetCAMetalLayerHandle() const;
+
+			/**
+			 * このフレームの id<MTLCommandBuffer>。フレーム未開始なら nullptr。
+			 * MetalRenderContextImpl がエンコーダを開くのに使う。
+			 */
+			void* GetCurrentCommandBufferHandle() const;
 
 			/**
 			 * 直近にコミットした MTLCommandBuffer を記録する(retain する)。

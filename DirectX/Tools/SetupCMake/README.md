@@ -158,6 +158,35 @@ cmake --build --preset macos-ninja-debug
 cd Game && ../build/macos-ninja/bin/Debug/Game.app/Contents/MacOS/Game
 ```
 
+### 5.2.0 ネイティブ Metal 構成でビルド・実行する
+
+道B(ネイティブ Metal。設計書 `MetalBackend設計.md`)は**別プリセット**で、
+Vulkan 構成と併存する。Vulkan 側の手順は何も変わらない。
+
+```bash
+source ~/.local/aq-mac-env.sh
+cd <repo>/DirectX
+cmake --preset macos-ninja-metal
+cmake --build --preset macos-ninja-metal-debug
+
+cd Game && ../build/macos-ninja-metal/bin/Debug/Game.app/Contents/MacOS/Game
+```
+
+**Metal 構成でも `VULKAN_SDK` が要る。** 描画には使わないが、シェーダのビルド経路
+(`.fx` → `dxc` → `.spv` → `spirv-cross` → `.metal`)の 2 つのツールがどちらも
+Vulkan SDK 同梱のため。未設定だと configure が `FATAL_ERROR` で止まる。
+
+**Metal API Validation(Vulkan の validation layer に相当)の有効化:**
+
+```bash
+METAL_DEVICE_WRAPPER_TYPE=1 ../build/macos-ninja-metal/bin/Debug/Game.app/Contents/MacOS/Game
+```
+
+起動直後に `Metal API Validation Enabled` が出れば有効。Xcode で実行する場合は
+スキームの Diagnostics で GUI から切り替えられるが、**Ninja ビルドの実行では
+この環境変数が唯一の手段**。Metal の検証は既定で無効なので、**付け忘れると
+「エラーが出ていない」のか「検証していない」のか区別がつかない**点に注意。
+
 ### 5.2.1 Xcode でビルド・実行する
 
 **Xcode プロジェクトは CMake が生成する**。`.xcodeproj` はリポジトリに入っていないので、

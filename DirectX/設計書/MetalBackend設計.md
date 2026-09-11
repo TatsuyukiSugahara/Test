@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: 21cb46d / 最終更新: 2026-09-11
+> 対象コミット: da050fb / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -145,6 +145,24 @@ Metal は **1 レンダーパス = 1 `MTLRenderCommandEncoder`** で、エンコ
 **クリアはエンコーダの `loadAction` に畳む**のが要点。Metal には「エンコーダ内で RT をクリアする」
 コマンドが無いため、`ClearRenderTargetView` を独立コマンドとして実行しようとすると
 空のエンコーダを 1 本開く羽目になる。予約して次のパスの `loadAction` にするのが素直で速い。
+
+**ただし予約を RT 跨ぎで持ち越してはいけない**(P1 で判明)。`ClearRenderTargetView(index, ...)` の
+`index` は「いまバインドされている構成の何番目のアタッチメントか」なので、予約したまま
+`OMSet*` で構成が変わると**前の RT 宛てのクリア色が次の RT に紛れ込む**。
+実際、`Application.cpp` のクリア色予約が DeferredRenderer の GBuffer 黒クリアに
+上書きされて画面が黒くなる経路があった。
+
+したがって **`FlushPendingClears()` の呼び出し元は 3 か所**にする:
+
+1. `CopyToBackBuffer()` の blit 前
+2. `Present()` のコミット前
+3. **`OMSet*` 系でアタッチメント構成が変わる直前**
+
+エンジンの Clear は D3D11 由来の**即時実行セマンティクス**なので、
+「描画が無いまま RT を切り替えてもクリアだけは効く」が正しい挙動になる。
+`FlushPendingClears()` は予約が無ければ即 return するので、
+**描画があるパスでは Draw が開くエンコーダに畳まれ、この 3 か所はすべて no-op** になる
+(二重にエンコーダは開かない)。
 
 ### 3.2 保留ステートと Draw 時 flush
 
@@ -496,6 +514,30 @@ namespace aq { namespace graphics {
 ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
 当初見込んだ pimpl の定型は 1 クラス分に収まった。
 
+### P1 の結果(2026-09-11)
+
+- [x] **指定色で塗られる**。`Application.cpp` のクリア色 `{1,1,1,1}` で白くなる。
+      一時的に `{0.15, 0.45, 0.85}` へ変えると**そのとおり青くなる**ことを確認した
+      (白が「偶然の初期値」でないことの確認。確認後に元へ戻してある)
+- [x] **Metal API Validation エラー 0**。`METAL_DEVICE_WRAPPER_TYPE=1` で
+      `Metal API Validation Enabled` が出た状態での実行
+- [x] **終了コード 0**
+- [x] Metal 構成の警告 0(既存の `OceanDebugPanel.h` 1 件のみ)/ Vulkan 構成 0 エラー
+- [ ] Windows の回帰確認 — **この Mac では不可**
+
+実装した範囲: `dispatch_semaphore_t` による frames-in-flight、`nextDrawable`(**nil を返しうるので
+セマフォを戻してそのフレームを捨てる**)、クリアの予約と flush、`MTLBlitCommandEncoder` による
+`CopyToBackBuffer`、`presentDrawable` + `addCompletedHandler` でのセマフォ signal。
+コミットした `MTLCommandBuffer` は `WaitIdle()` 用に必ず記録している。
+
+**`SetComputeSupported(false)` を Metal の `Initialize()` で呼んでいる**(P5 まで)。
+これが無いと P1 の到達目標に届かない: `Renderer::GetDisplayRTHandle()` は compute 対応時に
+displayRT を**ポストプロセスチェーンの最終 RT**(Tonemap の compute 出力)にするため、
+`CopyToBackBuffer` が「まだ誰も書いていない RT」を画面に出してしまう。
+false にすると Renderer はシーン RT を直接表示する経路に落ちる。
+D3D11 も同じ場所で FL10 判定として呼んでおり作法は一致している。
+**P5 で compute を入れたら true に戻し、同時に §13-9 の HDR 化を行うこと。**
+
 ### P0.5 の結果(2026-09-11)
 
 - [x] **59/59 生成**。`aqCompileMsl` が `.fx` → dxc → `.spv` → spirv-cross → `.metal` を通す
@@ -562,9 +604,13 @@ Vulkan の統一名前空間であることを見落としていた。シフト�
    `R16G16B16A16_SFLOAT`** で、最後に `CopyToBackBuffer` で LDR へ落としている。
    トーンマップと Bloom が絡むので、**P3〜P4 で Vulkan と同じ見た目を出す段階で HDR へ変える**こと。
    変え忘れると「白飛びしない代わりに暗部が潰れる」形でズレる。
-10. **Metal API Validation の有効化方法**: Xcode スキームなら GUI で設定できるが、
-   Ninja ビルドの実行では `METAL_DEVICE_WRAPPER_TYPE=1` 等の環境変数が要る。
-   P1 までに確定し、`Tools/SetupCMake/README.md` へ書く。
+10. ~~**Metal API Validation の有効化方法**~~ → **解決**。実行時に
+   **`METAL_DEVICE_WRAPPER_TYPE=1`** を付けると、起動直後に
+   `Metal API Validation Enabled` が出て有効になる(実機で確認)。
+   Xcode はスキームの Diagnostics から GUI で切り替えられる。
+   手順は `Tools/SetupCMake/README.md` §5.2.0 に記載した。
+   **既定では無効**なので、付け忘れると「エラーが出ていない」のか
+   「検証していない」のか区別がつかない。各フェーズの評価では必ず付けて起動すること。
 
 ---
 

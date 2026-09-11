@@ -12,6 +12,7 @@ namespace aq
 	namespace graphics
 	{
 		class MetalGraphicsDeviceImpl;
+		class MetalRenderTarget;
 		class MetalShader;
 
 
@@ -68,28 +69,106 @@ namespace aq
 
 
 		/**
-		 * Metal RenderContext Implementor — P0(足場)
+		 * Metal RenderContext Implementor — P1(クリアの予約と flush)
 		 *
-		 * P0 は **描画を一切しない**。IRenderContextImpl の純粋仮想 37 本をすべて
-		 * override して空実装で埋め、AquaDash が起動して終了コード 0 で閉じられる
-		 * ことだけを担保する(設計書 §12 の P0)。
-		 * 実装は各メソッドの TODO に書いたフェーズで順に入れていく。
+		 * P1 は **描画コマンドをまだ出さない**。アタッチメント構成の保持と、
+		 * クリアの「予約 → loadAction への畳み込み」だけを実装する(設計書 §3.1)。
+		 * Draw / Dispatch は no-op のままで、実装は各メソッドの TODO のフェーズで順に入れる。
+		 *
+		 * **エンコーダの寿命** (設計書 §3.1): Metal は 1 レンダーパス = 1 エンコーダで、
+		 * 開いた後にレンダーターゲットを差し替えられない。アタッチメントが変わる操作
+		 * (OMSet* / Clear* / Dispatch)が来たらエンコーダを閉じ、次の描画で開き直す。
+		 *
+		 * **アタッチメントを差し替えるときは予約クリアを先に確定させる**(設計書への追加)。
+		 * エンジンの Clear は D3D11 由来の即時実行の意味なので、描画が 1 本も無いまま
+		 * RT を切り替えても「クリアだけは効いた」状態でなければならない。予約を持ち越すと
+		 * 直前の RT 向けのクリア色が次の RT へ紛れ込む。
 		 */
 		class MetalRenderContextImpl : public IRenderContextImpl
 		{
 		private:
-			/** 所属デバイス。P0 では保持するだけで呼び出さない */
+			/** 保留クリアのビットマスク幅。colorAttachments の本数と同じ */
+			static constexpr uint32_t MAX_MRT = PendingGraphicsState::MAX_MRT;
+
+			/** 深度のクリア値。D3D11 / Vulkan 側と揃える(遠クリップ = 1.0) */
+			static constexpr float DEPTH_CLEAR_VALUE = 1.0f;
+
+
+		private:
+			/** 所属デバイス。エンコーダ / drawable / コマンドバッファはここから取る */
 			MetalGraphicsDeviceImpl* device_;
 
 			/** 保留ステート (設計書 §3.2) */
 			PendingGraphicsState pending_;
 
+			/** 現在のアタッチメント構成。エンコーダを開くときの MTLRenderPassDescriptor の素 */
+			MetalRenderTarget* colorRTs_[MAX_MRT];
+			uint32_t           colorRTCount_;
+
+			/** 深度の供給元。自前深度を持つ RT か、OMSetRenderTargetWithDepth で指定された相手 */
+			MetalRenderTarget* depthRT_;
+
+			/**
+			 * 開いているレンダーコマンドエンコーダ。無ければ nil。
+			 * MRR だが commandBuffer から得るエンコーダは autorelease なので retain して保持する。
+			 */
+			id<MTLRenderCommandEncoder> encoder_;
+
+			/**
+			 * クリアの予約 (設計書 §3.1)。
+			 *
+			 * Metal には「エンコーダ内で RT をクリアする」コマンドが無いため、Clear* は即実行せず、
+			 * 次にそのアタッチメントでエンコーダを開くときの loadAction = Clear + clearColor として
+			 * ここへ憶える。実際に消費するのは BuildRenderPassDescriptor()。
+			 */
+			uint32_t clearColorMask_;
+			float    clearColors_[MAX_MRT][4];
+			bool     clearDepthPending_;
+
 
 		public:
 			explicit MetalRenderContextImpl(MetalGraphicsDeviceImpl* device);
+			~MetalRenderContextImpl() override;
 
-			/** 所属デバイス (P1 以降でエンコーダ / drawable を取りに行くのに使う) */
+			/** 所属デバイス */
 			inline MetalGraphicsDeviceImpl* GetDevice() const { return device_; }
+
+
+			/**
+			 * エンコーダ / 保留クリア(MetalGraphicsDeviceImpl から呼ぶ)
+			 */
+		public:
+			/**
+			 * 予約されたままのクリアを実際に画面へ反映する。
+			 *
+			 * 描画があるときは、Draw がエンコーダを開くついでに loadAction = Clear へ畳まれるので
+			 * **この空エンコーダは出ない**(予約が既に消費済みで、ここは即 return する)。
+			 * 描画が 1 本も無いまま CopyToBackBuffer / Present に来たときだけ、
+			 * 空のエンコーダ(loadAction = Clear → すぐ endEncoding)を 1 本だけ発行する。
+			 */
+			void FlushPendingClears();
+
+			/** 開いているエンコーダがあれば閉じる。アタッチメントが変わる操作と Present の前に呼ぶ */
+			void EndEncodingIfActive();
+
+
+		private:
+			/**
+			 * 現在のアタッチメント構成から MTLRenderPassDescriptor を組む。
+			 * **保留クリアの予約はここで消費する**(このパスが実際にクリアを行うため)。
+			 * P2 以降の Draw 時 flush も同じものを使う。
+			 * @return 組めなければ nil(アタッチメントが 1 枚も無い等)
+			 */
+			MTLRenderPassDescriptor* BuildRenderPassDescriptor();
+
+			/**
+			 * アタッチメント構成を差し替える。OMSet* 系の共通処理。
+			 * 構成が同一なら何もしない(エンコーダを開いたまま維持する。設計書 §3.1)。
+			 * @param colorTargets カラーの配列 (count が 0 なら参照しない)
+			 * @param count        カラーの本数
+			 * @param depthTarget  深度の供給元。無ければ nullptr
+			 */
+			void SetAttachments(MetalRenderTarget* const* colorTargets, const uint32_t count, MetalRenderTarget* depthTarget);
 
 
 			/**

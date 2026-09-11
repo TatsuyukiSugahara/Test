@@ -37,6 +37,16 @@ namespace aq
 
 			/** 直近にコミットしたコマンドバッファ。WaitIdle() の待機対象(設計書 §2.2) */
 			id<MTLCommandBuffer> lastCommandBuffer = nil;
+
+			/**
+			 * frames-in-flight を制御するセマフォ(初期値 FRAME_COUNT。設計書 §2.2)。
+			 * BeginFrameIfNeeded で wait し、コマンドバッファの完了ハンドラで signal する。
+			 */
+			dispatch_semaphore_t frameSemaphore    = nullptr;
+
+			/** このフレームの drawable とコマンドバッファ。どちらも autorelease なので retain して持つ */
+			id<CAMetalDrawable>  currentDrawable      = nil;
+			id<MTLCommandBuffer> currentCommandBuffer = nil;
 		};
 
 
@@ -47,6 +57,9 @@ namespace aq
 
 			/** CreateOffscreenRenderTarget の失敗値(IGraphicsDeviceImpl の契約) */
 			static constexpr uint32_t INVALID_RT_INDEX = ~0u;
+
+			/** CopyToBackBuffer の不一致ログ。毎フレーム出ると使い物にならないので 1 度だけ出す */
+			bool g_copyMismatchLogged = false;
 
 			/** 素の C++ ヘッダ越しに持っている MTLDevice を取り出す */
 			inline id<MTLDevice> ToMTLDevice(const MetalGraphicsDeviceImpl* impl)
@@ -61,7 +74,10 @@ namespace aq
 			, width_(0)
 			, height_(0)
 			, offscreenRTs_()
+			, swapchainRT_()
 			, activeContext_(nullptr)
+			, frameOpen_(false)
+			, frameAcquireFailed_(false)
 		{
 			g_staticDevice = this;
 		}
@@ -113,6 +129,18 @@ namespace aq
 				aq::StartupMark("  [metal] command queue ok");
 			}
 
+			// compute の対応表明。
+			//
+			// TODO(P5): compute を実装したら true にする(Dispatch / CS* は P5 まで no-op)。
+			//
+			// Metal のハードウェアは当然 compute に対応しているが、**バックエンドの実装がまだ無い**。
+			// ここで true を返すと Renderer が displayRT をポストプロセスチェーンの最終 RT
+			// (Tonemap の compute 出力) にしてしまい、誰も書かない RT が CopyToBackBuffer で
+			// 画面へ出る。false にすると Renderer はシーン RT を直接表示する経路に落ちるので、
+			// P1〜P4 の「描いたものがそのまま見える」状態を保てる(Renderer::GetDisplayRTHandle)。
+			// メイン RT を LDR の BGRA8Unorm で作っている現状とも整合する(設計書 §13-9)。
+			aq::graphics::SetComputeSupported(false);
+
 			// スワップチェーン(CAMetalLayer)。PlatformMac が生成済みのものを設定するだけ(設計書 §7)。
 			@autoreleasepool
 			{
@@ -131,6 +159,20 @@ namespace aq
 				[layer setOpaque:YES];
 				// contentsScale は触らない。PlatformMac が 1 に固定済み(設計書/Mac移植設計.md §8-13)。
 				aq::StartupMark("  [metal] CAMetalLayer configured");
+			}
+
+			// フレーム同期とスワップチェーンプロキシ(設計書 §2.2 / §7)。
+			{
+				objects_->frameSemaphore = dispatch_semaphore_create(metal::FRAME_COUNT);
+				if (objects_->frameSemaphore == nullptr) {
+					aq::StartupMark("  [metal] dispatch_semaphore_create failed");
+					return false;
+				}
+
+				// 実体は毎フレーム nextDrawable のテクスチャを差し込む。ここでは器だけ用意する。
+				swapchainRT_ = std::make_unique<MetalRenderTarget>();
+				swapchainRT_->InitAsSwapchainProxy(width_, height_, metal::SWAPCHAIN_PIXEL_FORMAT);
+				aq::StartupMarkf("  [metal] frame sync ok (frames in flight %u)", metal::FRAME_COUNT);
 			}
 
 			// メイン RT。RenderTargetHandle と ToggleMainRenderTarget が 2 枚前提(設計書 §7)。
@@ -156,7 +198,12 @@ namespace aq
 				return;
 			}
 
+			// エンコーダは毎フレーム Present が閉じているので、ここでは触らない
+			// (RenderContext の方が先に壊れている可能性があり、activeContext_ を触ると危ない)。
+
 			// GPU が参照中かもしれないリソースを壊さないよう、先にアイドル化する(設計書 §2.2)。
+			// waitUntilCompleted は完了ハンドラを呼び終えてから戻るので、
+			// この後にセマフォを壊しても signal が空振りすることはない。
 			WaitIdle();
 
 			// 生成と逆順に解放する。
@@ -164,10 +211,28 @@ namespace aq
 			for (auto& renderTarget : mainRTs_) {
 				renderTarget.reset();
 			}
+			swapchainRT_.reset();
 			activeContext_ = nullptr;
 
 			@autoreleasepool
 			{
+				// コミットせずに残ったフレーム(drawable を取った直後に落ちた等)の後始末。
+				if (frameOpen_)
+				{
+					[objects_->currentCommandBuffer release];
+					[objects_->currentDrawable release];
+					dispatch_semaphore_signal(objects_->frameSemaphore);
+				}
+				objects_->currentCommandBuffer = nil;
+				objects_->currentDrawable      = nil;
+				frameOpen_          = false;
+				frameAcquireFailed_ = false;
+
+				if (objects_->frameSemaphore != nullptr) {
+					dispatch_release(objects_->frameSemaphore);
+					objects_->frameSemaphore = nullptr;
+				}
+
 				[objects_->lastCommandBuffer release];
 				objects_->lastCommandBuffer = nil;
 
@@ -240,6 +305,12 @@ namespace aq
 		void* MetalGraphicsDeviceImpl::GetCAMetalLayerHandle() const
 		{
 			return (objects_ != nullptr) ? objects_->layer : nil;
+		}
+
+
+		void* MetalGraphicsDeviceImpl::GetCurrentCommandBufferHandle() const
+		{
+			return (objects_ != nullptr) ? objects_->currentCommandBuffer : nil;
 		}
 
 
@@ -326,20 +397,170 @@ namespace aq
 
 
 		/**
+		 * フレーム
+		 */
+		void MetalGraphicsDeviceImpl::BeginFrameIfNeeded()
+		{
+			// frameAcquireFailed_ は「このフレームは drawable が取れなかった」印。
+			// CopyToBackBuffer と Present の両方から呼ばれるので、1 フレームに何度も
+			// nextDrawable (nil 時は内部で待つ) を叩かないようここで止める。
+			if (objects_ == nullptr || frameOpen_ || frameAcquireFailed_) {
+				return;
+			}
+
+			// Initialize が途中で失敗した構成では何も始めない(セマフォへの wait で落ちるため)。
+			if (objects_->frameSemaphore == nullptr || objects_->layer == nil || swapchainRT_ == nullptr) {
+				return;
+			}
+
+			@autoreleasepool
+			{
+				// frames-in-flight 分だけ先行を許す。完了ハンドラが signal するまでここで待つ(設計書 §2.2)。
+				dispatch_semaphore_wait(objects_->frameSemaphore, DISPATCH_TIME_FOREVER);
+
+				// nextDrawable はウィンドウが隠れている等で **nil を返しうる**。
+				// その場合はセマフォを戻してこのフレームを捨てる(落とさないこと)。
+				id<CAMetalDrawable> drawable = [[objects_->layer nextDrawable] retain];
+				if (drawable == nil) {
+					dispatch_semaphore_signal(objects_->frameSemaphore);
+					frameAcquireFailed_ = true;
+					return;
+				}
+
+				id<MTLCommandBuffer> commandBuffer = [[objects_->commandQueue commandBuffer] retain];
+				if (commandBuffer == nil) {
+					[drawable release];
+					dispatch_semaphore_signal(objects_->frameSemaphore);
+					frameAcquireFailed_ = true;
+					return;
+				}
+
+				objects_->currentDrawable      = drawable;
+				objects_->currentCommandBuffer = commandBuffer;
+
+				// drawable のテクスチャをスワップチェーンプロキシへ差し込む(設計書 §7)。
+				swapchainRT_->SetDrawableTexture([drawable texture]);
+				frameOpen_ = true;
+			}
+		}
+
+
+		/**
 		 * 提示
 		 */
 		void MetalGraphicsDeviceImpl::Present()
 		{
-			// TODO(P1): nextDrawable を取り、MTLRenderPassDescriptor でクリアしてから
-			//           presentDrawable: / commit する(設計書 §2.2)。コミットしたコマンド
-			//           バッファは SetLastCommittedCommandBuffer() へ記録すること。
+			if (objects_ == nullptr) {
+				return;
+			}
+
+			BeginFrameIfNeeded();
+			if (!frameOpen_) {
+				// drawable が取れなかったフレーム。次のフレームでは取り直す。
+				frameAcquireFailed_ = false;
+				return;
+			}
+
+			@autoreleasepool
+			{
+				// 予約されたままのクリアを畳み、開いているエンコーダを閉じてからコミットする。
+				if (activeContext_ != nullptr) {
+					activeContext_->FlushPendingClears();
+					activeContext_->EndEncodingIfActive();
+				}
+
+				id<MTLCommandBuffer> commandBuffer = objects_->currentCommandBuffer;
+				[commandBuffer presentDrawable:objects_->currentDrawable];
+
+				// 完了ハンドラは **別スレッド** で呼ばれる。self を掴むと寿命が絡むので、
+				// セマフォだけをローカルへ取り出してキャプチャし、中では signal しかしない。
+				dispatch_semaphore_t frameSemaphore = objects_->frameSemaphore;
+				[commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> /*completed*/)
+					{
+						dispatch_semaphore_signal(frameSemaphore);
+					}];
+				[commandBuffer commit];
+
+				// WaitIdle() の待機対象。記録し忘れると終了時と実行時リソース破棄で落ちる(設計書 §2.2)。
+				SetLastCommittedCommandBuffer(commandBuffer);
+
+				// フレーム状態のリセット。次の BeginFrameIfNeeded が効くようにする。
+				swapchainRT_->SetDrawableTexture(nil);
+				[objects_->currentDrawable release];
+				objects_->currentDrawable = nil;
+				[commandBuffer release];                 // BeginFrameIfNeeded の retain 分
+				objects_->currentCommandBuffer = nil;
+
+				frameOpen_          = false;
+				frameAcquireFailed_ = false;
+			}
 		}
 
 
-		void MetalGraphicsDeviceImpl::CopyToBackBuffer(IRenderTarget& /*src*/)
+		void MetalGraphicsDeviceImpl::CopyToBackBuffer(IRenderTarget& src)
 		{
-			// TODO(P1): MTLBlitCommandEncoder の copyFromTexture:toTexture: で drawable へ写す。
-			//           フォーマットが違う場合はフルスクリーン描画へフォールバックする(設計書 §7)。
+			if (objects_ == nullptr) {
+				return;
+			}
+
+			BeginFrameIfNeeded();
+			if (!frameOpen_) {
+				return;
+			}
+
+			auto& renderTarget = static_cast<MetalRenderTarget&>(src);
+			if (renderTarget.IsProxy()) {
+				return;  // drawable 自身が渡された。写す必要が無い
+			}
+
+			// ブリットはエンコーダの外でしか積めない。保留クリアもここで畳んでおく
+			// (P1 は描画が 1 本も無いので、実際に画面を塗るのはこの flush)。
+			if (activeContext_ != nullptr) {
+				activeContext_->FlushPendingClears();
+				activeContext_->EndEncodingIfActive();
+			}
+
+			id<MTLTexture> srcTexture = renderTarget.GetTexture();
+			id<MTLTexture> dstTexture = swapchainRT_->GetTexture();
+			if (srcTexture == nil || dstTexture == nil) {
+				return;
+			}
+
+			// TODO(P4): サイズ / フォーマットが違う場合はフルスクリーン描画へフォールバックする(設計書 §7)。
+			//           ウィンドウのリサイズ(CAMetalLayer.drawableSize とメイン RT のずれ)もここに来る。
+			//           P1 は落とさないことだけを担保し、1 度だけログを出してスキップする。
+			if ([srcTexture pixelFormat] != [dstTexture pixelFormat] ||
+			    [srcTexture width]       != [dstTexture width]       ||
+			    [srcTexture height]      != [dstTexture height])
+			{
+				if (!g_copyMismatchLogged)
+				{
+					g_copyMismatchLogged = true;
+					aq::StartupMarkf("  [metal] CopyToBackBuffer skipped: src %lux%lu fmt %lu / dst %lux%lu fmt %lu",
+					                 static_cast<unsigned long>([srcTexture width]),
+					                 static_cast<unsigned long>([srcTexture height]),
+					                 static_cast<unsigned long>([srcTexture pixelFormat]),
+					                 static_cast<unsigned long>([dstTexture width]),
+					                 static_cast<unsigned long>([dstTexture height]),
+					                 static_cast<unsigned long>([dstTexture pixelFormat]));
+				}
+				return;
+			}
+
+			@autoreleasepool
+			{
+				id<MTLBlitCommandEncoder> blit = [objects_->currentCommandBuffer blitCommandEncoder];
+				[blit copyFromTexture:srcTexture
+				          sourceSlice:0
+				          sourceLevel:0
+				         sourceOrigin:MTLOriginMake(0, 0, 0)
+				           sourceSize:MTLSizeMake([srcTexture width], [srcTexture height], 1)
+				            toTexture:dstTexture
+				     destinationSlice:0
+				     destinationLevel:0
+				    destinationOrigin:MTLOriginMake(0, 0, 0)];
+				[blit endEncoding];
+			}
 		}
 
 

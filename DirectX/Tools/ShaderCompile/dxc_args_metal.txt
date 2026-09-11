@@ -1,0 +1,67 @@
+// ============================================================================
+//  DXC 引数の単一ソース (Metal 構成用)
+//
+//  Vulkan 用の dxc_args.txt と対になるファイル。参照するのは 1 か所だけ:
+//    - Tools/ShaderCompile/compile_msl.cmake … 正規表現で読んでビルド時 dxc の引数にする
+//  Metal には実行時 DXC 経路が無い (実行時にコンパイルするのは MSL であって HLSL ではない)
+//  ため、VulkanShader.cpp のような #include 側は存在しない。
+//
+//  **dxc_args.txt との差はシフト 4 行だけ。** それ以外を勝手に変えないこと
+//  (変えると Vulkan と Metal で cbuffer のレイアウトやエントリ名が食い違う)。
+//
+//  書式ルールは dxc_args.txt と同じ:
+//    - 1 引数 = AQ_DXC_ARG("...") 1 個
+//    - デバッグ構成でのみ渡す引数は AQ_DXC_ARG_DEBUG("...")
+//    - コメントは行頭 "//" のみ
+//    - 可変引数 (-E / -T / -I / -Fo) はここに書かない
+//
+//  シェーダモデル (compile_msl.cmake が -T <stage>_<model> の生成に使う)。
+//  AQ_DXC_SHADER_MODEL 6_0
+// ============================================================================
+
+// SPIR-V を出力する (この後 spirv-cross が MSL へ変換する)
+AQ_DXC_ARG("-spirv")
+
+// SPIR-V のエントリ名を "main" に固定する
+// (spirv-cross はこれを MSL 側で "main0" に改名する。MetalShader はその名前で引く)
+AQ_DXC_ARG("-fspv-entrypoint-name=main")
+
+// cbuffer を D3D パッキングに合わせる (CPU 側の構造体レイアウトと一致させる)
+AQ_DXC_ARG("-fvk-use-dx-layout")
+
+// register -> binding の機械写像 (MetalBackend設計.md §5.1)
+//   b# -> 0+#, t# -> 8+#, s# -> 0+#, u# -> 24+#
+//
+// **Vulkan ともシフトが違うが、「全部 0 でよい」わけでもない。**
+//
+// Metal のバッファ / テクスチャ / サンプラは独立した番号空間なので、
+// 一見すると b/t/s/u を全部 0 から始めてよさそうに見える。しかし
+// **中間生成物の SPIR-V は Vulkan の統一 binding 名前空間**なので、
+// そこで衝突すると spirv-cross がバッファを別名化して
+//   device void* spvBufferAliasSet0Binding0 [[buffer(0)]]
+// のような、アドレス空間をまたぐ不正なキャストを含む MSL を吐く。
+// 実際 ClusterCull.fx は StructuredBuffer を t0、cbuffer を b0 に置いており、
+// b/t を両方 0 にすると壊れた MSL になってコンパイルできない (P0.5 で判明)。
+//
+// したがって **b / t / u は SPIR-V 上で重ならないように配る**必要がある。
+// s だけは重なってよい (サンプラはバッファと別名化しない)。
+//
+//   b : 0..7    (cbuffer。実使用は b0..b5)
+//   t : 8..23   (SRV。テクスチャにもバッファにもなる。実使用は t0..t11 -> 8..19)
+//   u : 24..28  (UAV。同上。実使用は u0..u1 -> 24..25)
+//   s : 0..15   (サンプラ。実使用は s0..s1)
+//
+// Metal 側の実効 index (--msl-decoration-binding なので binding がそのまま index):
+//   buffer 最大 25 / texture 最大 24 / sampler 最大 1 で、
+//   頂点バッファに使う 29・30 とも衝突しない (実測で確認済み)。
+//
+// t と u の値は aqEngine/Graphics/Metal/MetalCommon.h の
+// SRV_INDEX_SHIFT / UAV_INDEX_SHIFT と **必ず一致させること**。
+AQ_DXC_ARG("-fvk-b-shift") AQ_DXC_ARG("0")  AQ_DXC_ARG("all")
+AQ_DXC_ARG("-fvk-t-shift") AQ_DXC_ARG("8")  AQ_DXC_ARG("all")
+AQ_DXC_ARG("-fvk-s-shift") AQ_DXC_ARG("0")  AQ_DXC_ARG("all")
+AQ_DXC_ARG("-fvk-u-shift") AQ_DXC_ARG("24") AQ_DXC_ARG("all")
+
+// デバッグ情報 (AQ_MSL_DEBUG_INFO=ON のときだけ渡す)
+AQ_DXC_ARG_DEBUG("-Zi")
+AQ_DXC_ARG_DEBUG("-Qembed_debug")

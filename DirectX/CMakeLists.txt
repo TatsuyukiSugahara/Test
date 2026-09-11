@@ -133,6 +133,22 @@ if(AQ_GRAPHICS_API STREQUAL "Vulkan")
 	add_dependencies(Game aqCompileSpv)
 endif()
 
+# ----------------------------------------------------------------------------
+#  ビルド時 MSL 生成(設計書 MetalBackend設計.md §9.1)
+#
+#  Metal には実行時 HLSL コンパイル経路が無いので、.fx -> dxc -> .spv ->
+#  spirv-cross -> .metal をビルド時に通す。実行時にコンパイルするのは MSL のほう
+#  (MetalShader が newLibraryWithSource: で行う)。
+#  dxc / spirv-cross はどちらも Vulkan SDK 同梱のため、Metal 構成でも
+#  VULKAN_SDK を要求している(上の AQ_VULKAN_SDK の解決を参照)。
+#  シフトが Vulkan と違うので、出力先も Game/Assets/Shader/msl と別にしてある。
+# ----------------------------------------------------------------------------
+if(AQ_GRAPHICS_API STREQUAL "Metal")
+	include(${CMAKE_CURRENT_SOURCE_DIR}/Tools/ShaderCompile/compile_msl.cmake)
+	aq_add_compile_msl_target(aqCompileMsl)
+	add_dependencies(Game aqCompileMsl)
+endif()
+
 # VS 生成時のスタートアッププロジェクト
 if(CMAKE_GENERATOR MATCHES "Visual Studio")
 	set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT Game)

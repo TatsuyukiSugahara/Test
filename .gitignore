@@ -89,3 +89,7 @@ CMakeUserPresets.json
 
 # ビルド時に dxc が生成する SPIR-V(Tools/ShaderCompile/compile_spv.cmake)
 DirectX/Game/Assets/Shader/spv/
+
+# ビルド時に dxc + spirv-cross が生成する MSL と、その中間の SPIR-V
+# (Tools/ShaderCompile/compile_msl.cmake)。Vulkan 用の spv/ とはシフトが違う別物。
+DirectX/Game/Assets/Shader/msl/

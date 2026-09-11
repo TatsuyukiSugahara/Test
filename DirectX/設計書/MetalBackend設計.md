@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: 329b51d / 最終更新: 2026-09-11
+> 対象コミット: 21cb46d / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -26,7 +26,7 @@
 | 参照カウント | **MRR(手動 retain/release)**。ARC は使わない | 既存の Mac コード(`PlatformMac.mm` 等)が MRR。混在させない |
 | ヘッダの ObjC 型 | **出さない**。不透明構造体 `struct MetalObjects;` を前方宣言し、定義は `.mm` に置く | `Engine.cpp` は素の `.cpp` のまま `MetalGraphicsDeviceImpl.h` を include して `GraphicsDevice::Create<>` を呼ぶ。`PlatformMac.h` と同じ手 |
 | シェーダ | **ビルド時に `.metal`(MSL)を生成し、実行時に `newLibraryWithSource:` でコンパイル** | `xcrun metal` が使えない(§0.2)。Windows が実行時 DXC なのと同じ構図 |
-| binding 写像 | **Metal 専用の dxc シフト `b:0 / t:0 / s:0 / u:16`** + `spirv-cross --msl-decoration-binding` | Metal はバッファ/テクスチャ/サンプラが**別の番号空間**。Vulkan の積み上げシフト(b:0/t:16/s:32/u:48)は `sampler(32)` が上限 16 を超えて破綻する(§0.2)。リフレクション不要の 1 対 1 写像になる |
+| binding 写像 | **Metal 専用の dxc シフト `b:0 / t:8 / s:0 / u:24`** + `spirv-cross --msl-decoration-binding` | Metal はバッファ/テクスチャ/サンプラが**別の番号空間**。Vulkan の積み上げシフト(b:0/t:16/s:32/u:48)は `sampler(32)` が上限 16 を超えて破綻する(§0.2)。リフレクション不要の 1 対 1 写像になる |
 | 深度フォーマット | **`Depth32Float`**(`D24_Unorm_S8_Uint` は使わない) | Apple Silicon が D24S8 非対応(§0.2)。Vulkan バックエンドも既に D32_SFLOAT |
 | BC 圧縮 | **そのまま使う**。再エンコードしない | Apple Silicon が BC1〜BC7 に対応(§0.2) |
 | アップロード | **`MTLStorageModeShared` へ直接書く**。ステージングバッファを作らない | ユニファイドメモリ。VMA 相当の仕組みが丸ごと不要 |
@@ -43,7 +43,8 @@
 | MSL の実行時コンパイル(`newLibraryWithSource:`) | **59/59 成功**。全部で約 2 秒(1 本 ≒ 34ms) |
 | `xcrun metal`(ビルド時 `.metallib`) | **使えない**。Metal Toolchain 未導入(`xcodebuild -downloadComponent MetalToolchain` が要る) |
 | Vulkan のシフト規約(b:0/t:16/s:32/u:48)をそのまま流す | **破綻**。`sampler(32)` が Metal の上限(0〜15)超過で **25/59 が失敗** |
-| **Metal 専用シフト(b:0/t:0/s:0/u:16)+ `--msl-decoration-binding`** | **58/59 成功**(残り 1 本は §13-1) |
+| Metal 専用シフト(b:0/**t:0**/s:0/u:16)+ `--msl-decoration-binding` | 58/59 成功。**残り 1 本は b/t の衝突で壊れた MSL になる**(§5.1)|
+| **Metal 専用シフト(b:0/t:8/s:0/u:24)+ `--msl-decoration-binding`** | **59/59 成功**(P0.5 で確定) |
 | `.fx` の実レジスタ使用 | `b` ≤ 4 / `t` ≤ 11 / `s` ≤ 1 / `u` ≤ 1。Metal の上限に**大きく余裕がある** |
 | `supportsBCTextureCompression` | **YES**。BC1/3/4/5/6H/7 のテクスチャ生成も全て成功 |
 | `isDepth24Stencil8PixelFormatSupported` | **NO**。`Depth32Float` / `Depth32Float_Stencil8` は生成成功 |
@@ -242,18 +243,42 @@ Draw の flush 時に遅延生成。Metal の PSO 生成は実測で数 ms か�
 ### 5.1 register → Metal index の写像
 
 **Metal はバッファ / テクスチャ / サンプラが独立した番号空間を持つ**。
-Vulkan のように 1 つの descriptor set へ積み上げる必要がないので、シフトを分けずに済む。
+一方で、**中間生成物の SPIR-V は Vulkan の統一 binding 名前空間**である。
+この 2 つの事情を両方満たす配り方をする。
 
 | HLSL | dxc シフト(Metal 用) | SPIR-V binding | Metal |
 |---|---|---|---|
-| `b0..bN`(cbuffer) | `-fvk-b-shift 0 all` | 0..N | `[[buffer(0..N)]]` |
-| `t0..tN`(SRV) | `-fvk-t-shift 0 all` | 0..N | `[[texture(0..N)]]` |
-| `s0..sN`(Sampler) | `-fvk-s-shift 0 all` | 0..N | `[[sampler(0..N)]]` |
-| `u0..uN`(UAV) | `-fvk-u-shift 16 all` | 16..16+N | バッファ UAV → `[[buffer(16+N)]]` / テクスチャ UAV → `[[texture(16+N)]]` |
+| `b0..bN`(cbuffer) | `-fvk-b-shift 0 all` | 0..7 | `[[buffer(0+N)]]` |
+| `t0..tN`(SRV) | `-fvk-t-shift 8 all` | 8..23 | `[[texture(8+N)]]` / バッファなら `[[buffer(8+N)]]` |
+| `s0..sN`(Sampler) | `-fvk-s-shift 0 all` | 0..15 | `[[sampler(0+N)]]` |
+| `u0..uN`(UAV) | `-fvk-u-shift 24 all` | 24..28 | `[[texture(24+N)]]` / バッファなら `[[buffer(24+N)]]` |
 
-`u` だけ 16 ずらすのは、**Metal では UAV バッファが `b` と同じ buffer 空間、
-UAV テクスチャが `t` と同じ texture 空間に落ちる**ため。実レジスタ使用は
-`b` ≤ 4 / `t` ≤ 11 なので 16 で衝突しない。
+> **当初案(b/t/s/u をすべて 0 始まり)は誤りだった**(P0.5 で判明)。
+> Metal 側の名前空間が別なので 0 始まりで良さそうに見えるが、**SPIR-V 上でバッファ同士が
+> 衝突すると spirv-cross がバッファを別名化**し、
+> `device void* spvBufferAliasSet0Binding0 [[buffer(0)]]` を作って
+> `constant T*` へキャストする、**アドレス空間をまたぐ不正な MSL** を吐く。
+> `ClusterCull.fx` が `StructuredBuffer` を `t0`、`cbuffer` を `b0` に置いているためこれに当たった。
+>
+> したがって **`b` / `t` / `u` は SPIR-V 上で重ならないように配る**。`t` と `u` は
+> HLSL の型次第でテクスチャにもバッファにもなるため、どちらも `b` と分ける必要がある。
+> **`s` だけは重なってよい**(サンプラはバッファと別名化しない)。
+
+`--msl-decoration-binding` により SPIR-V の binding がそのまま Metal の index になるので、
+**実行時のリフレクションも写像テーブルも要らない**。エンジンの
+`PSSetShaderResource(slot, ...)` は `setFragmentTexture:atIndex:(SRV_INDEX_SHIFT + slot)` になる。
+
+実測した index の使用状況(全 59 本):
+
+| | 使用 | 最大 | Metal の上限 |
+|---|---|---|---|
+| buffer | 0,1,2,3,4,5, 8,9, 24,25 | **25** | 30(頂点バッファ 29/30 と衝突しない) |
+| texture | 8〜12, 16〜19, 24 | **24** | 127 |
+| sampler | 0,1 | **1** | 15 |
+
+シフト値は `Tools/ShaderCompile/dxc_args_metal.txt` と
+`aqEngine/Graphics/Metal/MetalCommon.h` の `SRV_INDEX_SHIFT` / `UAV_INDEX_SHIFT` の
+**2 か所に書いてあるので、必ず一致させること**。
 
 `spirv-cross --msl-decoration-binding` を付ければ SPIR-V の binding がそのまま
 Metal の index になり、**実行時のリフレクションも写像テーブルも要らない**。
@@ -337,14 +362,17 @@ image layout 追跡とバリア発行は要らない。明示が要るのは次�
   (Xcode がターミナル環境を継承しない問題への対処。`compile_spv.cmake` と同じ理由)
 - 引数は `Tools/ShaderCompile/dxc_args_metal.txt`(新規)に単一ソース化する。
   Vulkan 用 `dxc_args.txt` との差は**シフト 4 行だけ**
-- 出力: `Game/Assets/Shader/msl/<stem>.<entry>.<stage>.metal` と、
-  頂点入力用に `.spv` も残す(§9.3)
+- 出力: `Game/Assets/Shader/msl/<stem>.<entry>.<stage>.metal`。
+  **同じディレクトリに同名の `.spv` も残す**(§9.3 の頂点入力リフレクションが読む)。
+  Vulkan 用の `Game/Assets/Shader/spv/` とはシフトが違う別物なので、**同じ場所へ出さないこと**。
+  どちらも `.gitignore` 済み(生成物は追跡しない)
 
 ```
 dxc -spirv -fspv-entrypoint-name=main -fvk-use-dx-layout \
     -fvk-b-shift 0 all -fvk-t-shift 0 all -fvk-s-shift 0 all -fvk-u-shift 16 all \
+    -fvk-b-shift 0 all -fvk-t-shift 8 all -fvk-s-shift 0 all -fvk-u-shift 24 all \
     -E <entry> -T <stage>_6_0 -I <shaderDir> -Fo <out.spv> <src.fx>
-spirv-cross --msl --msl-version 20000 --msl-decoration-binding <out.spv> > <out.metal>
+spirv-cross --msl --msl-version 20000 --msl-decoration-binding --output <out.metal> <out.spv>
 ```
 
 > `shader_entries.txt` は **CRLF + 行末インラインコメント**を含む。
@@ -468,19 +496,44 @@ namespace aq { namespace graphics {
 ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
 当初見込んだ pimpl の定型は 1 クラス分に収まった。
 
+### P0.5 の結果(2026-09-11)
+
+- [x] **59/59 生成**。`aqCompileMsl` が `.fx` → dxc → `.spv` → spirv-cross → `.metal` を通す
+- [x] **59/59 コンパイル成功**。起動時に実際に読まれるのは 23 本(遅延ロード)で **0 失敗**。
+      残り 36 本もオフラインで `newLibraryWithSource:` に通して確認済み
+- [x] **起動時間の増分を実測**。23 本で **812ms**(1 本 ≒ 35ms)。詳細と対処案は §13-2
+- [x] Vulkan 構成が壊れていない(0 エラーでビルド)
+- [ ] Windows の回帰確認 — **この Mac では不可**
+
+**当初の binding 設計が誤っていたことがここで判明した**(§5.1 / §13-1)。
+「Metal は名前空間が別だから全部 0 始まりでよい」は、中間生成物の SPIR-V が
+Vulkan の統一名前空間であることを見落としていた。シフトを `b:0 / t:8 / s:0 / u:24` に
+配り直して解決した。**設計を実装前に実機で検証していても、1 段階の中間表現を
+挟む経路はこういう見落としが残る**という例。
+
+新規: `Tools/ShaderCompile/compile_msl.cmake`(402 行)/ `dxc_args_metal.txt`。
+`MetalShader` は 59 → 387 行。`shader_entries.txt` は Vulkan と**同じものを再利用**している。
+
 ---
 
 ## 13. オープン課題
 
-1. **`ClusterCull.main.cs` が spirv-cross で壊れる**(§0.2 で判明): 生成 MSL が
-   `device void*` → `const constant type_ClusterCullCB*` というアドレス空間をまたぐ
-   C 形式キャストを吐き、`newLibraryWithSource:` が
-   `converts between mismatching address spaces` で落ちる。58/59 はこの 1 本だけ。
-   対処案は (a) 当該シェーダの `ByteAddressBuffer` 的な使い方を見直す、
-   (b) このシェーダだけ `--msl-argument-buffers` で出す、(c) 生成後に sed で直す。
-   **P5 で決める**。それまでクラスタカリングは Metal で無効にしてよい。
-2. **起動時のシェーダコンパイル 2 秒**: 実測値。P0.5 で正確に測り、許容できなければ
-   `MTLBinaryArchive` によるキャッシュか、Metal Toolchain 導入による `.metallib` 事前ビルドへ。
+1. ~~**`ClusterCull.main.cs` が spirv-cross で壊れる**~~ → **解決(P0.5)**。
+   シェーダ固有の問題ではなく、**binding シフトの設計ミス**だった。`b` と `t` を
+   両方 0 始まりにしたため、`cbuffer ... : register(b0)` と
+   `StructuredBuffer ... : register(t0)` が SPIR-V の同じ binding に落ち、
+   spirv-cross がバッファを別名化して不正なキャストを吐いていた。
+   シフトを `b:0 / t:8 / s:0 / u:24` に配り直して **59/59 がコンパイルできるようになった**(§5.1)。
+   同じ形をしたシェーダは他にもあり得たので、1 本の特例対処にしなくて正解だった。
+2. **起動時のシェーダコンパイルが起動時間の大半を占める**(P0.5 で実測):
+   タイトル画面までに読まれるのは 59 本中 **23 本**(残りは遅延ロード)で、
+   その 23 本のコンパイルに **812ms**(1 本あたり約 35ms)。
+   このときの起動全体が約 1,100ms なので、**7 割以上がシェーダのコンパイル**。
+   50ms を超えたものが 11 本あり、重いのはポストプロセスの compute
+   (`DualBlurUpAccum` 85ms / `PBRLighting` 78ms / `MotionBlur` 67ms / `HiZReconstruct` 67ms)。
+   対処は (a) `MTLBinaryArchive` でコンパイル結果をディスクにキャッシュ、
+   (b) Metal Toolchain を導入して `.metallib` を事前ビルド、(c) 並列コンパイル。
+   **P6 の「詰め」で決める**。
 3. **`DrawIndexedIndirect` の引数レイアウト**: D3D の `D3D12_DRAW_INDEXED_ARGUMENTS`
    (IndexCountPerInstance / InstanceCount / StartIndexLocation / BaseVertexLocation / StartInstanceLocation)と
    Metal の `MTLDrawIndexedPrimitivesIndirectArguments` はフィールドの並びが同じだが、

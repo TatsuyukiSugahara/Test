@@ -34,23 +34,34 @@ namespace aq
 			//  バインディング規約 (設計書 §5)
 			// ----------------------------------------------------------------
 			//
-			//  Metal はバッファ / テクスチャ / サンプラが独立した番号空間を持つので、
-			//  Vulkan のように 1 つの descriptor set へ積み上げる必要がない。
-			//  dxc のシフトを b:0 / t:0 / s:0 / u:16 にし、spirv-cross へ
-			//  --msl-decoration-binding を渡すことで、HLSL のレジスタ番号が
+			//  dxc のシフトを b:0 / t:8 / s:0 / u:24 にし、spirv-cross へ
+			//  --msl-decoration-binding を渡すことで、SPIR-V の binding が
 			//  そのまま Metal の index になる。
 			//
-			//    b0..bN (cbuffer)  -> [[buffer(0..N)]]
-			//    t0..tN (SRV)      -> [[texture(0..N)]]
-			//    s0..sN (Sampler)  -> [[sampler(0..N)]]
-			//    u0..uN (UAV)      -> [[buffer(16+N)]] または [[texture(16+N)]]
+			//    b0..bN (cbuffer)  -> [[buffer(0+N)]]
+			//    t0..tN (SRV)      -> [[texture(8+N)]]  または [[buffer(8+N)]]
+			//    s0..sN (Sampler)  -> [[sampler(0+N)]]
+			//    u0..uN (UAV)      -> [[texture(24+N)]] または [[buffer(24+N)]]
 			//
-			//  u だけ 16 ずらすのは、Metal では UAV バッファが b と同じ buffer 空間、
-			//  UAV テクスチャが t と同じ texture 空間へ落ちるため。実レジスタ使用は
-			//  b <= 4 / t <= 11 なので衝突しない。
+			//  **なぜ全部 0 始まりにしないのか**(P0.5 で踏んだ):
+			//  Metal のバッファ / テクスチャ / サンプラは独立した番号空間なので、
+			//  一見すると全部 0 から始めてよさそうに見える。しかし**中間生成物の
+			//  SPIR-V は Vulkan の統一 binding 名前空間**で、そこでバッファ同士が
+			//  衝突すると spirv-cross が
+			//      device void* spvBufferAliasSet0Binding0 [[buffer(0)]]
+			//  のような別名を作り、アドレス空間をまたぐ不正なキャストを吐く。
+			//  ClusterCull.fx が StructuredBuffer を t0 / cbuffer を b0 に置いており、
+			//  b と t を両方 0 にするとこれで壊れた。
+			//  **b / t / u は SPIR-V 上で重ならないように配ること。**
+			//  s だけは重なってよい(サンプラはバッファと別名化しない)。
+			//
+			//  値は Tools/ShaderCompile/dxc_args_metal.txt と**必ず一致させること**。
+
+			/** t レジスタのシフト量。dxc の -fvk-t-shift と同じ値でなければならない */
+			static constexpr uint32_t SRV_INDEX_SHIFT = 8;
 
 			/** u レジスタのシフト量。dxc の -fvk-u-shift と同じ値でなければならない */
-			static constexpr uint32_t UAV_INDEX_SHIFT = 16;
+			static constexpr uint32_t UAV_INDEX_SHIFT = 24;
 
 			/**
 			 * 頂点バッファの Metal buffer index。

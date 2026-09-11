@@ -15,6 +15,11 @@
   - コース回廊 (中心線 ±FLAT_RADIUS) は「最寄り路面 y - CORRIDOR_DROP」へ追従させる。
     Catmull-Rom のアンダーシュートで路面が y<0 に沈む区間でも地形が一緒に下がるので
     路面が地面へ埋まらない。負の高さは terrain.heightOffset (地形エンティティの Y) で表現する。
+  - ただし追従の種にするのは「接地している路面サンプル」だけ (is_grounded)。ループのように
+    路面が空中へ立ち上がる区間まで追従させると、その足元の画素だけ地形が数 m 隆起し、
+    同じ画素を通る往路/復路の平坦な路面が地面に埋まる (2026-09-11 に Stage01 のループ 2 で
+    最大 1.85m の埋まりを確認)。ループ区間は種を置かず、入口/出口の接地高さから距離場で
+    埋めることで、足元は平らなまま路面がその上を通る。
 
 使い方:
   python bake_stage_terrain.py ../Assets/Stages/Stage01.stage.json
@@ -50,6 +55,10 @@ ROCK_SLOPE_HI = 0.32    # 岩が支配的になる勾配
 SNOW_M_LO     = 12.0    # 雪が現れ始めるワールド高さ [m]
 SNOW_M_HI     = 18.0    # 雪が支配的になるワールド高さ [m]
 SEED          = 1234
+# 路面サンプルを「接地している」とみなす条件。どちらかを外れた区間 (ループ・ひねり) は
+# 地形追従の種にしない。up.y はバンク角、slope は進行方向の勾配 (dy/ds)。
+GROUND_UP_Y_MIN  = 0.90   # up ベクトルの Y 成分の下限 (0.90 ≒ バンク 26 度まで)
+GROUND_SLOPE_MAX = 0.40   # 進行方向の勾配の上限 (0.40 ≒ 22 度まで)
 
 
 # ---------------------------------------------------------------- スプライン
@@ -79,6 +88,25 @@ def sample_spline(points, per_segment=64):
         a, b = positions[i - 1], positions[i]
         lengths.append(lengths[-1] + math.dist(a, b))
     return positions, lengths
+
+
+def is_grounded(positions, lengths, ups, d, total):
+    """弧長 d の路面が接地しているか (地形追従の種にしてよいか) を返す。
+
+    ループ・ひねり区間は路面が空中へ立ち上がるため、その足元の地形まで路面 y へ
+    引き上げてしまうと、同じ XZ を通る往路/復路の平坦な路面が埋まる。
+    バンク角 (up.y) と進行方向の勾配 (dy/ds) の両方が緩い区間だけを接地とみなす。
+    """
+    up = evaluate_at(ups, lengths, d)
+    norm = math.sqrt(sum(c * c for c in up))
+    if norm <= 0.0 or up[1] / norm < GROUND_UP_Y_MIN:
+        return False
+    a = evaluate_at(positions, lengths, max(0.0, d - 1.0))
+    b = evaluate_at(positions, lengths, min(total, d + 1.0))
+    seg = math.dist(a, b)
+    if seg <= 0.0:
+        return True
+    return abs(b[1] - a[1]) / seg <= GROUND_SLOPE_MAX
 
 
 def evaluate_at(positions, lengths, d):
@@ -241,8 +269,12 @@ def main():
     with open(stage_path, encoding="utf-8") as f:
         stage = json.load(f)
     points = [tuple(p["position"]) for p in stage["course"]["points"]]
+    ups    = [tuple(p["up"]) for p in stage["course"]["points"]]
 
     positions, lengths = sample_spline(points)
+    # up も同じ刻みで補間する (接地判定にしか使わないので、球面補間ではなく
+    # 位置と同じ Catmull-Rom + 使用時に正規化で足りる)。
+    up_positions, _ = sample_spline(ups)
     total = lengths[-1]
 
     # 地形原点 / terrainSize (CreateStageWorld と同一式)。
@@ -262,10 +294,17 @@ def main():
           f"({1.0 / px_per_m:.2f} m/px)")
 
     # コース中心線を 1m 刻みで画素へ落とし、距離場と「最寄り路面 y」を作る。
-    # ループなど同一画素を複数回通る場合は最小 y を採用する (地面はループの根本に合わせる)。
+    # 種にするのは接地区間だけ。ループ区間は種を置かず、入口/出口の高さが距離場で
+    # 足元まで伝播する (= ループの真下は平ら)。
+    # 同一画素を複数回通る場合は最小 y を採用する (地面は低いほうの路面に合わせる)。
     seeds = {}
+    skipped = 0
     d = 0.0
     while d <= total:
+        if not is_grounded(positions, lengths, up_positions, d, total):
+            skipped += 1
+            d += 1.0
+            continue
         p = evaluate_at(positions, lengths, d)
         px = round((p[0] - origin_x) * px_per_m)
         pz = round((p[2] - origin_z) * px_per_m)
@@ -273,6 +312,10 @@ def main():
             key = (px, pz)
             seeds[key] = min(seeds.get(key, 1.0e9), p[1])
         d += 1.0
+    print(f"  seeds={len(seeds)}px (非接地として除外した中心線 {skipped}m / 全長 {total:.0f}m)")
+    if not seeds:
+        print("ERROR: 接地サンプルが 1 つも無い (GROUND_* のしきい値を見直すこと)")
+        return 1
     dist_px, road_y = chamfer_distance(seeds, IMAGE_SIZE)
 
     # 高さ [m・ワールド絶対値]:

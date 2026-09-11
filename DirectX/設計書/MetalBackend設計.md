@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: 910e7c0 / 最終更新: 2026-09-11
+> 対象コミット: 329b51d / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -378,8 +378,19 @@ per-vertex / per-instance を `I_` 接頭辞で分ける、という処理は AP
 
 ## 10. Objective-C++ の扱いとヘッダ規約
 
-- `Graphics/Metal/*.mm` は **`.mm`**、`Graphics/Metal/*.h` は **ObjC 型を含まない素の C++**。
-- ObjC オブジェクトは各クラスの不透明構造体にまとめる:
+**素の C++ に縛るのは「外から include されるヘッダ」だけでよい**(P0 で確定)。
+Vulkan バックエンドで `Graphics/Vulkan/` の外から include されているのは
+`VulkanGraphicsDeviceImpl.h` と `VulkanImGui.h` の 2 本だけ(`Engine.cpp` /
+`Core/Application.cpp` / `Rendering/ImGuiRenderCommand.cpp` から)。Metal も同じになる。
+
+| ヘッダ | 規約 |
+|---|---|
+| `MetalGraphicsDeviceImpl.h` / `MetalImGui.h`(P6) | **素の C++**。ObjC 型を一切出さない。`Engine.cpp` 等が素の `.cpp` から include するため |
+| それ以外の `Graphics/Metal/*.h` | **Objective-C++ 専用でよい**。`MetalCommon.h` を include する。誤って `.cpp` から引かれたら `MetalCommon.h` の `#ifndef __OBJC__` が `#error` で止める |
+
+これにより、当初見込んでいた「不透明構造体の定型 +150 行」は**実質 1 クラス分で済む**。
+
+- ObjC オブジェクトは公開ヘッダを持つクラスだけ不透明構造体にまとめる:
 
 ```cpp
 // MetalGraphicsDeviceImpl.h
@@ -434,6 +445,29 @@ namespace aq { namespace graphics {
 
 各フェーズの完了条件に共通で **「Windows(D3D11/D3D12)と Mac の Vulkan 構成が壊れていない」** を含める。
 
+### P0 の結果(2026-09-11)
+
+- [x] **ビルドが通る**。`macos-ninja-metal` Debug。`Graphics/Metal/` の 16 ファイル(3,022 行)は**警告 0**
+- [x] **起動して閉じられる**。黒いウィンドウが出て、閉じると**終了コード 0**。エラー/アサート無し
+- [x] **Vulkan 構成が壊れていない**。`macos-ninja` Debug は 0 エラーでビルドでき、
+      タイトル画面・ImGui・60fps まで従来どおり。Vulkan validation エラー 0 / 終了コード 0
+- [ ] Windows(D3D11/D3D12/UWP)の回帰確認 — **この Mac では不可。次に Windows を触るときの宿題**
+
+実装した範囲と、意図して先送りしたもの:
+
+| | P0 で入れた | 先送り |
+|---|---|---|
+| デバイス | `MTLDevice` / `MTLCommandQueue` / `CAMetalLayer` の設定 | — |
+| フレーム | `WaitIdle()`(最後にコミットしたコマンドバッファを待つ) | drawable 取得・Present(P1) |
+| RT / 深度 | `MetalRenderTarget`(オフスクリーン)/ `MetalDepthMap`(D32F × 4 スライス) | swapchain プロキシの実配線(P1) |
+| リソース | VB / IB / CB / テクスチャ(**BC 対応**)/ サンプラを実際に確保 | — |
+| コンテキスト | 純粋仮想 37 本を override。保留ステートと `UpdateConstantBuffer` のみ中身あり | 描画(P2 以降) |
+| シェーダ | スタブ(`Load` はパスを憶えて true を返すだけ) | `.metal` 生成と `newLibraryWithSource:`(P0.5) |
+| ImGui | **Metal では ImGui コンテキストを作らない**(`Application.cpp` に分岐) | `MetalImGui`(P6) |
+
+ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
+当初見込んだ pimpl の定型は 1 クラス分に収まった。
+
 ---
 
 ## 13. オープン課題
@@ -461,7 +495,21 @@ namespace aq { namespace graphics {
 6. **`PixelFormat::D24_Unorm_S8_Uint` の扱い**: Apple Silicon 非対応(§0.2)。
    `Depth32Float` へ黙って読み替えるか、`Unknown` を返して呼び出し側に気づかせるかを決める。
    現状エンジンがこの値を実際に要求しているかの確認から。
-7. **Metal API Validation の有効化方法**: Xcode スキームなら GUI で設定できるが、
+7. **P0 で入れた「後で直す」実装 2 つ**(P2 で必ず解消する):
+   - **`MetalConstantBuffer` が単一スライス**。Vulkan 版は Update ごとに別スライスへ bump 確保して
+     frames-in-flight のリングにしている(オブジェクトごとの world 行列が同一フレームで
+     何度も Update されるため)。**このまま描画を入れると全オブジェクトが最後の行列で描かれる**。
+   - **動的 VB/IB のリング位置がデバイスのフレーム番号と同期していない**。P0 では自前カウンタを
+     `% FRAME_COUNT` で回しているだけなので、1 フレームに 2 回 Update されるとずれる。
+     Vulkan 版と同じくデバイスのフレーム番号駆動へ差し替える。
+8. **`SamplerDesc::mipLODBias` は Metal で落ちる**: `MTLSamplerDescriptor` に LOD バイアスが無い。
+   現状 0 以外を使っている箇所が無いので実害は出ていないが、使い始めたら破綻する。
+9. **メイン RT のフォーマットが Vulkan と違う**(P0 で判明): P0 では
+   `SWAPCHAIN_PIXEL_FORMAT`(BGRA8Unorm)で作ったが、**Vulkan 版のメイン RT は HDR の
+   `R16G16B16A16_SFLOAT`** で、最後に `CopyToBackBuffer` で LDR へ落としている。
+   トーンマップと Bloom が絡むので、**P3〜P4 で Vulkan と同じ見た目を出す段階で HDR へ変える**こと。
+   変え忘れると「白飛びしない代わりに暗部が潰れる」形でズレる。
+10. **Metal API Validation の有効化方法**: Xcode スキームなら GUI で設定できるが、
    Ninja ビルドの実行では `METAL_DEVICE_WRAPPER_TYPE=1` 等の環境変数が要る。
    P1 までに確定し、`Tools/SetupCMake/README.md` へ書く。
 
@@ -491,7 +539,8 @@ namespace aq { namespace graphics {
 - [ ] 抽象IF(`IGraphicsDeviceImpl` / `IRenderContextImpl` / `I*.h`)への**追加が 0 本**
 - [ ] `.fx` が無改変で、`shader_entries.txt` も再利用されている
 - [ ] `id<MTL*>` / `CAMetalLayer` / `NS*` が `Graphics/Metal/` の**外に現れない**
-      (ヘッダも含む。`Graphics/Metal/*.h` は素の C++)
+- [ ] **外から include されるヘッダ**(`MetalGraphicsDeviceImpl.h` / `MetalImGui.h`)が素の C++ で、
+      素の `.cpp` から include してもコンパイルできる(§10)
 - [ ] `.mm` が `Platform/Mac/`・`HID/Mac/`・`Sound/CoreAudio/`・`Graphics/Metal/`・
       `ExtAudioFileDecoder.mm`・`MacMain.mm` に閉じている
 - [ ] Vulkan 構成(`macos-ninja`)と Windows(D3D11/D3D12)が壊れていない

@@ -80,6 +80,11 @@ namespace aq
 		aq::level::RegisterLevelComponents();   // Level 層のコンポーネント（LevelStream 等）を登録
 
 #ifdef AQ_IMGUI
+#if defined(ENGINE_GRAPHICS_METAL)
+		// TODO(P6): Metal の ImGui バックエンド(MetalImGui)は設計書/MetalBackend設計.md の
+		// P6 で入れる。それまでは ImGui のコンテキストを作らない。imguiReady_ が false の
+		// ままなので、Update / Render / Finalize の ImGui ブロックはすべて素通りする。
+#else
 		{
 			ImGui::CreateContext();
 
@@ -183,7 +188,8 @@ namespace aq
 			}
 		}
 		aq::StartupMark("  [app] ImGui ok (font atlas built, ASCII only)");
-#endif
+#endif // !ENGINE_GRAPHICS_METAL
+#endif // AQ_IMGUI
 
 		renderer_.SetUIRenderCallback([](aq::rendering::RenderCommandList& list) {
 			aq::ui::UIContext::Get().GetBatchRenderer().BuildCommandList(list);

@@ -13,6 +13,8 @@
 #include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 #include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
+#elif defined(ENGINE_GRAPHICS_METAL)
+#include "Graphics/Metal/MetalGraphicsDeviceImpl.h"
 #endif
 
 
@@ -200,6 +202,8 @@ namespace aq
 		aq::graphics::GraphicsDevice::Create<aq::graphics::D3D12GraphicsDeviceImpl>();
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 		aq::graphics::GraphicsDevice::Create<aq::graphics::VulkanGraphicsDeviceImpl>();
+#elif defined(ENGINE_GRAPHICS_METAL)
+		aq::graphics::GraphicsDevice::Create<aq::graphics::MetalGraphicsDeviceImpl>();
 #endif
 
 		if (!aq::graphics::GraphicsDevice::Get().Initialize(window_, renderWidth_, renderHeight_)) {

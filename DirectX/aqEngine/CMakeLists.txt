@@ -61,6 +61,7 @@ if(WIN32)
 		"/Platform/Mac/"
 		"/HID/Mac/"
 		"/Sound/CoreAudio/"
+		"/Graphics/Metal/"
 		"\\.mm$"
 	)
 else()

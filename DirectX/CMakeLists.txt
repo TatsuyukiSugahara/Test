@@ -47,15 +47,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #  MSBuild 側のプロパティ AqGraphicsApi(Game/GraphicsApi.props)と同じ意味・
 #  同じ既定値。ENGINE_GRAPHICS_<API> の定義と API 別ライブラリのリンクを決める。
 # ----------------------------------------------------------------------------
-set(AQ_GRAPHICS_API "D3D12" CACHE STRING "グラフィックス API (D3D11 / D3D12 / Vulkan)")
-set_property(CACHE AQ_GRAPHICS_API PROPERTY STRINGS "D3D11" "D3D12" "Vulkan")
+set(AQ_GRAPHICS_API "D3D12" CACHE STRING "グラフィックス API (D3D11 / D3D12 / Vulkan / Metal)")
+set_property(CACHE AQ_GRAPHICS_API PROPERTY STRINGS "D3D11" "D3D12" "Vulkan" "Metal")
 
-if(NOT AQ_GRAPHICS_API MATCHES "^(D3D11|D3D12|Vulkan)$")
-	message(FATAL_ERROR "AQ_GRAPHICS_API は D3D11 / D3D12 / Vulkan のいずれかを指定してください (現在: ${AQ_GRAPHICS_API})")
+if(NOT AQ_GRAPHICS_API MATCHES "^(D3D11|D3D12|Vulkan|Metal)$")
+	message(FATAL_ERROR "AQ_GRAPHICS_API は D3D11 / D3D12 / Vulkan / Metal のいずれかを指定してください (現在: ${AQ_GRAPHICS_API})")
 endif()
 
 if(NOT WIN32 AND AQ_GRAPHICS_API MATCHES "^D3D")
-	message(FATAL_ERROR "Windows 以外では AQ_GRAPHICS_API=Vulkan のみ指定できます (現在: ${AQ_GRAPHICS_API})")
+	message(FATAL_ERROR "Windows 以外では AQ_GRAPHICS_API=Vulkan / Metal のみ指定できます (現在: ${AQ_GRAPHICS_API})")
+endif()
+
+if(AQ_GRAPHICS_API STREQUAL "Metal" AND NOT APPLE)
+	message(FATAL_ERROR "AQ_GRAPHICS_API=Metal は macOS 専用です")
 endif()
 
 message(STATUS "AquaDash: AQ_GRAPHICS_API = ${AQ_GRAPHICS_API}")
@@ -69,10 +73,13 @@ message(STATUS "AquaDash: AQ_GRAPHICS_API = ${AQ_GRAPHICS_API}")
 #  解決結果 AQ_VULKAN_SDK は aqEngine(ヘッダ/ライブラリ)と Game(実行時 DLL の
 #  コピー)の双方から参照するため、ルートで一度だけ決める。
 # ----------------------------------------------------------------------------
+#  Metal 構成も SDK を要求する。描画には使わないが、シェーダのビルド経路
+#  (.fx -> dxc -> .spv -> spirv-cross -> .metal) がどちらも SDK 同梱のツールのため
+#  (設計書/MetalBackend設計.md §9.1)。
 set(AQ_VULKAN_SDK "")
-if(AQ_GRAPHICS_API STREQUAL "Vulkan")
+if(AQ_GRAPHICS_API STREQUAL "Vulkan" OR AQ_GRAPHICS_API STREQUAL "Metal")
 	if(NOT DEFINED ENV{VULKAN_SDK})
-		message(FATAL_ERROR "AQ_GRAPHICS_API=Vulkan には環境変数 VULKAN_SDK が必要です")
+		message(FATAL_ERROR "AQ_GRAPHICS_API=${AQ_GRAPHICS_API} には環境変数 VULKAN_SDK が必要です (dxc / spirv-cross の入手元)")
 	endif()
 	file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" AQ_VULKAN_SDK)
 	message(STATUS "AquaDash: VULKAN_SDK = ${AQ_VULKAN_SDK}")

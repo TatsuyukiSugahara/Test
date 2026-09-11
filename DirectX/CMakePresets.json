@@ -74,6 +74,22 @@
       "description": "P2 で検証する。Vulkan SDK for macOS が必要。",
       "inherits": "macos-ninja",
       "generator": "Xcode"
+    },
+    {
+      "name": "macos-ninja-metal",
+      "displayName": "macOS / Ninja Multi-Config (ネイティブ Metal)",
+      "description": "設計書/MetalBackend設計.md の P6。dxc と spirv-cross を使うため Vulkan SDK が必要。",
+      "inherits": "macos-ninja",
+      "cacheVariables": {
+        "AQ_GRAPHICS_API": "Metal"
+      }
+    },
+    {
+      "name": "macos-xcode-metal",
+      "displayName": "macOS / Xcode (ネイティブ Metal)",
+      "description": "設計書/MetalBackend設計.md の P6。",
+      "inherits": "macos-ninja-metal",
+      "generator": "Xcode"
     }
   ],
   "buildPresets": [
@@ -125,6 +141,26 @@
     {
       "name": "macos-xcode-release",
       "configurePreset": "macos-xcode",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-ninja-metal-debug",
+      "configurePreset": "macos-ninja-metal",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-ninja-metal-release",
+      "configurePreset": "macos-ninja-metal",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-xcode-metal-debug",
+      "configurePreset": "macos-xcode-metal",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-xcode-metal-release",
+      "configurePreset": "macos-xcode-metal",
       "configuration": "Release"
     }
   ]

@@ -10,8 +10,9 @@
 //#define ENGINE_GRAPHICS_D3D11
 //#define ENGINE_GRAPHICS_D3D12
 //#define ENGINE_GRAPHICS_VULKAN
+//#define ENGINE_GRAPHICS_METAL
 
-#if !defined(ENGINE_GRAPHICS_D3D11) && !defined(ENGINE_GRAPHICS_D3D12) && !defined(ENGINE_GRAPHICS_VULKAN)
+#if !defined(ENGINE_GRAPHICS_D3D11) && !defined(ENGINE_GRAPHICS_D3D12) && !defined(ENGINE_GRAPHICS_VULKAN) && !defined(ENGINE_GRAPHICS_METAL)
 // 既定は D3D12。Xbox の UWP(道A)も、Dev Home の「ゲーム」種別なら実 GPU で D3D12 が
 // FL12_0 まで通る(「アプリ」種別は D3D12 が WARP のみで非実用)。
 // 「アプリ」種別/FL10 機向けの D3D11 + FL10 フォールバックは、ENGINE_GRAPHICS_D3D11 を
@@ -19,8 +20,13 @@
 #define ENGINE_GRAPHICS_D3D12
 #endif
 
-#if (defined(ENGINE_GRAPHICS_D3D11) + defined(ENGINE_GRAPHICS_D3D12) + defined(ENGINE_GRAPHICS_VULKAN)) > 1
+#if (defined(ENGINE_GRAPHICS_D3D11) + defined(ENGINE_GRAPHICS_D3D12) + defined(ENGINE_GRAPHICS_VULKAN) + defined(ENGINE_GRAPHICS_METAL)) > 1
 #error "Define exactly one ENGINE_GRAPHICS_* backend"
+#endif
+
+// ENGINE_GRAPHICS_METAL は macOS 専用(設計書/MetalBackend設計.md)。
+#if defined(ENGINE_GRAPHICS_METAL) && !defined(AQ_PLATFORM_MAC)
+#error "ENGINE_GRAPHICS_METAL is macOS only"
 #endif
 
 // レンダリング同期モードの切り替え (AQ_RENDER_PIPELINED) はここではなく

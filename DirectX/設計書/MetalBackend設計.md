@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: 0241d90 / 最終更新: 2026-09-11
+> 対象コミット: f1375d6 / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -532,6 +532,44 @@ namespace aq { namespace graphics {
 ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
 当初見込んだ pimpl の定型は 1 クラス分に収まった。
 
+### P5 の結果(2026-09-11)
+
+- [x] **GPU 駆動クラスタカリングが動く**。`ClusterCullReset` / `ClusterCull` が実際に Dispatch され、
+      スレッドグループサイズも `.spv` から **1x1x1 / 64x1x1** と正しく読めている
+- [x] **描画結果が変わらない**。CPU カリング経路との地面の画素比較は **平均差 1.11/255**
+      (差が 24 を超えたのは 1.72% で、草とキャラの位置が別フレームである分)
+- [x] **Metal API Validation エラー 0 / 終了コード 0 / Metal 由来の警告 0** / Vulkan 構成 0 エラー
+- [ ] Windows の回帰確認 — **この Mac では不可**
+
+**§13-3 の懸念(間接引数のレイアウト)は変換不要で解決した。** `ClusterCullReset.fx` が書く
+レイアウトと Metal の `MTLDrawIndexedPrimitivesIndirectArguments` が**完全に同一**:
+
+| offset | `ClusterCullReset.fx` | Metal |
+|---|---|---|
+| 0 | IndexCountPerInstance (uint) | `indexCount` (uint32) |
+| 4 | InstanceCount (uint) | `instanceCount` (uint32) |
+| 8 | StartIndexLocation (uint) | `indexStart` (uint32) |
+| 12 | BaseVertexLocation (int) | `baseVertex` (**int32**) |
+| 16 | StartInstanceLocation (uint) | `baseInstance` (uint32) |
+
+`VkDrawIndexedIndirectCommand` も同じ並びなので、**3 API で同じバッファをそのまま使える**。
+`indexStart` はバイトではなく**インデックス単位**で、`indexBufferOffset` とは別に加算される。
+
+実装は 2 メソッドだけ:
+
+- `IASetIndexBufferGpu` … compact 済み IB を保留する。`ClusterCull.fx` が
+  `RWByteAddressBuffer` へ R32_UINT で書くのでインデックス型は常に 32bit。
+  **CPU 側 IB とは排他**にして、どちらか一方だけが非 nullptr になるようにした。
+- `DrawIndexedIndirect` … `drawIndexedPrimitives:...indirectBuffer:indirectBufferOffset:`。
+
+**検証には一時的な変更が 2 つ必要だった**(確認後に復元済み。差分が空であることを確認):
+
+`g_clusterCullEnabled` の既定は **false**(ImGui のデバッグ UI から切り替える設計)で、
+さらに `g_clusterCullMinClusters` が **256**。AquaDash のメッシュはこの閾値に届かないため、
+**既定設定ではこの経路に入らない**。両方を一時的に緩めて実際に Dispatch させ、
+描画が変わらないことを確認した。
+**Metal に ImGui が入る P6 以降は、デバッグ UI から切り替えて確認できる。**
+
 ### P4 の結果(2026-09-11)
 
 - [x] **ステージが Vulkan 構成と同じ見た目・同じ明るさになった**。
@@ -734,7 +772,9 @@ Vulkan の統一名前空間であることを見落としていた。シフト�
    対処は (a) `MTLBinaryArchive` でコンパイル結果をディスクにキャッシュ、
    (b) Metal Toolchain を導入して `.metallib` を事前ビルド、(c) 並列コンパイル。
    **P6 の「詰め」で決める**。
-3. **`DrawIndexedIndirect` の引数レイアウト**: D3D の `D3D12_DRAW_INDEXED_ARGUMENTS`
+3. ~~**`DrawIndexedIndirect` の引数レイアウト**~~ → **解決(P5)**。D3D12 / Vulkan / Metal で
+   **完全に同一**だったため変換は不要だった(§12 の P5 の結果に対応表)。以下は当初の懸念:
+   D3D の `D3D12_DRAW_INDEXED_ARGUMENTS`
    (IndexCountPerInstance / InstanceCount / StartIndexLocation / BaseVertexLocation / StartInstanceLocation)と
    Metal の `MTLDrawIndexedPrimitivesIndirectArguments` はフィールドの並びが同じだが、
    **`baseVertex` の符号と `indexStart` の単位**を実機で確認すること。

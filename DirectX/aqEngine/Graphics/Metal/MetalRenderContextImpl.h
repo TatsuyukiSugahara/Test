@@ -60,6 +60,14 @@ namespace aq
 
 			IVertexBuffer*       vb[MAX_VERTEX_STREAM]      = {};
 			IIndexBuffer*        ib                         = nullptr;
+
+			/**
+			 * GPU 駆動カリングが compact した IB(R32_UINT)。
+			 *
+			 * ib とは**排他**。どちらか一方だけが非 nullptr になる
+			 * (IASetIndexBuffer / IASetIndexBufferGpu が互いを nullptr にする)。
+			 */
+			IGpuBuffer*          gpuIB                      = nullptr;
 			IConstantBuffer*     vsCB[MAX_CONSTANT_COUNT]   = {};
 			IConstantBuffer*     psCB[MAX_CONSTANT_COUNT]   = {};
 			IShaderResourceView* psSRV[MAX_SRV_COUNT]       = {};
@@ -414,6 +422,7 @@ namespace aq
 			void IASetVertexBuffer(IVertexBuffer& vertexBuffer) override;
 			void IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vertexBuffer) override;
 			void IASetIndexBuffer(IIndexBuffer& indexBuffer) override;
+			void IASetIndexBufferGpu(IGpuBuffer& indexBuffer) override;
 			void IASetPrimitiveTopology(PrimitiveTopology topology) override;
 			void IASetInputLayout(IShader& vsShader) override;
 
@@ -457,6 +466,7 @@ namespace aq
 			void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
 			                          uint32_t startIndexLocation, int32_t baseVertexLocation,
 			                          uint32_t startInstanceLocation) override;
+			void DrawIndexedIndirect(IGpuBuffer& argsBuffer) override;
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
 
 			/**

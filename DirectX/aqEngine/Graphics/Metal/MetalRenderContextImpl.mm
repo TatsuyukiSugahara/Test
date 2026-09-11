@@ -734,7 +734,21 @@ namespace aq
 		void MetalRenderContextImpl::IASetIndexBuffer(IIndexBuffer& indexBuffer)
 		{
 			// drawIndexedPrimitives: の引数として渡すので、保留するだけでよい。
-			pending_.ib = &indexBuffer;
+			pending_.ib    = &indexBuffer;
+			pending_.gpuIB = nullptr;   // CPU 側 IB と GPU 駆動 IB は排他
+		}
+
+
+		/**
+		 * GPU 駆動カリングが compact した IB をバインドする(設計書 §12 の P5)。
+		 *
+		 * ClusterCull.fx が RWByteAddressBuffer へ **R32_UINT** で書くので、
+		 * インデックス型は常に 32bit。CPU 側 IB とは排他にする。
+		 */
+		void MetalRenderContextImpl::IASetIndexBufferGpu(IGpuBuffer& indexBuffer)
+		{
+			pending_.gpuIB = &indexBuffer;
+			pending_.ib    = nullptr;
 		}
 
 
@@ -1373,6 +1387,47 @@ namespace aq
 
 			outThreadsPerThreadgroup = GetThreadGroupSize(cs);
 			return true;
+		}
+
+
+		/**
+		 * 間接描画(GPU 駆動クラスタカリング)。
+		 *
+		 * **引数レイアウトは D3D12 / Vulkan / Metal で完全に同一**なので変換は要らない
+		 * (設計書 §13-3 の懸念は実機の型定義とシェーダの書き込みを突き合わせて解消した)。
+		 *
+		 *   offset  ClusterCullReset.fx が書く値      MTLDrawIndexedPrimitivesIndirectArguments
+		 *   ------  --------------------------------  -----------------------------------------
+		 *        0  IndexCountPerInstance (uint)      indexCount    (uint32_t)
+		 *        4  InstanceCount         (uint)      instanceCount (uint32_t)
+		 *        8  StartIndexLocation    (uint)      indexStart    (uint32_t)
+		 *       12  BaseVertexLocation    (int)       baseVertex    (int32_t)
+		 *       16  StartInstanceLocation (uint)      baseInstance  (uint32_t)
+		 *
+		 * indexStart は**インデックス単位**(バイトではない)で、indexBufferOffset とは
+		 * 別に加算される。ここでは IB の先頭から使うので indexBufferOffset は 0。
+		 */
+		void MetalRenderContextImpl::DrawIndexedIndirect(IGpuBuffer& argsBuffer)
+		{
+			MetalGpuBuffer* indexBuffer = static_cast<MetalGpuBuffer*>(pending_.gpuIB);
+			MetalGpuBuffer* args        = static_cast<MetalGpuBuffer*>(&argsBuffer);
+			if (indexBuffer == nullptr || indexBuffer->GetBuffer() == nil || args->GetBuffer() == nil) {
+				return;
+			}
+
+			@autoreleasepool
+			{
+				if (!FlushGraphicsState()) {
+					return;
+				}
+
+				[encoder_ drawIndexedPrimitives:metal::ToMTLPrimitiveType(pending_.topology)
+				                      indexType:MTLIndexTypeUInt32
+				                    indexBuffer:indexBuffer->GetBuffer()
+				              indexBufferOffset:0
+				                 indirectBuffer:args->GetBuffer()
+				           indirectBufferOffset:0];
+			}
 		}
 
 

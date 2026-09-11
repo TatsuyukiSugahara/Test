@@ -202,7 +202,17 @@ P5(`.app` 配布)と P6(ネイティブ Metal)。
 
 ---
 
-## 7. 道B(ネイティブ Metal)の方針 ― 詳細は着手時に `MetalBackend設計.md`
+## 7. 道B(ネイティブ Metal)の方針 ― 詳細は [MetalBackend設計.md](MetalBackend設計.md)
+
+> **2026-09-11 追記**: P6 に着手し、[MetalBackend設計.md](MetalBackend設計.md) を起こした。
+> 事前の実機検証で、**下の当初方針のうち 3 点が成り立たないことが判明している**
+> (同書 §0.2)。以降は同書が一次資料。
+> - `metal-cpp` で `.cpp` → **Objective-C++(`.mm`)** に変更。出荷実績のあるエンジンが
+>   いずれも ObjC++ であることと、既存の Mac コードと作法を揃えるため
+> - `xcrun metal` で `.metallib` を事前生成 → **実行時に `newLibraryWithSource:`** に変更。
+>   Metal Toolchain がこの環境に無いため(59 本 2 秒で実行時コンパイルできることは実測済み)
+> - Vulkan の shift 規約(b:0/t:16/s:32/u:48)をそのまま流す → **Metal 専用シフト
+>   (b:0/t:0/s:0/u:16)** に変更。`sampler(32)` が Metal の上限 16 を超えて 25/59 が壊れるため
 
 - `aqEngine/Graphics/Metal/` に `MetalGraphicsDeviceImpl` / `MetalRenderContextImpl` / `MetalPipelineCache` / `MetalBuffers` / `MetalResources` / `MetalRenderTarget` / `MetalDepthMap` / `MetalShader` / `MetalImGui`(Vulkan フォルダと同名規則、**metal-cpp** で `.cpp`)。
 - `ENGINE_GRAPHICS_METAL` を `aq.h`/`Engine.cpp`/`Core/Application.cpp`/`Graphics/RenderContext.cpp`/`Rendering/ImGuiRenderCommand.cpp` の 5 箇所に追加。
@@ -757,7 +767,7 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
 
 - [ ] 抽象の直交性: `AQ_PLATFORM_*` と `ENGINE_GRAPHICS_*` が独立し、Mac × Vulkan / Win32 × Vulkan / Mac × Metal(将来)が成立する
 - [ ] API/OS 固有型の漏れ: `HWND`/`NSView`/`CAMetalLayer`/`LPDIRECTINPUT*`/`IMF*` が `Platform/<OS>/`・`HID/<OS>/`・`Sound/<Backend>/`・`Graphics/<API>/` の外に現れない
-- [ ] `.mm` が `Platform/Mac/`・`HID/Mac/`・`Sound/CoreAudio/`・`Sound/Decoder/ExtAudioFileDecoder.mm`・`MacMain.mm` に閉じている
+- [ ] `.mm` が `Platform/Mac/`・`HID/Mac/`・`Sound/CoreAudio/`・`Sound/Decoder/ExtAudioFileDecoder.mm`・`MacMain.mm` に閉じている(P4b で `Platform/Mac/MacImGui.mm` が加わった。**P6 で `Graphics/Metal/` を追加する** → [MetalBackend設計.md](MetalBackend設計.md) §10)
 - [ ] 各 Bridge(入力/サウンド/画像)に Null 実装があり、未対応プラットフォームでも落ちずに起動する
 - [ ] 抽象IF(`IGraphicsDeviceImpl`/`IRenderContextImpl`/`IPlatform`/`ISoundBackend`/`IPadBackend`)への追加が 0 本(`IPlatform` は追加なし。`IKeyboardBackend`/`IMouseBackend` は新設)
 - [ ] `.fx` が無改変

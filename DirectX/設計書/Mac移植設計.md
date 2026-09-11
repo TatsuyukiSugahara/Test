@@ -5,8 +5,9 @@
 ## 現在の到達点(main へマージした時点)
 
 **macOS(Apple Silicon)で AquaDash がタイトルからステージクリアまで通しで動く。** 起動から
-終了まで Vulkan validation エラー 0 / 終了コード 0。フェーズは P0〜P4b まで済み、残りは
-P5(`.app` 配布)と P6(ネイティブ Metal)。
+終了まで Vulkan validation エラー 0 / 終了コード 0。**P0〜P6 まで全フェーズ完了**。
+道B(ネイティブ Metal)は [MetalBackend設計.md](MetalBackend設計.md) で P0〜P6 まで実装済みで、
+Vulkan 構成と**同じ見た目**(画素比較で平均差 1.8/255)。`.app` 単体配布も両構成で動く。
 
 | | 状態 |
 |---|---|
@@ -277,6 +278,16 @@ P5(`.app` 配布)と P6(ネイティブ Metal)。
    「相対パス候補が CWD = `Game/` で解決している」から**にすぎない。`Game/` 以外を CWD にすると
    アセットを読めない(`.app` / 素の実行ファイルの双方で確認)。P5 で Assets を `Resources` へ
    同梱すれば解消する。それまでは CWD を `Game/` にして起動する。
+
+21. **`FindProjectRoot` が 3 か所に重複していて `GetContentRoot()` を見ていない**(P5 で判明):
+   `VulkanShader.cpp` / `MetalShader.mm` / `MetalRenderContextImpl.mm` が
+   「CWD から上方へ `Game/Assets` を探す」独自実装を持っており、
+   `Engine::GetContentRoot()` を見ていない。さらに**サウンドとオーディオバンクは
+   `"Assets/..."` を CWD 相対のまま `fopen`** する。そのため `.app` 単体起動は
+   `MacMain.mm` が CWD を `Contents/Resources/Game` へ移すことで成立させている。
+   **本来は `Resource.cpp` の `BuildResourcePathCandidates` と同じく
+   `GetContentRoot()` 優先へ統一すべき**。統一すれば CWD への依存が消え、
+   Windows / UWP とも作法が揃う。P5 では `aqEngine` を触らない方針で回避した。
 
 17. **`Model.fx` / `SimpleBox.fx` の頂点オフセットがずれている**(P3 で判明。未修正):
    DXC は**未使用の頂点入力を SPIR-V から削る**。この 2 つは NORMAL(location 1)が消えて
@@ -750,12 +761,47 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
       - (2026-09-10: D3D11/D3D12/Vulkan はビルド・起動・終了まで確認済(冒頭「引き継ぎ」1)。
         UWP は Windows Store ツールセットが無い PC のため未確認)
 
-### P5: 配布形態(任意)
+### P5: 配布形態
 
-- `.app` バンドル(Assets を `Resources` へ、`libMoltenVK.dylib`/`libvulkan.dylib` を `Frameworks` へ、rpath)。コード署名は範囲外。
+`.app` バンドルに Assets と(Vulkan 構成なら)ランタイムを同梱する。コード署名は範囲外。
 
-評価:
-- [ ] ソースツリー外にコピーした `.app` 単体で起動する
+実装は `Tools/PackageApp/package_app.cmake` + `Game/CMakeLists.txt` の
+**`aqBundleApp` ターゲット**。`Assets` が 92MB あるので **ALL には入れない**
+(毎ビルドでコピーするとイテレーションが遅くなる)。`aqCompileMsl` / `aqCompileSpv` へ
+推移的に依存するので、シェーダ生成物は必ず生成後に同梱される。手順は
+`Tools/SetupCMake/README.md` §5.2.2。
+
+評価(2026-09-11):
+- [x] **ソースツリー外にコピーした `.app` 単体で起動する**。`/tmp` へコピーし、
+      `VULKAN_SDK` / `VK_ICD_FILENAMES` / `VK_DRIVER_FILES` / `DYLD_LIBRARY_PATH` を
+      **すべて外した状態**で Metal 構成・Vulkan 構成の両方がタイトル画面まで起動し、
+      終了コード 0。アセット読み込みの失敗 0 件
+- [x] **Finder からの起動(CWD = `/`)でも動く**
+- [x] Vulkan 構成の `otool -L` は `@rpath/libvulkan.1.dylib` のみ、`LC_RPATH` は
+      `@executable_path/../Frameworks` のみ(SDK の rpath は `install_name_tool` で剥がす。
+      **剥がさないと「同梱 dylib ではなく開発機の SDK を読んでいるだけ」を見抜けない**)
+
+実装で分かったこと(**設計の記述が 3 点足りなかった**):
+
+1. **同梱先は `Contents/Resources` 直下ではなく `Contents/Resources/Game/Assets`**。
+   `Resource.cpp` の `BuildResourcePathCandidates` が `"Assets/..."` を
+   `<root>/Game/Assets/...` へ組み立てるため(UWP の appx も同じ理由で
+   `install/Game/Assets/...` に置いている)。「Assets を `Resources` へ」だと 1 段足りない。
+2. **Assets を同梱するだけでは §8-16 は解消しない。CWD の移動が要る。**
+   `GetContentRoot()` を見ていない経路が 2 種類ある:
+   - シェーダのパス解決(`VulkanShader.cpp` / `MetalShader.mm` /
+     `MetalRenderContextImpl.mm` の `FindProjectRoot`。CWD から上方へ `Game/Assets` を探す)
+   - **サウンドとオーディオバンク**(`"Assets/..."` を CWD 相対のまま `fopen` する)
+   そこで `MacMain.mm` が **CWD を `Contents/Resources/Game` へ移す**。
+   **`Resources` へ移すと前者しか満たせず、BGM とオーディオバンクが読めなくなる**(実機で踏んだ)。
+   `Resources/Game` なら両方成り立ち、開発時の `cd Game && ...` と同じ形になる。
+   → **本来の直し方は `aqEngine` 側で 3 つの `FindProjectRoot` を `GetContentRoot()` 優先へ
+   統一すること**(`Resource.cpp` と同じ形)。P5 では `aqEngine` を触らず CWD で回避した。§8-21 へ。
+3. **Vulkan は dylib 2 本 + rpath だけでは足りない。** ICD 定義 JSON の同梱と
+   `library_path` のバンドル内相対への書き換え、`VK_DRIVER_FILES` / `VK_ICD_FILENAMES` の
+   実行時設定(`.app` 起動時かつ未設定のときだけ)が要る。SDK の
+   `libvulkan.dylib` / `libvulkan.1.dylib` は**シンボリックリンク**なので実体をコピーすること
+   (`file(COPY)` だとリンクのまま複製されて配布先で切れる。`file(COPY_FILE)` を使う)。
 
 ### P6: ネイティブ Metal(道B、別設計書)
 

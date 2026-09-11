@@ -231,12 +231,99 @@ Arguments(環境変数)。
 
 
 - **CWD は `Game/` にすること。** `.app` から起動すると `GetContentRoot()` が
-  `Contents/Resources` を返し、ソースツリーの上方探索が行われない。Assets を
-  `Resources` へ同梱するのは P5 の作業なので、それまでは相対パス
-  (`Assets/...` が CWD で解決する)に頼っている。設計書 §8-16。
+  `Contents/Resources` を返し、ソースツリーの上方探索が行われない。ビルドしただけの
+  `.app` には Assets が入っていないので、相対パス(`Assets/...` が CWD で解決する)に
+  頼っている。設計書 §8-16。Assets を同梱して CWD に依存しない `.app` を作る手順は
+  §5.2.2。
 - 起動診断は CWD に `startup_timing.log` が出る。
 - validation layer のメッセージは stderr に出る。P2 時点で**エラー 0 / 警告 10**
   (警告はストレージイメージのフォーマット不一致。Mac 固有ではない。設計書 §8-15)。
+
+### 5.2.2 `.app` を配布形態にする(P5)
+
+ビルドしただけの `Game.app` は `Contents/MacOS/Game` しか入っておらず、
+CWD をソースツリーの `Game/` にしないと起動できない(§5.2 の最後の注意)。
+**`aqBundleApp` ターゲット**を叩くと、単体で起動できる `.app` になる。
+
+```bash
+source ~/.local/aq-mac-env.sh
+cd <repo>/DirectX
+
+# Vulkan 構成
+cmake --build --preset macos-ninja-debug --target aqBundleApp
+
+# Metal 構成
+cmake --build --preset macos-ninja-metal-debug --target aqBundleApp
+```
+
+**`aqBundleApp` は ALL に入っていない。** `Assets` が 92MB あり、毎ビルドで
+コピーすると開発のイテレーションが目に見えて遅くなるため、明示的に叩いたときだけ
+走る。通常の `cmake --build` の挙動は従来と変わらない。
+
+投入されるもの(中身は `Tools/PackageApp/package_app.cmake`):
+
+| 投入先 | 中身 | 構成 |
+|---|---|---|
+| `Contents/Resources/Game/Assets/` | `Game/Assets` 一式(生成した `Shader/msl` ・ `Shader/spv` を含む) | 共通 |
+| `Contents/Frameworks/libvulkan.1.dylib` | Vulkan ローダー | Vulkan のみ |
+| `Contents/Frameworks/libMoltenVK.dylib` | ICD(MoltenVK)本体 | Vulkan のみ |
+| `Contents/Resources/vulkan/icd.d/MoltenVK_icd.json` | ICD 定義。`library_path` はバンドル内の相対パスへ書き換え済み | Vulkan のみ |
+
+**`Resources` 直下ではなく `Resources/Game/Assets`** に置く点に注意。リソースの
+パス解決は `"Assets/..."` を `<コンテンツルート>/Game/Assets/...` へ組み立てる
+(UWP の appx も同じ理由で `install/Game/Assets/...` に置いている)。
+
+Metal 構成は**外部 dylib 依存がゼロ**(`otool -L` がシステムフレームワークしか
+出さない)なので、Assets を入れるだけで自己完結する。
+
+ソースツリー外へコピーして起動する:
+
+```bash
+# Vulkan 構成
+rm -rf /tmp/Game.app
+cp -R build/macos-ninja/bin/Debug/Game.app /tmp/Game.app
+cd /tmp && /tmp/Game.app/Contents/MacOS/Game
+
+# Metal 構成
+rm -rf /tmp/Game.app
+cp -R build/macos-ninja-metal/bin/Debug/Game.app /tmp/Game.app
+cd /tmp && /tmp/Game.app/Contents/MacOS/Game
+```
+
+Finder からダブルクリックしても起動する(CWD が `/` でも、`MacMain.mm` が
+バンドル内の `Contents/Resources` へ移すため)。
+
+**アプリ側でしている手当ては 2 つ**(`Game/Application/MacMain.mm` の
+`SetupBundleEnvironment`。どちらもエンジン初期化より前):
+
+1. **CWD をバンドルの `Contents/Resources` へ移す。**
+   リソースは `GetContentRoot()` を見るが、**シェーダのパス解決だけは
+   見ていない**(`VulkanShader.cpp` / `MetalShader.mm` /
+   `MetalRenderContextImpl.mm` が CWD から上へ `Game/Assets` を探す独自実装)。
+   CWD を合わせると両者が同じルートを指す。
+2. **Vulkan の `VK_DRIVER_FILES` / `VK_ICD_FILENAMES` にバンドル内の
+   `MoltenVK_icd.json` を設定する。** 無いと配布先で `vkCreateInstance` が
+   `VK_ERROR_INCOMPATIBLE_DRIVER`(-9)になる。**既に設定されていれば触らない**
+   ので、`source ~/.local/aq-mac-env.sh` した開発環境での起動は従来どおり。
+
+どちらも「本物の `.app` から起動したとき」だけ行う。`aqBundleApp` を実行していない
+`.app`(Assets 未同梱)では CWD も移さないので、§5.2 の `cd Game && ...` の
+開発フローはそのまま使える。
+
+**自己完結の確認**(SDK を入れていない配布先で壊れていないか):
+
+```bash
+otool -L /tmp/Game.app/Contents/MacOS/Game       # @rpath と /System 以外が出ないこと
+otool -l /tmp/Game.app/Contents/MacOS/Game | grep -A2 LC_RPATH
+```
+
+`aqBundleApp` は Vulkan 構成のとき、実行ファイルに残っている
+`$VULKAN_SDK/lib` の `LC_RPATH` を `install_name_tool -delete_rpath` で剥がす。
+残したままだと「同梱した dylib ではなく開発機の SDK を読んでいるだけ」の状態に
+気づけない。剥がした後に残る rpath は `@executable_path/../Frameworks` のみ。
+
+コード署名は範囲外(設計書 §9 P5)。他人の Mac へ配る場合は Gatekeeper の
+扱いが別途必要になる。
 
 ### 5.3 前提と構成
 

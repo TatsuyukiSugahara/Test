@@ -126,3 +126,46 @@ if(WIN32 AND AQ_GRAPHICS_API STREQUAL "Vulkan")
 		endif()
 	endforeach()
 endif()
+
+
+# ----------------------------------------------------------------------------
+#  .app バンドルへの同梱(Mac のみ。設計書 Mac移植設計.md §9 P5)
+#
+#  **ALL には入れない。**Assets が 92MB あるため毎ビルドでコピーすると
+#  イテレーションが目に見えて遅くなる。配布形態を作りたいときだけ
+#  明示的に aqBundleApp を叩く。通常の cmake --build の挙動は従来どおり。
+#
+#      cmake --build --preset macos-ninja-debug --target aqBundleApp
+#
+#  シェーダ生成物(Assets/Shader/msl・spv)はビルド生成物なので、
+#  「生成してから同梱」する必要がある。aqCompileMsl / aqCompileSpv は
+#  ルート CMakeLists.txt で add_dependencies(Game ...) されているので、
+#  aqBundleApp -> Game -> aqCompileXxx と**推移的に**順序が付く
+#  (この時点では aqCompileXxx がまだ定義されていないため直接は書けない)。
+#
+#  投入の中身は Tools/PackageApp/package_app.cmake 側。
+# ----------------------------------------------------------------------------
+if(APPLE)
+	add_custom_target(aqBundleApp
+		COMMAND "${CMAKE_COMMAND}"
+			"-DAQ_PKG_BUNDLE_DIR=$<TARGET_BUNDLE_DIR:Game>"
+			"-DAQ_PKG_EXECUTABLE=$<TARGET_FILE:Game>"
+			"-DAQ_PKG_ASSETS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/Assets"
+			"-DAQ_PKG_GRAPHICS_API=${AQ_GRAPHICS_API}"
+			"-DAQ_PKG_VULKAN_SDK=${AQ_VULKAN_SDK}"
+			-P "${CMAKE_SOURCE_DIR}/Tools/PackageApp/package_app.cmake"
+		VERBATIM
+		COMMENT "Game.app へ Assets(と Vulkan ランタイム)を同梱"
+	)
+	add_dependencies(aqBundleApp Game)
+
+	# Vulkan 構成は実行ファイルが @rpath/libvulkan.1.dylib を参照するため、
+	# バンドル内の Frameworks を探索パスに足す。CMake が自動で足す
+	# Vulkan SDK の lib より **前** に来るよう BUILD_RPATH の先頭に入れる
+	# (SDK が先だと、同梱した dylib ではなく開発機の SDK を読んでしまい、
+	#  自己完結しているかどうかを取り違える)。
+	if(AQ_GRAPHICS_API STREQUAL "Vulkan")
+		set_property(TARGET Game APPEND PROPERTY BUILD_RPATH "@executable_path/../Frameworks")
+		set_property(TARGET Game APPEND PROPERTY INSTALL_RPATH "@executable_path/../Frameworks")
+	endif()
+endif()

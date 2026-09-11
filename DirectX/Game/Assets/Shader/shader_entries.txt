@@ -10,9 +10,9 @@
 #  "#" 始まりの行と空行は無視される。
 #
 #  内容は Game/Assets/Shader/*.fx の実体 (エントリ関数の定義) を全走査して作成した。
-#  .fx = 40 本 / うちエントリを持つもの 35 本 / インクルード専用 5 本
+#  .fx = 41 本 / うちエントリを持つもの 36 本 / インクルード専用 5 本
 #  (Common.fx, Lighting.fx, PBRFunctions.fx, ShadowSampling.fx, Tonemap.fx)。
-#  エントリ総数 = 59。
+#  エントリ総数 = 61。
 #
 #  [参照] 印の無い行は、現状 C++ 側の CreateShader / LoadShader から呼ばれていない
 #  エントリ (旧フォワード/GBuffer 系の残置)。Mac移植設計.md §9 P3 の
@@ -72,6 +72,8 @@ SkeletalModelLit.fx   VSMain     vs   # [参照] Graphics/SkeletalMesh.cpp
 SkeletalModelLit.fx   PSMain     ps   # [参照] Graphics/SkeletalMesh.cpp
 SkeletalPBRGBuffer.fx VSMain     vs   # [未参照]
 SkeletalPBRGBuffer.fx PSMain     ps   # [参照] Graphics/SkeletalMesh.cpp
+Skybox.fx             VSMain     vs   # [参照] Rendering/Sky/SkyRenderer.cpp
+Skybox.fx             PSMain     ps   # [参照] Rendering/Sky/SkyRenderer.cpp
 TerrainGBufferLit.fx  VSMain     vs   # [未参照]
 TerrainGBufferLit.fx  PSMain     ps   # [未参照]
 TerrainLit.fx         VSMain     vs   # [参照] Graphics/StaticMesh.cpp

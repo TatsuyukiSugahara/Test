@@ -17,6 +17,7 @@
 #include "Sound/SoundStream.h"
 #include "Sound/Component/SoundSystem.h"
 #include "Sound/Authoring/Audio.h"
+#include "Rendering/Sky/SkyRenderer.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
 #include "Sound/Authoring/Debug/AudioAuthoringPanel.h"
@@ -218,6 +219,26 @@ namespace app
 		aq::res::ResourceManager::Reflection<aq::ui::FontResource, aq::ui::FontLoader>();
 		aq::res::ResourceManager::Reflection<aq::sound::SoundClip, aq::sound::SoundClipLoader>();
 		aq::res::ResourceManager::Reflection<aq::res::ParticleSystemData, aq::res::ParticleLoader>();
+
+		// スカイキューブ (設計書/Skybox設計.md)。
+		//
+		// **OnInitialize ではなくここで生成する。** SkyRenderer はキューブマップを
+		// ResourceManager 経由で非同期ロードするが、リソースバンクの登録は上の
+		// RegisterBank 群 (= OnRegister) が済むまで行われない。Engine は
+		// Initialize() -> Register() の順に呼ぶので、OnInitialize で Load すると
+		// バンクが無く EngineAssert で落ちる。
+		//
+		// ロードに失敗しても続行する。空が出ないだけで背景はクリア色のまま残る
+		// (Deferred の decal と同じ作法)。テクスチャの完了待ちは SkyRenderer が
+		// 描画時にポーリングするので、ここでは待たない。
+		{
+			auto sky = std::make_unique<aq::rendering::SkyRenderer>();
+			if (sky->Create())
+			{
+				renderer_.SetSkyRenderer(std::move(sky));
+			}
+		}
+		aq::StartupMark("    [game] Sky ok (cubemap load kicked + shaders x2)");
 
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::ActorStateMachineSystem>();

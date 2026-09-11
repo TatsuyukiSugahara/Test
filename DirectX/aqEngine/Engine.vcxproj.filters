@@ -118,6 +118,9 @@
     <Filter Include="Rendering\Shadow\Debug">
       <UniqueIdentifier>{f567c67a-8bc6-566c-9b12-2e147c53ce83}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\Sky">
+      <UniqueIdentifier>{c50e4da4-0c2b-424d-99dd-45e7eb5d22c8}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Resource">
       <UniqueIdentifier>{0dd3f527-688b-4000-a85f-54637f175461}</UniqueIdentifier>
     </Filter>
@@ -580,6 +583,12 @@
     </ClCompile>
     <ClCompile Include="Rendering\Deferred\Debug\DeferredDebugPanel.cpp">
       <Filter>Rendering\Deferred\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Sky\SkyRenderer.cpp">
+      <Filter>Rendering\Sky</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Sky\SkyCommand.cpp">
+      <Filter>Rendering\Sky</Filter>
     </ClCompile>
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
@@ -1407,6 +1416,12 @@
     </ClInclude>
     <ClInclude Include="Rendering\Deferred\Debug\DeferredDebugPanel.h">
       <Filter>Rendering\Deferred\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Sky\SkyRenderer.h">
+      <Filter>Rendering\Sky</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Sky\SkyCommand.h">
+      <Filter>Rendering\Sky</Filter>
     </ClInclude>
     <ClInclude Include="UI\UITypes.h">
       <Filter>UI</Filter>

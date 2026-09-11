@@ -41,6 +41,20 @@ namespace aq
 		}
 
 
+		void Renderer::SetSkyRenderer(std::unique_ptr<SkyRenderer> sky)
+		{
+			skyRenderer_ = std::move(sky);
+		}
+
+
+		void Renderer::BuildSkyCommandList(RenderFrame& frame, RenderCommandList& outList) const
+		{
+			if (skyRenderer_) {
+				skyRenderer_->BuildCommandList(frame, outList);
+			}
+		}
+
+
 		RenderTargetHandle Renderer::GetDisplayRTHandle(RenderTargetHandle sceneRT) const
 		{
 			// compute 非対応(FL10 の Xbox One UWP 等)ではポストプロセス(Bloom)が動かないので、
@@ -104,6 +118,10 @@ namespace aq
 				// GBuffer0 の depth を使って深度テストしながら描画する
 				const RenderTargetHandle gbuffer0 = deferredRenderer_->GetGBuffer0Handle();
 				outList.Enqueue<SetRenderTargetWithDepthCommand>(rtHandle, gbuffer0);
+
+				// Pass 2c: 空（ライティング直後・フォワード直前。RT と深度は直前でバインド済み）
+				BuildSkyCommandList(frame, outList);
+
 				for (const RenderItem& item : frame.forwardItems) {
 					RecordDrawItem(item, frame.camera, outList);
 				}
@@ -193,6 +211,10 @@ namespace aq
 
 					const RenderTargetHandle gbuffer0 = deferredRenderer_->GetGBuffer0Handle();
 					outList.Enqueue<SetRenderTargetWithDepthCommand>(rtHandle, gbuffer0);
+
+					// Pass 2c: 空（ライティング直後・フォワード直前。RT と深度は直前でバインド済み）
+					BuildSkyCommandList(frame, outList);
+
 					for (const RenderItem& item : frame.forwardItems) {
 						RecordDrawItem(item, frame.camera, outList);
 					}

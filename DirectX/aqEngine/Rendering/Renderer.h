@@ -7,6 +7,7 @@
 #include "Shadow/IShadowRenderer.h"
 #include "PostProcess/IPostProcessRenderer.h"
 #include "Deferred/IDeferredRenderer.h"
+#include "Sky/SkyRenderer.h"
 
 
 namespace aq
@@ -45,6 +46,14 @@ namespace aq
 			/** ディファードレンダラーを設定する。nullptr を渡すとフォワードのみになる。 */
 			void SetDeferredRenderer(std::unique_ptr<IDeferredRenderer> dr);
 			IDeferredRenderer* GetDeferredRenderer() const { return deferredRenderer_.get(); }
+
+			/**
+			 * スカイボックスレンダラーを設定する。nullptr を渡すと空なしになる。
+			 * 未設定のままなら初回の BuildCommandList / BuildCommandListViews で自動生成する
+			 * (生成に失敗しても描画は継続し、空が出ないだけ)。
+			 */
+			void SetSkyRenderer(std::unique_ptr<SkyRenderer> sky);
+			SkyRenderer* GetSkyRenderer() const { return skyRenderer_.get(); }
 
 			/**
 			 * UI 描画コールバックを設定する。
@@ -117,9 +126,13 @@ namespace aq
 			                    const CameraData&  camera,
 			                    RenderCommandList& outList) const;
 
+			/** 空のコマンドを積む。シーン RT + 深度がバインド済みの位置から呼ぶこと。 */
+			void BuildSkyCommandList(RenderFrame& frame, RenderCommandList& outList) const;
+
 			std::unique_ptr<IShadowRenderer>        shadowRenderer_;
 			std::unique_ptr<IPostProcessRenderer>   postProcessRenderer_;
 			std::unique_ptr<IDeferredRenderer>      deferredRenderer_;
+			std::unique_ptr<SkyRenderer>            skyRenderer_;
 			std::function<void(RenderCommandList&)> uiRenderCallback_;
 			std::function<void(const RenderFrame&, RenderCommandList&)> hiZBuildCallback_;
 			RenderTargetHandle                      mainRTHandle_;

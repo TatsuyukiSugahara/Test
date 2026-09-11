@@ -342,6 +342,8 @@
     <ClCompile Include="Rendering\Deferred\DeferredLightingCommand.cpp" />
     <ClCompile Include="Rendering\Deferred\DeferredDecalCommand.cpp" />
     <ClCompile Include="Rendering\Deferred\Debug\DeferredDebugPanel.cpp" />
+    <ClCompile Include="Rendering\Sky\SkyRenderer.cpp" />
+    <ClCompile Include="Rendering\Sky\SkyCommand.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Terrain\HeightmapPainter.cpp" />
     <ClCompile Include="Terrain\SplatmapPainter.cpp" />
@@ -641,6 +643,8 @@
     <ClInclude Include="Rendering\Deferred\DeferredLightingCommand.h" />
     <ClInclude Include="Rendering\Deferred\DeferredDecalCommand.h" />
     <ClInclude Include="Rendering\Deferred\Debug\DeferredDebugPanel.h" />
+    <ClInclude Include="Rendering\Sky\SkyRenderer.h" />
+    <ClInclude Include="Rendering\Sky\SkyCommand.h" />
     <ClInclude Include="UI\UITypes.h" />
     <ClInclude Include="UI\UIContext.h" />
     <ClInclude Include="UI\UIObject.h" />

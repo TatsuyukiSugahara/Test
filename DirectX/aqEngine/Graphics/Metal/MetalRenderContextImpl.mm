@@ -4,6 +4,7 @@
 #include "Graphics/Metal/MetalRenderContextImpl.h"
 #include "Graphics/Metal/MetalGraphicsDeviceImpl.h"
 #include "Graphics/Metal/MetalRenderTarget.h"
+#include "Graphics/Metal/MetalDepthMap.h"
 #include "Graphics/Metal/MetalBuffers.h"
 #include "Graphics/Metal/MetalResources.h"
 #include "Graphics/Metal/MetalShader.h"
@@ -27,6 +28,8 @@ namespace aq
 			, colorRTs_()
 			, colorRTCount_(0)
 			, depthRT_(nullptr)
+			, depthOnlyMap_(nullptr)
+			, depthOnlySlice_(0)
 			, encoder_(nil)
 			, clearColorMask_(0)
 			, clearColors_()
@@ -126,8 +129,34 @@ namespace aq
 
 		MTLRenderPassDescriptor* MetalRenderContextImpl::BuildRenderPassDescriptor()
 		{
+			// 深度のみパス(シャドウ)。カラー 0 本 + depthAttachment だけを組む(設計書 §3.3)。
+			// **ここを通さないと深度マップへ 1 本も描けない**(P2 まではここで nil を返していた)。
+			if (depthOnlyMap_ != nullptr)
+			{
+				id<MTLTexture> depthTexture = depthOnlyMap_->GetTexture();
+				if (depthTexture == nil) {
+					return nil;
+				}
+
+				MTLRenderPassDescriptor* descriptor = [MTLRenderPassDescriptor renderPassDescriptor];  // autorelease
+				MTLRenderPassDepthAttachmentDescriptor* attachment = descriptor.depthAttachment;
+
+				// 深度マップは 2D 配列なので、**どのカスケードへ描くかは slice で選ぶ**。
+				attachment.texture     = depthTexture;
+				attachment.level       = 0;
+				attachment.slice       = depthOnlySlice_;
+				attachment.storeAction = MTLStoreActionStore;
+				attachment.loadAction  = clearDepthPending_ ? MTLLoadActionClear : MTLLoadActionLoad;
+				attachment.clearDepth  = DEPTH_CLEAR_VALUE;
+
+				// このパスが実際にクリアを行うので、予約はここで消費する。
+				// カラーの予約は触らない(カラーが 0 本なので、このパスでは何もクリアしていない)。
+				clearDepthPending_ = false;
+				return descriptor;
+			}
+
+			// カラーも深度マップも無ければパスを組めない。
 			if (colorRTCount_ == 0) {
-				// TODO(P4): OMSetDepthOnlyTarget のシャドウパスは color 0 本 + depth だけになる。
 				return nil;
 			}
 
@@ -209,8 +238,15 @@ namespace aq
 
 			// Metal はアタッチメントの外へはみ出したビューポート / シザーを弾くので、
 			// RT の実サイズで丸める。
-			const uint32_t rtWidth  = (colorRTs_[0] != nullptr) ? colorRTs_[0]->GetWidth()  : 0;
-			const uint32_t rtHeight = (colorRTs_[0] != nullptr) ? colorRTs_[0]->GetHeight() : 0;
+			//
+			// **深度のみパス(シャドウ)はカラー RT が無い**。クランプ元をカラーのままにすると
+			// 0 になってビューポートが潰れ、シャドウマップへ何も描かれない。
+			// このパスの基準は深度マップの解像度(正方形)。
+			const bool     depthOnly = (depthOnlyMap_ != nullptr);
+			const uint32_t rtWidth   = depthOnly ? depthOnlyMap_->GetResolution()
+			                                     : ((colorRTs_[0] != nullptr) ? colorRTs_[0]->GetWidth()  : 0);
+			const uint32_t rtHeight  = depthOnly ? depthOnlyMap_->GetResolution()
+			                                     : ((colorRTs_[0] != nullptr) ? colorRTs_[0]->GetHeight() : 0);
 
 			// ビューポート。一度も RSSetViewport が来ていなければ RT 全面とみなす。
 			MTLViewport viewport = pending_.viewport;
@@ -257,10 +293,18 @@ namespace aq
 
 			// 深度ステート。**深度アタッチメントが無いパスで深度書き込みを有効にすると Metal が弾く**
 			// ため、深度が無ければ Disabled 相当へ落とす(意味としても正しい)。
+			//
+			// **深度のみパスはこの「Disabled 強制」に巻き込まないこと**。このパスは
+			// depthAttachment が「ある」(depthOnlyMap_ のスライス)ので、条件に depthOnly を足す。
+			// さらにモードは pending_.depth ではなく **ReadWrite を強制**する。シャドウパスの
+			// 手前で UI などが DepthMode::Disabled を残していることがあり、そのまま使うと
+			// 深度が 1 つも書かれず「全面が影」に戻ってしまう(Vulkan 版が PSO キーで
+			// depthOnly のとき ReadWrite を固定しているのと同じ扱い)。
 			if (depthStencilCache_ != nullptr)
 			{
-				const bool      hasDepth = (depthRT_ != nullptr) && depthRT_->HasDepth();
-				const DepthMode mode     = hasDepth ? pending_.depth : DepthMode::Disabled;
+				const bool      hasDepth = depthOnly || ((depthRT_ != nullptr) && depthRT_->HasDepth());
+				const DepthMode mode     = depthOnly ? DepthMode::ReadWrite
+				                                     : (hasDepth ? pending_.depth : DepthMode::Disabled);
 
 				id<MTLDepthStencilState> depthState = depthStencilCache_->Get(mode);
 				if (depthState != nil) {
@@ -316,7 +360,9 @@ namespace aq
 			const uint32_t colorCount = (count < MAX_MRT) ? count : MAX_MRT;
 
 			// 構成が同一ならエンコーダを開いたまま維持する(設計書 §3.1)。
-			bool sameConfig = (colorCount == colorRTCount_) && (depthTarget == depthRT_);
+			// **深度のみパスの最中は必ず組み直す**。カラー 0 本の構成同士は colorRTCount_ と
+			// depthRT_ が一致してしまい、シャドウパスから抜けられなくなる。
+			bool sameConfig = (depthOnlyMap_ == nullptr) && (colorCount == colorRTCount_) && (depthTarget == depthRT_);
 			for (uint32_t i = 0; sameConfig && i < colorCount; ++i) {
 				sameConfig = (colorTargets[i] == colorRTs_[i]);
 			}
@@ -336,6 +382,12 @@ namespace aq
 			}
 			colorRTCount_ = colorCount;
 			depthRT_      = depthTarget;
+
+			// カラーを伴う構成へ移る = 深度のみパスは終わり。
+			// **FlushPendingClears() より後に落とすこと**。先に落とすと、消費されていない
+			// 深度クリアの予約が対象を失って次のパスへ紛れ込む。
+			depthOnlyMap_   = nullptr;
+			depthOnlySlice_ = 0;
 
 			// PSO キーにも反映する(設計書 §4.1)。P2 の Draw 時 flush がここを見る。
 			for (uint32_t i = 0; i < MAX_MRT; ++i) {
@@ -663,14 +715,17 @@ namespace aq
 		 */
 		bool MetalRenderContextImpl::FlushGraphicsState()
 		{
-			// 深度のみパス(シャドウ)は P3 / P4。ここではカラーが 1 枚も無い構成は描かない。
 			if (device_ == nullptr || pipelineCache_ == nullptr) {
 				return false;
 			}
-			if (pending_.vs == nullptr || pending_.ps == nullptr) {
+			if (pending_.vs == nullptr) {
 				return false;
 			}
-			if (colorRTCount_ == 0 || colorRTs_[0] == nullptr) {
+
+			// **深度のみパス(シャドウ)では PS 無し・カラー 0 本が正常**なので、ここで捨てない。
+			// 通常パスだけ「PS とカラー RT が揃っていること」を要求する(Vulkan 版の FlushGraphics と同型)。
+			const bool depthOnly = (depthOnlyMap_ != nullptr);
+			if (!depthOnly && (pending_.ps == nullptr || colorRTCount_ == 0 || colorRTs_[0] == nullptr)) {
 				return false;
 			}
 
@@ -695,10 +750,12 @@ namespace aq
 
 			MetalPipelineKey key = {};
 			key.vsFunction     = static_cast<const void*>(pending_.vs->GetFunction());
-			key.psFunction     = static_cast<const void*>(pending_.ps->GetFunction());
+			// 深度のみパスは fragment 関数が無い(MetalPipelineCache は nullptr を許容している)。
+			key.psFunction     = (pending_.ps != nullptr) ? static_cast<const void*>(pending_.ps->GetFunction())
+			                                             : nullptr;
 			key.topologyClass  = static_cast<uint8_t>(metal::ToMTLTopologyClass(pending_.topology));
 			key.blendMode      = static_cast<uint8_t>(pending_.blend);
-			key.colorCount     = static_cast<uint8_t>(colorRTCount_);
+			key.colorCount     = depthOnly ? 0 : static_cast<uint8_t>(colorRTCount_);
 			for (uint32_t i = 0; i < MAX_MRT; ++i) {
 				key.colorFormat[i] = pending_.colorFormat[i];
 			}
@@ -745,6 +802,13 @@ namespace aq
 				                   offset:constantBuffer->GetCurrentOffset()
 				                  atIndex:i];
 			}
+			// 深度のみパスは fragment 関数を持たない。**fragment 側のバインドは丸ごと要らない**
+			// (束ねても無視されるだけだが、シャドウは描画数が多いので無駄を出さない)。
+			if (depthOnly) {
+				pending_.bindingDirty = false;
+				return true;
+			}
+
 			for (uint32_t i = 0; i < PendingGraphicsState::MAX_CONSTANT_COUNT; ++i)
 			{
 				MetalConstantBuffer* constantBuffer = static_cast<MetalConstantBuffer*>(pending_.psCB[i]);
@@ -910,18 +974,62 @@ namespace aq
 		/**
 		 * シャドウ深度パス
 		 */
+		void MetalRenderContextImpl::OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, const uint32_t slice)
+		{
+			// カラー 0 本 + 深度マップの 1 スライスへ切り替える(設計書 §3.3)。
+			// VulkanRenderContextImpl::OMSetDepthOnlyTargetSlice と同じ構造。
+
+			// 予約中のクリアは「今の構成」宛て。差し替える前にここで確定させる
+			// (SetAttachments と同じ理由。設計書 §3.1 の 3 番目の呼び出し元にあたる)。
+			FlushPendingClears();
+			EndEncodingIfActive();
+
+			for (uint32_t i = 0; i < MAX_MRT; ++i) {
+				colorRTs_[i]            = nullptr;
+				pending_.colorFormat[i] = MTLPixelFormatInvalid;
+			}
+			colorRTCount_ = 0;
+			depthRT_      = nullptr;
+
+			MetalDepthMap* target = static_cast<MetalDepthMap*>(&depthMap);
+			depthOnlyMap_   = target;
+			depthOnlySlice_ = slice;
+
+			// PSO キーにも反映する(設計書 §4.1)。深度のみパスは color 0 本 + 深度フォーマットだけ。
+			pending_.colorCount    = 0;
+			pending_.depthFormat   = (target != nullptr) ? target->GetPixelFormat() : MTLPixelFormatInvalid;
+			pending_.pipelineDirty = true;
+		}
+
+
 		void MetalRenderContextImpl::OMSetDepthOnlyTarget(IDepthMap& depthMap)
 		{
-			// TODO(P4): color 0 本 + depthAttachment に MetalDepthMap のスライスを差す(設計書 §3.3)。
-			//           P1 は構成を空にするだけ。こうしないと、シャドウパスに入る直前の RT 宛ての
-			//           クリア予約がパスを跨いで生き残る。
-			SetAttachments(nullptr, 0u, nullptr);
+			OMSetDepthOnlyTargetSlice(depthMap, 0);
+		}
+
+
+		void MetalRenderContextImpl::ClearDepthMapSlice(IDepthMap& /*depthMap*/, const uint32_t /*slice*/)
+		{
+			// 次に開く深度のみパスの depthAttachment.loadAction = Clear として予約する(設計書 §3.1)。
+			// 対象とスライスは直前の OMSetDepthOnlyTargetSlice が既に決めているので引数は見ない
+			// (Vulkan 版の ClearDepthMapSlice も pendingDepthClear_ を立てるだけ)。
+			//
+			// **P1/P2 はここで予約を立てていなかった**。消費側(color 0 本 + depthAttachment)が
+			// 無く、予約が誰にも消費されないまま居座って別パスを巻き添えにするのを避けるためで、
+			// P3 で BuildRenderPassDescriptor() に消費側を入れたので立てるのが正しくなった。
+			if (depthOnlyMap_ == nullptr) {
+				return;
+			}
+
+			// 開いているパスの loadAction はもう変えられないので、いったん閉じて開き直させる。
+			EndEncodingIfActive();
+			clearDepthPending_ = true;
 		}
 
 
 		void MetalRenderContextImpl::ClearDepthMap(IDepthMap& depthMap)
 		{
-			// TODO(P4): 次に開く深度パスの loadAction = Clear として予約する。
+			ClearDepthMapSlice(depthMap, 0);
 		}
 	}
 }

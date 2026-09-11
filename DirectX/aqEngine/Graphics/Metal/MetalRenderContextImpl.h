@@ -14,6 +14,7 @@ namespace aq
 	{
 		class MetalGraphicsDeviceImpl;
 		class MetalRenderTarget;
+		class MetalDepthMap;
 		class MetalShader;
 		class MetalPipelineCache;
 		class MetalDepthStencilCache;
@@ -85,7 +86,7 @@ namespace aq
 		 * Draw* が来た時点で「エンコーダを開く → PSO / 深度ステートを引く →
 		 * ビューポート・シザー → 頂点 / 定数バッファ・テクスチャ・サンプラを束ねる →
 		 * 描画コマンド」を行う(設計書 §3.2)。
-		 * 深度のみパス(シャドウ)は P3 / P4、compute(Dispatch)は P5。
+		 * P3 で**深度のみパス(シャドウ)**を足した。compute(Dispatch)は P5。
 		 *
 		 * **エンコーダの寿命** (設計書 §3.1): Metal は 1 レンダーパス = 1 エンコーダで、
 		 * 開いた後にレンダーターゲットを差し替えられない。アタッチメントが変わる操作
@@ -129,6 +130,16 @@ namespace aq
 
 			/** 深度の供給元。自前深度を持つ RT か、OMSetRenderTargetWithDepth で指定された相手 */
 			MetalRenderTarget* depthRT_;
+
+			/**
+			 * 深度のみパス(シャドウ)の対象と、その配列スライス。通常パスでは nullptr。
+			 *
+			 * VulkanRenderContextImpl の depthOnlyMap_ / depthOnlySlice_ と同じ役割で、
+			 * **これが非 nullptr の間はカラーアタッチメントが 0 本**になる(設計書 §3.3)。
+			 * ビューポートのクランプ元・深度ステート・PSO キーのすべてがここを見る。
+			 */
+			MetalDepthMap* depthOnlyMap_;
+			uint32_t       depthOnlySlice_;
 
 			/**
 			 * 開いているレンダーコマンドエンコーダ。無ければ nil。
@@ -200,6 +211,9 @@ namespace aq
 			 * 現在のアタッチメント構成から MTLRenderPassDescriptor を組む。
 			 * **保留クリアの予約はここで消費する**(このパスが実際にクリアを行うため)。
 			 * Draw 時 flush も同じものを使う。
+			 *
+			 * カラー 0 本でも、深度のみパス(depthOnlyMap_ が非 nullptr)なら
+			 * depthAttachment だけのパスを組む(設計書 §3.3)。
 			 * @return 組めなければ nil(アタッチメントが 1 枚も無い等)
 			 */
 			MTLRenderPassDescriptor* BuildRenderPassDescriptor();
@@ -243,7 +257,8 @@ namespace aq
 			void CreateFallbackResources(id<MTLDevice> device);
 
 			/**
-			 * アタッチメント構成を差し替える。OMSet* 系の共通処理。
+			 * アタッチメント構成(カラー + 深度)を差し替える。カラーを伴う OMSet* 系の共通処理。
+			 * **深度のみパスからは抜ける**(depthOnlyMap_ を落とす)。
 			 * 構成が同一なら何もしない(エンコーダを開いたまま維持する。設計書 §3.1)。
 			 * @param colorTargets カラーの配列 (count が 0 なら参照しない)
 			 * @param count        カラーの本数
@@ -328,7 +343,9 @@ namespace aq
 			 */
 		public:
 			void OMSetDepthOnlyTarget(IDepthMap& depthMap) override;
+			void OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t slice) override;
 			void ClearDepthMap(IDepthMap& depthMap) override;
+			void ClearDepthMapSlice(IDepthMap& depthMap, uint32_t slice) override;
 		};
 	}
 }

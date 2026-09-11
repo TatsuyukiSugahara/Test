@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: f1ab702 / 最終更新: 2026-09-11
+> 対象コミット: 52dbca0 / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -484,9 +484,9 @@ namespace aq { namespace graphics {
 | **P0.5** | `compile_msl.cmake` と `MetalShader`。59 本の `.metal` がビルド時に生成され、起動時に**全部コンパイルできる**(描画はまだしない) | 59/59 生成・59/59 コンパイル成功 / 起動時間の増分を実測して記録 |
 | **P1** | `CAMetalLayer` から drawable を取り、`MTLRenderPassDescriptor` でクリアして Present。**単色の画面が出る** | 指定色で塗られる / validation(Metal API Validation)エラー 0 |
 | **P2** | 描画パス一式。`MetalPipelineCache` / `MetalDepthStencilCache` / `MTLVertexDescriptor` / バッファ・テクスチャ・サンプラの束ね / 定数バッファのスライス化。**タイトル画面が出る** | タイトルが Vulkan 構成と同じ見た目 / BC 圧縮テクスチャが正しく出る |
-| **P3** | 深度と 3D。ステージの不透明パス・地形・インスタンス描画 | ステージの形が出る / 深度が効く / 行列が Windows と一致 |
-| **P4** | GBuffer(MRT)・ディファードライティング・シャドウ(`MetalDepthMap` のスライス) | ステージが Vulkan 構成と同じ見た目 |
-| **P5** | compute(クラスタカリング・Bloom・Hi-Z・モーションブラー)。間接描画 | 路面/草/コインが出る / ポストプロセスが効く |
+| **P3** | シャドウ。depth-only パス(color 0 本 + `MetalDepthMap` のスライス)と深度マップの初期クリア | 手前が暗くならない / 影が Vulkan と同じ位置に出る |
+| **P4** | compute を有効化(`SetComputeSupported(true)`)。メイン RT の HDR 化とポストプロセス一式(トーンマップ・Bloom・Hi-Z・モーションブラー) | ステージが Vulkan 構成と同じ見た目・同じ明るさ |
+| **P5** | GPU 駆動のクラスタカリングと間接描画(`DrawIndexedIndirect`) | カリングが効く / 描画結果が変わらない |
 | **P6** | `MetalImGui` とデバッグ UI。詰め(PSO 事前生成・起動時間・フレーム時間の比較) | ImGui が出て操作できる / 通しプレイ / 終了コード 0 |
 
 各フェーズの完了条件に共通で **「Windows(D3D11/D3D12)と Mac の Vulkan 構成が壊れていない」** と
@@ -502,6 +502,12 @@ namespace aq { namespace graphics {
 >
 > **番号を振り直さないのは意図的**。`Mac移植設計.md` でフェーズ番号を途中で
 > 組み替えた結果、コミットログから順序が読めなくなった反省による。
+>
+> **P3〜P5 も P2 完了時にもう一度切り直した**(同じく番号は据え置き)。
+> P2 の描画パスが**当初 P3/P4 に割り振っていた MRT・ディファードライティング・
+> インスタンス描画までそのまま動いた**ため。実際に P2 完了時点でステージが
+> 走行可能な状態で描けている。残っていたのは (a) シャドウ、(b) ポストプロセス、
+> (c) GPU 駆動カリングの 3 つだったので、それぞれ P3 / P4 / P5 に割り当て直した。
 
 ### P0 の結果(2026-09-11)
 
@@ -525,6 +531,47 @@ namespace aq { namespace graphics {
 
 ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
 当初見込んだ pimpl の定型は 1 クラス分に収まった。
+
+### P3 の結果(2026-09-11)
+
+- [x] **手前が暗くならない**。キャラクターも草も Vulkan と同じ明るさ関係になった
+- [x] **Metal API Validation エラー 0 / 終了コード 0 / Metal 由来の警告 0**
+- [x] Vulkan 構成 0 エラー
+- [ ] Windows の回帰確認 — **この Mac では不可**
+
+**P2 の時点で、当初 P3/P4 に割り振っていた MRT・ディファードライティング・
+インスタンス描画・深度までそのまま動いていた**(ステージが走行可能な状態で描けていた)。
+残っていた「手前が真っ暗」の原因は 1 点で、**`MetalDepthMap` の初期クリアが無く、
+未初期化の深度マップが「全面が影」と判定されていた**こと。
+Vulkan 版は生成時に `vkCmdClearDepthStencilImage` で 1.0(遠 = 影なし)にしている。
+
+実装したもの:
+
+- **深度マップの初期クリア**を `Create()` の末尾で行う。Metal はクリアにコマンドバッファが
+  要るので、キューから 1 本取り、スライスごとに「color 0 本 + depthAttachment
+  (`loadAction = Clear` / `clearDepth = 1.0`)」の空パスを開いて即閉じ、
+  `commit` + `waitUntilCompleted`(起動時 1 回のみ)。
+- **depth-only パス**。`OMSetDepthOnlyTargetSlice` で color 0 本 + `depthOnlySlice_` を記録し、
+  `BuildRenderPassDescriptor()` が `depthAttachment.slice` に差す。
+  `nil` を返すのは **`depthOnlyMap_` も `colorRTCount_` も無い場合だけ**にした。
+- **深度ステートの誤爆を 2 段階で防いだ**。P2 の「深度アタッチメントが無ければ `Disabled` 強制」に
+  `depthOnly` を OR で足したうえで、**depth-only では `pending_.depth` ではなく
+  `DepthMode::ReadWrite` を強制**する。シャドウパスの直前に UI が `Disabled` を残していることがあり、
+  そのまま使うと深度が 1 つも書かれず「全面が影」へ逆戻りする。
+- **ビューポートのクランプ元**を depth-only では深度マップ解像度にした
+  (カラー RT が無いので、従来の `colorRTs_[0]` 基準だと 0 になりビューポートが潰れる)。
+
+**残差の測定**: 地面の画素比較は P3 前 46.2/255 → P3 後 36.3/255。
+残った差は**トーンマップ未適用によるもの**と特定済み(下表)。P4 で解消する。
+
+| 位置 | Vulkan | Metal | 比 |
+|---|---|---|---|
+| 空 | 205 | **255** | 1.24(素のクリア色がそのまま) |
+| 道路 | (110,119,136) | (75,83,101) | 0.68 / 0.70 / 0.74 |
+| 草 | (57,83,32) | (40,55,25) | 0.70 / 0.66 / 0.78 |
+
+**照明面が一律 0.7 倍で暗く、空だけ 255 に張り付く**のは、中間調を持ち上げて
+ハイライトを圧縮するトーンマップが走っていないときの典型。**構造的な破綻ではない。**
 
 ### P2 の結果(2026-09-11)
 

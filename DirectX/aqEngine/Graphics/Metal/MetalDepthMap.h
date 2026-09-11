@@ -18,7 +18,7 @@ namespace aq
 		 * Metal 深度専用テクスチャ(設計書/MetalBackend設計.md §7)
 		 *
 		 * D3D12DepthMap / VulkanDepthMap と同等で、Depth32Float の 2D 配列(4 スライス)。
-		 * - スライス別ビューをシャドウパスの depthAttachment として使う(P4)。
+		 * - シャドウパス(depth-only)の depthAttachment は**配列テクスチャ + slice 指定**で差す(P3)。
 		 * - 全スライスの配列ビューを PSt4 へ、比較サンプラ(LessEqual)を PSs1 へバインドする。
 		 *
 		 * Apple Silicon は D24_Unorm_S8_Uint を持たないため、フォーマットは
@@ -117,6 +117,16 @@ namespace aq
 			void Release();
 
 
+		private:
+			/**
+			 * 全スライスの深度を 1.0(遠 = 影なし)で埋める(P3)
+			 *
+			 * **これが無いと未初期化の深度が「全面が影」と判定される**。Create() の最後で 1 回だけ呼ぶ。
+			 * VulkanDepthMap が vkCmdClearDepthStencilImage で行っているのと同じ意図。
+			 */
+			void ClearAllSlices();
+
+
 			/**
 			 * IDepthMap
 			 */
@@ -134,7 +144,7 @@ namespace aq
 
 
 			/**
-			 * Metal 固有(P4 のシャドウパスが使う)
+			 * Metal 固有(シャドウパスが使う)
 			 */
 		public:
 			/** 全スライスを含む深度テクスチャ */

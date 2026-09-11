@@ -2,6 +2,7 @@
 // 非 Metal 構成では本体をガードして空 TU にする(Vulkan バックエンドと同じ作法)。
 #if defined(ENGINE_GRAPHICS_METAL)
 #include "Graphics/Metal/MetalDepthMap.h"
+#include "Graphics/Metal/MetalGraphicsDeviceImpl.h"
 
 // 本 TU は手動参照カウント(MRR)前提。CMake は -fobjc-arc を渡していない。
 #if __has_feature(objc_arc)
@@ -18,6 +19,9 @@ namespace aq
 			/** MTLSamplerDescriptor.maxAnisotropy の有効範囲 */
 			static constexpr uint32_t MIN_ANISOTROPY = 1;
 			static constexpr uint32_t MAX_ANISOTROPY = 16;
+
+			/** 生成直後の深度。1.0 = 遠クリップ = 「何にも遮られていない」(D3D11 / Vulkan 版と同値) */
+			static constexpr double INITIAL_CLEAR_DEPTH = 1.0;
 		}
 
 
@@ -169,10 +173,66 @@ namespace aq
 				return false;
 			}
 
-			// TODO(P4): Vulkan 版は未描画でも「影なし」に見えるよう深度を 1.0 でクリアしている。
-			// Metal では blit / レンダーパスにコマンドキューが要るので、シャドウパス本体と
-			// 同時に P4 で入れる。P0 では描画自体を行わないため未初期化のままでよい。
+			// **生成直後に全スライスを 1.0 で埋める**。詳細は ClearAllSlices() のコメント。
+			ClearAllSlices();
 			return true;
+		}
+
+
+		void MetalDepthMap::ClearAllSlices()
+		{
+			// **これが無いと未初期化の深度が「全面が影」と判定される**。
+			// ライティングはこの深度マップを sample_compare して遮蔽を求めるため、中身がゴミだと
+			// 「手前の草とキャラクターだけ真っ暗」という形で出る。1.0(遠クリップ)で埋めておけば、
+			// シャドウパスが一度も描かれていないスライスも「影なし」として読まれる。
+			// VulkanDepthMap が生成時に vkCmdClearDepthStencilImage で 1.0 を流し込んでいるのと同じ意図。
+			//
+			// Metal には「テクスチャを直接クリアする」コマンドが無いので、
+			// **カラー 0 本 + depthAttachment(loadAction = Clear)だけの空のレンダーパス**を
+			// スライスごとに開いて即閉じる。実際に塗るのは loadAction なので描画コマンドは要らない。
+			MetalGraphicsDeviceImpl* device = MetalGraphicsDeviceImpl::GetInstance();
+			if (device == nullptr || texture_ == nil) {
+				return;
+			}
+
+			id<MTLCommandQueue> commandQueue = static_cast<id<MTLCommandQueue>>(device->GetMTLCommandQueueHandle());
+			if (commandQueue == nil) {
+				aq::StartupLog("[MetalDepthMap] コマンドキューが取れず初期クリアを行えませんでした(手前が暗くなります)");
+				return;
+			}
+
+			@autoreleasepool
+			{
+				// フレーム用のコマンドバッファ(Present までコミットされない)とは別に 1 本立てる。
+				// **深度マップの生成は起動時の 1 回だけ**なので、ここは同期で待ってしまってよい。
+				id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];  // autorelease
+				if (commandBuffer == nil) {
+					aq::StartupLog("[MetalDepthMap] コマンドバッファを作れず初期クリアを行えませんでした");
+					return;
+				}
+
+				for (uint32_t slice = 0; slice < ARRAY_SIZE; ++slice)
+				{
+					MTLRenderPassDescriptor* descriptor = [MTLRenderPassDescriptor renderPassDescriptor];  // autorelease
+
+					// スライス別ビューではなく**配列テクスチャ + slice 指定**で差す。
+					// MetalRenderContextImpl のシャドウパスと同じ組み方に揃えておく。
+					MTLRenderPassDepthAttachmentDescriptor* attachment = descriptor.depthAttachment;
+					attachment.texture     = texture_;
+					attachment.level       = 0;
+					attachment.slice       = slice;
+					attachment.loadAction  = MTLLoadActionClear;
+					attachment.clearDepth  = INITIAL_CLEAR_DEPTH;
+					attachment.storeAction = MTLStoreActionStore;
+
+					id<MTLRenderCommandEncoder> encoder =
+						[commandBuffer renderCommandEncoderWithDescriptor:descriptor];  // autorelease
+					[encoder endEncoding];
+				}
+
+				[commandBuffer commit];
+				[commandBuffer waitUntilCompleted];
+			}
 		}
 
 

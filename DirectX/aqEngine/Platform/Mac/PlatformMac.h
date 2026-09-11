@@ -45,10 +45,6 @@ namespace aq
 
 			// アプリ終了を要求する(ウィンドウデリゲートから呼ぶ)。
 			inline void RequestExit() { exitRequested_ = true; }
-
-			// imgui の OSX バックエンド用。実体は NSView*(P4 で ImGui_ImplOSX_Init へ渡す)。
-			// Objective-C 型をヘッダに出さないため void* で返す(設計書 §6)。
-			void* GetNSView() const;
 		};
 	}
 }

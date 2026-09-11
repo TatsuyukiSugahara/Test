@@ -19,8 +19,9 @@
 #include <imgui/imgui.h>
 #if defined(AQ_PLATFORM_WIN32)
 #include <imgui/imgui_impl_win32.h>
+#elif defined(AQ_PLATFORM_MAC)
+#include "Platform/Mac/MacImGui.h"
 #endif
-// TODO(P4): MAC は imgui_impl_osx.h を include し ImGui_ImplOSX_* を呼ぶ(設計書 §6)。
 #include "Rendering/ImGuiRenderCommand.h"
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
@@ -82,12 +83,40 @@ namespace aq
 		{
 			ImGui::CreateContext();
 
-				// ImGui 用フォントを Windows フォントフォルダから読み込む(GetWindowsDirectoryA で動的解決)。
+				// ImGui 用フォントをシステムのフォントフォルダから読み込む。
 				// 日本語グリフ(かな/CJK 統合漢字 約 21,000 字)は起動時のアトラス生成に約 0.26 秒かかる一方、
 				// 使用箇所は Debug パネルの一部ラベルのみだったため ASCII(+矢印/図形記号)に制限した。
 				// 日本語ラベルは "?" で表示される。必要なら kCustomRanges に範囲を足す。
 				{
+					ImGuiIO& io = ImGui::GetIO();
+					bool fontLoaded = false;
+
+#if defined(AQ_PLATFORM_WIN32) || defined(AQ_PLATFORM_MAC)
+					// ASCII/Latin-1 + Arrows (U+2190-21FF) + Geometric Shapes (U+25A0-25FF) のみ。
+					// 日本語範囲(U+3000-30FF / U+31F0-31FF / U+FF00-FFEF / U+4E00-9FAF)は起動短縮のため外した。
+					// 範囲表とロード手順は Windows / Mac で共用し、フォントの探索先だけを分ける。
+					static const ImWchar kCustomRanges[] = {
+						0x0020, 0x00FF, // Basic Latin + Latin-1
+						0x2190, 0x21FF, // Arrows (→←↑↓↖↗↘↙↕ 等)
+						0x25A0, 0x25FF, // Geometric Shapes (●▶◀▲▼ 等)
+						0,
+					};
+
+					// 読めたら true。TTC はコレクション内の先頭フォントを使う。
+					auto tryLoadFont = [&io](const char* path) -> bool
+					{
+						FILE* f = fopen(path, "rb");
+						if (!f) return false;
+						fclose(f);
+
+						ImFontConfig cfg;
+						cfg.FontNo = 0;
+						return io.Fonts->AddFontFromFileTTF(path, 15.0f, &cfg, kCustomRanges) != nullptr;
+					};
+#endif
+
 #if defined(AQ_PLATFORM_WIN32)
+					// Windows フォントフォルダ(GetWindowsDirectoryA で動的解決)。
 					char winDir[MAX_PATH] = {};
 					if (GetWindowsDirectoryA(winDir, MAX_PATH) == 0)
 						snprintf(winDir, sizeof(winDir), "%s", "C:\\Windows");
@@ -97,44 +126,34 @@ namespace aq
 						"YuGothR.ttc",   // Yu Gothic Regular (Win8.1+)
 						"msgothic.ttc",  // MS Gothic (XP+、フォールバック)
 					};
-
-					ImGuiIO& io = ImGui::GetIO();
-					bool fontLoaded = false;
 					for (const char* name : kJpFontNames)
 					{
 						char path[MAX_PATH];
 						snprintf(path, sizeof(path), "%s\\Fonts\\%s", winDir, name);
-
-						FILE* f = fopen(path, "rb");
-						if (!f) continue;
-						fclose(f);
-
-						// ASCII/Latin-1 + Arrows (U+2190-21FF) + Geometric Shapes (U+25A0-25FF) のみ。
-						// 日本語範囲(U+3000-30FF / U+31F0-31FF / U+FF00-FFEF / U+4E00-9FAF)は起動短縮のため外した。
-						static const ImWchar kCustomRanges[] = {
-							0x0020, 0x00FF, // Basic Latin + Latin-1
-							0x2190, 0x21FF, // Arrows (→←↑↓↖↗↘↙↕ 等)
-							0x25A0, 0x25FF, // Geometric Shapes (●▶◀▲▼ 等)
-							0,
-						};
-						ImFontConfig cfg;
-						cfg.FontNo = 0;  // TTC コレクション内の先頭フォントを使用
-						ImFont* font = io.Fonts->AddFontFromFileTTF(
-							path, 15.0f, &cfg, kCustomRanges);
-						if (font) { fontLoaded = true; break; }
+						if (tryLoadFont(path)) { fontLoaded = true; break; }
 					}
+#elif defined(AQ_PLATFORM_MAC)
+					// macOS のシステムフォント。SFNS が標準で、無い環境向けに Helvetica を残す。
+					static const char* kMacFontPaths[] = {
+						"/System/Library/Fonts/SFNS.ttf",       // San Francisco (macOS 11+)
+						"/System/Library/Fonts/Helvetica.ttc",  // フォールバック
+					};
+					for (const char* path : kMacFontPaths)
+					{
+						if (tryLoadFont(path)) { fontLoaded = true; break; }
+					}
+#endif
+					// UWP はフォントファイルを直接読めないため、常に既定フォントになる。
 					if (!fontLoaded)
 						io.Fonts->AddFontDefault();
-#else
-					// TODO(P4): Mac は /System/Library/Fonts から読む。P2 では既定フォントで足りる。
-					ImGui::GetIO().Fonts->AddFontDefault();
-#endif
 				}
 
 #if defined(AQ_PLATFORM_WIN32)
 			const bool winOk = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
+#elif defined(AQ_PLATFORM_MAC)
+			const bool winOk = aq::platform::MacImGui::Init();
 #else
-			// TODO(P4): MAC は ImGui_ImplOSX_Init(NSView*) に差し替える(設計書 §6)。
+			// UWP はプラットフォームバックエンドを持たない(ImGui へ入力が届かない)。
 			const bool winOk = true;
 #endif
 			bool backendOk = false;
@@ -156,6 +175,8 @@ namespace aq
 			{
 #if defined(AQ_PLATFORM_WIN32)
 				if (winOk) ImGui_ImplWin32_Shutdown();
+#elif defined(AQ_PLATFORM_MAC)
+				if (winOk) aq::platform::MacImGui::Shutdown();
 #endif
 				ImGui::DestroyContext();
 				EngineAssertMsg(false, "ImGui backend initialization failed");
@@ -337,6 +358,8 @@ namespace aq
 #endif
 #if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_Shutdown();
+#elif defined(AQ_PLATFORM_MAC)
+			aq::platform::MacImGui::Shutdown();
 #endif
 			ImGui::DestroyContext();
 			imguiReady_ = false;
@@ -473,13 +496,12 @@ namespace aq
 		{
 #if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_NewFrame();
+#elif defined(AQ_PLATFORM_MAC)
+			aq::platform::MacImGui::NewFrame();
 #else
-			// TODO(P4): ImGui_ImplOSX_NewFrame へ差し替える(設計書 §6)。
-			// それまでは、プラットフォームバックエンドが埋めるべき最低限の 2 つを自前で入れる。
+			// UWP はプラットフォームバックエンドが無いので、それが埋めるべき最低限の 2 つを自前で入れる。
 			//  - DisplaySize: 0 のままだと ImGui::NewFrame のサニティチェックで停止する
 			//  - DeltaTime  : 0 以下だと同じくアサートに掛かる(初回フレームは実測値が無い)
-			// 入力(マウス/キー)は P4 で ImGui_ImplOSX_* に任せる。DisplayFramebufferScale は
-			// 既定の (1,1) のまま。Retina の扱いは設計書 §8-7 の未決事項。
 			{
 				ImGuiIO& io = ImGui::GetIO();
 				io.DisplaySize = ImVec2(static_cast<float>(Engine::Get().GetScreenWidth()),

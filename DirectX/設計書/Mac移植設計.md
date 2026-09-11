@@ -1,12 +1,12 @@
 # Mac(Metal)移植 設計
 
-> 対象コミット: 21ce56e / 最終更新: 2026-09-10
+> 対象コミット: 02e0c76 / 最終更新: 2026-09-11
 
 ## 現在の到達点(main へマージした時点)
 
-**macOS(Apple Silicon)で AquaDash がタイトルからステージまで動く。** 起動から終了まで
-Vulkan validation エラー 0 / 終了コード 0。フェーズは P0〜P4a まで済み、残りは P4b(ImGui の
-Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
+**macOS(Apple Silicon)で AquaDash がタイトルからステージクリアまで通しで動く。** 起動から
+終了まで Vulkan validation エラー 0 / 終了コード 0。フェーズは P0〜P4b まで済み、残りは
+P5(`.app` 配布)と P6(ネイティブ Metal)。
 
 | | 状態 |
 |---|---|
@@ -14,7 +14,7 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
 | 描画 | ステージまで描画。路面・草・コイン・キャラ・地形・影・UI が出る |
 | 入力 | キーボード / マウスは実機確認済み。**パッドは実機未確認**(コントローラが無いため) |
 | サウンド | CoreAudio で出力。波形上は鳴っている(左右のピークが連続)。**耳での確認は未実施** |
-| ImGui | 描画は出る。**入力は未接続**(P4b で `imgui_impl_osx`) |
+| ImGui | 描画・入力とも動作(P4b 完了)。自前の `MacImGui` がキー/マウス/ホイール/文字入力/カーソル形状/クリップボードを賄う |
 
 ### 引き継ぎで最初に読むべきこと
 
@@ -195,9 +195,9 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
 | `ThirdParty/WinCompat/sal.h` **(新規・自前。P2 で追加)** | 同梱 DirectXMath の `DirectXMath.h` が無条件に `#include "sal.h"` する受け皿。**上流の DirectXMath / DirectX-Headers のどちらも `sal.h` を同梱していない**ため自前で用意する(P2 で判明。上流の contents API で確認済み)。中身は DirectXMath / DirectXTex が実際に使う注釈だけを空マクロにしたもので、`basetsd.h` と定義が重なっても双方 `#ifndef` + 空定義なので衝突しない。**非 Windows のときだけ**インクルードパスに載せる(Windows SDK の `sal.h` を隠さないため) |
 | `ThirdParty/DirectX-Headers` **(新規・同梱)** | v1.619.5 / MIT。**現行版に `sal.h` というファイルは無く**、SAL 注釈は `include/wsl/stubs/basetsd.h` が定義する。DirectXTex の非 Windows 経路が要求するのは `directx/dxgiformat.h` + `wsl/winadapter.h` + `wsl/wrladapter.h` + `directx/d3d12.h` とその推移依存(`dxgicommon.h`/`d3dcommon.h`/`d3d12sdklayers.h`/`wsl/stubs/*`)。`d3dx12_*` や `dxguids` 等は不要なので入れない。**インクルードパスへ載せるのは非 Windows のときだけ**(`wsl/stubs/` が Windows SDK の同名ヘッダを隠すため) |
 | `ThirdParty/BulletPhysics` | Mac は `add_subdirectory(src)`(`BT_USE_DOUBLE_PRECISION`/`BT_THREADSAFE=1`)。Windows は既存 prebuilt `.lib` 維持 |
-| `ThirdParty/imgui/imgui_impl_osx.{h,mm}` **(新規・同梱)** | imgui 本体(1.92 WIP)と同じ版のものを取得 |
+| ~~`ThirdParty/imgui/imgui_impl_osx.{h,mm}`~~ | **同梱しない方針に変更(P4b)**。自前の `aqEngine/Platform/Mac/MacImGui.{h,mm}` を書く。理由と責務は P4b の節を見ること |
 | `aqEngine/aq.h` | **ObjC++ TU(`__OBJC__`)では DirectXTex を include しない**(P2 で追加)。非 Windows の DirectXTex は `wsl/winadapter.h` 経由でスタブ `basetsd.h` を読み、そこが `BOOL` を uint32_t に typedef し `interface` を struct に #define するため、Cocoa の `typedef bool BOOL` と衝突して `@interface` が全滅する。`aq.h` は PCH として全 TU に強制インクルードされるので、ここで切る以外に手が無い。§10 の「`.mm` は Platform/Mac・HID/Mac・Sound/CoreAudio に閉じる」の帰結として、`.mm` は画像デコードに触らない |
-| `aqEngine/Core/Application.cpp` | `ImGui_ImplWin32_*` を `#if defined(AQ_PLATFORM_WIN32)`、MAC は `ImGui_ImplOSX_Init(NSView*)`(`CAMetalLayer` の `delegate`/`superview` から取得するため `PlatformMac` に `GetNSView()` を持たせ、`static_cast<PlatformMac*>` は Mac ブロック内でのみ行う)。描画は既存 `VulkanImGui`(自前) |
+| `aqEngine/Core/Application.cpp` | `ImGui_ImplWin32_*` を `#if defined(AQ_PLATFORM_WIN32)`、MAC は `aq::platform::MacImGui::Init/NewFrame/Shutdown`(**引数なし**)。描画は既存 `VulkanImGui`(自前)。<br>当初案の「`PlatformMac::GetNSView()` を `ImGui_ImplOSX_Init` へ渡す」は**不要になった**(P4b): `NSView` が要るのはイベント座標の変換だけで、それは `PlatformMac::DispatchInputEvent` が既に view を持ったまま呼ぶため。使われなくなった `GetNSView()` は削除する |
 | `aqEngine/Rendering/ImGuiRenderCommand.cpp` | `imgui_impl_dx11.h` include を D3D11 ブロック内へ |
 
 ---
@@ -217,7 +217,7 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
 2. **PNG/JPG ローダの統一**: Windows も `stb_image` にして分岐を消すか。sRGB 判定・`GenerateMipMaps` の結果差を比較してから決める。
 3. **`SoftwareMixer` の性能**: 同時ボイス数上限と線形リサンプルの品質。XAudio2 の結果と A/B。
 4. **`GetOutputClock` の精度**: A/V 同期(`SoundStream`)が要求する精度を `mHostTime` 基準で満たせるか。
-5. **imgui_impl_osx と `PumpEvents` の競合**: imgui の OSX impl は `NSView` にイベントモニタを張る。`PlatformMac` の `sendEvent` と二重処理にならないよう順序を決める。
+5. ~~**imgui_impl_osx と `PumpEvents` の競合**~~ → **解消(P4b)**。`imgui_impl_osx` を同梱せず、`PlatformMac::DispatchInputEvent` が受けた `NSEvent` を `MacImGui::HandleEvent` へも渡す自前バックエンドにしたため、`NSView` へイベントモニタを張る主体がいなくなった。NSEvent の入り口は`PumpEvents` の 1 本のまま。詳細は P4b の節。
 6. **KosmicKrisp**: macOS 26 + Apple Silicon 限定の完全準拠 Vulkan。MoltenVK で portability subset の制限に当たった場合の代替として評価。
 7. **clang が出す警告の扱い**(P0 の clang-cl 検証で判明。ビルドは通るので P0 の完了条件からは外した):
    - `-Wdelete-abstract-non-virtual-dtor` 2 件 — `aq::IApplication`(`Engine.cpp:115`)と `app::actor::IState`(`StateMachine.cpp:117`)を、仮想デストラクタ無しの抽象基底ポインタ経由で `delete` している。**派生のデストラクタが走らない未定義動作**なので P1 で潰す
@@ -310,6 +310,16 @@ Mac バックエンド)と P5(`.app` 配布)、P6(ネイティブ Metal)。
      `FlushRender` = `WaitForPipelinedFrame` が前フレームしか待たないためドレイン側も実際にブロックする。
      **両モードで BACK TO TITLE → タイトル → 再入場を実機確認済み**。
    - D3D11 は実行時破棄でも `WaitIdle` が no-op でよい(ランタイムがリソース参照を追跡して遅延解放する)。
+
+21. **終了時に `MemoryTracker` が約 1.28MB / 10,467 件のリークを報告する**(P4b の評価中に判明。
+   **本移植の回帰ではない**): Mac の Debug ビルドで AquaDash を起動してタイトルのまま
+   ウィンドウを閉じると、終了時の `MemoryTracker` ダンプが 10,467 件・1,279,246 バイトを並べる。
+   P4b の変更を `git stash` して同条件で測った値との差は **+12 件 / −240 バイト**で誤差の範囲、
+   つまり**以前から出ていたもの**。ダンプの全件が「no source info」で、どこの確保かが分からない
+   (`engineNewWith` を通っていない `new` / ThirdParty 側の確保と思われる)。
+   終了コードは 0、Vulkan validation エラーも 0 なので実害は出ていないが、
+   **これが正常なのか(意図的に解放しない静的データなのか)を誰も確認していない**。
+   Windows でも同じ数字が出るのかを含めて別途見ること。
 ---
 
 ## 9. フェーズ計画
@@ -631,19 +641,104 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
 
 ### P4b: Mac のデバッグ UI(Mac 実機)
 
-実装:
-- `imgui_impl_osx` の同梱と配線。
-- §8-5(`imgui_impl_osx` が `NSView` に張るイベントモニタと `PlatformMac::PumpEvents` の
-  二重処理)の順序決め。
+**方式変更(P4b 着手時に決定)**: 当初は `imgui_impl_osx.{h,mm}` を同梱する予定だったが、
+**自前の ImGui プラットフォームバックエンド `MacImGui` を書く**方式に変えた。
 
-評価:
-- [ ] ImGui のデバッグ UI が表示・操作でき、`SuppressKeyboard/Mouse` がゲーム入力と排他になる
-- [ ] 入力が二重に処理されない(1 回のクリックで ImGui とゲームの両方が反応しない)
-- [ ] キーボード/マウス/パッドで AquaDash が**通してプレイ**できる
-      (基本操作の確認は P2.5 で済ませた。ここでは音と UI を含めた通しプレイを見る)
+- P2.5 で `PumpEvents` → `DispatchInputEvent` → `CocoaInputSink` という NSEvent の一次受けが
+  既にできている。`imgui_impl_osx` は `NSView` に `addLocalMonitorForEventsMatchingMask` で
+  イベントモニタを張るため、同じ NSEvent を 2 系統から触ることになる(§8-5 の懸念そのもの)。
+  **入り口を 1 本に保つほうが素直**で、順序を詰める必要も消える。
+- `imgui_impl_osx` は IME(`NSTextInputClient` のサブビュー)まで面倒を見るが、Mac の
+  フォントアトラスは ASCII + 矢印 + 幾何学模様のみ(§6)なので **IME は使えず要らない**。
+  残る責務(キー写像・マウス・ホイール・カーソル形状・クリップボード)は自前で書ける量。
+- 同梱すると imgui 1.92 WIP という中間版に対応した backend を持ち込むことになり、
+  バージョン整合の確認コストが乗る。
+
+責務:
+
+| ファイル | 責務 |
+|---|---|
+| `aqEngine/Platform/Mac/MacImGui.{h,mm}` **(新規)** | ImGui の Mac プラットフォームバックエンド(`imgui_impl_win32` 相当)。`Init()` / `Shutdown()` / `NewFrame()` / `HandleEvent(NSEvent*, NSView*)`。ヘッダは C++ からも読めるよう、`HandleEvent` だけ `#ifdef __OBJC__` で囲む(`Application.cpp` は素の C++) |
+| `aqEngine/Platform/Mac/PlatformMac.mm` | `DispatchInputEvent` の末尾で `MacImGui::HandleEvent(event, view)` を呼ぶ。`windowDidResignKey` / `windowDidBecomeKey`(新設)から `MacImGui::OnFocusChanged`。使われなくなった `GetNSView()` を削除 |
+| `aqEngine/Platform/Mac/PlatformMac.h` | `GetNSView()` の宣言を削除 |
+| `aqEngine/Core/Application.cpp` | Mac 分岐の `DisplaySize`/`DeltaTime` 直書きを `MacImGui::NewFrame()` へ、`winOk = true` を `MacImGui::Init()` へ、終了処理へ `MacImGui::Shutdown()` を追加。フォントの `TODO(P4)` を解消 |
+
+決定事項:
+
+- **ゲーム入力との排他は既存の仕組みのまま**。`Application::Update` の先頭で
+  `io.WantCaptureKeyboard/Mouse` を `InputManager::Suppress*` へ渡す経路が既にあり、Win32 と同じ
+  (Win32 も `ImGui_ImplWin32_WndProcHandler` と DirectInput の両方に入力が入り、抑制はこの一点で効く)。
+  したがって `HandleEvent` と `CocoaInputSink` の**両方へ同じイベントを渡してよい**。
+  「二重処理」とはイベントが 2 回 ImGui に入ることであって、ゲームと ImGui の両方が見ること
+  ではない。
+- **呼ぶ順序**は「シンクへ転送 → `MacImGui::HandleEvent` → `[NSApp sendEvent:]`」。
+  前 2 つはどちらも状態を溜めるだけなので順序に意味は無く、既存行を動かさないため後ろに足す。
+- **座標系**: §8-13 の決定で `contentsScale = 1` に固定してあるため、NSView のポイント座標が
+  そのまま `io.DisplaySize`(= `Engine::GetScreenWidth/Height`)の座標系になる。
+  `DisplayFramebufferScale` は既定の (1,1) のまま。Y は Cocoa が左下原点なので反転する
+  (`CocoaInputSink` への `PushMousePosition` と同じ変換)。
+- **キー対応表は `CocoaInputSink` の `KEY_MAP` と共有しない**。あちらは `KeyBoardType`
+  (ゲームが見る 16 キー)への写像で、ImGui は英数・記号・F1〜F12・テンキー・編集キーまで要る。
+  写像先の enum が違うので、`MacImGui.mm` に `kVK_* → ImGuiKey` の表を別に持つ。
+  `kVK_*` の数値を自前定数として写す方針は `CocoaInputSink` と揃える(`Carbon.framework` に依存しない)。
+- **文字入力**は `[event characters]` を UTF-8 にして `io.AddInputCharactersUTF8`。制御文字は落とす。
+  IME(`markedText`)は扱わない。
+- **Command 押下中は keyUp が配送されない** macOS の仕様に、`CocoaInputSink::OnModifierFlagsChanged`
+  と同じ対処(Command が離れた時点で押下を一掃)を入れる。
+- **修飾キー**は `flagsChanged` の `modifierFlags` から `ImGuiMod_Ctrl/Shift/Alt/Super` を毎回入れ直す。
+- **ホイール**は `scrollingDeltaX/Y`。`hasPreciseScrollingDeltas`(トラックパッド)は
+  ピクセル量で来るので 1/10 に、行単位のときはそのまま `AddMouseWheelEvent` へ渡す。
+- **カーソル形状**(`ImGui::GetMouseCursor()` → `NSCursor`)と**クリップボード**
+  (`NSPasteboard`)も入れる。どちらも数十行で、デバッグ UI の使い勝手に直結する。
+  クリップボードの口は 1.91.1 で `ImGuiIO` から **`ImGuiPlatformIO::Platform_*ClipboardTextFn`**
+  へ移っている(同梱の 1.92.0 WIP では `io` 側は旧 API 互換として残っているだけ)。
+- **フォーカスの出入りは両方通知する**(実装中に判明して追加): `MacImGui::OnFocusChanged(bool)` を
+  `NSWindowDelegate` の `windowDidResignKey` / `windowDidBecomeKey` から呼ぶ。
+  ImGui の `io.AppFocusLost` は**立ちっぱなしのフラグ**で、真の間は毎フレーム
+  `ClearInputKeys` / `ClearInputMouse` が走る(`imgui.cpp` の `UpdateInputEvents` 末尾)。
+  **`AddFocusEvent(false)` だけを送ると、以後 ImGui の入力が永久に捨てられる**。
+  既存の `windowDidResignKey` は `CocoaInputSink::OnFocusLost()` しか呼んでいなかったので、
+  `windowDidBecomeKey` ごと足す。
+- **フォント**: `Application.cpp` の `TODO(P4)` を解消し、Mac でも
+  `/System/Library/Fonts/SFNS.ttf` →(無ければ)`Helvetica.ttc` を 15px で読む。
+  グリフ範囲は Windows 側と同じ表を共用する。読めなければ従来どおり `AddFontDefault()`。
+
+実装:
+- 上表の 4 ファイル。`imgui_impl_osx` は同梱しない(§8-5 は本方式で解消)。
+- 新規ファイルは `aqEngine/CMakeLists.txt` の glob(`*.mm` / `Platform/Mac/`)が自動で拾う。
+  **Windows の `.vcxproj` には登録しない**(Mac 専用ファイルは `PlatformMac` / `CocoaInputSink` 等と
+  同じく CMake 側だけで扱う既存方針)。
+
+評価(2026-09-11 実機。`macos-ninja` Debug / 合成入力 CGEvent + スクリーンショットで確認):
+- [x] ImGui のデバッグ UI が表示・操作でき、`SuppressKeyboard/Mouse` がゲーム入力と排他になる
+      - メニューバー(Tools → Audio / Prefab Editor / Level Editor)が開く。Scene Hierarchy の
+        エンティティをクリックで選択でき Inspector に反映される
+      - **排他の確認**: Inspector の Name 欄を編集中に Space を押すと文字入力側に入り、
+        タイトル画面は進まない。欄からフォーカスを外すと同じ Space でゲームが開始する
+- [x] 入力が二重に処理されない(1 回のクリックで ImGui とゲームの両方が反応しない)
+      - 上記 Space の挙動がそのまま証拠。`imgui_impl_osx` を入れていないので NSEvent の
+        入り口は `PumpEvents` 1 本のまま
+- [x] F1 / 中クリックでデバッグ UI がトグルできる(両方とも動作)
+- [x] ImGui のテキスト入力欄に英数字が打てる(Name 欄が `Session` → `Sessionxyz` になる)
+- [x] カーソル形状がウィジェットに応じて変わる(テキスト欄で I ビーム / ゲーム上で矢印)
+- [x] 別アプリへ切り替えて戻っても ImGui の入力が効き続ける(`AppFocusLost` が残らない)
+      - Finder へ切り替えて復帰後も F1 トグルが効く
+- [x] ホイールでパネルがスクロールする
+- [x] キーボード/マウスで AquaDash が**通してプレイ**できる
+      - タイトル → ステージ → STAGE CLEAR(COIN 157 / TIME 01:30)まで到達。終了コード 0、
+        Vulkan validation **エラー 0**(警告は §8-15 の既知のもののみ)
+      - **パッドは実機が無いため未確認のまま**(P2.5 から継続。本フェーズでも解消しない)
+      - 音は鳴っている前提(P4a)。**耳での確認は引き続き未実施**
 - [ ] Windows 側の回帰なし(D3D12/Vulkan/UWP がビルド・動作)
-      (2026-09-10: D3D11/D3D12/Vulkan はビルド・起動・終了まで確認済(冒頭「引き継ぎ」1)。
-      UWP は Windows Store ツールセットが無い PC のため未確認)
+      - **この Mac では検証できない。次に Windows を触るときの宿題**
+      - 共有ファイルの差分は `Core/Application.cpp` のみで、Mac 経路は
+        `#elif defined(AQ_PLATFORM_MAC)` に閉じている。**UWP が拾っていた `#else` は
+        そのまま残した**(`DisplaySize`/`DeltaTime` の手当てが UWP には引き続き要る)。
+        フォント読み込みはグリフ範囲表とロード手順を Win/Mac で共用する形に整理したので、
+        **Windows のフォント探索の挙動は変わらないはずだが要確認**
+      - 新規ファイルは `Platform/Mac/` 配下のみで CMake が非 Mac では除外する
+      - (2026-09-10: D3D11/D3D12/Vulkan はビルド・起動・終了まで確認済(冒頭「引き継ぎ」1)。
+        UWP は Windows Store ツールセットが無い PC のため未確認)
 
 ### P5: 配布形態(任意)
 

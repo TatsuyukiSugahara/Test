@@ -4,6 +4,9 @@
 #if defined(AQ_PLATFORM_MAC)
 #include "Platform/Mac/PlatformMac.h"
 #include "HID/Mac/CocoaInputSink.h"
+#if defined(AQ_IMGUI)
+#include "Platform/Mac/MacImGui.h"
+#endif
 #import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -160,6 +163,13 @@ namespace
 		default:
 			break;
 		}
+
+#if defined(AQ_IMGUI)
+		// ImGui にも同じイベントを渡す。ゲーム入力との排他は Application::Update の
+		// SuppressKeyboard/Mouse(io.WantCapture*)で効くので、両方が見てよい(設計書 P4b)。
+		// どちらも状態を溜めるだけなので、シンクへの転送との順序に意味は無い。
+		aq::platform::MacImGui::HandleEvent(event, view);
+#endif
 	}
 }
 
@@ -183,6 +193,20 @@ namespace
 {
 	(void)notification;
 	aq::hid::CocoaInputSink::Get().OnFocusLost();
+#if defined(AQ_IMGUI)
+	aq::platform::MacImGui::OnFocusChanged(false);
+#endif
+}
+
+
+// 復帰も必ず伝える。ImGui の io.AppFocusLost は立ちっぱなしのフラグで、真の間は
+// 毎フレーム入力が捨てられるため、false を送ったら true も返す必要がある。
+- (void)windowDidBecomeKey:(NSNotification*)notification
+{
+	(void)notification;
+#if defined(AQ_IMGUI)
+	aq::platform::MacImGui::OnFocusChanged(true);
+#endif
 }
 
 
@@ -378,9 +402,10 @@ namespace aq
 						break;
 					}
 
-					// 入力シンクへ転送してから NSApplication へ流す。
-					// TODO(P4): imgui_impl_osx は NSView にイベントモニタを張るため、
-					// ここの sendEvent と二重処理になりうる(設計書 §8-5)。順序は P4 で再確認する。
+					// 入力シンクと ImGui へ転送してから NSApplication へ流す。
+					// imgui_impl_osx は同梱せず(P4b)、自前の MacImGui::HandleEvent へ
+					// DispatchInputEvent から渡している。NSView にイベントモニタを張る主体が
+					// いないため、NSEvent の入り口はここ 1 本のまま(設計書 §8-5 は解消)。
 					DispatchInputEvent(event, objects_ != nullptr ? objects_->view : nil);
 					[NSApp sendEvent:event];
 				}
@@ -431,12 +456,6 @@ namespace aq
 
 			// 3) 空なら nullptr。Win32 と同じく Resource 側の FindProjectRoot 探索へ委ねる。
 			return contentRoot_.empty() ? nullptr : contentRoot_.c_str();
-		}
-
-
-		void* PlatformMac::GetNSView() const
-		{
-			return objects_ != nullptr ? static_cast<void*>(objects_->view) : nullptr;
 		}
 	}
 }

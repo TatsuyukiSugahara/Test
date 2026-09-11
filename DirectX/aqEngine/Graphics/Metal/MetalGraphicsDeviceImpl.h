@@ -71,6 +71,13 @@ namespace aq
 			/** フレーム状態。BeginFrameIfNeeded で立て、Present で倒す(設計書 §2.2) */
 			bool frameOpen_;
 
+			/**
+			 * Present するたびに増える通し番号。frames-in-flight のリング位置に使う。
+			 * 動的バッファ(CB / 動的 VB・IB)は自前カウンタではなくこれを見ること
+			 * (1 フレーム内で何度 Update されてもリングがずれないため)。
+			 */
+			uint64_t frameCounter_;
+
 			/** このフレームは nextDrawable が nil で捨てた。Present までの再取得を 1 回に抑える */
 			bool frameAcquireFailed_;
 
@@ -120,6 +127,14 @@ namespace aq
 
 			/** フレームが開始済みか(捨てたフレームでは false のまま) */
 			inline bool IsFrameOpen() const { return frameOpen_; }
+
+			/**
+			 * frames-in-flight のリング位置(0 .. FRAME_COUNT-1)。
+			 *
+			 * 動的バッファはこの値でスライスを選ぶ。**自前カウンタを Update ごとに
+			 * 進めてはいけない**(同一フレーム内で複数回 Update されるとずれる)。
+			 */
+			uint32_t GetFrameIndex() const;
 
 
 			/**

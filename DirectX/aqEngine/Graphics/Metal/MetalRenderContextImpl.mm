@@ -5,7 +5,11 @@
 #include "Graphics/Metal/MetalGraphicsDeviceImpl.h"
 #include "Graphics/Metal/MetalRenderTarget.h"
 #include "Graphics/Metal/MetalBuffers.h"
+#include "Graphics/Metal/MetalResources.h"
 #include "Graphics/Metal/MetalShader.h"
+#include "Graphics/Metal/MetalPipelineCache.h"
+#include "Graphics/Metal/MetalDepthStencilCache.h"
+#include <cstdio>
 
 // 本 TU は手動参照カウント(MRR)前提で書いている。CMake は -fobjc-arc を渡していない。
 #if __has_feature(objc_arc)
@@ -27,7 +31,26 @@ namespace aq
 			, clearColorMask_(0)
 			, clearColors_()
 			, clearDepthPending_(false)
+			, pipelineCache_()
+			, depthStencilCache_()
+			, fallbackTexture_(nil)
+			, fallbackSampler_(nil)
+			, fallbackTextureLoggedMask_(0)
+			, fallbackSamplerLoggedMask_(0)
 		{
+			// PSO / 深度ステートのキャッシュとフォールバックは MTLDevice が要る。
+			// SetupRenderContext は Initialize の後に呼ばれるので、ここで揃えられる。
+			id<MTLDevice> mtlDevice = (device_ != nullptr)
+				? static_cast<id<MTLDevice>>(device_->GetMTLDeviceHandle())
+				: nil;
+			if (mtlDevice == nil) {
+				aq::StartupLog("[MetalRenderContext] MTLDevice が取れませんでした。描画は行われません");
+				return;
+			}
+
+			pipelineCache_     = std::make_unique<MetalPipelineCache>(mtlDevice);
+			depthStencilCache_ = std::make_unique<MetalDepthStencilCache>(mtlDevice);
+			CreateFallbackResources(mtlDevice);
 		}
 
 
@@ -35,6 +58,54 @@ namespace aq
 		{
 			// エンコーダを開いたまま壊れるとコマンドバッファが不正になる。必ず閉じてから解放する。
 			EndEncodingIfActive();
+
+			[fallbackTexture_ release];
+			fallbackTexture_ = nil;
+			[fallbackSampler_ release];
+			fallbackSampler_ = nil;
+		}
+
+
+		void MetalRenderContextImpl::CreateFallbackResources(id<MTLDevice> device)
+		{
+			@autoreleasepool
+			{
+				// 1x1 の白。UI シェーダは「テクスチャ無し」の矩形でも t0 を宣言しているので、
+				// nil のまま描くと Validation エラーになる。白なら頂点カラーがそのまま出る。
+				MTLTextureDescriptor* textureDesc =
+					[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+					                                                  width:1
+					                                                 height:1
+					                                              mipmapped:NO];
+				textureDesc.usage       = MTLTextureUsageShaderRead;
+				textureDesc.storageMode = MTLStorageModeShared;
+
+				fallbackTexture_ = [device newTextureWithDescriptor:textureDesc];
+				if (fallbackTexture_ != nil) {
+					const uint8_t white[4] = { 255, 255, 255, 255 };
+					[fallbackTexture_ replaceRegion:MTLRegionMake2D(0, 0, 1, 1)
+					                    mipmapLevel:0
+					                      withBytes:white
+					                    bytesPerRow:sizeof(white)];
+				} else {
+					aq::StartupLog("[MetalRenderContext] フォールバック白テクスチャの生成に失敗しました");
+				}
+
+				MTLSamplerDescriptor* samplerDesc = [[MTLSamplerDescriptor alloc] init];
+				samplerDesc.minFilter    = MTLSamplerMinMagFilterLinear;
+				samplerDesc.magFilter    = MTLSamplerMinMagFilterLinear;
+				samplerDesc.mipFilter    = MTLSamplerMipFilterLinear;
+				samplerDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+				samplerDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+				samplerDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+
+				fallbackSampler_ = [device newSamplerStateWithDescriptor:samplerDesc];
+				[samplerDesc release];
+
+				if (fallbackSampler_ == nil) {
+					aq::StartupLog("[MetalRenderContext] フォールバックサンプラの生成に失敗しました");
+				}
+			}
 		}
 
 
@@ -98,6 +169,104 @@ namespace aq
 			clearColorMask_    = 0;
 			clearDepthPending_ = false;
 			return descriptor;
+		}
+
+
+		void MetalRenderContextImpl::OpenEncoderIfNeeded()
+		{
+			if (encoder_ != nil || device_ == nullptr) {
+				return;
+			}
+
+			// 描画にもコマンドバッファが要る。まだフレームが始まっていなければここで始める(設計書 §2.3)。
+			device_->BeginFrameIfNeeded();
+			id<MTLCommandBuffer> commandBuffer =
+				static_cast<id<MTLCommandBuffer>>(device_->GetCurrentCommandBufferHandle());
+			if (commandBuffer == nil) {
+				// drawable が取れずフレームを捨てた。クリア予約は次のフレームへ持ち越す。
+				return;
+			}
+
+			@autoreleasepool
+			{
+				// 予約クリアの消費は BuildRenderPassDescriptor() が一手に行う。ここでは触らない。
+				MTLRenderPassDescriptor* descriptor = BuildRenderPassDescriptor();
+				if (descriptor == nil) {
+					return;
+				}
+
+				// renderCommandEncoderWithDescriptor: は autorelease なので retain して保持する。
+				encoder_ = [[commandBuffer renderCommandEncoderWithDescriptor:descriptor] retain];
+			}
+		}
+
+
+		void MetalRenderContextImpl::ApplyEncoderStates()
+		{
+			if (encoder_ == nil) {
+				return;
+			}
+
+			// Metal はアタッチメントの外へはみ出したビューポート / シザーを弾くので、
+			// RT の実サイズで丸める。
+			const uint32_t rtWidth  = (colorRTs_[0] != nullptr) ? colorRTs_[0]->GetWidth()  : 0;
+			const uint32_t rtHeight = (colorRTs_[0] != nullptr) ? colorRTs_[0]->GetHeight() : 0;
+
+			// ビューポート。一度も RSSetViewport が来ていなければ RT 全面とみなす。
+			MTLViewport viewport = pending_.viewport;
+			if (viewport.width <= 0.0 || viewport.height <= 0.0)
+			{
+				viewport.originX = 0.0;
+				viewport.originY = 0.0;
+				viewport.width   = static_cast<double>(rtWidth);
+				viewport.height  = static_cast<double>(rtHeight);
+				viewport.znear   = 0.0;
+				viewport.zfar    = 1.0;
+			}
+			if (rtWidth > 0 && rtHeight > 0)
+			{
+				if (viewport.originX < 0.0) { viewport.originX = 0.0; }
+				if (viewport.originY < 0.0) { viewport.originY = 0.0; }
+				if (viewport.originX + viewport.width  > static_cast<double>(rtWidth)) {
+					viewport.width  = static_cast<double>(rtWidth)  - viewport.originX;
+				}
+				if (viewport.originY + viewport.height > static_cast<double>(rtHeight)) {
+					viewport.height = static_cast<double>(rtHeight) - viewport.originY;
+				}
+			}
+			[encoder_ setViewport:viewport];
+
+			// シザー。Metal に「無効」が無いので、無効時は RT 全面を指定する(設計書 §3.3)。
+			MTLScissorRect scissor = {};
+			if (pending_.scissorEnabled)
+			{
+				scissor = pending_.scissor;
+				if (scissor.x > rtWidth)  { scissor.x = rtWidth;  }
+				if (scissor.y > rtHeight) { scissor.y = rtHeight; }
+				if (scissor.x + scissor.width  > rtWidth)  { scissor.width  = rtWidth  - scissor.x; }
+				if (scissor.y + scissor.height > rtHeight) { scissor.height = rtHeight - scissor.y; }
+			}
+			else
+			{
+				scissor.x      = 0;
+				scissor.y      = 0;
+				scissor.width  = rtWidth;
+				scissor.height = rtHeight;
+			}
+			[encoder_ setScissorRect:scissor];
+
+			// 深度ステート。**深度アタッチメントが無いパスで深度書き込みを有効にすると Metal が弾く**
+			// ため、深度が無ければ Disabled 相当へ落とす(意味としても正しい)。
+			if (depthStencilCache_ != nullptr)
+			{
+				const bool      hasDepth = (depthRT_ != nullptr) && depthRT_->HasDepth();
+				const DepthMode mode     = hasDepth ? pending_.depth : DepthMode::Disabled;
+
+				id<MTLDepthStencilState> depthState = depthStencilCache_->Get(mode);
+				if (depthState != nil) {
+					[encoder_ setDepthStencilState:depthState];
+				}
+			}
 		}
 
 
@@ -312,13 +481,28 @@ namespace aq
 		 */
 		void MetalRenderContextImpl::IASetVertexBuffer(IVertexBuffer& vertexBuffer)
 		{
-			// TODO(P2): setVertexBuffer:offset:atIndex:metal::VERTEX_BUFFER_INDEX へ流す。
+			// 束ねるのは Draw 時 flush。ここでは保留するだけ(設計書 §3.2)。
+			pending_.vb[0] = &vertexBuffer;
+
+			// slot0 を差し替えたら slot1 は持ち越さない(次の描画がインスタンスとは限らない)。
+			pending_.vb[1] = nullptr;
+		}
+
+
+		void MetalRenderContextImpl::IASetVertexBufferSlot(const uint32_t slot, IVertexBuffer& vertexBuffer)
+		{
+			// slot0 = per-vertex(buffer 30)、slot1 = per-instance(buffer 29)。
+			// D3D12 は任意スロットを受けるが、本バックエンドが使うのは 0 と 1 だけ(設計書 §5.2)。
+			if (slot < PendingGraphicsState::MAX_VERTEX_STREAM) {
+				pending_.vb[slot] = &vertexBuffer;
+			}
 		}
 
 
 		void MetalRenderContextImpl::IASetIndexBuffer(IIndexBuffer& indexBuffer)
 		{
-			// TODO(P2): 保留して drawIndexedPrimitives: の引数に渡す。
+			// drawIndexedPrimitives: の引数として渡すので、保留するだけでよい。
+			pending_.ib = &indexBuffer;
 		}
 
 
@@ -334,7 +518,13 @@ namespace aq
 
 		void MetalRenderContextImpl::IASetInputLayout(IShader& vsShader)
 		{
-			// TODO(P2): VS のリフレクション結果から MTLVertexDescriptor を組む(設計書 §9.3)。
+			// 入力レイアウトは VS のリフレクション由来(設計書 §9.3)。MTLVertexDescriptor は
+			// MetalShader が持っているので、ここは VS を記録するだけでよい(VSSetShader と同源)。
+			MetalShader* vs = static_cast<MetalShader*>(&vsShader);
+			if (pending_.vs != vs) {
+				pending_.vs            = vs;
+				pending_.pipelineDirty = true;
+			}
 		}
 
 
@@ -351,9 +541,12 @@ namespace aq
 		}
 
 
-		void MetalRenderContextImpl::VSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer)
+		void MetalRenderContextImpl::VSSetConstantBuffer(const uint32_t startSlot, IConstantBuffer& constantBuffer)
 		{
-			// TODO(P2): setVertexBuffer:offset:atIndex:startSlot へ流す(設計書 §5.1)。
+			// b レジスタはシフト 0 なので、スロット番号がそのまま buffer index になる(設計書 §5.1)。
+			if (startSlot < PendingGraphicsState::MAX_CONSTANT_COUNT) {
+				pending_.vsCB[startSlot] = &constantBuffer;
+			}
 		}
 
 
@@ -376,27 +569,41 @@ namespace aq
 		}
 
 
-		void MetalRenderContextImpl::PSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& constantBuffer)
+		void MetalRenderContextImpl::PSSetConstantBuffer(const uint32_t startSlot, IConstantBuffer& constantBuffer)
 		{
-			// TODO(P2): setFragmentBuffer:offset:atIndex:startSlot へ流す(設計書 §5.1)。
+			// Metal は VS / PS で buffer 空間が独立しているので、VS 側とは別に保持する。
+			if (startSlot < PendingGraphicsState::MAX_CONSTANT_COUNT) {
+				pending_.psCB[startSlot] = &constantBuffer;
+			}
 		}
 
 
-		void MetalRenderContextImpl::PSSetShaderResource(uint32_t startSlot, IShaderResourceView& shaderResourceView)
+		void MetalRenderContextImpl::PSSetShaderResource(const uint32_t startSlot, IShaderResourceView& shaderResourceView)
 		{
-			// TODO(P3): setFragmentTexture:atIndex:startSlot へ流す。
+			// **実体の解決は Draw 時**に GetNativeHandle() で行う(設計書 §5.1)。
+			// UI の DeferredSRV のようにロード完了で中身が差し替わるラッパがあるため、
+			// ここで id<MTLTexture> にしてしまうと「ロード前に束ねた nil」が残る。
+			if (startSlot < PendingGraphicsState::MAX_SRV_COUNT) {
+				pending_.psSRV[startSlot] = &shaderResourceView;
+			}
 		}
 
 
-		void MetalRenderContextImpl::PSUnsetShaderResource(uint32_t slot)
+		void MetalRenderContextImpl::PSUnsetShaderResource(const uint32_t slot)
 		{
-			// TODO(P3): 該当スロットの保留を落とす。
+			// nil のまま描くと Validation エラーになるので、Draw 時にフォールバックへ差し替える。
+			if (slot < PendingGraphicsState::MAX_SRV_COUNT) {
+				pending_.psSRV[slot] = nullptr;
+			}
 		}
 
 
-		void MetalRenderContextImpl::PSSetSampler(uint32_t startSlot, ISamplerState& samplerState)
+		void MetalRenderContextImpl::PSSetSampler(const uint32_t startSlot, ISamplerState& samplerState)
 		{
-			// TODO(P3): setFragmentSamplerState:atIndex:startSlot へ流す。
+			// s レジスタはシフト 0。スロット番号がそのまま sampler index になる(設計書 §5.1)。
+			if (startSlot < PendingGraphicsState::MAX_SAMPLER_COUNT) {
+				pending_.psSampler[startSlot] = &samplerState;
+			}
 		}
 
 
@@ -454,21 +661,232 @@ namespace aq
 		/**
 		 * 描画 / ディスパッチ
 		 */
-		void MetalRenderContextImpl::Draw(uint32_t vertexCount, uint32_t startVertexLocation)
+		bool MetalRenderContextImpl::FlushGraphicsState()
 		{
-			// TODO(P2): 保留ステートを flush して drawPrimitives:vertexStart:vertexCount:。
+			// 深度のみパス(シャドウ)は P3 / P4。ここではカラーが 1 枚も無い構成は描かない。
+			if (device_ == nullptr || pipelineCache_ == nullptr) {
+				return false;
+			}
+			if (pending_.vs == nullptr || pending_.ps == nullptr) {
+				return false;
+			}
+			if (colorRTCount_ == 0 || colorRTs_[0] == nullptr) {
+				return false;
+			}
+
+			OpenEncoderIfNeeded();
+			if (encoder_ == nil) {
+				return false;
+			}
+
+			MetalVertexBuffer* vertexBuffer   = static_cast<MetalVertexBuffer*>(pending_.vb[0]);
+			MetalVertexBuffer* instanceBuffer = static_cast<MetalVertexBuffer*>(pending_.vb[1]);
+
+			// ── PSO(設計書 §4.1)──
+			// stride は**リフレクション値ではなく実バッファの値**を使う。DXC が未使用の入力を
+			// 削るとリフレクション側が短くなり、2 個目以降の要素が 1 つずつずれて読まれる
+			// (Vulkan 側で踏んだ穴。設計書 §13-5)。
+			pending_.vertexStride = (vertexBuffer != nullptr) ? vertexBuffer->GetStride() : 0;
+			// VS がインスタンス属性を持ち、かつ slot1 が束ねられているときだけ layouts[29] を作る
+			// (片方だけでは PSO と頂点バッファが食い違う)。
+			pending_.instanceStride = ((instanceBuffer != nullptr) && (pending_.vs->GetInstanceStride() > 0))
+				? instanceBuffer->GetStride()
+				: 0;
+
+			MetalPipelineKey key = {};
+			key.vsFunction     = static_cast<const void*>(pending_.vs->GetFunction());
+			key.psFunction     = static_cast<const void*>(pending_.ps->GetFunction());
+			key.topologyClass  = static_cast<uint8_t>(metal::ToMTLTopologyClass(pending_.topology));
+			key.blendMode      = static_cast<uint8_t>(pending_.blend);
+			key.colorCount     = static_cast<uint8_t>(colorRTCount_);
+			for (uint32_t i = 0; i < MAX_MRT; ++i) {
+				key.colorFormat[i] = pending_.colorFormat[i];
+			}
+			key.depthFormat    = pending_.depthFormat;
+			key.vertexStride   = pending_.vertexStride;
+			key.instanceStride = pending_.instanceStride;
+
+			id<MTLRenderPipelineState> pipelineState =
+				pipelineCache_->GetOrCreate(key, pending_.vs->GetVertexDescriptor());
+			if (pipelineState == nil) {
+				return false;
+			}
+			[encoder_ setRenderPipelineState:pipelineState];
+			pending_.pipelineDirty = false;
+
+			// ── エンコーダ固有のステート ──
+			// エンコーダを開き直すと消えるので、Draw ごとに流し直す。
+			ApplyEncoderStates();
+
+			// ── 頂点ストリーム(設計書 §5.2)──
+			if (vertexBuffer != nullptr && vertexBuffer->GetBuffer() != nil)
+			{
+				[encoder_ setVertexBuffer:vertexBuffer->GetBuffer()
+				                   offset:vertexBuffer->GetCurrentOffset()
+				                  atIndex:metal::VERTEX_BUFFER_INDEX];
+			}
+			if (pending_.instanceStride > 0 && instanceBuffer != nullptr && instanceBuffer->GetBuffer() != nil)
+			{
+				[encoder_ setVertexBuffer:instanceBuffer->GetBuffer()
+				                   offset:instanceBuffer->GetCurrentOffset()
+				                  atIndex:metal::INSTANCE_BUFFER_INDEX];
+			}
+
+			// ── 定数バッファ(b はシフト 0。スロット番号がそのまま index)──
+			// offset は **GetCurrentOffset()**。CB は Update ごとに別スライスへ確保されるので、
+			// ここを 0 にすると全オブジェクトが最後の行列で描かれる(設計書 §13-7)。
+			for (uint32_t i = 0; i < PendingGraphicsState::MAX_CONSTANT_COUNT; ++i)
+			{
+				MetalConstantBuffer* constantBuffer = static_cast<MetalConstantBuffer*>(pending_.vsCB[i]);
+				if (constantBuffer == nullptr || constantBuffer->GetBuffer() == nil) {
+					continue;
+				}
+				[encoder_ setVertexBuffer:constantBuffer->GetBuffer()
+				                   offset:constantBuffer->GetCurrentOffset()
+				                  atIndex:i];
+			}
+			for (uint32_t i = 0; i < PendingGraphicsState::MAX_CONSTANT_COUNT; ++i)
+			{
+				MetalConstantBuffer* constantBuffer = static_cast<MetalConstantBuffer*>(pending_.psCB[i]);
+				if (constantBuffer == nullptr || constantBuffer->GetBuffer() == nil) {
+					continue;
+				}
+				[encoder_ setFragmentBuffer:constantBuffer->GetBuffer()
+				                     offset:constantBuffer->GetCurrentOffset()
+				                    atIndex:i];
+			}
+
+			// ── テクスチャ / サンプラ(t はシフト 8、s はシフト 0)──
+			// **未バインドのスロットもフォールバックで埋める**。シェーダが宣言している引数が
+			// nil だと Metal API Validation がエラーにするため(Vulkan 版と同じ考え方)。
+			for (uint32_t i = 0; i < BIND_SRV_COUNT; ++i)
+			{
+				id<MTLTexture> texture = nil;
+				if (pending_.psSRV[i] != nullptr) {
+					// MetalTexture / MetalRenderTarget::ColorSRV / MetalDepthMap::DepthSRV は
+					// いずれも id<MTLTexture> をそのまま返す規約(設計書 §5.1)。
+					texture = static_cast<id<MTLTexture>>(pending_.psSRV[i]->GetNativeHandle());
+				}
+
+				if (texture == nil)
+				{
+					texture = fallbackTexture_;
+					if ((fallbackTextureLoggedMask_ & (1u << i)) == 0)
+					{
+						fallbackTextureLoggedMask_ |= (1u << i);
+						char msg[128];
+						std::snprintf(msg, sizeof(msg),
+						              "[MetalRenderContext] t%u が未バインドのため白テクスチャで埋めました", i);
+						aq::StartupLog(msg);
+					}
+				}
+				[encoder_ setFragmentTexture:texture atIndex:(metal::SRV_INDEX_SHIFT + i)];
+			}
+			for (uint32_t i = 0; i < BIND_SAMPLER_COUNT; ++i)
+			{
+				MetalSampler*       sampler      = static_cast<MetalSampler*>(pending_.psSampler[i]);
+				id<MTLSamplerState> samplerState = (sampler != nullptr) ? sampler->GetSampler() : nil;
+
+				if (samplerState == nil)
+				{
+					samplerState = fallbackSampler_;
+					if ((fallbackSamplerLoggedMask_ & (1u << i)) == 0)
+					{
+						fallbackSamplerLoggedMask_ |= (1u << i);
+						char msg[128];
+						std::snprintf(msg, sizeof(msg),
+						              "[MetalRenderContext] s%u が未バインドのため既定サンプラで埋めました", i);
+						aq::StartupLog(msg);
+					}
+				}
+				[encoder_ setFragmentSamplerState:samplerState atIndex:i];
+			}
+
+			pending_.bindingDirty = false;
+			return true;
 		}
 
 
-		void MetalRenderContextImpl::DrawIndexed(uint32_t indexCount)
+		void MetalRenderContextImpl::Draw(const uint32_t vertexCount, const uint32_t startVertexLocation)
 		{
-			// TODO(P2): 保留ステートを flush して drawIndexedPrimitives:。
+			if (vertexCount == 0) {
+				return;
+			}
+
+			// 毎フレーム通る経路なので autorelease を溜めない(MRR。設計書 §10)。
+			@autoreleasepool
+			{
+				if (!FlushGraphicsState()) {
+					return;
+				}
+
+				[encoder_ drawPrimitives:metal::ToMTLPrimitiveType(pending_.topology)
+				             vertexStart:startVertexLocation
+				             vertexCount:vertexCount];
+			}
 		}
 
 
-		void MetalRenderContextImpl::DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation)
+		void MetalRenderContextImpl::DrawIndexedInternal(const uint32_t indexCount,
+		                                                 const uint32_t startIndexLocation,
+		                                                 const uint32_t instanceCount,
+		                                                 const int32_t  baseVertexLocation,
+		                                                 const uint32_t startInstanceLocation)
 		{
-			// TODO(P2): 同上 (indexBufferOffset に startIndexLocation * 要素サイズを足す)。
+			MetalIndexBuffer* indexBuffer = static_cast<MetalIndexBuffer*>(pending_.ib);
+			if (indexCount == 0 || instanceCount == 0 || indexBuffer == nullptr || indexBuffer->GetBuffer() == nil) {
+				return;
+			}
+
+			@autoreleasepool
+			{
+				if (!FlushGraphicsState()) {
+					return;
+				}
+
+				// indexBufferOffset は**バイト単位**。動的 IB のスライス offset に、
+				// 開始インデックスのバイト数を足したものになる(片方を忘れるとインデックスがずれる)。
+				const NSUInteger indexOffset = static_cast<NSUInteger>(indexBuffer->GetCurrentOffset())
+				                             + static_cast<NSUInteger>(startIndexLocation) * indexBuffer->GetIndexStride();
+
+				// 通常描画も instanceCount = 1 のインスタンス描画として出す。
+				// baseVertex / baseInstance が要るのはインスタンス側だけだが、分けても差は無い。
+				[encoder_ drawIndexedPrimitives:metal::ToMTLPrimitiveType(pending_.topology)
+				                     indexCount:indexCount
+				                      indexType:indexBuffer->GetIndexType()
+				                    indexBuffer:indexBuffer->GetBuffer()
+				              indexBufferOffset:indexOffset
+				                  instanceCount:instanceCount
+				                     baseVertex:baseVertexLocation
+				                   baseInstance:startInstanceLocation];
+			}
+		}
+
+
+		void MetalRenderContextImpl::DrawIndexed(const uint32_t indexCount)
+		{
+			DrawIndexedInternal(indexCount, 0, 1, 0, 0);
+		}
+
+
+		void MetalRenderContextImpl::DrawIndexed(const uint32_t indexCount, const uint32_t startIndexLocation)
+		{
+			DrawIndexedInternal(indexCount, startIndexLocation, 1, 0, 0);
+		}
+
+
+		/**
+		 * インデックス付きインスタンス描画。
+		 *
+		 * IRenderContextImpl の既定は no-op。override し忘れると
+		 * **インスタンス描画が 1 つも発行されない**(Vulkan 側で踏んだ穴)。
+		 * per-instance ストリーム(buffer 29)の束ねは FlushGraphicsState() が行う。
+		 */
+		void MetalRenderContextImpl::DrawIndexedInstanced(const uint32_t indexCount, const uint32_t instanceCount,
+		                                                  const uint32_t startIndexLocation, const int32_t baseVertexLocation,
+		                                                  const uint32_t startInstanceLocation)
+		{
+			DrawIndexedInternal(indexCount, startIndexLocation, instanceCount, baseVertexLocation, startInstanceLocation);
 		}
 
 

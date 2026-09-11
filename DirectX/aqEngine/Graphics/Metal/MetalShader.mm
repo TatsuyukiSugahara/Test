@@ -2,6 +2,7 @@
 // Metal のシェーダ。他構成では本体をガードして空 TU にする。
 #if defined(ENGINE_GRAPHICS_METAL)
 #include "Graphics/Metal/MetalShader.h"
+#include <spirv_reflect/spirv_reflect.h>
 #include <cstdio>
 #include <filesystem>
 
@@ -19,6 +20,9 @@ namespace aq
 		{
 			/** spirv-cross が付けるエントリ関数名(後述の BuildMslPath のコメント参照) */
 			static constexpr char MSL_ENTRY_NAME[] = "main0";
+
+			/** SPIR-V バイナリ先頭のマジックナンバー(リトルエンディアンで読んだ値) */
+			static constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
 
 			/** この時間を超えた 1 本だけログに出す。全 59 本を出すと読めないため */
 			static constexpr double SLOW_COMPILE_MS = 50.0;
@@ -109,6 +113,26 @@ namespace aq
 			}
 
 
+			/**
+			 * 頂点入力のリフレクション用 SPIR-V の探索パス: <shaderDir>/msl/<stem>.<entry>.<stage>.spv
+			 *
+			 * compile_msl.cmake は dxc の中間生成物である .spv を **.metal と同じディレクトリに
+			 * 同名で残している**ので、BuildMslPath() と拡張子だけが違う。
+			 * Vulkan 用の spv/ とは register -> binding のシフトが違う別物なので混ぜないこと
+			 * (ただし頂点入力の location はシフトの影響を受けないため、どちらで読んでも同じ)。
+			 */
+			std::string BuildSpirvPath(const char* resolvedPath, const char* entry, const IShader::ShaderType type)
+			{
+				const std::filesystem::path src(resolvedPath ? resolvedPath : "");
+				if (src.empty()) { return std::string(); }
+
+				const std::string name = src.stem().string() + "."
+				                       + ((entry && entry[0]) ? entry : "main") + "."
+				                       + StageSuffix(type) + ".spv";
+				return (src.parent_path() / "msl" / name).generic_string();
+			}
+
+
 			/** ファイル全体をテキストとして読む */
 			bool ReadWholeFile(const char* path, std::string& out)
 			{
@@ -129,6 +153,27 @@ namespace aq
 				const size_t read = (size > 0) ? std::fread(&out[0], 1, static_cast<size_t>(size), fp) : 0;
 				std::fclose(fp);
 				return read == static_cast<size_t>(size);
+			}
+
+
+			/**
+			 * ファイル全体を 32bit ワード列として読む(SPIR-V 用)。
+			 *
+			 * spirv_reflect は 4 バイト境界に載った語列を期待するので、std::string で受けずに
+			 * vector<uint32_t> へ入れ直す。サイズが 4 の倍数でなければ SPIR-V ではない。
+			 */
+			bool ReadWholeFileWords(const char* path, std::vector<uint32_t>& out)
+			{
+				out.clear();
+
+				std::string bytes;
+				if (!ReadWholeFile(path, bytes))                         { return false; }
+				if (bytes.size() < sizeof(uint32_t))                     { return false; }
+				if ((bytes.size() % sizeof(uint32_t)) != 0)              { return false; }
+
+				out.resize(bytes.size() / sizeof(uint32_t));
+				std::memcpy(out.data(), bytes.data(), bytes.size());
+				return true;
 			}
 
 
@@ -232,6 +277,9 @@ namespace aq
 			: device_([device retain])
 			, library_(nil)
 			, function_(nil)
+			, vertexDescriptor_(nil)
+			, vertexStride_(0)
+			, instanceStride_(0)
 			, filePath_()
 			, entryFuncName_()
 			, type_(ShaderType::VS)
@@ -362,10 +410,258 @@ namespace aq
 				}
 			}
 
-			// TODO(P2): 隣の .spv を spirv_reflect で読んで MTLVertexDescriptor を組む(設計書 §9.3)。
-			//   compile_msl.cmake は .metal と同じ場所へ同名の .spv を残しているので、
-			//   BuildMslPath() の拡張子を差し替えるだけで引ける。
+			// ── 4. 頂点入力レイアウト(設計書 §9.3)──
+			// 隣の .spv を spirv_reflect で読んで MTLVertexDescriptor を組む。
+			// 失敗しても致命にしない(下のコメント参照)ので戻り値は見ない。
+			BuildVertexDescriptor();
 			return true;
+		}
+
+
+		namespace
+		{
+			/**
+			 * per-instance 入力か。
+			 *
+			 * DXC は入力変数を **`in.var.<セマンティクス>`**(ドット区切り)と名付ける。
+			 * `spirv-dis` は表示のときにドットをアンダースコアへ直して `%in_var_POSITION` と
+			 * 見せるので、逆アセンブル出力を見て `in_var_` を期待すると一致しない
+			 * (Vulkan 側で一度そこで嵌まっている)。念のため両方の綴りを受ける。
+			 *
+			 * 前置きを剥がしたセマンティクスが `I_` で始まれば per-instance
+			 * (D3D12Shader.cpp / VulkanShader.cpp の perInstance 判定と同じ規約)。
+			 */
+			bool IsPerInstanceInput(const char* name)
+			{
+				if (name == nullptr) { return false; }
+
+				static constexpr char PREFIX_DOT[]   = "in.var.";
+				static constexpr char PREFIX_UNDER[] = "in_var_";
+
+				const char* semantic = nullptr;
+				if (std::strncmp(name, PREFIX_DOT, sizeof(PREFIX_DOT) - 1) == 0) {
+					semantic = name + (sizeof(PREFIX_DOT) - 1);
+				} else if (std::strncmp(name, PREFIX_UNDER, sizeof(PREFIX_UNDER) - 1) == 0) {
+					semantic = name + (sizeof(PREFIX_UNDER) - 1);
+				} else {
+					semantic = name;   // 前置きが無い綴りにも一応対応する
+				}
+
+				return semantic[0] == 'I' && semantic[1] == '_';
+			}
+
+
+			/**
+			 * SpvReflectFormat -> MTLVertexFormat。
+			 *
+			 * SpvReflectFormat の値は VkFormat と同じ数値なので、VulkanShader.cpp が
+			 * そのまま VkFormat へキャストしているところを Metal では写像し直す。
+			 * 16bit 系は現状のシェーダには出てこないが、出たときに黙って
+			 * stride が狂わないよう(FormatByteSize が 0 を返さないよう)拾ってある。
+			 */
+			MTLVertexFormat ToMTLVertexFormat(const SpvReflectFormat format)
+			{
+				switch (format)
+				{
+				case SPV_REFLECT_FORMAT_R32_SFLOAT:          return MTLVertexFormatFloat;
+				case SPV_REFLECT_FORMAT_R32G32_SFLOAT:       return MTLVertexFormatFloat2;
+				case SPV_REFLECT_FORMAT_R32G32B32_SFLOAT:    return MTLVertexFormatFloat3;
+				case SPV_REFLECT_FORMAT_R32G32B32A32_SFLOAT: return MTLVertexFormatFloat4;
+
+				case SPV_REFLECT_FORMAT_R32_UINT:            return MTLVertexFormatUInt;
+				case SPV_REFLECT_FORMAT_R32G32_UINT:         return MTLVertexFormatUInt2;
+				case SPV_REFLECT_FORMAT_R32G32B32_UINT:      return MTLVertexFormatUInt3;
+				case SPV_REFLECT_FORMAT_R32G32B32A32_UINT:   return MTLVertexFormatUInt4;
+
+				case SPV_REFLECT_FORMAT_R32_SINT:            return MTLVertexFormatInt;
+				case SPV_REFLECT_FORMAT_R32G32_SINT:         return MTLVertexFormatInt2;
+				case SPV_REFLECT_FORMAT_R32G32B32_SINT:      return MTLVertexFormatInt3;
+				case SPV_REFLECT_FORMAT_R32G32B32A32_SINT:   return MTLVertexFormatInt4;
+
+				case SPV_REFLECT_FORMAT_R16_SFLOAT:          return MTLVertexFormatHalf;
+				case SPV_REFLECT_FORMAT_R16G16_SFLOAT:       return MTLVertexFormatHalf2;
+				case SPV_REFLECT_FORMAT_R16G16B16_SFLOAT:    return MTLVertexFormatHalf3;
+				case SPV_REFLECT_FORMAT_R16G16B16A16_SFLOAT: return MTLVertexFormatHalf4;
+
+				case SPV_REFLECT_FORMAT_R16_UINT:            return MTLVertexFormatUShort;
+				case SPV_REFLECT_FORMAT_R16G16_UINT:         return MTLVertexFormatUShort2;
+				case SPV_REFLECT_FORMAT_R16G16B16_UINT:      return MTLVertexFormatUShort3;
+				case SPV_REFLECT_FORMAT_R16G16B16A16_UINT:   return MTLVertexFormatUShort4;
+
+				case SPV_REFLECT_FORMAT_R16_SINT:            return MTLVertexFormatShort;
+				case SPV_REFLECT_FORMAT_R16G16_SINT:         return MTLVertexFormatShort2;
+				case SPV_REFLECT_FORMAT_R16G16B16_SINT:      return MTLVertexFormatShort3;
+				case SPV_REFLECT_FORMAT_R16G16B16A16_SINT:   return MTLVertexFormatShort4;
+
+				default:                                     return MTLVertexFormatInvalid;
+				}
+			}
+
+
+			/** 頂点入力で使う範囲のフォーマットのバイトサイズ(未知は 0) */
+			uint32_t FormatByteSize(const SpvReflectFormat format)
+			{
+				switch (format)
+				{
+				case SPV_REFLECT_FORMAT_R16_SFLOAT:
+				case SPV_REFLECT_FORMAT_R16_UINT:
+				case SPV_REFLECT_FORMAT_R16_SINT:            return 2;
+
+				case SPV_REFLECT_FORMAT_R16G16_SFLOAT:
+				case SPV_REFLECT_FORMAT_R16G16_UINT:
+				case SPV_REFLECT_FORMAT_R16G16_SINT:
+				case SPV_REFLECT_FORMAT_R32_SFLOAT:
+				case SPV_REFLECT_FORMAT_R32_UINT:
+				case SPV_REFLECT_FORMAT_R32_SINT:            return 4;
+
+				case SPV_REFLECT_FORMAT_R16G16B16_SFLOAT:
+				case SPV_REFLECT_FORMAT_R16G16B16_UINT:
+				case SPV_REFLECT_FORMAT_R16G16B16_SINT:      return 6;
+
+				case SPV_REFLECT_FORMAT_R16G16B16A16_SFLOAT:
+				case SPV_REFLECT_FORMAT_R16G16B16A16_UINT:
+				case SPV_REFLECT_FORMAT_R16G16B16A16_SINT:
+				case SPV_REFLECT_FORMAT_R32G32_SFLOAT:
+				case SPV_REFLECT_FORMAT_R32G32_UINT:
+				case SPV_REFLECT_FORMAT_R32G32_SINT:         return 8;
+
+				case SPV_REFLECT_FORMAT_R32G32B32_SFLOAT:
+				case SPV_REFLECT_FORMAT_R32G32B32_UINT:
+				case SPV_REFLECT_FORMAT_R32G32B32_SINT:      return 12;
+
+				case SPV_REFLECT_FORMAT_R32G32B32A32_SFLOAT:
+				case SPV_REFLECT_FORMAT_R32G32B32A32_UINT:
+				case SPV_REFLECT_FORMAT_R32G32B32A32_SINT:   return 16;
+
+				default:                                     return 0;
+				}
+			}
+		}
+
+
+		void MetalShader::BuildVertexDescriptor()
+		{
+			// VS 以外は頂点入力を持たない。
+			if (type_ != ShaderType::VS) { return; }
+
+			// ── 1. 隣の .spv を読む ──
+			// **読めなくても致命エラーにはしない**。頂点入力を持たないフルスクリーンパスの VS も
+			// あり、その場合 MTLVertexDescriptor は nil のままが正しい姿だから
+			// (Vulkan 側も BuildInputLayout の失敗は黙って属性 0 本として扱っている)。
+			// ただし原因が追えるようログだけは残す。
+			const std::string resolved = ResolveShaderPath(filePath_.c_str());
+			const std::string spvPath  = BuildSpirvPath(resolved.c_str(), entryFuncName_.c_str(), type_);
+
+			std::vector<uint32_t> spirv;
+			if (spvPath.empty() || !ReadWholeFileWords(spvPath.c_str(), spirv) || spirv[0] != SPIRV_MAGIC) {
+				char msg[512];
+				std::snprintf(msg, sizeof(msg),
+					"[MetalShader] 頂点入力の .spv を読めません(頂点レイアウト無しで続行): %s",
+					spvPath.empty() ? filePath_.c_str() : spvPath.c_str());
+				aq::StartupLog(msg);
+				return;
+			}
+
+			// ── 2. 入力変数を列挙する(VulkanShader::BuildInputLayout の移植)──
+			SpvReflectShaderModule reflectModule{};
+			if (spvReflectCreateShaderModule(spirv.size() * sizeof(uint32_t), spirv.data(), &reflectModule)
+			    != SPV_REFLECT_RESULT_SUCCESS) {
+				char msg[512];
+				std::snprintf(msg, sizeof(msg),
+					"[MetalShader] spirv_reflect が .spv を解釈できません(頂点レイアウト無しで続行): %s",
+					spvPath.c_str());
+				aq::StartupLog(msg);
+				return;
+			}
+
+			uint32_t count = 0;
+			spvReflectEnumerateInputVariables(&reflectModule, &count, nullptr);
+			std::vector<SpvReflectInterfaceVariable*> inputs(count);
+			spvReflectEnumerateInputVariables(&reflectModule, &count, inputs.data());
+
+			// 組み込み変数(SV_*)を除外し location 昇順に並べる。
+			std::vector<SpvReflectInterfaceVariable*> userInputs;
+			for (SpvReflectInterfaceVariable* variable : inputs) {
+				if (variable && variable->built_in == static_cast<SpvBuiltIn>(-1) && variable->location != 0xFFFFFFFF) {
+					userInputs.push_back(variable);
+				}
+			}
+			std::sort(userInputs.begin(), userInputs.end(),
+				[](const SpvReflectInterfaceVariable* a, const SpvReflectInterfaceVariable* b)
+				{
+					return a->location < b->location;
+				});
+
+			if (userInputs.empty()) {
+				// 頂点入力を持たない VS(フルスクリーンパス)。記述子は nil のままが正しい。
+				spvReflectDestroyShaderModule(&reflectModule);
+				return;
+			}
+
+			// ── 3. MTLVertexDescriptor を組む ──
+			// パック済みレイアウト(CPU の VertexData / SkinnedVertexData と一致)を仮定し、
+			// location 順にオフセットを積む(D3D12 の APPEND_ALIGNED と同じ思想)。
+			//
+			// **セマンティクスが `I_` で始まる入力は per-instance ストリーム**という規約は
+			// D3D12 / Vulkan と共通。これを分けないと per-instance のワールド行列が
+			// per-vertex データとして読まれ、インスタンス描画(路面リボン / 草 / コインリング)が
+			// 姿勢を失って消える。
+			//
+			// **attributes[location] へそのまま入れてよい根拠**: spirv-cross が吐いた MSL の
+			// `[[attribute(n)]]` の n は SPIR-V の Location 装飾をそのまま写したものであることを
+			// 実機で確認済み(設計書 §0.2 / §9.3)。よって SPIR-V の location と
+			// MTLVertexDescriptor の属性添字は一対一で対応する。
+			@autoreleasepool {
+				MTLVertexDescriptor* descriptor = [[MTLVertexDescriptor alloc] init];
+
+				uint32_t vertexOffset   = 0;
+				uint32_t instanceOffset = 0;
+				for (const SpvReflectInterfaceVariable* variable : userInputs) {
+					const SpvReflectFormat format      = static_cast<SpvReflectFormat>(variable->format);
+					const MTLVertexFormat  metalFormat = ToMTLVertexFormat(format);
+					const uint32_t         size        = FormatByteSize(format);
+					if (metalFormat == MTLVertexFormatInvalid || size == 0) {
+						char msg[512];
+						std::snprintf(msg, sizeof(msg),
+							"[MetalShader] 未対応の頂点入力フォーマット(location=%u, format=%d): %s",
+							variable->location, static_cast<int>(format), spvPath.c_str());
+						aq::StartupLog(msg);
+						continue;
+					}
+
+					const bool     perInstance = IsPerInstanceInput(variable->name);
+					const uint32_t bufferIndex = perInstance ? metal::INSTANCE_BUFFER_INDEX : metal::VERTEX_BUFFER_INDEX;
+
+					descriptor.attributes[variable->location].format      = metalFormat;
+					descriptor.attributes[variable->location].offset      = perInstance ? instanceOffset : vertexOffset;
+					descriptor.attributes[variable->location].bufferIndex = bufferIndex;
+
+					if (perInstance) { instanceOffset += size; }
+					else             { vertexOffset   += size; }
+				}
+
+				vertexStride_   = vertexOffset;
+				instanceStride_ = instanceOffset;
+
+				// レイアウト(ストリーム)側。cbuffer とぶつからないよう buffer 空間の上端を使う(設計書 §5.2)。
+				// インスタンス属性が無いときは layouts[29] に触らない。stride 0 のレイアウトを
+				// 残すと「バッファが束ねられていない」として Validation に叱られるため。
+				if (vertexStride_ > 0) {
+					descriptor.layouts[metal::VERTEX_BUFFER_INDEX].stride       = vertexStride_;
+					descriptor.layouts[metal::VERTEX_BUFFER_INDEX].stepFunction = MTLVertexStepFunctionPerVertex;
+					descriptor.layouts[metal::VERTEX_BUFFER_INDEX].stepRate     = 1;
+				}
+				if (instanceStride_ > 0) {
+					descriptor.layouts[metal::INSTANCE_BUFFER_INDEX].stride       = instanceStride_;
+					descriptor.layouts[metal::INSTANCE_BUFFER_INDEX].stepFunction = MTLVertexStepFunctionPerInstance;
+					descriptor.layouts[metal::INSTANCE_BUFFER_INDEX].stepRate     = 1;
+				}
+
+				// MRR: alloc/init で +1 したものをそのまま保持し、Release() で対に release する。
+				vertexDescriptor_ = descriptor;
+			}
+
+			spvReflectDestroyShaderModule(&reflectModule);
 		}
 
 
@@ -375,6 +671,13 @@ namespace aq
 			function_ = nil;
 			[library_ release];
 			library_  = nil;
+
+			// PSO が参照し終えた後に呼ばれる想定。MetalPipelineCache 側は記述子を copy して
+			// 使うので、ここで解放しても生成済みの PSO には影響しない。
+			[vertexDescriptor_ release];
+			vertexDescriptor_ = nil;
+			vertexStride_     = 0;
+			instanceStride_   = 0;
 		}
 
 

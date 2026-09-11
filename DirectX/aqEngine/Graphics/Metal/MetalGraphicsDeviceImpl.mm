@@ -76,6 +76,7 @@ namespace aq
 			, offscreenRTs_()
 			, swapchainRT_()
 			, activeContext_(nullptr)
+			, frameCounter_(0)
 			, frameOpen_(false)
 			, frameAcquireFailed_(false)
 		{
@@ -493,7 +494,14 @@ namespace aq
 
 				frameOpen_          = false;
 				frameAcquireFailed_ = false;
+				++frameCounter_;
 			}
+		}
+
+
+		uint32_t MetalGraphicsDeviceImpl::GetFrameIndex() const
+		{
+			return static_cast<uint32_t>(frameCounter_ % metal::FRAME_COUNT);
 		}
 
 

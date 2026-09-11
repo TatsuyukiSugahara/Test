@@ -5,6 +5,7 @@
 #if defined(ENGINE_GRAPHICS_METAL)
 #include "Graphics/Metal/MetalCommon.h"
 #include "Graphics/IRenderContextImpl.h"
+#include <memory>
 
 
 namespace aq
@@ -14,6 +15,8 @@ namespace aq
 		class MetalGraphicsDeviceImpl;
 		class MetalRenderTarget;
 		class MetalShader;
+		class MetalPipelineCache;
+		class MetalDepthStencilCache;
 
 
 		/**
@@ -23,7 +26,7 @@ namespace aq
 		 * レンダーターゲットを差し替えられない。一方エンジンの API は D3D11 由来の
 		 * イミディエイト風なので、いったんここへ溜めて Draw で確定させる(D3D12 / Vulkan と同型)。
 		 *
-		 * P0 では「代入するだけ」で、エンコーダへは何も流さない。
+		 * 実際にエンコーダへ流すのは MetalRenderContextImpl::FlushGraphicsState()。
 		 */
 		struct PendingGraphicsState
 		{
@@ -60,7 +63,14 @@ namespace aq
 			IShaderResourceView* psSRV[MAX_SRV_COUNT]       = {};
 			ISamplerState*       psSampler[MAX_SAMPLER_COUNT] = {};
 
-			/** 差分フラグ (P2 で PSO / バインドの再構築判定に使う) */
+			/**
+			 * 差分フラグ。
+			 *
+			 * P2 の flush は**毎 Draw 束ね直している**(Metal のエンコーダはステートを
+			 * 引き継がず、RT 切り替えで開き直すたびに全部やり直しになるため、
+			 * 差分判定のほうが壊れやすい)。フラグは flush で倒すだけで、
+			 * 束ね直しの間引きに使うのは計測してからにする。
+			 */
 			bool pipelineDirty = true;
 			bool bindingDirty  = true;
 		};
@@ -69,11 +79,13 @@ namespace aq
 
 
 		/**
-		 * Metal RenderContext Implementor — P1(クリアの予約と flush)
+		 * Metal RenderContext Implementor — P2(描画パスとバインド)
 		 *
-		 * P1 は **描画コマンドをまだ出さない**。アタッチメント構成の保持と、
-		 * クリアの「予約 → loadAction への畳み込み」だけを実装する(設計書 §3.1)。
-		 * Draw / Dispatch は no-op のままで、実装は各メソッドの TODO のフェーズで順に入れる。
+		 * P1 のアタッチメント保持とクリア予約の上に、**Draw 時 flush** を載せた段階。
+		 * Draw* が来た時点で「エンコーダを開く → PSO / 深度ステートを引く →
+		 * ビューポート・シザー → 頂点 / 定数バッファ・テクスチャ・サンプラを束ねる →
+		 * 描画コマンド」を行う(設計書 §3.2)。
+		 * 深度のみパス(シャドウ)は P3 / P4、compute(Dispatch)は P5。
 		 *
 		 * **エンコーダの寿命** (設計書 §3.1): Metal は 1 レンダーパス = 1 エンコーダで、
 		 * 開いた後にレンダーターゲットを差し替えられない。アタッチメントが変わる操作
@@ -92,6 +104,16 @@ namespace aq
 
 			/** 深度のクリア値。D3D11 / Vulkan 側と揃える(遠クリップ = 1.0) */
 			static constexpr float DEPTH_CLEAR_VALUE = 1.0f;
+
+			/**
+			 * フォールバック込みで毎 Draw 束ねる SRV / サンプラのスロット数。
+			 *
+			 * 全 59 本の実使用は t <= 11 / s <= 1(設計書 §5.1 の実測)。シェーダが宣言した
+			 * 引数が nil だと Metal API Validation がエラーにするので、**未バインドのスロットも
+			 * 白テクスチャ / 既定サンプラで埋める**(Vulkan 版が全スロットへ write するのと同じ)。
+			 */
+			static constexpr uint32_t BIND_SRV_COUNT     = 12;  // t0..t11
+			static constexpr uint32_t BIND_SAMPLER_COUNT = 2;   // s0..s1
 
 
 		private:
@@ -125,6 +147,27 @@ namespace aq
 			float    clearColors_[MAX_MRT][4];
 			bool     clearDepthPending_;
 
+			/**
+			 * PSO と深度ステートのキャッシュ(設計書 §4)。
+			 * デバイスではなく**本クラスが所有する**。Draw 時 flush からしか引かないため。
+			 */
+			std::unique_ptr<MetalPipelineCache>     pipelineCache_;
+			std::unique_ptr<MetalDepthStencilCache> depthStencilCache_;
+
+			/**
+			 * 未バインドスロット用のフォールバック。
+			 *
+			 * Metal API Validation は「シェーダが宣言している引数が nil」をエラーにする。
+			 * UI シェーダはテクスチャとサンプラを必ず使うので、バインドされていない
+			 * スロットへは 1x1 の白テクスチャと既定サンプラを束ねる。
+			 */
+			id<MTLTexture>      fallbackTexture_;
+			id<MTLSamplerState> fallbackSampler_;
+
+			/** フォールバックを使ったスロットを 1 回だけログするためのビットマスク */
+			uint32_t fallbackTextureLoggedMask_;
+			uint32_t fallbackSamplerLoggedMask_;
+
 
 		public:
 			explicit MetalRenderContextImpl(MetalGraphicsDeviceImpl* device);
@@ -156,10 +199,48 @@ namespace aq
 			/**
 			 * 現在のアタッチメント構成から MTLRenderPassDescriptor を組む。
 			 * **保留クリアの予約はここで消費する**(このパスが実際にクリアを行うため)。
-			 * P2 以降の Draw 時 flush も同じものを使う。
+			 * Draw 時 flush も同じものを使う。
 			 * @return 組めなければ nil(アタッチメントが 1 枚も無い等)
 			 */
 			MTLRenderPassDescriptor* BuildRenderPassDescriptor();
+
+			/**
+			 * エンコーダが開いていなければ開く。
+			 * 予約クリアの消費は BuildRenderPassDescriptor() が一手に行うので、ここでは触らない。
+			 */
+			void OpenEncoderIfNeeded();
+
+			/**
+			 * ビューポート / シザー / 深度ステートをエンコーダへ流す。
+			 *
+			 * **Metal のエンコーダはステートを引き継がない**ため、開き直すたびに要る。
+			 * 呼び分けを間違えると「RT を切り替えた後だけ描画が消える」形で出るので、
+			 * 判定を省いて Draw ごとに流している(いずれも安価な setter)。
+			 */
+			void ApplyEncoderStates();
+
+			/**
+			 * Draw 直前に保留ステートを確定させる(設計書 §3.2)。
+			 * @return 描画できる状態なら true。false なら Draw を捨てる
+			 */
+			bool FlushGraphicsState();
+
+			/**
+			 * DrawIndexed 系の共通処理。
+			 * @param indexCount            描画するインデックス数
+			 * @param startIndexLocation    開始インデックス(バイトではなく要素数)
+			 * @param instanceCount         インスタンス数(通常描画は 1)
+			 * @param baseVertexLocation    頂点のベースオフセット
+			 * @param startInstanceLocation インスタンスのベースオフセット
+			 */
+			void DrawIndexedInternal(const uint32_t indexCount,
+			                         const uint32_t startIndexLocation,
+			                         const uint32_t instanceCount,
+			                         const int32_t  baseVertexLocation,
+			                         const uint32_t startInstanceLocation);
+
+			/** 1x1 の白テクスチャと既定サンプラを作る(コンストラクタから 1 回だけ) */
+			void CreateFallbackResources(id<MTLDevice> device);
 
 			/**
 			 * アタッチメント構成を差し替える。OMSet* 系の共通処理。
@@ -192,6 +273,7 @@ namespace aq
 			 */
 		public:
 			void IASetVertexBuffer(IVertexBuffer& vertexBuffer) override;
+			void IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vertexBuffer) override;
 			void IASetIndexBuffer(IIndexBuffer& indexBuffer) override;
 			void IASetPrimitiveTopology(PrimitiveTopology topology) override;
 			void IASetInputLayout(IShader& vsShader) override;
@@ -233,6 +315,9 @@ namespace aq
 			void Draw(uint32_t vertexCount, uint32_t startVertexLocation) override;
 			void DrawIndexed(uint32_t indexCount) override;
 			void DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation) override;
+			void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
+			                          uint32_t startIndexLocation, int32_t baseVertexLocation,
+			                          uint32_t startInstanceLocation) override;
 			void Dispatch(uint32_t x, uint32_t y, uint32_t z) override;
 
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;

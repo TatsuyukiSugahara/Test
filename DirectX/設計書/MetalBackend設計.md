@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: da050fb / 最終更新: 2026-09-11
+> 対象コミット: f1ab702 / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -483,13 +483,25 @@ namespace aq { namespace graphics {
 | **P0** | 足場。`ENGINE_GRAPHICS_METAL` の配線、CMake プリセット、空の `MetalGraphicsDeviceImpl`/`MetalRenderContextImpl`(全メソッド no-op)でビルドが通り、**黒画面で起動して終了コード 0** | ビルドが通る / 起動して閉じられる / Vulkan 構成が壊れていない |
 | **P0.5** | `compile_msl.cmake` と `MetalShader`。59 本の `.metal` がビルド時に生成され、起動時に**全部コンパイルできる**(描画はまだしない) | 59/59 生成・59/59 コンパイル成功 / 起動時間の増分を実測して記録 |
 | **P1** | `CAMetalLayer` から drawable を取り、`MTLRenderPassDescriptor` でクリアして Present。**単色の画面が出る** | 指定色で塗られる / validation(Metal API Validation)エラー 0 |
-| **P2** | `MetalPipelineCache` + `MetalBuffers` + `MTLVertexDescriptor`。**三角形 1 枚**、続いて定数バッファ付きの箱 | 三角形が出る / 行列変換が Windows と一致 |
-| **P3** | `MetalResources`(テクスチャ・サンプラ)と `MetalDepthStencilCache`。**テクスチャ付きモデルが深度付きで出る** | BC 圧縮テクスチャが正しく出る / 深度が効く |
-| **P4** | `MetalRenderTarget` / `MetalDepthMap` / エンコーダ寿命管理の本実装。**ステージが一式描ける**(GBuffer・ライティング・影・地形・インスタンス描画) | タイトル → ステージが Vulkan 構成と同じ見た目 |
+| **P2** | 描画パス一式。`MetalPipelineCache` / `MetalDepthStencilCache` / `MTLVertexDescriptor` / バッファ・テクスチャ・サンプラの束ね / 定数バッファのスライス化。**タイトル画面が出る** | タイトルが Vulkan 構成と同じ見た目 / BC 圧縮テクスチャが正しく出る |
+| **P3** | 深度と 3D。ステージの不透明パス・地形・インスタンス描画 | ステージの形が出る / 深度が効く / 行列が Windows と一致 |
+| **P4** | GBuffer(MRT)・ディファードライティング・シャドウ(`MetalDepthMap` のスライス) | ステージが Vulkan 構成と同じ見た目 |
 | **P5** | compute(クラスタカリング・Bloom・Hi-Z・モーションブラー)。間接描画 | 路面/草/コインが出る / ポストプロセスが効く |
 | **P6** | `MetalImGui` とデバッグ UI。詰め(PSO 事前生成・起動時間・フレーム時間の比較) | ImGui が出て操作できる / 通しプレイ / 終了コード 0 |
 
-各フェーズの完了条件に共通で **「Windows(D3D11/D3D12)と Mac の Vulkan 構成が壊れていない」** を含める。
+各フェーズの完了条件に共通で **「Windows(D3D11/D3D12)と Mac の Vulkan 構成が壊れていない」** と
+**「Metal API Validation エラー 0(`METAL_DEVICE_WRAPPER_TYPE=1` を付けて実行)」** を含める。
+
+> **P2〜P4 の範囲を P1 完了時に見直した**(番号は組み替えていない)。当初は
+> 「P2 = 三角形 1 枚 → P3 = テクスチャ → P4 = ステージ一式」だったが、
+> **テクスチャとサンプラの生成は P0 で既に済んでいる**(`MetalResources`)ため、
+> 束ねるだけなら P2 に自然に入る。逆にテクスチャを束ねずに UI を描くと
+> nil テクスチャで Validation エラーになり、フェーズの完了条件を満たせない。
+> そこで P2 を「描画パス一式 → タイトル画面が出る」、P3 を「深度と 3D」、
+> P4 を「GBuffer と影」に切り直した。
+>
+> **番号を振り直さないのは意図的**。`Mac移植設計.md` でフェーズ番号を途中で
+> 組み替えた結果、コミットログから順序が読めなくなった反省による。
 
 ### P0 の結果(2026-09-11)
 
@@ -513,6 +525,48 @@ namespace aq { namespace graphics {
 
 ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
 当初見込んだ pimpl の定型は 1 クラス分に収まった。
+
+### P2 の結果(2026-09-11)
+
+- [x] **タイトル画面が Vulkan 構成と同じ見た目で出る**。背景・雲・山・水面・タイトル文字・
+      ステージサムネイル・「STAGE 01 GREEN COAST」・「PRESS SPACE」すべて描画される
+      - 同じウィンドウ領域で撮った Metal / Vulkan のスクリーンショットを画素比較したところ
+        **平均差 2.05/255**。差が 24 を超えた画素は 2.41% で、**動く輪郭(雲・水面)と
+        文字のアンチエイリアスに集中**している(タイトルはアニメーションするので
+        2 枚は別フレーム。完全一致にはならない)
+- [x] **BC 圧縮テクスチャが正しく出る**(ステージサムネイルと背景が正常)
+- [x] **Metal API Validation エラー 0**
+- [x] **終了コード 0** / Metal 構成の警告 0 / Vulkan 構成 0 エラー
+- [x] フォールバック白テクスチャの使用ログ 0、定数バッファのリング拡張 0、PSO 生成失敗 0
+- [ ] Windows の回帰確認 — **この Mac では不可**
+
+P0 の申し送り 2 件(§13-7)を解消した:
+
+- **定数バッファをスライス化**した。Update ごとに次のスライスへ bump 確保し、
+  `GetCurrentOffset()` がそのオフセットを返す。**リングが枯渇したらまず 2 倍に伸ばし
+  (旧内容を memcpy して引き継ぐ)、1 CB あたり 8MB の上限に達したらログを出して
+  最終スライスを使い回す**。Vulkan 版は静かに最終スライスへクランプするだけだが、
+  Metal 側は原因がログから追えるようにした(意図的な差分)。
+  **先頭へ巻き戻すことはしない**(前フレームのデータを壊すため)。
+- **リング位置をデバイスのフレーム番号に同期**した(`GetFrameIndex()`)。自前カウンタは撤去。
+  あわせて**フレーム未開始の間はカーソルを 0 に戻す**ようにした。`Present()` は drawable が
+  取れなかったフレームで番号を進めないため、これが無いとウィンドウが隠れている間に
+  Update だけが積み上がってリングが無駄に上限まで伸びる。
+
+設計に無かった判断:
+
+- **深度アタッチメントが無いパスでは `DepthMode::Disabled` を強制**する。PSO の
+  `depthAttachmentPixelFormat` が Invalid なのに depth write が有効だと Metal に弾かれる。
+  Vulkan は PSO 生成側で無効化しているが、**Metal は PSO が深度に関与しない**ので
+  コンテキスト側の責任になる。
+- **ビューポート / シザーを RT の実サイズへクランプ**する(はみ出すと Metal が弾く)。
+- **未バインドのテクスチャ/サンプラ用に 1x1 白テクスチャと既定サンプラを束ねる**。
+  Validation は「シェーダが宣言している引数が nil」を弾くため。タイトル画面では
+  実際には 1 度も使われなかった(ログ 0 件)。
+- **PSO キーのハッシュは構造体丸ごとではなくメンバ単位**。`const void*` と `uint8_t` が
+  混在してパディングが入るので、Vulkan 版のようなバイト列ハッシュだと
+  「等しいのにハッシュが違う」キーが生まれる。
+- **PSO 生成失敗も `nullptr` としてキャッシュに記録**する(毎 Draw で作り直してログが溢れるのを防ぐ)。
 
 ### P1 の結果(2026-09-11)
 
@@ -604,7 +658,28 @@ Vulkan の統一名前空間であることを見落としていた。シフト�
    `R16G16B16A16_SFLOAT`** で、最後に `CopyToBackBuffer` で LDR へ落としている。
    トーンマップと Bloom が絡むので、**P3〜P4 で Vulkan と同じ見た目を出す段階で HDR へ変える**こと。
    変え忘れると「白飛びしない代わりに暗部が潰れる」形でズレる。
-10. ~~**Metal API Validation の有効化方法**~~ → **解決**。実行時に
+10. **P2 から P3 への申し送り 3 件**:
+   - **深度のみパス(シャドウ)が通らない**。`FlushGraphicsState()` は `ps == nullptr` /
+     `colorRTCount_ == 0` で描画を捨て、`BuildRenderPassDescriptor()` も color 0 本で nil を返す。
+     **P4 で「color 0 本 + depthAttachment」の経路を両方に入れること**
+     (PSO キャッシュ側は `psFunction = nullptr` / `colorCount = 0` を既に許容している)。
+   - **インスタンス属性を持つ VS を非インスタンス描画すると Validation エラーになりうる**。
+     `MTLVertexDescriptor` に `layouts[29]` が残っているのに buffer 29 を束ねないため。
+     P2 の範囲(UI)には該当シェーダが無い。**P3 でインスタンス描画を入れるときに、
+     「slot1 未バインドなら記述子から 29 を落とす」か「プレースホルダを束ねる」かを決めること**。
+   - **定数バッファにはフォールバックが無い**。シェーダが宣言している `b#` が未バインドだと
+     Validation エラーになる。エンジンが必ずバインドする前提。出たら「256 バイトのゼロ CB」で塞ぐ。
+11. **Vulkan の `FormatByteSize` に潜在バグがある**(P2 の頂点レイアウト移植中に発見。
+   **Metal 固有ではなく Vulkan/Windows にも効く**): `VulkanShader.cpp:136-146` の
+   `FormatByteSize()` は **32bit 系以外を 0 で返す**。呼び出し側(同 397-399 行)は
+   その値を offset に足しているだけなので、**16bit 系の頂点入力を使うと offset が進まず、
+   以降の属性がすべて同じ位置を指す**。しかも**何も言わずに壊れる**。
+   現行 59 本のシェーダに 16bit 入力が無いので顕在化していないだけで、
+   パック済み UV(`R16G16_SFLOAT`)などを入れた瞬間に踏む。
+   Metal 側(`MetalShader::BuildVertexDescriptor`)は 16bit まで拡張し、
+   **未知フォーマットはログを出して属性をスキップする**ようにした。
+   **Vulkan 側も同じ直し方をすること**(別途)。
+12. ~~**Metal API Validation の有効化方法**~~ → **解決**。実行時に
    **`METAL_DEVICE_WRAPPER_TYPE=1`** を付けると、起動直後に
    `Metal API Validation Enabled` が出て有効になる(実機で確認)。
    Xcode はスキームの Diagnostics から GUI で切り替えられる。

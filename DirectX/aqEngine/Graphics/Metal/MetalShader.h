@@ -34,6 +34,11 @@ namespace aq
 			id<MTLLibrary>  library_;
 			id<MTLFunction> function_;
 
+			/** 頂点入力レイアウト(VS のみ。持たない VS では nil / 0) */
+			MTLVertexDescriptor* vertexDescriptor_;
+			uint32_t             vertexStride_;
+			uint32_t             instanceStride_;
+
 			/** ロード情報 */
 			std::string filePath_;
 			std::string entryFuncName_;
@@ -43,6 +48,9 @@ namespace aq
 		private:
 			/** .metal の読み込みと実行時コンパイルの本体(計測は Load 側で行う) */
 			bool LoadMsl();
+
+			/** 隣の .spv を spirv_reflect で読み、MTLVertexDescriptor を組む(設計書 §9.3) */
+			void BuildVertexDescriptor();
 
 
 		public:
@@ -73,6 +81,24 @@ namespace aq
 			inline ShaderType  GetType() const          { return type_; }
 			inline const char* GetFilePath() const      { return filePath_.c_str(); }
 			inline const char* GetEntryFuncName() const { return entryFuncName_.c_str(); }
+
+
+			/**
+			 * 頂点入力レイアウト(設計書 §9.3)
+			 *
+			 * ビルド時に .metal と同じ場所へ残した .spv を spirv_reflect で読んで組む。
+			 * **VS 以外と、頂点入力を持たない VS(フルスクリーンパス)では nil / 0** になる。
+			 * nil は正常系なので、PSO 生成側は分岐して扱うこと。
+			 */
+		public:
+			/** PSO へ渡す MTLVertexDescriptor。VS 以外・頂点入力なしなら nil */
+			inline MTLVertexDescriptor* GetVertexDescriptor() const { return vertexDescriptor_; }
+
+			/** per-vertex ストリーム(buffer 30)の stride。リフレクションによるパック済み前提の値 */
+			inline uint32_t GetVertexStride() const { return vertexStride_; }
+
+			/** per-instance ストリーム(buffer 29)の stride。インスタンス属性が無ければ 0 */
+			inline uint32_t GetInstanceStride() const { return instanceStride_; }
 
 
 			/**

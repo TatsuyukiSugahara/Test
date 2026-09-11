@@ -11,6 +11,8 @@
 #include <vector>
 #include "Graphics/IGraphicsDeviceImpl.h"
 
+struct ImDrawData;
+
 
 namespace aq
 {
@@ -69,17 +71,26 @@ namespace aq
 			MetalRenderContextImpl* activeContext_;
 
 			/** フレーム状態。BeginFrameIfNeeded で立て、Present で倒す(設計書 §2.2) */
-			bool frameOpen_;
-
 			/**
 			 * Present するたびに増える通し番号。frames-in-flight のリング位置に使う。
 			 * 動的バッファ(CB / 動的 VB・IB)は自前カウンタではなくこれを見ること
 			 * (1 フレーム内で何度 Update されてもリングがずれないため)。
+			 *
+			 * **宣言順に注意**: コンストラクタの初期化順はヘッダの宣言順で決まるので、
+			 * frameOpen_ より前に置く(初期化子の順序と合わせないと -Wreorder-ctor が出る)。
 			 */
 			uint64_t frameCounter_;
 
+			bool frameOpen_;
+
 			/** このフレームは nextDrawable が nil で捨てた。Present までの再取得を 1 回に抑える */
 			bool frameAcquireFailed_;
+
+			/**
+			 * このフレームの imgui 描画データ(AQ_IMGUI 時のみ立つ)。
+			 * CopyToBackBuffer の末尾で drawable へ描いたら nullptr へ戻す(1 フレーム限りのため)。
+			 */
+			ImDrawData* imguiDrawData_;
 
 
 		public:
@@ -135,6 +146,19 @@ namespace aq
 			 * 進めてはいけない**(同一フレーム内で複数回 Update されるとずれる)。
 			 */
 			uint32_t GetFrameIndex() const;
+
+
+			/**
+			 * ImGui (設計書 §12 P6)
+			 */
+		public:
+			/**
+			 * imgui の描画データを受け取り、CopyToBackBuffer 後に drawable へ描く (AQ_IMGUI 時)。
+			 *
+			 * Vulkan 版と同じ経路。ImGuiRenderCommand::Execute から毎フレーム渡され、
+			 * 描き終えた時点で nullptr へ戻す(描画データはそのフレーム限り有効)。
+			 */
+			inline void SetImGuiDrawData(ImDrawData* data) { imguiDrawData_ = data; }
 
 
 			/**

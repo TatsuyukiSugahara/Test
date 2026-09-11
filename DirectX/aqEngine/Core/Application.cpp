@@ -31,6 +31,8 @@
 #include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 #include "Graphics/Vulkan/VulkanImGui.h"
+#elif defined(ENGINE_GRAPHICS_METAL)
+#include "Graphics/Metal/MetalImGui.h"
 #endif
 #endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
@@ -80,11 +82,6 @@ namespace aq
 		aq::level::RegisterLevelComponents();   // Level 層のコンポーネント（LevelStream 等）を登録
 
 #ifdef AQ_IMGUI
-#if defined(ENGINE_GRAPHICS_METAL)
-		// TODO(P6): Metal の ImGui バックエンド(MetalImGui)は設計書/MetalBackend設計.md の
-		// P6 で入れる。それまでは ImGui のコンテキストを作らない。imguiReady_ が false の
-		// ままなので、Update / Render / Finalize の ImGui ブロックはすべて素通りする。
-#else
 		{
 			ImGui::CreateContext();
 
@@ -171,6 +168,8 @@ namespace aq
 			backendOk = winOk && aq::graphics::D3D12ImGui::Init();
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 			backendOk = winOk && aq::graphics::VulkanImGui::Init();
+#elif defined(ENGINE_GRAPHICS_METAL)
+			backendOk = winOk && aq::graphics::MetalImGui::Init();
 #endif
 			if (backendOk)
 			{
@@ -188,7 +187,6 @@ namespace aq
 			}
 		}
 		aq::StartupMark("  [app] ImGui ok (font atlas built, ASCII only)");
-#endif // !ENGINE_GRAPHICS_METAL
 #endif // AQ_IMGUI
 
 		renderer_.SetUIRenderCallback([](aq::rendering::RenderCommandList& list) {
@@ -361,6 +359,8 @@ namespace aq
 			aq::graphics::D3D12ImGui::Shutdown();
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 			aq::graphics::VulkanImGui::Shutdown();
+#elif defined(ENGINE_GRAPHICS_METAL)
+			aq::graphics::MetalImGui::Shutdown();
 #endif
 #if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_Shutdown();
@@ -522,6 +522,8 @@ namespace aq
 			aq::graphics::D3D12ImGui::NewFrame();
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 			aq::graphics::VulkanImGui::NewFrame();
+#elif defined(ENGINE_GRAPHICS_METAL)
+			aq::graphics::MetalImGui::NewFrame();
 #endif
 			ImGui::NewFrame();
 
@@ -541,6 +543,10 @@ namespace aq
 					const char* backend = "D3D12";
 #elif defined(ENGINE_GRAPHICS_D3D11)
 					const char* backend = "D3D11";
+#elif defined(ENGINE_GRAPHICS_VULKAN)
+					const char* backend = "Vulkan";
+#elif defined(ENGINE_GRAPHICS_METAL)
+					const char* backend = "Metal";
 #else
 					const char* backend = "?";
 #endif

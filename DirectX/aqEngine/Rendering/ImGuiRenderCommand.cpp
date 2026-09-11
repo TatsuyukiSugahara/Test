@@ -9,6 +9,8 @@
 #include "Graphics/D3D12/D3D12ImGui.h"
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 #include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
+#elif defined(ENGINE_GRAPHICS_METAL)
+#include "Graphics/Metal/MetalGraphicsDeviceImpl.h"
 #endif
 
 namespace aq
@@ -32,6 +34,10 @@ namespace aq
 #elif defined(ENGINE_GRAPHICS_VULKAN)
 			// Vulkan は描画データを device に渡し、CopyToBackBuffer 後に swapchain へ描く。
 			static_cast<graphics::VulkanGraphicsDeviceImpl*>(
+				graphics::GraphicsDevice::Get().GetImplRaw())->SetImGuiDrawData(drawData_);
+#elif defined(ENGINE_GRAPHICS_METAL)
+			// Metal も Vulkan と同じ。CopyToBackBuffer が drawable へ出した後に重ねて描く。
+			static_cast<graphics::MetalGraphicsDeviceImpl*>(
 				graphics::GraphicsDevice::Get().GetImplRaw())->SetImGuiDrawData(drawData_);
 #endif
 		}

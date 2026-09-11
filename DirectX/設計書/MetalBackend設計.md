@@ -1,6 +1,6 @@
 # Metal バックエンド設計
 
-> 対象コミット: f1375d6 / 最終更新: 2026-09-11
+> 対象コミット: 7625249 / 最終更新: 2026-09-11
 
 対象: `aqEngine/Graphics/Metal/`(新規)。macOS(Apple Silicon)でネイティブ Metal 描画を行う。
 前提: `Mac移植設計.md` の P0〜P4b(足回り・入力・音・ImGui)が完了済み。本書はその **P6** にあたる。
@@ -121,6 +121,10 @@ Present    : [cmdBuf presentDrawable:drawable]
 Metal の NDC は **D3D と同じ**(Y 下向き・Z が [0,1])。
 Vulkan で必要だった負ビューポートによる Y-flip も `frontFace` の補正も**要らない**。
 テクスチャ座標の原点も D3D と同じ左上。**この点は Vulkan より素直**。
+
+> **例外が 1 つだけある**(P6 で判明): `ImGuiVK.fx` は**唯一 Vulkan NDC 前提で書かれた `.fx`**
+> で、D3D 系の行列を通さず imgui 座標から直接 NDC へ写像している。Metal でそのまま同じ定数を
+> 渡すと **UI が上下逆さま**になるので、`MetalImGui` 側が投影定数で吸収している(`.fx` は無改変)。
 
 ---
 
@@ -531,6 +535,43 @@ namespace aq { namespace graphics {
 
 ヘッダ規約は P0 で確定した(§10)。**素の C++ に縛るのは `MetalGraphicsDeviceImpl.h` だけ**で済み、
 当初見込んだ pimpl の定型は 1 クラス分に収まった。
+
+### P6 の結果(2026-09-11)
+
+- [x] **ImGui が出て操作できる**。メニューバー・Scene Hierarchy・Inspector・
+      Rendering パネル(タブ / スライダー / 折りたたみ)すべて動作
+- [x] **FPS オーバーレイが `Metal 60.0 FPS` と出る**(下記の副次修正)
+- [x] **通しプレイ**。F1 でデバッグ UI をトグルし、ステージへ入って 60fps で走行
+- [x] **Metal API Validation エラー 0 / 終了コード 0 / Metal 由来の警告 0**
+- [x] **Vulkan 構成に回帰なし**。0 エラーでビルドし、オーバーレイは `Vulkan 60.0 FPS`、
+      VK エラー 0 / 終了コード 0
+- [ ] Windows の回帰確認 — **この Mac では不可**
+
+`VulkanImGui`(249 行)と同じ構造の `MetalImGui`(364 行)。`imgui_impl_metal` は使わず、
+クラシック API(`GetTexDataAsRGBA32`)で自前描画する。`ImGuiVK.fx` をそのまま使うので
+**`.fx` も `shader_entries.txt` も増えていない**。
+
+**`ImGuiVK.fx` だけは Y 反転が要る**(§2.4 の例外): §2.4 は「Metal の NDC は D3D と同じなので
+Y-flip は要らない」としているが、これは**エンジンの通常シェーダ**の話。`ImGuiVK.fx` は
+**唯一 Vulkan NDC 前提で書かれた `.fx`** で(コメントにも「imgui 座標 → Vulkan NDC へ直接写像」とある)、
+同じ定数を渡すと**UI が上下逆さま**になる。`.fx` は無改変のまま、投影定数の Y 成分の符号と
+平行移動だけで吸収した。
+
+その他の判断:
+
+- **PSO は `Init()` ではなく初回 `Render()` で遅延生成**する。
+  `colorAttachments[0].pixelFormat` に drawable のフォーマットが要るため
+  (`EnsureFullscreenBlitPipeline` と同じ手)。
+- **頂点記述子は `MetalShader::GetVertexDescriptor()` を使わず自前で組む**。
+  `ImDrawVert` の `col` はバッファ上 RGBA8 unorm だが、シェーダ宣言は `float4` なので
+  `.spv` リフレクションでは float4 になってしまう。`VulkanImGui` が
+  `VK_FORMAT_R8G8B8A8_UNORM` を明示しているのと同じ理由。
+- **`CopyToBackBuffer` の本体を関数へ括り出した**。元の実装は blit 成功時と
+  フォールバック失敗時に `return` で抜けており、**そのままだと ImGui が描かれないフレームが出る**。
+
+**副次修正**: FPS オーバーレイのバックエンド名が `D3D11` / `D3D12` しか分岐を持たず、
+**Vulkan も Metal も `?` と表示されていた**(P4b の評価時に見つけて保留していたもの)。
+`Vulkan` / `Metal` を追加した。**Windows の Vulkan 構成にも効く。**
 
 ### P5 の結果(2026-09-11)
 

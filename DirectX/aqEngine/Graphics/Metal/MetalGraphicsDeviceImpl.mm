@@ -10,6 +10,9 @@
 #include "Graphics/Metal/MetalResources.h"
 #include "Graphics/Metal/MetalShader.h"
 #include "Graphics/RenderContext.h"
+#ifdef AQ_IMGUI
+#include "Graphics/Metal/MetalImGui.h"
+#endif
 
 // 本 TU は手動参照カウント(MRR)前提。CMake は -fobjc-arc を渡していない。
 #if __has_feature(objc_arc)
@@ -226,6 +229,97 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 				return true;
 			}
 
+			/**
+			 * 表示 RT を drawable へ写す本体(blit / フルスクリーン変換描画)
+			 *
+			 * CopyToBackBuffer から括り出してある。**ここでの早期 return が
+			 * 呼び出し側の後続処理(ImGui の重ね描き)を飛ばさないようにする**のが目的で、
+			 * 関数の中身は括り出す前と同じ。
+			 * @param objects    デバイスオブジェクト群
+			 * @param srcTexture 表示 RT のテクスチャ
+			 * @param dstTexture drawable のテクスチャ
+			 */
+			void RecordCopyToDrawable(MetalDeviceObjects* objects,
+			                          id<MTLTexture>      srcTexture,
+			                          id<MTLTexture>      dstTexture)
+			{
+				// **blit は生バイトコピー**。フォーマットも寸法も完全一致するときだけ使える。
+				//
+				//  - RGBA8Unorm → BGRA8Unorm: copyFromTexture: は「通してしまう」が中身はバイト列の
+				//    移送なので **R と B が入れ替わる**(実機で確認済み。赤が青になる)。
+				//    compute 有効時の表示 RT はトーンマップ最終 RT(RGBA8Unorm)、drawable は
+				//    BGRA8Unorm なので、**この組み合わせが常用**。つまり実際にはほぼ常に下の描画へ落ちる。
+				//  - RGBA16Float → BGRA8Unorm: Validation がアサートで落とす。
+				//  - 寸法違い(ウィンドウのリサイズ)は blit では縮尺できない。
+				//
+				// よって一致しないときはフルスクリーン描画で変換する(設計書 §7)。
+				const bool canBlit = ([srcTexture pixelFormat] == [dstTexture pixelFormat]) &&
+				                     ([srcTexture width]       == [dstTexture width])       &&
+				                     ([srcTexture height]      == [dstTexture height]);
+
+				@autoreleasepool
+				{
+					if (canBlit)
+					{
+						id<MTLBlitCommandEncoder> blit = [objects->currentCommandBuffer blitCommandEncoder];
+						[blit copyFromTexture:srcTexture
+						          sourceSlice:0
+						          sourceLevel:0
+						         sourceOrigin:MTLOriginMake(0, 0, 0)
+						           sourceSize:MTLSizeMake([srcTexture width], [srcTexture height], 1)
+						            toTexture:dstTexture
+						     destinationSlice:0
+						     destinationLevel:0
+						    destinationOrigin:MTLOriginMake(0, 0, 0)];
+						[blit endEncoding];
+						return;
+					}
+
+					// ここからフォールバックのフルスクリーン変換描画。
+					if (!g_copyFallbackLogged)
+					{
+						g_copyFallbackLogged = true;
+						aq::StartupMarkf("  [metal] CopyToBackBuffer uses fullscreen draw: src %lux%lu fmt %lu / dst %lux%lu fmt %lu",
+						                 static_cast<unsigned long>([srcTexture width]),
+						                 static_cast<unsigned long>([srcTexture height]),
+						                 static_cast<unsigned long>([srcTexture pixelFormat]),
+						                 static_cast<unsigned long>([dstTexture width]),
+						                 static_cast<unsigned long>([dstTexture height]),
+						                 static_cast<unsigned long>([dstTexture pixelFormat]));
+					}
+
+					if (!EnsureFullscreenBlitPipeline(objects, [dstTexture pixelFormat]))
+					{
+						if (!g_copyFailureLogged)
+						{
+							g_copyFailureLogged = true;
+							aq::StartupMark("  [metal] CopyToBackBuffer skipped: fullscreen blit pipeline unavailable");
+						}
+						return;
+					}
+
+					// 全画素を三角形が覆うので、宛先の読み出しは要らない(DontCare で帯域を節約する)。
+					MTLRenderPassDescriptor* passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+					passDesc.colorAttachments[0].texture     = dstTexture;
+					passDesc.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
+					passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+					id<MTLRenderCommandEncoder> encoder =
+						[objects->currentCommandBuffer renderCommandEncoderWithDescriptor:passDesc];
+					if (encoder == nil) {
+						return;
+					}
+
+					// ビューポートはアタッチメント全面が既定。src と寸法が違う場合は
+					// サンプラの線形補間が縮尺を吸収する。
+					[encoder setRenderPipelineState:objects->blitPipeline];
+					[encoder setFragmentTexture:srcTexture atIndex:0];
+					[encoder setFragmentSamplerState:objects->blitSampler atIndex:0];
+					[encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+					[encoder endEncoding];
+				}
+			}
+
 			/** 素の C++ ヘッダ越しに持っている MTLDevice を取り出す */
 			inline id<MTLDevice> ToMTLDevice(const MetalGraphicsDeviceImpl* impl)
 			{
@@ -244,6 +338,7 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 			, frameCounter_(0)
 			, frameOpen_(false)
 			, frameAcquireFailed_(false)
+			, imguiDrawData_(nullptr)
 		{
 			g_staticDevice = this;
 		}
@@ -722,81 +817,38 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 				return;
 			}
 
-			// **blit は生バイトコピー**。フォーマットも寸法も完全一致するときだけ使える。
-			//
-			//  - RGBA8Unorm → BGRA8Unorm: copyFromTexture: は「通してしまう」が中身はバイト列の
-			//    移送なので **R と B が入れ替わる**(実機で確認済み。赤が青になる)。
-			//    compute 有効時の表示 RT はトーンマップ最終 RT(RGBA8Unorm)、drawable は
-			//    BGRA8Unorm なので、**この組み合わせが常用**。つまり実際にはほぼ常に下の描画へ落ちる。
-			//  - RGBA16Float → BGRA8Unorm: Validation がアサートで落とす。
-			//  - 寸法違い(ウィンドウのリサイズ)は blit では縮尺できない。
-			//
-			// よって一致しないときはフルスクリーン描画で変換する(設計書 §7)。
-			const bool canBlit = ([srcTexture pixelFormat] == [dstTexture pixelFormat]) &&
-			                     ([srcTexture width]       == [dstTexture width])       &&
-			                     ([srcTexture height]      == [dstTexture height]);
+			RecordCopyToDrawable(objects_, srcTexture, dstTexture);
 
-			@autoreleasepool
+#ifdef AQ_IMGUI
+			// imgui は変換出力が**終わった後**に drawable へ重ねて描く。
+			// Vulkan 版(VulkanGraphicsDeviceImpl.cpp の CopyToBackBuffer 末尾)と同じ位置・同じ考え方で、
+			// 既に出ている画を消さないよう **loadAction = Load** のレンダーパスを開く。
+			if (imguiDrawData_ != nullptr)
 			{
-				if (canBlit)
+				@autoreleasepool
 				{
-					id<MTLBlitCommandEncoder> blit = [objects_->currentCommandBuffer blitCommandEncoder];
-					[blit copyFromTexture:srcTexture
-					          sourceSlice:0
-					          sourceLevel:0
-					         sourceOrigin:MTLOriginMake(0, 0, 0)
-					           sourceSize:MTLSizeMake([srcTexture width], [srcTexture height], 1)
-					            toTexture:dstTexture
-					     destinationSlice:0
-					     destinationLevel:0
-					    destinationOrigin:MTLOriginMake(0, 0, 0)];
-					[blit endEncoding];
-					return;
-				}
+					MTLRenderPassDescriptor* imguiPass = [MTLRenderPassDescriptor renderPassDescriptor];
+					imguiPass.colorAttachments[0].texture     = dstTexture;
+					imguiPass.colorAttachments[0].loadAction  = MTLLoadActionLoad;
+					imguiPass.colorAttachments[0].storeAction = MTLStoreActionStore;
 
-				// ここからフォールバックのフルスクリーン変換描画。
-				if (!g_copyFallbackLogged)
-				{
-					g_copyFallbackLogged = true;
-					aq::StartupMarkf("  [metal] CopyToBackBuffer uses fullscreen draw: src %lux%lu fmt %lu / dst %lux%lu fmt %lu",
-					                 static_cast<unsigned long>([srcTexture width]),
-					                 static_cast<unsigned long>([srcTexture height]),
-					                 static_cast<unsigned long>([srcTexture pixelFormat]),
-					                 static_cast<unsigned long>([dstTexture width]),
-					                 static_cast<unsigned long>([dstTexture height]),
-					                 static_cast<unsigned long>([dstTexture pixelFormat]));
-				}
-
-				if (!EnsureFullscreenBlitPipeline(objects_, [dstTexture pixelFormat]))
-				{
-					if (!g_copyFailureLogged)
+					id<MTLRenderCommandEncoder> imguiEncoder =
+						[objects_->currentCommandBuffer renderCommandEncoderWithDescriptor:imguiPass];
+					if (imguiEncoder != nil)
 					{
-						g_copyFailureLogged = true;
-						aq::StartupMark("  [metal] CopyToBackBuffer skipped: fullscreen blit pipeline unavailable");
+						MetalImGui::Render(imguiEncoder,
+						                   [dstTexture pixelFormat],
+						                   static_cast<uint32_t>([dstTexture width]),
+						                   static_cast<uint32_t>([dstTexture height]),
+						                   imguiDrawData_);
+						[imguiEncoder endEncoding];
 					}
-					return;
 				}
 
-				// 全画素を三角形が覆うので、宛先の読み出しは要らない(DontCare で帯域を節約する)。
-				MTLRenderPassDescriptor* passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
-				passDesc.colorAttachments[0].texture     = dstTexture;
-				passDesc.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
-				passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-				id<MTLRenderCommandEncoder> encoder =
-					[objects_->currentCommandBuffer renderCommandEncoderWithDescriptor:passDesc];
-				if (encoder == nil) {
-					return;
-				}
-
-				// ビューポートはアタッチメント全面が既定。src と寸法が違う場合は
-				// サンプラの線形補間が縮尺を吸収する。
-				[encoder setRenderPipelineState:objects_->blitPipeline];
-				[encoder setFragmentTexture:srcTexture atIndex:0];
-				[encoder setFragmentSamplerState:objects_->blitSampler atIndex:0];
-				[encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-				[encoder endEncoding];
+				// 描画データはこのフレーム限り。次のフレームで積み直されるまで持ち越さない。
+				imguiDrawData_ = nullptr;
 			}
+#endif
 		}
 
 

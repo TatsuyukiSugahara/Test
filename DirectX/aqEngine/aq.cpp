@@ -74,6 +74,18 @@ namespace aq
 	}
 
 
+#if !defined(AQ_PLATFORM_UWP)
+	// UWP 以外の StartupLog は「StartupMark へ流すだけ」で同一。
+	// 以前は PlatformWin32.cpp / PlatformMac.mm が同じ一行をそれぞれ持っていたが、
+	// プラットフォームを増やすたびに同じ定義が要るため既定実装をここへ置く。
+	// UWP だけはパッケージの LocalState へ書く必要があるので PlatformUWP.cpp が持つ。
+	void StartupLog(const char* msg)
+	{
+		StartupMark(msg);
+	}
+#endif
+
+
 #if defined(AQ_PLATFORM_WIN32)
 	namespace
 	{

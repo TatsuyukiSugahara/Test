@@ -6,6 +6,8 @@
 //    UWP(Xbox / PC-UWP)  : 入力なし(Null)。実入力は Phase 4 の GameInput で対応
 //    Mac                   : 入力なし(Null)。Cocoa 実装(CocoaKeyboardBackend /
 //                            CocoaMouseBackend)は P4 で追加する
+//    Android               : 入力なし(Null)。物理キーボード/マウスは対象外で、
+//                            操作はタッチとパッドが担う(設計書/Android移植設計.md)
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -47,6 +49,21 @@ namespace aq
 		// バックエンドはそれを読むだけ(設計書/Mac移植設計.md §3.2)。
 		using DefaultKeyboardBackend = CocoaKeyboardBackend;
 		using DefaultMouseBackend    = CocoaMouseBackend;
+	}
+}
+#elif defined(AQ_PLATFORM_ANDROID)
+#include "HID/NullKeyboardBackend.h"
+#include "HID/NullMouseBackend.h"
+
+namespace aq
+{
+	namespace hid
+	{
+		// Android: 物理キーボード / マウスは想定しない。UI のタップは ITouchBackend、
+		// ゲーム操作は DefaultPadBackend(仮想パッド or 物理コントローラ)が担う。
+		// Null のままで Input 側は無改修で成立する。
+		using DefaultKeyboardBackend = NullKeyboardBackend;
+		using DefaultMouseBackend    = NullMouseBackend;
 	}
 }
 #else

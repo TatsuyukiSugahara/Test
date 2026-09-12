@@ -56,19 +56,25 @@ endfunction()
 #  プラットフォーム選択マクロを対象ターゲットへ付与する
 #
 #  aqEngine/Platform/Common/PlatformDefs.h は AQ_PLATFORM_WIN32 /
-#  AQ_PLATFORM_UWP / AQ_PLATFORM_MAC のちょうど 1 つを要求する。
-#  UWP は vcxproj 専用(GameUWP.vcxproj)なので CMake では扱わない。
+#  AQ_PLATFORM_UWP / AQ_PLATFORM_MAC / AQ_PLATFORM_ANDROID のちょうど 1 つを
+#  要求する。UWP は vcxproj 専用(GameUWP.vcxproj)なので CMake では扱わない。
+#
+#  ANDROID を最初に判定すること。Android は UNIX が真になるため、
+#  「Windows でも Apple でもない = Mac 以外の UNIX」という書き方では
+#  Mac 用の分岐へ落ちてしまう。
 #
 #  visibility には PUBLIC を渡すこと。aq.h を include する側(Game)にも
 #  同じマクロが見えている必要がある。
 # ----------------------------------------------------------------------------
 function(aq_apply_platform_definitions targetName visibility)
-	if(WIN32)
+	if(ANDROID)
+		target_compile_definitions(${targetName} ${visibility} AQ_PLATFORM_ANDROID)
+	elseif(WIN32)
 		target_compile_definitions(${targetName} ${visibility} AQ_PLATFORM_WIN32 _WINDOWS _CRT_SECURE_NO_WARNINGS)
 	elseif(APPLE)
 		target_compile_definitions(${targetName} ${visibility} AQ_PLATFORM_MAC)
 	else()
-		message(FATAL_ERROR "サポート外のプラットフォームです (Windows / macOS のみ)")
+		message(FATAL_ERROR "サポート外のプラットフォームです (Windows / macOS / Android のみ)")
 	endif()
 endfunction()
 

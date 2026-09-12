@@ -183,6 +183,8 @@ namespace aq
 			// MoltenVK は portability driver として列挙されるため、この拡張と
 			// ENUMERATE_PORTABILITY フラグが無いと Loader 経由で物理デバイスが 1 台も見えない。
 			exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#elif defined(AQ_PLATFORM_ANDROID)
+			exts.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
 #else
 			exts.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #endif
@@ -238,6 +240,13 @@ namespace aq
 			VkMetalSurfaceCreateInfoEXT ci{ VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT };
 			ci.pLayer = static_cast<const CAMetalLayer*>(nativeWindow);
 			return VK_VERIFY(vkCreateMetalSurfaceEXT(instance_, &ci, nullptr, &surface_));
+#elif defined(AQ_PLATFORM_ANDROID)
+			// PlatformAndroid は NativeWindowHandle.handle に ANativeWindow* を入れて返す。
+			// ANativeWindow は vulkan_android.h が前方宣言するので、
+			// <android/native_window.h> をここで include する必要は無い。
+			VkAndroidSurfaceCreateInfoKHR ci{ VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR };
+			ci.window = static_cast<ANativeWindow*>(nativeWindow);
+			return VK_VERIFY(vkCreateAndroidSurfaceKHR(instance_, &ci, nullptr, &surface_));
 #else
 			VkWin32SurfaceCreateInfoKHR ci{ VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
 			ci.hinstance = GetModuleHandle(nullptr);

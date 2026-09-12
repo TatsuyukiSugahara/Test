@@ -6,7 +6,7 @@
 //    Windows デスクトップ : XAudio2
 //    Xbox(UWP / 道A)      : XAudio2（UWP でも XAudio2 2.9 が標準。ほぼ無改修）
 //    Mac                  : CoreAudio（AudioUnit + SoftwareMixer）
-//    Android              : Oboe（フェーズ5で追加予定）
+//    Android              : 無音（Null）。Oboe は P5 で追加する
 // ============================================================
 
 // AQ_PLATFORM_WINDOWS_FAMILY は AQ_PLATFORM_WIN32 / AQ_PLATFORM_UWP のときに
@@ -15,8 +15,11 @@
 #  define SOUND_BACKEND_XAUDIO2
 #elif defined(AQ_PLATFORM_MAC)
 #  define SOUND_BACKEND_COREAUDIO
-#elif defined(__ANDROID__)
-#  define SOUND_BACKEND_OBOE
+#elif defined(AQ_PLATFORM_ANDROID)
+// Android は当面無音。Oboe(AAudio + SoftwareMixer)を実装したら
+// SOUND_BACKEND_OBOE へ差し替える。
+// TODO(P5): SOUND_BACKEND_OBOE に切り替える。
+#  define SOUND_BACKEND_NULL
 #endif
 
 

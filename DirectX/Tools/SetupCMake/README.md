@@ -359,7 +359,84 @@ otool -l /tmp/Game.app/Contents/MacOS/Game | grep -A2 LC_RPATH
 
 ---
 
-## 6. 既存 `DirectX.sln` との併存についての注意
+## 6. Android(P0 到達済み)
+
+設計は [設計書/Android移植設計.md](../../設計書/Android移植設計.md)。
+**P0(ビルド基盤)まで到達**: NDK で `libGame.so`(arm64-v8a)がリンクまで通る。
+APK 化・実機起動は P1 以降。
+
+### 6.1 ツールの導入(初回のみ)
+
+Visual Studio の「C++ によるモバイル開発」ワークロードを入れてあれば
+**SDK / NDK / JDK は既に入っている**(この開発機はその状態だった)。
+
+| もの | この開発機での場所 | 用途 |
+|---|---|---|
+| NDK r27c | `C:\Program Files (x86)\Android\AndroidNDK\android-ndk-r27c` | ビルド(r26 以降が必要) |
+| SDK | `C:\Program Files (x86)\Android\android-sdk`(platforms 34/35/36) | P1 の Gradle |
+| JDK 17 | `C:\Program Files (x86)\Android\openjdk\jdk-17.0.14` | P1 の Gradle |
+| CMake / Ninja | Visual Studio 同梱(§1 と同じ) | ビルド |
+
+**Vulkan SDK は要らない。** NDK の sysroot が `vulkan/vulkan.h` と `libvulkan.so` の
+両方を持つ。シェーダは事前生成した `.spv` を読む経路だけを使う。
+
+**注意**: Visual Studio の Android ワークロードそのもの(`.androidproj` による
+MSBuild ビルド)は VS 2026 で非サポート・将来削除。使うのは **NDK 本体だけ**で、
+ビルドは CMake、APK 化は Gradle が担う。
+
+### 6.2 NDK のパスに空白を入れない ★必須
+
+`C:\Program Files (x86)\...` のまま使うと**リンクだけが失敗する**。
+Ninja ジェネレータが空白入りパスのコンパイラを 8.3 短縮名(`CLANG_~1.EXE`)で
+呼ぶため、clang が argv[0] から「C++ ドライバ」と判定できず C としてリンクし、
+**libc++ がリンクされない**。結果 `std::` / `__cxa_*` が未定義エラーになる。
+コンパイルは全て通るので原因が分かりにくい(ルート `CMakeLists.txt` で検出して
+FATAL_ERROR で止めるようにしてある)。
+
+対処はジャンクションを張って空白を回避する(コピー不要・管理者権限不要):
+
+```bat
+mklink /J "C:\Users\<user>\AndroidNDK" "C:\Program Files (x86)\Android\AndroidNDK"
+```
+
+そのうえで環境変数を空白なしのパスへ向ける:
+
+```powershell
+$env:ANDROID_NDK_HOME = "C:\Users\<user>\AndroidNDK\android-ndk-r27c"
+```
+
+### 6.3 ビルド
+
+PowerShell から(Ninja は PATH に入れる。§1 の同梱版でよい):
+
+```powershell
+$env:ANDROID_NDK_HOME = "C:\Users\<user>\AndroidNDK\android-ndk-r27c"
+$vs = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake"
+$env:PATH = "$vs\Ninja;" + $env:PATH
+
+& "$vs\CMake\bin\cmake.exe" --preset android-arm64
+& "$vs\CMake\bin\cmake.exe" --build --preset android-arm64-debug
+```
+
+出力は `build/android-arm64/lib/Debug/libGame.so`。
+エミュレータ向けは `android-x86_64` プリセット(Vulkan の機能・性能は実機と
+一致しないので判定には使わない)。
+
+成果物の確認(NDK の `llvm-readelf`):
+
+```powershell
+$bin = "$env:ANDROID_NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin"
+& "$bin\llvm-readelf.exe" -h build\android-arm64\lib\Debug\libGame.so   # AArch64 / DYN
+& "$bin\llvm-readelf.exe" -d build\android-arm64\lib\Debug\libGame.so   # NEEDED を確認
+```
+
+`NEEDED` は `liblog.so` / `libandroid.so` / `libvulkan.so` / `libm` / `libdl` / `libc` の
+6 本になる。`libc++_shared.so` が出ないのは `ANDROID_STL=c++_static` で
+静的リンクしているため(同梱する `.so` を増やさないための選択)。
+
+---
+
+## 7. 既存 `DirectX.sln` との併存についての注意
 
 - **出力先が別**: MSBuild は `x64/<Config>/`、CMake は `build/<preset>/bin/<Config>/`。
   互いの成果物を上書きしない。中間ファイルも `build/` 配下に閉じる。
@@ -382,10 +459,11 @@ otool -l /tmp/Game.app/Contents/MacOS/Game | grep -A2 LC_RPATH
 
 ---
 
-## 7. よくあるつまずき
+## 8. よくあるつまずき
 
 | 症状 | 原因と対処 |
 |---|---|
+| Android でコンパイルは通るのに `std::` / `__cxa_*` が未定義でリンク失敗 | NDK のパスに空白がある(§6.2)。ジャンクションで空白を回避する |
 | `windows-clang-cl` でリンカ/Windows SDK が見つからない | 素の PowerShell から実行している。x64 Native Tools Command Prompt を使う |
 | `Visual Studio 18 2026` ジェネレータが無いと言われる | CMake が古い。`windows-vs2022` プリセットを使うか CMake を更新する |
 | `環境変数 VULKAN_SDK が必要です` で configure が止まる | `AQ_GRAPHICS_API=Vulkan` を指定したが SDK 未導入。SDK を入れるか API を戻す |

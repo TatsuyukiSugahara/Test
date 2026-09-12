@@ -13,7 +13,7 @@ namespace aq
 		bool RenderCommandList::Page::Fits(size_t size, size_t align) const
 		{
 			size_t aligned = (cursor + align - 1) & ~(align - 1);
-			return aligned + size <= PAGE_SIZE;
+			return aligned + size <= COMMAND_PAGE_SIZE;
 		}
 
 		void* RenderCommandList::Page::Alloc(size_t size, size_t align)

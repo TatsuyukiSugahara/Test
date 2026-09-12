@@ -21,6 +21,12 @@
 #ifndef VK_ENABLE_BETA_EXTENSIONS
 #define VK_ENABLE_BETA_EXTENSIONS
 #endif
+#elif defined(AQ_PLATFORM_ANDROID)
+// Android のサーフェスは ANativeWindow 経由 (VK_KHR_android_surface)。
+// ヘッダと libvulkan.so はどちらも NDK の sysroot が供給するので Vulkan SDK は要らない。
+#ifndef VK_USE_PLATFORM_ANDROID_KHR
+#define VK_USE_PLATFORM_ANDROID_KHR
+#endif
 #endif
 
 #if defined(AQ_PLATFORM_WINDOWS_FAMILY)

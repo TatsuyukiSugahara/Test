@@ -1,6 +1,22 @@
 # Android 移植 設計
 
-> 対象コミット: 6f6f88c / 最終更新: 2026-09-10
+> 対象コミット: d1e7f6a / 最終更新: 2026-09-12
+
+## 現在の到達点
+
+**P0(ビルド基盤)完了。** NDK r27c で `libGame.so`(arm64-v8a)がエラー 0 でリンクまで通る。
+APK 化・実機起動は P1 以降。
+
+| | 状態 |
+|---|---|
+| Android ビルド | `cmake --preset android-arm64` → `--build --preset android-arm64-debug` が通る。エラー 0 / 警告 23 |
+| 成果物 | `build/android-arm64/lib/Debug/libGame.so`(ELF64 / AArch64 / DYN、Debug 87MB) |
+| 依存 `.so` | liblog / libandroid / libvulkan / libm / libdl / libc の 6 本。libc++ は静的リンク |
+| Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。起動〜終了コード 0 |
+| Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` の一本化が `PlatformMac.mm` に及ぶので次に Mac を触るとき要確認 |
+| 実機 | 未着手(P1) |
+
+導入手順とハマりどころは [Tools/SetupCMake/README.md](../Tools/SetupCMake/README.md) §6 が正本。
 
 対象: `aqEngine/` + `Game/`。既存の Vulkan バックエンドを Android(NDK)で動かし、実機で
 AquaDash が起動〜プレイできる状態までを設計する。
@@ -13,8 +29,7 @@ AquaDash が起動〜プレイできる状態までを設計する。
 - [Xbox移植設計.md](Xbox移植設計.md) — `IPlatform` 抽象の導入元。
 - [Sound設計.md](Sound設計.md) §8 — Oboe バックエンドの一次資料(本書では重複させない)。
 
-**本書のステータス: 設計フェーズ。ユーザー未承認・実装未着手。** §0.4 の未決事項が
-決まるまで P0 に着手しない。
+**本書のステータス: P0 完了。** §0.4 の判断は 2026-09-12 に確定した。次は P1。
 
 ---
 
@@ -60,14 +75,14 @@ Mac のような「道A / 道B」の分岐は無い。Android のネイティブ
 (Deferred + compute(Bloom/トーンマップ)+ 配列シャドウマップを GLES3 で書き直す作業量が、
 得られる互換性に見合わない)。
 
-### 0.4 未決事項(着手前にユーザー判断が要る)
+### 0.4 決定事項(2026-09-12)
 
-| # | 論点 | 選択肢 | 影響 |
+| # | 論点 | 決定 | 帰結 |
 |---|---|---|---|
-| 1 | ビルド経路 | (a) CMake + Gradle【推奨】 / (b) VS の Android ワークロードに固執 | (b) は VS 2026 で消えるため、投資が無駄になる |
-| 2 | 最低 Android / Vulkan バージョン | (a) **Android 13+ / Vulkan 1.3**【推奨・改修最小】 / (b) Android 10+ / Vulkan 1.1 + `VK_KHR_dynamic_rendering` 等の拡張フォールバック | (b) を採ると Vulkan バックエンドに**バージョン分岐が入る**(§4.2)。対応端末は広がる |
-| 3 | タッチ操作の方針 | (a) オンスクリーン仮想パッド(UI で描画し `IPadBackend` として供給) / (b) 物理コントローラ必須 / (c) 専用タッチ操作を新規設計 | (a) はゲーム側変更ゼロで済む。(c) は AquaDash 側の設計も要る |
-| 4 | 検証端末 | 実機の有無 / 機種 | エミュレータの Vulkan は機能・性能とも制限があり、P1 以降の判定に使えない |
+| 1 | ビルド経路 | **CMake + Gradle**。VS の Android ワークロードは使わない | VS は「フォルダを開く(CMake)」でビルド/IntelliSense まで。デプロイと実機デバッグは adb / Android Studio |
+| 2 | 最低 Android / Vulkan | **Android 13+ / Vulkan 1.3**(`ANDROID_PLATFORM=android-33`) | Vulkan バックエンドにバージョン分岐を**入れない**。1.1/1.2 端末向けの拡張フォールバックは §8-1 のまま別途 |
+| 3 | タッチ操作 | **入力ソースを問わない仮想パッドを `aqEngine/HID` に置く**。物理コントローラでもタッチでも同じ `IPadBackend` として `ActionMap` に見せる | ゲーム側・`ActionMap` の変更ゼロ。iOS 移植とも共有する(§5.3) |
+| 4 | 検証端末 | **実機あり** | P1 以降は実機で検証する。機種と Android バージョンは P1 着手時に記録し、§4.2 のフィーチャ確認結果を本書へ追記する |
 
 ---
 
@@ -160,11 +175,18 @@ DirectX/Android/                 (新設)
 
 | 項目 | 値(案) | 根拠 |
 |---|---|---|
-| NDK | r26 以降 | C++20 / libc++ / `std::filesystem` が安定して使える |
+| NDK | r26 以降(開発機は **r27c**) | C++20 / libc++ / `std::filesystem` が安定して使える |
 | `ANDROID_ABI` | `arm64-v8a`(必須)+ `x86_64`(任意) | 実機は arm64。`x86_64` はエミュレータ用で開発が回りやすくなるが、Vulkan は制限あり |
-| `ANDROID_PLATFORM` | 未決(§0.4-2) | Vulkan 1.3 を要求するなら `android-33` |
+| `ANDROID_PLATFORM` | **`android-33`** | Vulkan 1.3 の下限(Android 13)。§0.4-2 の決定 |
+| `ANDROID_STL` | **`c++_static`** | `.so` が 1 本だけなので静的で足りる。APK に `libc++_shared.so` を同梱しなくて済む |
 | C++ 標準 | C++20 | 既存設定のまま |
 | PCH | `aq.h` を `target_precompile_headers` で継続 | clang でも仕組みは同じ。中身の Windows ブロックは既に分離済 |
+
+**NDK のパスに空白を入れてはいけない。** 空白入りだと Ninja がコンパイラを 8.3 短縮名で
+呼び、clang が argv[0] から C++ ドライバと判定できず libc++ をリンクしないまま
+`std::` / `__cxa_*` が未定義になる(コンパイルは全て通るので原因が分かりにくい)。
+ルート `CMakeLists.txt` に検出を入れて FATAL_ERROR で止めている。回避手順は
+[Tools/SetupCMake/README.md](../Tools/SetupCMake/README.md) §6.2。
 
 ### 2.5 ThirdParty の通し確認
 
@@ -259,9 +281,10 @@ Win32 / Mac には無く、UWP でも部分的にしか無かった要件。
 
 ## 4. グラフィックス(Vulkan)
 
-### 4.1 サーフェス生成
+### 4.1 サーフェス生成 — P0 で実装済み
 
-Mac 対応と完全に同型の 1 分岐。
+Mac 対応と完全に同型の 1 分岐。**当初 P1 に置いていたが、これが無いと
+Vulkan バックエンドが Win32 分岐へ落ちてコンパイルできないため P0 で入れた。**
 
 | 箇所 | 変更 |
 |---|---|
@@ -346,23 +369,35 @@ Bloom/トーンマップ compute → blit** で、モバイル GPU にはメモ�
 `Input` が持つのは **Keyboard / Mouse / Pad の 3 系統**([02_HID設計.md](02_HID設計.md))。
 タッチという概念が抽象に存在しない。
 
-### 5.2 タッチの扱い(§0.4-3)
+### 5.2 タッチの扱い — 入力ソースを問わない仮想パッド(§0.4-3 の決定)
 
-| 案 | 内容 | 長所 | 短所 |
-|---|---|---|---|
-| **(a) 仮想パッド**【推奨】 | 画面上に仮想スティック/ボタンを描画し、その結果を **`IPadBackend` 実装として供給**する | **ゲーム側・`ActionMap` の変更がゼロ**。既存のパッド操作がそのまま動く | 操作感は専用設計に劣る |
-| (b) 物理コントローラ必須 | タッチは UI 操作のみ | 実装最小 | Android アプリとして成立しにくい |
-| (c) タッチ専用操作 | `ITouchBackend` を新設し、AquaDash 側に専用操作を設計 | 操作感が最良 | HID 抽象 + ゲーム設計の両方に手が入る |
+**方針: 上位から見て「パッドが 1 つある」状態に統一する。** タッチで操作していようが
+物理コントローラを繋いでいようが、`ActionMap` とゲーム側は区別しない。
+差は `aqEngine/HID` の内側に閉じる。
 
-**(a) を推奨**。ただし (a) でも **UI のタップ判定**には生のタッチ座標が要るので、
-`ITouchBackend`(タッチ点の配列: id / 座標 / 状態)は**どの案でも新設する**。
-`IMouseBackend` にタッチを流し込む案は、多点・ホバー無しの差異が UI 側に漏れるため採らない。
+| 追加するもの | 役割 |
+|---|---|
+| `ITouchBackend`(新設) | 生のタッチ点の配列(id / 正規化座標 / 押下・移動・離上)を供給する抽象。プラットフォーム実装が書き込み、上位は読むだけ |
+| `VirtualPadBackend`(新設・`IPadBackend` 実装) | `ITouchBackend` を読み、画面上の仮想スティック/ボタンの当たり判定を経てパッド状態(スティック 2 本 + ボタン)へ変換する |
+| `CompositePadBackend`(新設・`IPadBackend` 実装) | `VirtualPadBackend` と物理パッド実装を束ね、**先に入力があった側**を採用して 1 つのパッドとして見せる。Android の `DefaultPadBackend` はこれ |
 
-### 5.3 パッド
+- **`ActionMap` / `InputBinding` の変更は不要**。既存のパッド用バインディングがそのまま効く。
+- `ITouchBackend` は仮想パッドのためだけでなく **UI のタップ判定**にも要る(こちらは
+  `UIScreenManager` 側から読む)。
+- `IMouseBackend` にタッチを流し込む案は採らない。多点・ホバー無しという差異が
+  UI 側へ漏れ、デスクトップと挙動が分かれるため。
+- 仮想パッドの**描画**をどこに置くかは P4 着手時に決める(§8-4)。判定と描画は
+  分離し、`VirtualPadBackend` は当たり判定のレイアウトだけを持つ。
+- **iOS 移植と共有する**。`ITouchBackend` / `VirtualPadBackend` / `CompositePadBackend` は
+  プラットフォーム非依存に書き、iOS は `ITouchBackend` 実装だけを足す
+  ([iOS移植設計.md](iOS移植設計.md) から本節を一次資料として参照している)。
 
-- `AndroidPadBackend` を `IPadBackend` 実装として追加。GameActivity 採用なら
-  Paddleboat(`androidx.games:games-controller`)で機種差を吸収できる。
-- キーボード/マウスは `NullKeyboardBackend` / `NullMouseBackend` を既定にする(既存資産)。
+### 5.3 物理パッドとキーボード/マウス
+
+- `AndroidPadBackend` を `IPadBackend` 実装として追加し、`CompositePadBackend` に束ねる。
+  GameActivity 採用なら Paddleboat(`androidx.games:games-controller`)で機種差を吸収できる。
+- キーボード/マウスは `NullKeyboardBackend` / `NullMouseBackend`(P0 で配線済み)。
+  Android では物理キーボード/マウスを想定しない。
 - 戻るキー / フォーカス喪失時の入力リセット / IME は P4 で扱う。
 
 ---
@@ -449,20 +484,41 @@ Null(何もしない `IPlatform`)で構わない。
 - ThirdParty の通し確認(§2.5)
 
 **評価チェックリスト**
-- [ ] `cmake --preset android-arm64-debug` が configure できる
-- [ ] `libGame.so`(arm64-v8a)がリンクまで通る
-- [ ] Windows 3 構成(D3D11 / D3D12 / Vulkan)の Debug が従来どおりビルドできる(回帰なし)
-- [ ] 警告が Windows 構成で増えていない
+- [x] `cmake --preset android-arm64` が configure できる
+- [x] `libGame.so`(arm64-v8a)がリンクまで通る — ELF64 / AArch64 / DYN を `llvm-readelf` で確認
+- [x] Windows 3 構成(D3D11 / D3D12 / Vulkan)の Debug が従来どおりビルドできる(回帰なし)
+- [x] 警告が Windows 構成で増えていない — 3 構成とも 54 件(従来と同数)。Android Debug は 23 件
+- [x] Windows で起動〜終了コード 0・`startup_timing.log` 出力を確認(`StartupLog` 一本化の確認)
+
+**P0 で分かったこと / 設計からの差分**
+
+1. **NDK のパスの空白が致命的**(§2.4)。Ninja の 8.3 短縮名で clang が C ドライバとして
+   リンクし libc++ が入らない。コンパイルは全て通るのでリンクエラーだけが出る。
+   ルート `CMakeLists.txt` に検出を追加した。
+2. **`PAGE_SIZE` がマクロ衝突**。bionic の `<bits/page_size.h>` が同名マクロ(4096)を
+   持ち、`RenderCommandList` の `static constexpr size_t PAGE_SIZE` が壊れた。
+   `COMMAND_PAGE_SIZE` へ改名(全 3 プラットフォーム共通の改名)。
+3. **`StartupLog` を `aq.cpp` へ一本化**。UWP 以外は「`StartupMark` へ流すだけ」の同一実装が
+   `PlatformWin32.cpp` / `PlatformMac.mm` に重複していた。Android 用に 3 つ目を書くより
+   既定実装を 1 箇所に置き、UWP だけが上書きする形にした。
+4. **§4.1(Vulkan サーフェス分岐)を P0 に前倒し**。無いとコンパイルが通らない。
+5. **`DebugOutputAndroid.cpp` を P0 で追加**(P1 の項目だったが、無いとリンクできない)。
+6. **プラットフォーム選択ヘッダのゲートを Android 対応**: `KeyboardMouseBackend.h` /
+   `PadBackend.h` / `SoundBackend.h` / `CompressedDecoder.h` / `PlatformBudget.h` は
+   未知プラットフォームで `#error` になるため、それぞれ Null 実装 / Android プロファイルを
+   足した(`SoundBackend.h` の Android は Oboe 未実装なので `SOUND_BACKEND_NULL`)。
+7. **`DebugOutputAndroid.cpp` は `Engine.vcxproj` に登録しない**。`DebugOutputMac.cpp` と
+   同じ扱いで、非 Windows のプラットフォーム実装は CMake 経路だけが拾う。
 
 ### P1: 実機でクリア画面
 
 Gradle プロジェクト + `PlatformAndroid` + Android サーフェス。
 
 - `DirectX/Android/` の Gradle 一式、`AndroidManifest.xml`
-- `Platform/Android/`(`PlatformAndroid` / `AndroidApp`)、`DebugOutputAndroid.cpp`
+- `Platform/Android/`(`PlatformAndroid` / `AndroidApp`)
 - `Game/Application/AndroidMain.cpp`(`android_main`)
-- `VulkanCommon.h` / `CreateSurface` の Android 分岐
 - 検証レイヤの同梱(Debug)
+- (`DebugOutputAndroid.cpp` と Vulkan サーフェス分岐は P0 で済み)
 
 **評価チェックリスト**
 - [ ] APK が実機にインストールでき、起動する
@@ -542,13 +598,17 @@ Android 固有の最重要フェーズ。
 
 ## 10. チェックポイント(設計全体)
 
-- [ ] §0.4 の未決事項 4 点についてユーザーの判断を得た
-- [ ] `AQ_PLATFORM_ANDROID` が「ちょうど 1 つ」の制約を壊していない
+- [x] §0.4 の未決事項 4 点についてユーザーの判断を得た(2026-09-12)
+- [x] `AQ_PLATFORM_ANDROID` が「ちょうど 1 つ」の制約を壊していない — 4 プラットフォームの
+      排他チェックを更新し、Windows 3 構成 + Android がビルドできることで確認
 - [ ] Android 固有の型(`ANativeWindow` / `AAsset` / `android_app`)が `Platform/Android/` と
-      `Graphics/Vulkan/` の外に現れない
+      `Graphics/Vulkan/` の外に現れない — P0 時点では `Graphics/Vulkan` の
+      `ANativeWindow*` キャスト 1 箇所のみ。P1 以降も維持する
 - [ ] `IPlatform` / `IGraphicsDeviceImpl` への追加 IF が、Windows / Mac の既定実装で no-op として成立する
-- [ ] Android 対応のために Windows / Mac の挙動を変えていない(§4.3 のリサイズ対応は意図的な共通改善)
-- [ ] 同じ内容を [Sound設計.md](Sound設計.md) / [Mac移植設計.md](Mac移植設計.md) と二重に書いていない
+- [x] Android 対応のために Windows / Mac の挙動を変えていない — Windows 3 構成は
+      エラー 0 / 警告 54(従来と同数)・起動と終了コード 0。**Mac は未ビルド**
+      (`StartupLog` 一本化が `PlatformMac.mm` に及ぶため次に Mac を触るとき要確認)
+- [x] 同じ内容を [Sound設計.md](Sound設計.md) / [Mac移植設計.md](Mac移植設計.md) と二重に書いていない
 - [ ] 各フェーズのチェックリストが実機で確認可能な粒度になっている
 
 ---

@@ -6,6 +6,9 @@
 //    UWP(Xbox / PC-UWP)  : Windows.Gaming.Input(WinRTGamepadBackend)
 //    Mac                   : 入力なし(Null)。GameController.framework 実装
 //                            (GameControllerPadBackend)は P4 で追加する
+//    Android               : 入力なし(Null)。仮想パッド(タッチ)と物理コントローラを
+//                            同一視する実装は P4 で追加する
+//                            (設計書/Android移植設計.md)
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -41,6 +44,20 @@ namespace aq
 		// Mac: GameController.framework。Xbox / DualShock / DualSense を OS が
 		// 同じプロファイルへ正規化するので HID 直読みは要らない(設計書 §3.2)。
 		using DefaultPadBackend = GameControllerPadBackend;
+	}
+}
+#elif defined(AQ_PLATFORM_ANDROID)
+#include "HID/NullPadBackend.h"
+
+namespace aq
+{
+	namespace hid
+	{
+		// Android: P0 の時点では入力なし。P4 で入力ソースを問わない仮想パッド
+		// (タッチの仮想スティック / 物理コントローラのどちらも同じ IPadBackend として
+		//  見せる合成バックエンド)へ差し替える。ActionMap 側は無改修で切替できる。
+		// TODO(P4): CompositePadBackend(仮想パッド + AndroidPadBackend)へ差し替える。
+		using DefaultPadBackend = NullPadBackend;
 	}
 }
 #else

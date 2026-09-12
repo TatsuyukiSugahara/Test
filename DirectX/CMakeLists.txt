@@ -62,6 +62,31 @@ if(AQ_GRAPHICS_API STREQUAL "Metal" AND NOT APPLE)
 	message(FATAL_ERROR "AQ_GRAPHICS_API=Metal は macOS 専用です")
 endif()
 
+if(ANDROID AND NOT AQ_GRAPHICS_API STREQUAL "Vulkan")
+	message(FATAL_ERROR "Android では AQ_GRAPHICS_API=Vulkan のみ指定できます (現在: ${AQ_GRAPHICS_API})")
+endif()
+
+
+# ----------------------------------------------------------------------------
+#  NDK のパスに空白が入っていないことの確認(Android のみ)
+#
+#  空白入りのパスだと Ninja ジェネレータがコンパイラを 8.3 短縮名
+#  (CLANG_~1.EXE)で呼ぶ。clang は argv[0] を見て「C ドライバか C++ ドライバか」
+#  を決めるため、短縮名では clang++ と判定できず C としてリンクし、
+#  **libc++ をリンクしないまま** std::/__cxa_* が未定義エラーになる。
+#  コンパイルは通ってリンクだけが失敗するので原因が分かりにくい。ここで止める。
+#
+#  対処: 空白を含まないパスへ NDK を置くか、ジャンクションを張って
+#  ANDROID_NDK_HOME をそちらへ向ける(手順は Tools/SetupCMake/README.md)。
+# ----------------------------------------------------------------------------
+if(ANDROID AND CMAKE_CXX_COMPILER MATCHES " ")
+	message(FATAL_ERROR
+		"NDK のパスに空白が含まれています: ${CMAKE_CXX_COMPILER}\n"
+		"Ninja が 8.3 短縮名でコンパイラを呼ぶため、libc++ がリンクされず "
+		"std:: / __cxa_* が未定義になります。空白を含まないパスを "
+		"ANDROID_NDK_HOME に指定してください (Tools/SetupCMake/README.md 参照)。")
+endif()
+
 message(STATUS "AquaDash: AQ_GRAPHICS_API = ${AQ_GRAPHICS_API}")
 
 
@@ -76,8 +101,11 @@ message(STATUS "AquaDash: AQ_GRAPHICS_API = ${AQ_GRAPHICS_API}")
 #  Metal 構成も SDK を要求する。描画には使わないが、シェーダのビルド経路
 #  (.fx -> dxc -> .spv -> spirv-cross -> .metal) がどちらも SDK 同梱のツールのため
 #  (設計書/MetalBackend設計.md §9.1)。
+#  Android は例外で SDK を要求しない。NDK の sysroot が Vulkan ヘッダと
+#  libvulkan.so の両方を持ち、シェーダは事前生成した .spv を読むだけなので
+#  dxc も要らない(.spv の生成はデスクトップ側で行う)。
 set(AQ_VULKAN_SDK "")
-if(AQ_GRAPHICS_API STREQUAL "Vulkan" OR AQ_GRAPHICS_API STREQUAL "Metal")
+if((AQ_GRAPHICS_API STREQUAL "Vulkan" AND NOT ANDROID) OR AQ_GRAPHICS_API STREQUAL "Metal")
 	if(NOT DEFINED ENV{VULKAN_SDK})
 		message(FATAL_ERROR "AQ_GRAPHICS_API=${AQ_GRAPHICS_API} には環境変数 VULKAN_SDK が必要です (dxc / spirv-cross の入手元)")
 	endif()
@@ -117,7 +145,10 @@ add_subdirectory(aqEngine)
 add_subdirectory(Game)
 
 # 開発用ツール(CMake 専用。vcxproj は用意しない)
-add_subdirectory(Tools/MixerTest)
+# Android では実行ファイルを端末上で直接叩けないため配線しない。
+if(NOT ANDROID)
+	add_subdirectory(Tools/MixerTest)
+endif()
 
 # ----------------------------------------------------------------------------
 #  ビルド時 SPIR-V 生成(設計書 Mac移植設計.md §4)
@@ -127,7 +158,10 @@ add_subdirectory(Tools/MixerTest)
 #  dxc は Vulkan SDK 同梱のため、SDK を要求しない構成(既定の D3D12 等)では
 #  配線しない(compile_spv.cmake は dxc が無いと FATAL_ERROR で止まるため)。
 # ----------------------------------------------------------------------------
-if(AQ_GRAPHICS_API STREQUAL "Vulkan")
+#  Android も実行時 DXC を持たないが、dxc 自体が Vulkan SDK 同梱で NDK には
+#  無いため、ビルド時生成はここでは配線しない。デスクトップ側で生成した
+#  Assets/Shader/spv を APK へ同梱する(設計書/Android移植設計.md)。
+if(AQ_GRAPHICS_API STREQUAL "Vulkan" AND NOT ANDROID)
 	include(${CMAKE_CURRENT_SOURCE_DIR}/Tools/ShaderCompile/compile_spv.cmake)
 	aq_add_compile_spv_target(aqCompileSpv)
 	add_dependencies(Game aqCompileSpv)

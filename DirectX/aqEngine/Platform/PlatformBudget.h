@@ -52,6 +52,18 @@ namespace aq
 				/*threadPoolWorkerCount*/  0u,
 				/*maxSingleFileBytes*/     0
 			};
+#elif defined(AQ_PLATFORM_ANDROID)
+			// Android: OS が per-app のヒープ上限を持つため、over-budget 観測用の
+			// 設計目標として 2GB を置く(強制ではない)。
+			// ワーカ数は当面 0(論理コア数)。big.LITTLE で小コアに割り当たると
+			// 描画スレッドが詰まるため、実機計測のうえで固定値に変える。
+			// TODO(P6): threadPoolWorkerCount を実機計測に基づく固定値へ。
+			return ResourceBudget{
+				/*memoryBudgetBytes*/      static_cast<size_t>(2) * 1024 * 1024 * 1024,
+				/*stackSizeBytes*/         static_cast<size_t>(4) * 1024 * 1024,
+				/*threadPoolWorkerCount*/  0u,
+				/*maxSingleFileBytes*/     0
+			};
 #else
 #error "GetResourceBudget: 未対応のプラットフォームです"
 #endif

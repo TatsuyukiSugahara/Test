@@ -19,9 +19,7 @@
 #endif
 
 
-// 起動診断ログ。Mac では起動計測(StartupMark)に流して経過時間付きで記録する。
-// Win32/UWP と同じく「プラットフォーム実装が 1 つだけ定義を持つ」構造(aq.h で宣言)。
-namespace aq { void StartupLog(const char* msg) { StartupMark(msg); } }
+// 起動診断ログ(StartupLog)の既定実装は aq.cpp にある(UWP 以外で共通)。
 
 
 // ウィンドウの閉じるボタンを終了要求へ変換するデリゲート。

@@ -54,29 +54,60 @@ aq_exclude_sources(AQ_ENGINE_SOURCES
 #  いない(P1 / P4 の作業)ため、非 Windows ではファイルごと除外する。
 #  HID/* と Platform/PlatformWin32.cpp は既にガード済みだが、意図を明示する
 #  ため同様に除外しておく(空 TU を並べる意味が無いため)。
+#
+#  Windows / Mac / Android の 3 分岐。Android は「非 Windows 共通の除外」に
+#  加えて Mac 専用実装も落とす必要があるため、除外集合を名前で持つ。
 # ----------------------------------------------------------------------------
-if(WIN32)
+set(AQ_ENGINE_WINDOWS_ONLY_PATTERNS
+	"/Graphics/D3D11/"
+	"/Graphics/D3D12/"
+	"/Platform/PlatformWin32\\.cpp$"
+	"/Platform/Common/DebugOutputWin32\\.cpp$"
+	"/HID/XInputPadBackend\\.cpp$"
+	"/HID/Win32PadBackend\\.cpp$"
+	"/HID/DualSensePadBackend\\.cpp$"
+	"/HID/WinRTGamepadBackend\\.cpp$"
+	"/Sound/XAudio2/"
+	"/Sound/Decoder/MFDecoder\\.cpp$"
+	"/Sound/Video/VideoPlayer\\.cpp$"
+)
+
+set(AQ_ENGINE_MAC_ONLY_PATTERNS
+	"/Platform/Common/DebugOutputMac\\.cpp$"
+	"/Platform/Mac/"
+	"/HID/Mac/"
+	"/Sound/CoreAudio/"
+	"/Graphics/Metal/"
+	"\\.mm$"
+)
+
+#  Android 専用実装。現時点の実体は DebugOutputAndroid.cpp だけで、残りは
+#  後続フェーズで増える(Platform/Android・HID/Android・Sound/Oboe)。
+#  先にパターンを置いておけば、ファイルを追加するだけで他プラットフォームの
+#  ビルドから自動的に外れる。
+set(AQ_ENGINE_ANDROID_ONLY_PATTERNS
+	"/Platform/Common/DebugOutputAndroid\\.cpp$"
+	"/Platform/Android/"
+	"/HID/Android/"
+	"/Sound/Oboe/"
+)
+
+#  ANDROID を先に判定すること(Android は UNIX が真になるため、
+#  「Windows でなければ Mac」という分岐では Mac 側へ落ちてしまう)。
+if(ANDROID)
 	aq_exclude_sources(AQ_ENGINE_SOURCES
-		"/Platform/Common/DebugOutputMac\\.cpp$"
-		"/Platform/Mac/"
-		"/HID/Mac/"
-		"/Sound/CoreAudio/"
-		"/Graphics/Metal/"
-		"\\.mm$"
+		${AQ_ENGINE_WINDOWS_ONLY_PATTERNS}
+		${AQ_ENGINE_MAC_ONLY_PATTERNS}
+	)
+elseif(WIN32)
+	aq_exclude_sources(AQ_ENGINE_SOURCES
+		${AQ_ENGINE_MAC_ONLY_PATTERNS}
+		${AQ_ENGINE_ANDROID_ONLY_PATTERNS}
 	)
 else()
 	aq_exclude_sources(AQ_ENGINE_SOURCES
-		"/Graphics/D3D11/"
-		"/Graphics/D3D12/"
-		"/Platform/PlatformWin32\\.cpp$"
-		"/Platform/Common/DebugOutputWin32\\.cpp$"
-		"/HID/XInputPadBackend\\.cpp$"
-		"/HID/Win32PadBackend\\.cpp$"
-		"/HID/DualSensePadBackend\\.cpp$"
-		"/HID/WinRTGamepadBackend\\.cpp$"
-		"/Sound/XAudio2/"
-		"/Sound/Decoder/MFDecoder\\.cpp$"
-		"/Sound/Video/VideoPlayer\\.cpp$"
+		${AQ_ENGINE_WINDOWS_ONLY_PATTERNS}
+		${AQ_ENGINE_ANDROID_ONLY_PATTERNS}
 	)
 endif()
 
@@ -156,7 +187,15 @@ target_link_libraries(aqEngine PUBLIC
 #  かつて aq.h / 各 .cpp の #pragma comment(lib) が担っていた分をここへ移す。
 #  Game へも伝播させる必要があるので PUBLIC。
 # ----------------------------------------------------------------------------
-if(WIN32)
+if(ANDROID)
+	# NDK の sysroot が持つ共有ライブラリ。
+	#   log     : __android_log_write(DebugOutputAndroid.cpp)
+	#   android : ANativeWindow / AAssetManager / ALooper(P1 以降で使う)
+	target_link_libraries(aqEngine PUBLIC
+		log
+		android
+	)
+elseif(WIN32)
 	# API 非依存
 	target_link_libraries(aqEngine PUBLIC
 		dinput8
@@ -202,7 +241,14 @@ endif()
 #  成功する。Windows は $VULKAN_SDK/Lib の vulkan-1.lib と dxcompiler.lib、
 #  Mac は SDK が入れた libvulkan(MoltenVK)を使う。
 # ----------------------------------------------------------------------------
-if(AQ_GRAPHICS_API STREQUAL "Vulkan")
+if(AQ_GRAPHICS_API STREQUAL "Vulkan" AND ANDROID)
+	# Android は NDK の sysroot がヘッダ(vulkan/vulkan.h)と libvulkan.so の
+	# 両方を持つため、Vulkan SDK を要求しない(ルート CMakeLists.txt 側でも
+	# VULKAN_SDK の要求から除外している)。
+	# シェーダは事前生成した .spv を読む経路のみ。実行時 DXC は Windows 専用で、
+	# VulkanShader.cpp が AQ_PLATFORM_WIN32 でガードしている。
+	target_link_libraries(aqEngine PUBLIC vulkan)
+elseif(AQ_GRAPHICS_API STREQUAL "Vulkan")
 	target_include_directories(aqEngine PUBLIC "${AQ_VULKAN_SDK}/Include")
 
 	if(WIN32)

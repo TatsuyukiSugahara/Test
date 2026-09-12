@@ -30,8 +30,17 @@ endif()
 #  Windows は WIN32(SubSystem=Windows / WinMain)。既存 DirectX.vcxproj の
 #  x64 構成の SubSystem と同じ。
 #  Mac は .app バンドル。バンドルへの Assets 同梱は P5 の作業(設計書 §9)。
+#
+#  Android だけ実行ファイルではなく **共有ライブラリ(libGame.so)** になる。
+#  アプリの実行主体は Java/Kotlin 側の Activity で、ネイティブコードは
+#  System.loadLibrary で読み込まれるため。エントリも WinMain / main ではなく
+#  android_main(P1 で追加)。
 # ----------------------------------------------------------------------------
-add_executable(Game WIN32 MACOSX_BUNDLE ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
+if(ANDROID)
+	add_library(Game SHARED ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
+else()
+	add_executable(Game WIN32 MACOSX_BUNDLE ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
+endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
 

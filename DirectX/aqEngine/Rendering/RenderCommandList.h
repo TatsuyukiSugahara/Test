@@ -33,7 +33,7 @@ namespace aq
 			template<typename T, typename... Args>
 			void Enqueue(Args&&... args)
 			{
-				static_assert(sizeof(T) <= PAGE_SIZE, "コマンドサイズがページサイズを超えています");
+				static_assert(sizeof(T) <= COMMAND_PAGE_SIZE, "コマンドサイズがページサイズを超えています");
 				void* mem = Allocate(sizeof(T), alignof(T));
 				ptrs_.push_back(new (mem) T(std::forward<Args>(args)...));
 			}
@@ -42,11 +42,13 @@ namespace aq
 			void Reset();
 
 		private:
-			static constexpr size_t PAGE_SIZE = 64 * 1024;
+			// PAGE_SIZE という名前は使えない。Android(bionic)の <bits/page_size.h> が
+			// 同名のマクロ(4096)を定義しており、マクロ展開でメンバ宣言が壊れる。
+			static constexpr size_t COMMAND_PAGE_SIZE = 64 * 1024;
 
 			struct Page
 			{
-				alignas(std::max_align_t) uint8_t data[PAGE_SIZE];
+				alignas(std::max_align_t) uint8_t data[COMMAND_PAGE_SIZE];
 				size_t cursor = 0;
 
 				bool  Fits(size_t size, size_t align) const;

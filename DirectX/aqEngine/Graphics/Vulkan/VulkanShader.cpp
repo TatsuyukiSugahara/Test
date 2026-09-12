@@ -23,24 +23,34 @@ namespace aq
 			static constexpr uint32_t SPIRV_MAGIC = 0x07230203u;
 
 			// ── パス解決 (D3D12Shader と同じ規則) ──
+			// ワーカースレッドから並列に呼ばれるため、C++11 のスレッドセーフな
+			// static 初期化で一度だけ算出する。
 			std::string FindProjectRoot()
 			{
-				static std::string cached;
-				if (!cached.empty()) return cached;
-				std::error_code ec;
-				std::filesystem::path dir = std::filesystem::current_path(ec);
-				if (ec) return std::string();
-				while (!dir.empty())
+				static const std::string cached = []() -> std::string
 				{
-					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec)
-					{
-						cached = dir.generic_string();
-						return cached;
+					// プラットフォームがコンテンツ基点を返す場合(UWP のパッケージ install
+					// フォルダ、Android の展開先など)はそれを採用し、ソースツリーの上方探索は
+					// 行わない。サンドボックスでは Game/Assets を遡れないため。
+					// Win32 は nullptr を返すので従来どおり下の探索へ落ちる。
+					if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
+						return contentRoot;
 					}
-					if (dir == dir.root_path()) break;
-					dir = dir.parent_path();
-				}
-				cached = std::filesystem::current_path(ec).generic_string();
+
+					std::error_code ec;
+					std::filesystem::path dir = std::filesystem::current_path(ec);
+					if (ec) return std::string();
+					while (!dir.empty())
+					{
+						if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec)
+						{
+							return dir.generic_string();
+						}
+						if (dir == dir.root_path()) break;
+						dir = dir.parent_path();
+					}
+					return std::filesystem::current_path(ec).generic_string();
+				}();
 				return cached;
 			}
 

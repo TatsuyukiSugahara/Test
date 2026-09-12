@@ -12,9 +12,12 @@
 	処理の流れ:
 	  1. デバッグ用 keystore が無ければ keytool で作る
 	  2. aapt2 link で AndroidManifest.xml から素の APK を作る
-	  3. lib/<abi>/libGame.so(と任意で Vulkan 検証レイヤ)を APK へ足す
-	  4. zipalign -p 4 で整列する
-	  5. apksigner で署名し、apksigner verify で検証する
+	  3. lib/<abi>/libGame.so(と任意で Vulkan 検証レイヤ)を並べる
+	  4. Game/Assets を assets/Game/Assets/... として並べ、
+	     展開用の asset_index.txt / asset_stamp.txt を作る
+	  5. 2 の APK をベースに 3・4 を流し込んだ APK を書き出す
+	  6. zipalign -p 4 で整列する
+	  7. apksigner で署名し、apksigner verify で検証する
 
 .EXAMPLE
 	powershell -ExecutionPolicy Bypass -File Tools\PackageApk\package_apk.ps1
@@ -33,8 +36,21 @@ param(
 	[ValidateSet('Debug', 'Release')]
 	[string]$Config = 'Debug',
 
-	# APK の assets/ へ入れるディレクトリ。P1 では未使用(.spv とアセットは P2 で使う)
+	# APK の assets/ へ入れるディレクトリ。既定は Game\Assets(.spv もこの下)
 	[string]$AssetsDir,
+
+	# assets/<AssetsPrefix>/... というエントリ名の頭に付ける部分。
+	# エンジン側はソースツリー相対("Game/Assets/...")でパスを解決するので、
+	# 展開先でその構造が再現されるようここを合わせる
+	[string]$AssetsPrefix = 'Game/Assets',
+
+	# アセットを一切入れない(ネイティブだけ差し替えて試すとき用)
+	[switch]$NoAssets,
+
+	# APK へ追加するエントリの圧縮レベル。Fastest が既定なのは、
+	# アセットが 100MB 規模あり Optimal では圧縮に時間がかかりすぎるため
+	[ValidateSet('Optimal', 'Fastest', 'NoCompression')]
+	[string]$CompressionLevel = 'Fastest',
 
 	[string]$Abi = 'arm64-v8a',
 
@@ -57,6 +73,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 
 # ---------------------------------------------------------------------------
@@ -108,19 +125,34 @@ function Assert-FileExists([string]$path, [string]$what)
 }
 
 
-# APK は zip なので、aapt2 の出力へ直接エントリを足す。
-# 圧縮して入れるのは、マニフェストが extractNativeLibs="true" を宣言しており
-# インストール時に展開される前提のため(効くのは APK のサイズだけ)
-function Add-EntriesToZip([string]$zipPath, [object[]]$entries)
+# aapt2 が作った APK をコピーし、そこへネイティブライブラリとアセットを足す。
+#
+# ZipArchiveMode::Update を使うのは、aapt2 が作った既存エントリを
+# 「圧縮方式ごとそのまま」残せる唯一の手段だから。
+# resources.arsc は API 30 以降「無圧縮 (Stored)」でなければインストールが
+# 拒否される(INSTALL_PARSE_FAILED_RESOURCES_ARSC_COMPRESSED)のに、
+# .NET Framework の ZipArchive は CompressionLevel::NoCompression を渡しても
+# Stored ではなく Deflate(レベル 0)で書く。つまり新しい zip へ詰め直すと
+# resources.arsc が圧縮扱いになってインストールできなくなる。
+# Update モードなら触らないエントリは元のバイト列のまま残るので問題が起きない。
+#
+# エントリ名は呼び出し側が組み立てたものをそのまま使う。zip の区切りは '/' で、
+# aapt2 の -A は Windows のパス区切り '\' をエントリ名に残してしまい
+# AAssetManager から引けなくなるので、-A は使わずここで足す。
+function Add-EntriesToApk([string]$sourceApk, [string]$destApk, [object[]]$entries, [string]$levelName)
 {
-	$zip = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Update)
+	$level = [System.Enum]::Parse([System.IO.Compression.CompressionLevel], $levelName)
+
+	Copy-Item -LiteralPath $sourceApk -Destination $destApk -Force
+
+	$zip = [System.IO.Compression.ZipFile]::Open($destApk, [System.IO.Compression.ZipArchiveMode]::Update)
 	try {
 		foreach ($entry in $entries) {
 			$existing = $zip.GetEntry($entry.Name)
 			if ($null -ne $existing) {
 				$existing.Delete()
 			}
-			$created = $zip.CreateEntry($entry.Name, [System.IO.Compression.CompressionLevel]::Optimal)
+			$created = $zip.CreateEntry($entry.Name, $level)
 			$writer = $created.Open()
 			try {
 				$reader = [System.IO.File]::OpenRead($entry.Path)
@@ -132,8 +164,70 @@ function Add-EntriesToZip([string]$zipPath, [object[]]$entries)
 			} finally {
 				$writer.Dispose()
 			}
-			$sizeMB = (Get-Item -LiteralPath $entry.Path).Length / 1MB
-			Write-Note ("追加: {0}  ({1:N1} MB)" -f $entry.Name, $sizeMB)
+		}
+	} finally {
+		# Update モードは追加分をここで初めて書き出す(それまではメモリ上)
+		$zip.Dispose()
+	}
+}
+
+
+# C++ 側が 1 行ずつ素朴に読むので、UTF-8 / BOM なし / LF で書く
+function Write-PlainTextFile([string]$path, [string[]]$lines)
+{
+	$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+	[System.IO.File]::WriteAllText($path, (($lines -join "`n") + "`n"), $utf8NoBom)
+}
+
+
+# resources.arsc が無圧縮(Stored)で入っていることを確認する。
+#
+# Android 30(R)以降は、インストール時に resources.arsc が
+#   ・無圧縮(Stored)
+#   ・4 バイト境界に整列
+# の 2 条件を満たすことを要求し、満たさないと
+#   Failure [-124: ... requires the resources.arsc of installed APKs to be
+#   stored uncompressed and aligned on a 4-byte boundary]
+# でインストールが拒否される。整列は zipalign が直せるが、
+# 圧縮は zip へ入れる時点で決まり zipalign では解けないので、ここで検査する。
+#
+# 罠: .NET Framework の ZipArchive は CompressionLevel::NoCompression を渡しても
+# Stored ではなく Deflate(レベル 0)で書く(40 バイトが 45 バイトに膨らむ)。
+# つまり「新しい zip へ詰め直して無圧縮指定」では条件を満たせない。
+# aapt2 が Stored で書いた resources.arsc を Update モードでそのまま残すのが唯一の手。
+function Test-ApkResourcesArsc([string]$apkPath)
+{
+	$zip = [System.IO.Compression.ZipFile]::OpenRead($apkPath)
+	try {
+		$arsc = $zip.GetEntry('resources.arsc')
+		if ($null -eq $arsc) {
+			Stop-WithError "resources.arsc が APK にありません: $apkPath"
+		}
+		if ($arsc.CompressedLength -ne $arsc.Length) {
+			Write-Host ("       resources.arsc: Length={0} CompressedLength={1}" -f $arsc.Length, $arsc.CompressedLength) -ForegroundColor Red
+			Stop-WithError "resources.arsc が圧縮されています。Android 30 以降はインストールを拒否します(zipalign では直せません)"
+		}
+		Write-Note ("resources.arsc は無圧縮 Stored(Length={0} = CompressedLength={1})" -f $arsc.Length, $arsc.CompressedLength)
+	} finally {
+		$zip.Dispose()
+	}
+}
+
+
+# エントリ名に '\' が混ざっていないことを確認する。
+# 混ざると端末側の AAssetManager / 展開処理から引けなくなる
+function Test-ApkEntryNames([string]$apkPath)
+{
+	$zip = [System.IO.Compression.ZipFile]::OpenRead($apkPath)
+	try {
+		$total = $zip.Entries.Count
+		$bad = @($zip.Entries | Where-Object { $_.FullName.Contains('\') })
+		Write-Note ("エントリ数 {0} / '\' を含むもの {1}" -f $total, $bad.Count)
+		if ($bad.Count -gt 0) {
+			foreach ($entry in ($bad | Select-Object -First 5)) {
+				Write-Host "       $($entry.FullName)" -ForegroundColor Red
+			}
+			Stop-WithError "エントリ名に '\' が混ざっています(AAssetManager から引けません)"
 		}
 	} finally {
 		$zip.Dispose()
@@ -173,6 +267,12 @@ if ([string]::IsNullOrWhiteSpace($OutApk)) {
 }
 if ([string]::IsNullOrWhiteSpace($Keystore)) {
 	$Keystore = Join-Path $env:USERPROFILE '.android\debug.keystore'
+}
+if ([string]::IsNullOrWhiteSpace($AssetsDir)) {
+	$AssetsDir = Join-Path $directXRoot 'Game\Assets'
+}
+if ($NoAssets) {
+	$AssetsDir = ''
 }
 
 Assert-FileExists $ManifestPath 'AndroidManifest.xml'
@@ -252,8 +352,10 @@ if (Test-Path -LiteralPath $stageDir) {
 New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 
 $baseApk    = Join-Path $stageDir 'base-unsigned.apk'
+$payloadApk = Join-Path $stageDir 'base-payload.apk'
 $alignedApk = Join-Path $stageDir 'base-aligned.apk'
 
+# アセットは aapt2 の -A ではなく後段の zip 追加で入れるので、link はマニフェストだけ
 $linkArgs = @('link', '-o', $baseApk, '-I', $androidJar, '--manifest', $ManifestPath)
 
 # debuggable はマニフェストに書かず、Debug 構成のときだけ aapt2 に入れさせる。
@@ -262,25 +364,11 @@ if ($Config -eq 'Debug') {
 	$linkArgs += '--debug-mode'
 }
 
-if (-not [string]::IsNullOrWhiteSpace($AssetsDir)) {
-	if (-not (Test-Path -LiteralPath $AssetsDir -PathType Container)) {
-		Stop-WithError "-AssetsDir が見つかりません: $AssetsDir"
-	}
-	$assetsFull = (Resolve-Path -LiteralPath $AssetsDir).Path
-	# 中間物(ステージングディレクトリ)を assets の下に作ると、aapt2 が
-	# それ自身をアセットとして APK へ取り込んでしまう
-	if ($stageDir.StartsWith($assetsFull, [StringComparison]::OrdinalIgnoreCase)) {
-		Stop-WithError "-OutApk を -AssetsDir の中に置けません(中間物がアセットに混ざる): $OutApk"
-	}
-	$linkArgs += @('-A', $assetsFull)
-	Write-Note "assets: $AssetsDir"
-}
-
 Invoke-Tool $aapt2 $linkArgs 'aapt2 link'
 
 
 # ---------------------------------------------------------------------------
-# 3. ネイティブライブラリを APK へ足す
+# 3. ネイティブライブラリの追加リスト
 # ---------------------------------------------------------------------------
 
 Write-Step "lib/$Abi へネイティブライブラリを追加"
@@ -288,8 +376,10 @@ Write-Step "lib/$Abi へネイティブライブラリを追加"
 Add-Type -AssemblyName 'System.IO.Compression' | Out-Null
 Add-Type -AssemblyName 'System.IO.Compression.FileSystem' | Out-Null
 
+$soFull = (Resolve-Path -LiteralPath $SoPath).Path
 $zipEntries = @()
-$zipEntries += [PSCustomObject]@{ Name = "lib/$Abi/libGame.so"; Path = (Resolve-Path -LiteralPath $SoPath).Path }
+$zipEntries += [PSCustomObject]@{ Name = "lib/$Abi/libGame.so"; Path = $soFull }
+Write-Note ("libGame.so     : {0:N1} MB" -f ((Get-Item -LiteralPath $soFull).Length / 1MB))
 
 # Vulkan 検証レイヤ。NDK r26 以降は同梱されなくなったので、あれば拾う程度に留める
 if ($IncludeValidationLayer) {
@@ -340,21 +430,95 @@ if ($IncludeValidationLayer) {
 	}
 }
 
-Add-EntriesToZip $baseApk $zipEntries
+
+# ---------------------------------------------------------------------------
+# 4. アセットの追加リストとメタファイル
+# ---------------------------------------------------------------------------
+
+$assetCount = 0
+$assetBytes = 0
+
+if ([string]::IsNullOrWhiteSpace($AssetsDir)) {
+	Write-Step "アセットの同梱をスキップ(-NoAssets)"
+} else {
+	Write-Step "assets/$AssetsPrefix へアセットを追加"
+
+	if (-not (Test-Path -LiteralPath $AssetsDir -PathType Container)) {
+		Stop-WithError "-AssetsDir が見つかりません: $AssetsDir"
+	}
+	$assetsFull = (Resolve-Path -LiteralPath $AssetsDir).Path
+
+	# 中間物(ステージングディレクトリ)がアセットの下にあると、自分の出力を
+	# アセットとして取り込んでしまう
+	if ($stageDir.StartsWith($assetsFull, [StringComparison]::OrdinalIgnoreCase)) {
+		Stop-WithError "-OutApk を -AssetsDir の中に置けません(中間物がアセットに混ざる): $OutApk"
+	}
+
+	# 並び順を固定する。asset_stamp.txt の値と一覧の内容を実行ごとに揺らさないため
+	$assetFiles = Get-ChildItem -LiteralPath $assetsFull -Recurse -File | Sort-Object -Property FullName
+
+	if ($assetFiles.Count -eq 0) {
+		Stop-WithError "-AssetsDir にファイルがありません: $assetsFull"
+	}
+
+	$prefix = $AssetsPrefix.Trim('/')
+	$indexLines = @()
+
+	foreach ($assetFile in $assetFiles) {
+		# AssetsDir からの相対パスを '/' 区切りへ直す。
+		# ここで作った名前がそのまま端末側の展開先の相対パスになる
+		$relative = $assetFile.FullName.Substring($assetsFull.Length).TrimStart('\', '/').Replace('\', '/')
+		$logicalPath = "$prefix/$relative"
+
+		$indexLines += $logicalPath
+		$zipEntries += [PSCustomObject]@{ Name = "assets/$logicalPath"; Path = $assetFile.FullName }
+
+		$assetCount++
+		$assetBytes += $assetFile.Length
+	}
+
+	# AAssetDir はサブディレクトリを返さないため、端末側は APK 内を再帰的に
+	# 列挙できない。展開に必要なファイル一覧を APK 自身に持たせる
+	$indexFile = Join-Path $stageDir 'asset_index.txt'
+	Write-PlainTextFile $indexFile $indexLines
+	$zipEntries += [PSCustomObject]@{ Name = 'assets/asset_index.txt'; Path = $indexFile }
+
+	# 展開済み判定用の印。展開先に置いた同名ファイルと文字列比較するだけなので、
+	# 内容は「ファイル数 合計バイト数」の 1 行で足りる
+	$stampFile = Join-Path $stageDir 'asset_stamp.txt'
+	Write-PlainTextFile $stampFile @("$assetCount $assetBytes")
+	$zipEntries += [PSCustomObject]@{ Name = 'assets/asset_stamp.txt'; Path = $stampFile }
+
+	Write-Note "元ディレクトリ : $assetsFull"
+	Write-Note ("ファイル数     : {0}" -f $assetCount)
+	Write-Note ("合計バイト数   : {0:N0} ({1:N1} MB)" -f $assetBytes, ($assetBytes / 1MB))
+	Write-Note ("asset_stamp    : {0} {1}" -f $assetCount, $assetBytes)
+}
 
 
 # ---------------------------------------------------------------------------
-# 4. zipalign
+# 5. APK の組み立て
+# ---------------------------------------------------------------------------
+
+Write-Step "APK の組み立て(圧縮レベル $CompressionLevel)"
+
+Add-EntriesToApk $baseApk $payloadApk $zipEntries $CompressionLevel
+Test-ApkEntryNames $payloadApk
+Test-ApkResourcesArsc $payloadApk
+
+
+# ---------------------------------------------------------------------------
+# 6. zipalign
 # ---------------------------------------------------------------------------
 
 Write-Step "zipalign(4 バイト整列 + .so のページ整列)"
 
 # -p は非圧縮の .so をページ境界へ揃える指示。-f は出力の上書き許可
-Invoke-Tool $zipalign @('-p', '-f', '4', $baseApk, $alignedApk) 'zipalign'
+Invoke-Tool $zipalign @('-p', '-f', '4', $payloadApk, $alignedApk) 'zipalign'
 
 
 # ---------------------------------------------------------------------------
-# 5. 署名と検証
+# 7. 署名と検証
 # ---------------------------------------------------------------------------
 
 Write-Step "apksigner sign"
@@ -393,7 +557,27 @@ if ($LASTEXITCODE -ne 0) {
 
 Remove-Item -LiteralPath $stageDir -Recurse -Force
 
+# zipalign と署名で zip を書き直すので、実機へ渡す成果物そのものを検査する。
+# ここが通らない APK はインストールで弾かれる
+Write-Step "最終 APK の検査"
+Test-ApkEntryNames $OutApk
+Test-ApkResourcesArsc $OutApk
+
+# zipalign -c は整列の検査。resources.arsc の行に注目する
+Write-Note "zipalign -c -v 4(resources.arsc の整列を確認)"
+$alignReport = & $zipalign -c -v 4 $OutApk
+if ($LASTEXITCODE -ne 0) {
+	$alignReport | Where-Object { $_ -match 'BAD|resources\.arsc' } | ForEach-Object { Write-Host "       $_" -ForegroundColor Red }
+	Stop-WithError "zipalign -c で整列不足が見つかりました(終了コード $LASTEXITCODE)"
+}
+$alignReport | Where-Object { $_ -match 'resources\.arsc|libGame\.so|Verification' } | ForEach-Object { Write-Host "       $_" -ForegroundColor DarkGray }
+
 $apkInfo = Get-Item -LiteralPath $OutApk
+$stopwatch.Stop()
+
 Write-Step "完了"
-Write-Host ("     {0}  ({1:N2} MB)" -f $apkInfo.FullName, ($apkInfo.Length / 1MB)) -ForegroundColor Green
+Write-Host ("     {0}" -f $apkInfo.FullName) -ForegroundColor Green
+Write-Host ("     APK サイズ     : {0:N0} バイト ({1:N2} MB)" -f $apkInfo.Length, ($apkInfo.Length / 1MB)) -ForegroundColor Green
+Write-Host ("     アセット       : {0} ファイル / {1:N0} バイト ({2:N1} MB)" -f $assetCount, $assetBytes, ($assetBytes / 1MB)) -ForegroundColor Green
+Write-Host ("     所要時間       : {0:N1} 秒" -f $stopwatch.Elapsed.TotalSeconds) -ForegroundColor Green
 Write-Host "     インストール: adb install -r `"$($apkInfo.FullName)`"" -ForegroundColor Green

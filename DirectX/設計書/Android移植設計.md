@@ -4,20 +4,24 @@
 
 ## 現在の到達点
 
-**P1(実機でクリア画面)完了。** Pixel 7a / Android 16 で APK が起動し、Vulkan のクリア色が
-全面に出て、終了までリークなしで通る。次は P2(アセットを APK へ入れて実シーン)。
+**P2(実機で実シーン)完了 — ただしステージ描画の確認は入力待ち。**
+Pixel 7a / Android 16 で **AquaDash のタイトル画面がフル表示**され、60 FPS で回る。
+ロゴ・背景・ステージサムネ・フォントすべて正しく出る。
+「PRESS SPACE / A BUTTON」から先へ進むには入力が要るため、**ステージ描画の確認は P4 へ移した**。
 
 | | 状態 |
 |---|---|
-| Android ビルド | `cmake --preset android-arm64` → `--build --preset android-arm64-debug` が通る。エラー 0 / 警告 23 |
-| 成果物 | `build/android-arm64/lib/Debug/libGame.so`(ELF64 / AArch64 / DYN、Debug 84MB)。LOAD セグメントは 16KB(0x4000)境界 |
-| APK | `build/android-arm64/AquaDash-debug.apk`(21.7MB / v3 署名 / `native-code: arm64-v8a`) |
-| 実機 | **Google Pixel 7a(lynx)/ Android 16(API 36)/ arm64-v8a / Mali** で確認 |
-| 起動 | `android_main` 0.6ms → ウィンドウ 2282x1080 取得 27ms → Vulkan デバイス 69ms → フレーム提示。logcat タグ `AquaDash` |
-| 画面 | 全面 RGB(25,89,153) = 指定した clear color (0.10, 0.35, 0.60) と一致 |
-| 終了 | BACK キーで `TERM_WINDOW` → `DESTROY` → `MemoryTracker: No leaks detected` → `android_main exit`。クラッシュなし |
-| Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。起動〜終了コード 0 |
-| Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` の一本化が `PlatformMac.mm` に及ぶので次に Mac を触るとき要確認 |
+| Android ビルド | `cmake --preset android-arm64` → `--build --preset android-arm64-debug` が通る。エラー 0 |
+| 成果物 | `build/android-arm64/lib/Debug/libGame.so`(ELF64 / AArch64 / DYN)。LOAD セグメントは 16KB(0x4000)境界 |
+| APK | `build/android-arm64/AquaDash-debug.apk`(97.85MB / v3 署名 / アセット 192 ファイル同梱) |
+| 実機 | **Google Pixel 7a(lynx)/ Android 16(API 36)/ arm64-v8a / Mali**。Vulkan は **1.4** |
+| アセット展開 | 初回のみ **192 ファイル / 101,394,210 バイトを 413 ms**。2 回目以降はスタンプ比較で即スキップ |
+| 起動 | `android_main` → ウィンドウ 2282x1080 取得 27ms → Vulkan デバイス 69ms → **タイトル表示 0.52s** |
+| 画面 | タイトル画面が正しく描画(ロゴ / TitleBG.png / Stage01_thumb.png / フォントアトラス / ImGui) |
+| 性能 | **60.1 FPS(16.64 ms)** — VSync 上限に張り付き |
+| 終了 | BACK キーで `TERM_WINDOW` → `DESTROY` → `MemoryTracker: No leaks detected`。クラッシュなし |
+| Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。実行もタイトル表示〜終了コード 0 |
+| Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` 一本化と `ImageLoader` の変更が Mac に及ぶので次に Mac を触るとき要確認 |
 | validation | **未確認**。検証レイヤの `.so` がどこにも無く同梱できない(§4.6) |
 
 導入手順とハマりどころは [Tools/SetupCMake/README.md](../Tools/SetupCMake/README.md) §6、
@@ -34,7 +38,8 @@ AquaDash が起動〜プレイできる状態までを設計する。
 - [Xbox移植設計.md](Xbox移植設計.md) — `IPlatform` 抽象の導入元。
 - [Sound設計.md](Sound設計.md) §8 — Oboe バックエンドの一次資料(本書では重複させない)。
 
-**本書のステータス: P1 完了。** §0.4 の判断は 2026-09-12 に確定した。次は P2。
+**本書のステータス: P2 完了。** §0.4 の判断は 2026-09-12 に確定した。次は P4(入力)。
+P3(ライフサイクル)のうち回転対応は P2 で先に入った(§4.3)。
 
 ---
 
@@ -355,12 +360,21 @@ P1 の実機確認結果(Pixel 7a / Android 16 / Mali。`adb shell cmd gpu vkjso
 デスクトップではウィンドウサイズ固定運用のため表面化していないが、Android では回転・復帰・
 マルチウィンドウで日常的に `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` が返る。
 
-- 戻り値を判定し、`OUT_OF_DATE` / `SUBOPTIMAL` でスワップチェーンを作り直す経路を新設する。
-- **プリトランスフォーム**: `VkSurfaceCapabilitiesKHR::currentTransform` を無視すると、
-  コンポジタが毎フレーム回転合成を挟み帯域を食う。最低限 `currentTransform` をそのまま
-  `preTransform` に指定し、90/270 度時は射影行列側で吸収する。
+- 戻り値を判定し、`OUT_OF_DATE` / `SUBOPTIMAL` でスワップチェーンを作り直す経路を新設する(P3)。
 - Android は起動直後のサーフェスサイズと実サイズがずれることがあるため、
-  レンダー解像度は `currentExtent` から取り直す。
+  レンダー解像度は `currentExtent` から取り直す(P3)。
+
+**プリトランスフォーム(回転)は P2 で対応済み。** 当初は「`currentTransform` をそのまま
+`preTransform` に渡し、90/270 度は射影行列で吸収する」計画だったが、**この方法では直らない**
+ことが実機で分かった。実測では Pixel 7a の横向きで `currentTransform = 0x2`
+(`ROTATE_90`)で、これをそのまま渡すと「アプリが回転済みの絵を描く」契約になり、
+**画面全体が 90 度回って表示される**(2D UI と ImGui はスクリーン座標で描くため、
+射影行列を回しても直らない。UI 層全部に手を入れる話になる)。
+
+そこで **`supportedTransforms` に IDENTITY があれば IDENTITY を要求**し、回転は
+コンポジタに任せる形にした。合成が 1 回増えるのでモバイルでは帯域を食うが、正しさを優先した。
+事前回転して合成コストを無くすのは P6 の最適化候補(`dynamicRenderingLocalRead` も使える)。
+デバッグのため `[vk] swapchain <w>x<h> currentTransform=0x? -> preTransform=0x?` をログに出している。
 
 > この改修は **Windows / Mac にも効く**(ウィンドウリサイズ対応)。Android 専用 `#ifdef` にはしない。
 
@@ -468,16 +482,46 @@ Bloom/トーンマップ compute → blit** で、モバイル GPU にはメモ�
 | [VulkanShader.cpp](../aqEngine/Graphics/Vulkan/VulkanShader.cpp) | 同型の `FindProjectRoot` + `std::fopen` |
 | [ImageLoader.cpp](../aqEngine/Resource/ImageLoader.cpp) | DirectXTex / stb_image にパスを渡す |
 
-方針は 2 案:
+方針は 2 案あり、**(a) 初回起動時に展開**を採った(P2 で実装)。
 
 | 案 | 内容 | 長所 | 短所 |
 |---|---|---|---|
-| **(a) 初回起動時に展開**【推奨(まず P2 で採る)】 | APK の `assets/` を `internalDataPath` へコピーし、`GetContentRoot` にそのパスを返す | **既存のファイル IO を一切変えなくてよい**。P2 が最短で通る | 起動時間とストレージを二重に消費 |
+| **(a) 初回起動時に展開**【採用】 | APK の `assets/` を `internalDataPath` へコピーし、`GetContentRoot` にそのパスを返す | **既存のファイル IO を一切変えなくてよい** | 起動時間とストレージを二重に消費 |
 | (b) `AAssetManager` 経路 | ファイル読み込みを抽象化し、Android では `AAsset_*` で読む | ストレージ効率が良い | `Resource` / `ImageLoader` / `VulkanShader` のパス前提に手が入る |
 
-**(a) で先に絵を出し、必要になったら (b) へ移す**。(b) へ移す場合も、抽象化の単位は
-「パス → バイト列」の 1 関数に絞る(`ImageLoader` が DirectXTex にパスを渡している箇所だけは
-メモリからのロード API に差し替えが要る)。
+(b) へ移すなら抽象化の単位は「パス → バイト列」の 1 関数に絞る(`ImageLoader` が
+DirectXTex にパスを渡している箇所だけはメモリからのロード API に差し替えが要る)。
+
+### 7.1 展開の仕組み(P2 実装)
+
+**`AAssetManager` はディレクトリ列挙ができない**(`AAssetDir` はサブディレクトリを返さない)。
+そのため「APK の中身を全部コピーする」ことが素直には書けない。**ファイル一覧を
+パッケージング時に APK へ同梱する**ことで解決した。
+
+| APK 内 | 役割 |
+|---|---|
+| `assets/Game/Assets/...` | アセット本体。**ソースツリー相対の構造をそのまま再現**する(下記の理由) |
+| `assets/asset_index.txt` | 同梱ファイルの相対パス一覧(1 行 1 ファイル、`/` 区切り、UTF-8/LF) |
+| `assets/asset_stamp.txt` | `<ファイル数> <合計バイト数>`。展開済み判定に使う |
+
+- 展開先は `<internalDataPath>/content` で、`GetContentRoot()` がこれを返す。
+  結果として `<content>/Game/Assets/...` が並ぶ。
+  **この形にするのは既存のパス解決規則に合わせるため**: `Resource.cpp` と
+  `VulkanShader.cpp` / `D3D12Shader.cpp` は `Assets/...` を `<root>/Game/Assets/...`、
+  `Game/Assets/...` を `<root>/Game/Assets/...` と解決する(UWP も同じ規則で同梱している)。
+- 展開済み判定は **APK 内の `asset_stamp.txt` と展開先に置いた同名ファイルの文字列比較**。
+  APK を入れ替えると印が変わるので自動で作り直される。
+- 印が違ったときは `remove_all` で展開先を消してから入れ直す(消えたファイルが残らないように)。
+- **印は全ファイルのコピーが終わった後に書く**。途中で落ちたら印が無いので次回やり直しになる。
+- 展開のトリガは `GetContentRoot()` の初回呼び出し 1 箇所に寄せてある(誰が最初に呼んでも成立する)。
+  ただし数秒かかる処理を初期化の途中で黙って走らせると原因が分からなくなるため、
+  `AndroidMain` は起動直後に明示的に 1 回呼んで印をログへ残す。
+
+**`VulkanShader.cpp` の修正が必要だった。** `Resource.cpp` と `D3D12Shader.cpp` は
+`Engine::GetContentRoot()` を見ていたが、`VulkanShader.cpp` の `FindProjectRoot()` だけは
+カレントディレクトリからの上方探索しか持っておらず、Android ではシェーダが見つからない。
+D3D12 側と同じ形(コンテンツ基点を優先 + スレッドセーフな static 初期化)に揃えた。
+Mac の Vulkan 構成が動いていたのは `.app` が CWD を `Game/` に移していたため。
 
 その他:
 
@@ -507,6 +551,14 @@ Bloom/トーンマップ compute → blit** で、モバイル GPU にはメモ�
    P1 の「絵が出た」以上の判定には使えない見込み。
 6. **Windows / Mac の回帰**。§4.3(スワップチェーン再生成)は全プラットフォーム共通コードに
    手を入れるため、各フェーズで Windows 3 構成(D3D11/D3D12/Vulkan)の回帰確認を行う。
+7. **ディスプレイカットアウト**。Pixel 7a の横向きでは画面左端に 118px の黒帯が出る
+   (2400px のうち ANativeWindow は 2282px)。フロントカメラのカットアウト領域を
+   避けているためで不具合ではない。全画面に広げるならマニフェストのテーマへ
+   `windowLayoutInDisplayCutoutMode="shortEdges"` を入れるが、UI がカメラ穴に
+   隠れる可能性とのトレードオフ。見た目の詰めとして P6 で判断する。
+8. **UWP の JSON 読み込み**。P2 で直した `JsonParser::ParseFile` の CWD 依存は
+   Xbox(UWP)で既知だった「JSON 全滅で画面がグレー」と同じ原因。Xbox 実機での
+   確認は [Xbox移植設計.md](Xbox移植設計.md) 側の作業として残っている。
 
 ---
 
@@ -603,17 +655,48 @@ Null(何もしない `IPlatform`)で構わない。
 
 ### P2: 実機で実シーン
 
-アセットとシェーダを APK から読ませる。
+アセットとシェーダを APK から読ませ、`AndroidMain` を本物の Engine ブートへ差し替えた。
 
-- `.spv` の APK 同梱
-- アセットの展開(§7 案 a)+ `GetContentRoot`
-- `Resource` / `ImageLoader` の実機動作確認
+- `Game/Assets` 一式(`.spv` 61 本を含む 192 ファイル)を APK へ同梱
+- アセットの展開(§7.1)+ `GetContentRoot`
+- `AndroidMain` を `Main.cpp` / `MacMain.mm` と同型の Engine ブートに
+- 実機で露出した既存バグ 3 件の修正(下記)
 
 **評価チェックリスト**
-- [ ] タイトル画面が表示される
-- [ ] ステージが描画される(路面・キャラ・地形・影・UI)
-- [ ] validation エラー 0
-- [ ] 起動時間とアセット展開時間を計測して記録した
+- [x] タイトル画面が表示される(ロゴ / 背景 / ステージサムネ / フォント / ImGui すべて正常)
+- [x] 起動時間とアセット展開時間を計測して記録した(展開 413ms / タイトル表示 0.52s / 60.1 FPS)
+- [ ] validation エラー 0 ← **検証レイヤの `.so` が入手できず未確認**(§4.6)
+- [ ] ステージが描画される(路面・キャラ・地形・影・UI)← **P4 へ移した**。
+      タイトルの「PRESS SPACE / A BUTTON」から先へ進むには入力が必要で、
+      Android の入力は P4 で実装するため。デバッグ用の自動開始を仕込むより、
+      P4 で実際に操作して確認するほうが確実と判断した
+
+**P2 で分かったこと / 実機でしか出なかった既存バグ 3 件**
+
+いずれも「Windows と Mac ではカレントディレクトリが `Game/` になっているため偶然動いていた」
+という同根の問題。Android は CWD が `/` で、アプリが変更できない。
+
+1. **`JsonParser::ParseFile` が CWD 相対だった。** 与えられたパスをそのまま `ifstream` に
+   渡していたため、Android では JSON が 1 つも読めない。Prefab / Level / UI 画面定義 /
+   AudioBank / Particle がすべて JSON なので、**UI が何も出ない**症状になる。
+   `aq::res::ResolveExistingResourcePath` を通すよう修正した。
+   **これは UWP(Xbox)で既知だった「JSON 全滅で画面がグレー」と同じ原因**で、
+   そちらも同時に直るはず(Xbox 実機での確認は別途)。
+2. **PNG / JPG ローダが Android に配線されていなかった。** `ImageLoader.cpp` の
+   stb_image 経路が `AQ_PLATFORM_MAC` でガードされており、Android は `#else` で
+   常に false を返していた。`!AQ_PLATFORM_WINDOWS_FAMILY` に広げた。
+3. **stb_image へ解決前のパスを渡していた。** 1 と同じ理由で Android では開けない。
+   DirectXTex 側は解決済みパスを渡していたので DDS だけが読めていた
+   (空のキューブマップは出るのにタイトル画像とフォントが出ない、という症状)。
+   併せて **失敗時のログが無かったので追加した**(WIC 側にはあった)。
+   テクスチャ無しで進むと「文字がベタ塊になる」だけが症状として出て原因が追えない。
+
+**副作用: 起動が速くなった。** 修正前はタイトル表示までの `[boot] wait` が 15 秒
+(896 フレーム)かかっていた。これはテクスチャのプリロード待ちがタイムアウトしていた
+ためで、テクスチャが読めるようになったら **0.07 秒(2 フレーム)**になった。
+
+**アセット展開は速い。** 101MB / 192 ファイルで 413ms(内部ストレージが速い)。
+起動時間への影響は初回のみで、体感できるほどではなかった。
 
 ### P3: ライフサイクルと回転
 
@@ -622,7 +705,11 @@ Android 固有の最重要フェーズ。
 - `IPlatform` のライフサイクル IF 拡張(`IsRenderable` / サーフェス通知)
 - `IGraphicsDeviceImpl::RecreateSurface`(Vulkan 実装、他は no-op)
 - `vkAcquireNextImageKHR` / `vkQueuePresentKHR` の戻り値処理と再生成
-- `preTransform` の考慮
+- (`preTransform` は P2 で対応済み)
+
+**注**: `PlatformAndroid` は既に `IsRenderable()` を自前で持ち、`TERM_WINDOW` で
+ウィンドウを手放して `PumpEvents` がブロックする形になっている(P1)。
+P3 で必要なのはこれを `IPlatform` へ持ち上げ、**サーフェスの作り直し**を繋ぐこと。
 
 **評価チェックリスト**
 - [ ] ホームに戻る → 復帰、を 10 回繰り返して落ちない
@@ -640,8 +727,10 @@ Android 固有の最重要フェーズ。
 
 **評価チェックリスト**
 - [ ] タッチでタイトルからステージへ進める
+- [ ] **ステージが描画される(路面・キャラ・地形・影・UI)** ← P2 から移動。入力が前提のため
+- [ ] ステージ描画時のフレームレートを実機で計測して記録した(タイトルは 60 FPS 張り付き)
 - [ ] 仮想パッドでキャラが操作できる
-- [ ] 物理コントローラが接続時に使える(実機がある場合)
+- [ ] 物理コントローラが接続時に使える
 - [ ] デバッグ UI が指で操作できる
 
 ### P5: サウンド

@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "SimpleJson.h"
+#include "Resource/Resource.h"
 #include <fstream>
 #include <cctype>
 #include <cstdlib>
@@ -192,7 +193,18 @@ namespace aq
 
 		JsonValue JsonParser::ParseFile(const char* path)
 		{
-			std::ifstream ifs(path, std::ios::binary | std::ios::ate);
+			if (path == nullptr) return JsonValue();
+
+			// "Assets/..." のようなアセット相対パスを、実際に開けるパスへ解決する。
+			// カレントディレクトリ依存のままだと、CWD をアプリが決められない
+			// プラットフォーム(Android は "/"、UWP はパッケージ配下)で JSON が
+			// 1 つも読めなくなる。Prefab / Level / UI / AudioBank / Particle が
+			// すべて JSON なので、読めないと画面に何も出ない。
+			// 該当ファイルが見つからなければ与えられた値がそのまま返るため、
+			// エディタが絶対パスを渡す使い方も従来どおり通る。
+			const std::string resolved = aq::res::ResolveExistingResourcePath(path);
+
+			std::ifstream ifs(resolved, std::ios::binary | std::ios::ate);
 			if (!ifs.is_open()) return JsonValue();
 			const auto size = static_cast<std::streamsize>(ifs.tellg());
 			ifs.seekg(0);

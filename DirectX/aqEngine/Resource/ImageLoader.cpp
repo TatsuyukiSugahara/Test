@@ -4,12 +4,13 @@
 #include <cctype>
 #include <cstdlib>
 
-#if defined(AQ_PLATFORM_MAC)
+#if !defined(AQ_PLATFORM_WINDOWS_FAMILY)
 // stb_image の実体はこの TU だけで生成する。
 // Windows は WIC を使うため実体化しない (未使用コードと警告を持ち込まないため)。
+// 非 Windows (Mac / Android) は WIC が無いのでこちらを使う。
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
-#endif // AQ_PLATFORM_MAC
+#endif // !AQ_PLATFORM_WINDOWS_FAMILY
 
 
 namespace aq
@@ -57,7 +58,7 @@ namespace aq
 			}
 
 
-#if defined(AQ_PLATFORM_MAC)
+#if !defined(AQ_PLATFORM_WINDOWS_FAMILY)
 			/**
 			 * stb_image で PNG / JPG 等をデコードし、RGBA8 の ScratchImage に詰め直す。
 			 * WIC が RGBA8 を返すケースに合わせて 4 チャンネル固定で受け取る。
@@ -92,7 +93,7 @@ namespace aq
 				}
 				return true;
 			}
-#endif // AQ_PLATFORM_MAC
+#endif // !AQ_PLATFORM_WINDOWS_FAMILY
 		}
 
 
@@ -122,7 +123,7 @@ namespace aq
 				return SUCCEEDED(DirectX::LoadFromTGAFile(widePath, DirectX::TGA_FLAGS_NONE, outMetadata, outImage));
 			}
 
-			// それ以外 (.png/.jpg 等) は WIC。Mac には WIC が無いので stb_image を使う。
+			// それ以外 (.png/.jpg 等) は WIC。Mac / Android には WIC が無いので stb_image を使う。
 #if defined(AQ_PLATFORM_WINDOWS_FAMILY)
 			{
 				const HRESULT hr = DirectX::LoadFromWICFile(widePath, DirectX::WIC_FLAGS_NONE, outMetadata, outImage);
@@ -134,10 +135,17 @@ namespace aq
 				}
 				return SUCCEEDED(hr);
 			}
-#elif defined(AQ_PLATFORM_MAC)
-			return LoadWithStbImage(path, outMetadata, outImage);
 #else
-			return false;
+			// 解決済みパスを渡すこと。元の CWD 相対パスを渡すと、CWD をアプリが
+			// 決められないプラットフォーム(Android は "/")で開けない。
+			// Mac では .app が CWD を Game/ へ移しているため元のパスでも通っていた。
+			if (!LoadWithStbImage(resolved, outMetadata, outImage)) {
+				// WIC 側と同じ理由で失敗を必ず残す。テクスチャ無しで進むと
+				// 「文字が塊になる」「絵が出ない」だけが症状として出て原因が追えない。
+				aq::StartupMarkf("[img] stb_image load failed path=%s", resolved.c_str());
+				return false;
+			}
+			return true;
 #endif
 		}
 	}

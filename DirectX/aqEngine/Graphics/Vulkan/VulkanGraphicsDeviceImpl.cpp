@@ -460,6 +460,23 @@ namespace aq
 			uint32_t imageCount = caps.minImageCount + 1;
 			if (caps.maxImageCount > 0 && imageCount > caps.maxImageCount) imageCount = caps.maxImageCount;
 
+			// サーフェスの回転。Android は端末の自然な向き(多くは縦)を基準に
+			// currentTransform が 90 / 270 度になる。これをそのまま preTransform へ渡すと
+			// 「アプリが回転済みの絵を描く」契約になり、何もしなければ画面が回って見える。
+			// 射影行列で吸収する手はあるが、2D UI と ImGui はスクリーン座標で描くため
+			// それでは直らない。ここでは IDENTITY を要求して回転をコンポジタに任せる。
+			// (合成が 1 回増えるのでモバイルでは帯域を食う。絵を出すことを優先した判断で、
+			//  事前回転して合成コストを無くすのは最適化フェーズの課題)
+			VkSurfaceTransformFlagBitsKHR preTransform = caps.currentTransform;
+			if ((caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) != 0)
+			{
+				preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+			}
+			aq::StartupMarkf("[vk] swapchain %ux%u currentTransform=0x%x -> preTransform=0x%x",
+			                 swapchainExtent_.width, swapchainExtent_.height,
+			                 static_cast<unsigned>(caps.currentTransform),
+			                 static_cast<unsigned>(preTransform));
+
 			VkSwapchainCreateInfoKHR ci{ VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 			ci.surface          = surface_;
 			ci.minImageCount    = imageCount;
@@ -469,7 +486,7 @@ namespace aq
 			ci.imageArrayLayers = 1;
 			ci.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 			ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-			ci.preTransform     = caps.currentTransform;
+			ci.preTransform     = preTransform;
 			ci.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 			ci.presentMode      = VK_PRESENT_MODE_FIFO_KHR;  // VSync。常に対応。
 			ci.clipped          = VK_TRUE;

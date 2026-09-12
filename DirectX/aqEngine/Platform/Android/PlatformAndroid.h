@@ -35,8 +35,9 @@ namespace aq
 			/** 終了要求(Activity の破棄要求) */
 			bool exitRequested_;
 
-			/** アセット基点。展開方式にするまでは空(GetContentRoot は nullptr を返す) */
+			/** アセット基点(APK から展開したディレクトリ)。直下に Game/Assets/... が並ぶ */
 			std::string contentRoot_;
+			bool        contentRootResolved_;
 
 			/** ユーザーデータ(セーブ等)の書き込み先。末尾セパレータ付き */
 			std::string userDataDir_;
@@ -63,6 +64,22 @@ namespace aq
 
 
 		private:
+			/**
+			 * APK の assets を内部ストレージへ展開する(展開済みなら何もしない)。
+			 *
+			 * APK 内の assets は通常のファイルパスでは開けないが、既存のリソース読み込みは
+			 * すべて fopen / std::filesystem 前提で書かれている。ファイル IO 全体を
+			 * 抽象化する代わりに、初回起動時に一度コピーしてしまう方式を採る。
+			 * AAssetManager はディレクトリ列挙ができないため、APK 側に同梱した
+			 * ファイル一覧(asset_index.txt)を読んで 1 本ずつ取り出す。
+			 *
+			 * @return 展開後の基点が使える状態なら true
+			 */
+			bool EnsureContentExtracted();
+
+			/** APK 内の 1 ファイルを丸ごと読む。見つからなければ false */
+			bool ReadAsset(const char* assetPath, std::string& out) const;
+
 			/** native_app_glue の onAppCmd から呼ばれる実体 */
 			void OnAppCmd(int32_t cmd);
 

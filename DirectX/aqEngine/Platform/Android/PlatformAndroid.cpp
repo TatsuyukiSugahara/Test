@@ -4,9 +4,13 @@
 #if defined(AQ_PLATFORM_ANDROID)
 #include "Platform/Android/PlatformAndroid.h"
 #include <android_native_app_glue.h>
+#include <android/asset_manager.h>
 #include <android/looper.h>
 #include <android/native_window.h>
 #include <sys/stat.h>
+#include <chrono>
+#include <cstdio>
+#include <filesystem>
 
 
 namespace aq
@@ -18,6 +22,7 @@ namespace aq
 			, window_(nullptr)
 			, exitRequested_(false)
 			, contentRoot_()
+			, contentRootResolved_(false)
 			, userDataDir_()
 			, userDataDirResolved_(false)
 		{
@@ -94,11 +99,191 @@ namespace aq
 
 		const char* PlatformAndroid::GetContentRoot()
 		{
-			// APK 内の assets は通常のファイルパスでは開けないため、アセットを
-			// 端末のストレージへ展開してその場所を返す方式にする。
-			// 展開そのものは未実装なので、今は「基点なし」を返す。
-			// TODO(P2): APK の assets を内部ストレージへ展開し、そのパスを返す。
+			// 初回呼び出しで展開する。誰が最初に呼んでも成立するように、
+			// 展開の起点はここ 1 箇所に寄せている(2 回目以降は即返る)。
+			if (!contentRootResolved_)
+			{
+				EnsureContentExtracted();
+			}
 			return contentRoot_.empty() ? nullptr : contentRoot_.c_str();
+		}
+
+
+		bool PlatformAndroid::ReadAsset(const char* assetPath, std::string& out) const
+		{
+			out.clear();
+			if (app_ == nullptr || app_->activity == nullptr
+			    || app_->activity->assetManager == nullptr)
+			{
+				return false;
+			}
+
+			AAsset* asset = AAssetManager_open(app_->activity->assetManager,
+			                                   assetPath, AASSET_MODE_STREAMING);
+			if (asset == nullptr)
+			{
+				return false;
+			}
+
+			char buffer[8192];
+			int  read = 0;
+			while ((read = AAsset_read(asset, buffer, sizeof(buffer))) > 0)
+			{
+				out.append(buffer, static_cast<size_t>(read));
+			}
+			AAsset_close(asset);
+
+			// read < 0 は読み取りエラー。途中まで積んだ内容は使えない。
+			if (read < 0)
+			{
+				out.clear();
+				return false;
+			}
+			return true;
+		}
+
+
+		bool PlatformAndroid::EnsureContentExtracted()
+		{
+			if (contentRootResolved_)
+			{
+				return !contentRoot_.empty();
+			}
+			contentRootResolved_ = true;
+
+			if (app_ == nullptr || app_->activity == nullptr
+			    || app_->activity->assetManager == nullptr
+			    || app_->activity->internalDataPath == nullptr)
+			{
+				aq::StartupMark("[android] no asset manager / data path");
+				return false;
+			}
+
+			const std::string base      = std::string(app_->activity->internalDataPath) + "/content";
+			const std::string stampPath = base + "/asset_stamp.txt";
+
+			// APK 側の印。パッケージング時に「ファイル数 合計バイト数」を書いてある。
+			std::string apkStamp;
+			if (!ReadAsset("asset_stamp.txt", apkStamp))
+			{
+				aq::StartupMark("[android] asset_stamp.txt not found in APK");
+				return false;
+			}
+
+			// 展開先の印と一致すれば展開済み。APK を入れ替えると印が変わるので作り直される。
+			{
+				std::string diskStamp;
+				if (std::FILE* fp = std::fopen(stampPath.c_str(), "rb"))
+				{
+					char   buffer[256];
+					const size_t read = std::fread(buffer, 1, sizeof(buffer), fp);
+					std::fclose(fp);
+					diskStamp.assign(buffer, read);
+				}
+				if (!diskStamp.empty() && diskStamp == apkStamp)
+				{
+					contentRoot_ = base;
+					aq::StartupMark("[android] assets already extracted");
+					return true;
+				}
+			}
+
+			std::string index;
+			if (!ReadAsset("asset_index.txt", index))
+			{
+				aq::StartupMark("[android] asset_index.txt not found in APK");
+				return false;
+			}
+
+			// 印が違う = 別の APK になっている。消えたファイルが残らないよう作り直す。
+			std::error_code ec;
+			std::filesystem::remove_all(base, ec);
+			std::filesystem::create_directories(base, ec);
+
+			const auto startTime = std::chrono::steady_clock::now();
+			size_t     fileCount = 0;
+			uint64_t   byteCount = 0;
+
+			size_t lineBegin = 0;
+			while (lineBegin < index.size())
+			{
+				size_t lineEnd = index.find('\n', lineBegin);
+				if (lineEnd == std::string::npos)
+				{
+					lineEnd = index.size();
+				}
+
+				std::string relative = index.substr(lineBegin, lineEnd - lineBegin);
+				lineBegin = lineEnd + 1;
+
+				// CRLF で書かれていても読めるようにしておく。
+				while (!relative.empty() && (relative.back() == '\r' || relative.back() == ' '))
+				{
+					relative.pop_back();
+				}
+				if (relative.empty())
+				{
+					continue;
+				}
+
+				AAsset* asset = AAssetManager_open(app_->activity->assetManager,
+				                                   relative.c_str(), AASSET_MODE_STREAMING);
+				if (asset == nullptr)
+				{
+					aq::StartupMarkf("[android] asset open failed: %s", relative.c_str());
+					return false;
+				}
+
+				const std::filesystem::path destination = std::filesystem::path(base) / relative;
+				std::filesystem::create_directories(destination.parent_path(), ec);
+
+				std::FILE* fp = std::fopen(destination.c_str(), "wb");
+				if (fp == nullptr)
+				{
+					AAsset_close(asset);
+					aq::StartupMarkf("[android] asset write failed: %s", relative.c_str());
+					return false;
+				}
+
+				char buffer[65536];
+				int  read = 0;
+				bool ok   = true;
+				while ((read = AAsset_read(asset, buffer, sizeof(buffer))) > 0)
+				{
+					if (std::fwrite(buffer, 1, static_cast<size_t>(read), fp) != static_cast<size_t>(read))
+					{
+						ok = false;
+						break;
+					}
+					byteCount += static_cast<uint64_t>(read);
+				}
+				std::fclose(fp);
+				AAsset_close(asset);
+
+				if (!ok || read < 0)
+				{
+					aq::StartupMarkf("[android] asset copy failed: %s", relative.c_str());
+					return false;
+				}
+				++fileCount;
+			}
+
+			// 印は最後に書く。途中で失敗したら印が無いので次回やり直しになる。
+			if (std::FILE* fp = std::fopen(stampPath.c_str(), "wb"))
+			{
+				std::fwrite(apkStamp.data(), 1, apkStamp.size(), fp);
+				std::fclose(fp);
+			}
+
+			const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - startTime).count();
+			aq::StartupMarkf("[android] extracted %zu files / %llu bytes in %lld ms",
+			                 fileCount,
+			                 static_cast<unsigned long long>(byteCount),
+			                 static_cast<long long>(elapsed));
+
+			contentRoot_ = base;
+			return true;
 		}
 
 

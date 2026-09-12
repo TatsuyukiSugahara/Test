@@ -69,9 +69,18 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 | [Mac移植設計](Mac移植設計.md) | macOS/Metal 移植の設計。方針決定、Platform/入力/サウンド/Vulkan(MoltenVK) の責務表、フェーズ計画とチェックリスト |
 | [Mac移植調査](Mac移植調査.md) | 同・調査メモ(一次資料)。Windows 依存の棚卸し、MoltenVK/DXC の対応状況、道A/道B 比較 |
 | [Android移植設計](Android移植設計.md) | Android(NDK/Vulkan)移植の設計。VS の Android ワークロードを使わない理由、ビルド/プラットフォーム層/ライフサイクル/タッチ入力/アセット配置の責務表、フェーズ計画 |
+| [iOS移植設計](iOS移植設計.md) | iOS(UIKit/Metal)移植の設計。iOS SDK での事前実測(195 TU のうち失敗 4 本、シミュレータの Metal 機能値)、メインループの所有権、BC 圧縮テクスチャ、タッチ入力、サンドボックスとファイル IO、フェーズ計画 |
 
 ## 既知の課題
 
+- (2026-09-12 発見)`FindProjectRoot` が **6 ファイルに重複実装**されている
+  (`Resource.cpp` / `VulkanShader.cpp` / `MetalShader.mm` / `MetalRenderContextImpl.mm` / `D3D12Shader.cpp` / `D3D11Shader.cpp`)。
+  うち Metal 経路の 2 本は `GetContentRoot()` を見ずカレントディレクトリ依存のままで、
+  サウンド(`OpenStream` / `LoadBank`)と一部メッシュ(`.tkm` / `.obj` / `.pmd`)も同様。
+  Mac は `chdir` で凌いでいる([iOS移植設計.md](iOS移植設計.md) §7.1)。パス解決の一元化は別途 `<Engine>` で行う。
+- (2026-09-12 発見)Metal バックエンドに GPU の**機能クエリが一箇所も無い**
+  (`supportsFamily` / `supportsBCTextureCompression` 等)。非対応フォーマットを検出せず
+  テクスチャ生成が nil になって静かに失敗する([iOS移植設計.md](iOS移植設計.md) §4.3)。
 - (解決済 2026-09-09)オフスクリーンパス(512²)がディファード経路でシーンを描けない件
   (512² RTV × 1920×1080 DSV の寸法不一致。2026-09-06 発見)は、P17 で縮小 GBuffer を
   自前所有する独立パス `OffscreenScenePass` を新設して解消(01_レンダリング設計.md §8)。

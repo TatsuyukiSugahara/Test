@@ -48,6 +48,32 @@
             }
         },
         {
+            "name": "ComboText",
+            "components": {
+                "transform": { "position": [-700, 400, 0], "sizeDelta": [400, 50] },
+                "text": {
+                    "content": "",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 34,
+                    "alignH": "Left",
+                    "alignV": "Middle",
+                    "color": [1.0, 0.6, 0.2, 1.0]
+                }
+            }
+        },
+        {
+            "name": "ComboGauge",
+            "components": {
+                "transform": { "position": [-800, 432, 0], "sizeDelta": [200, 8] },
+                "image": {
+                    "texture": "Assets/UI/Textures/white.png",
+                    "color": [1.0, 0.6, 0.2, 0.9],
+                    "fillAmount": 1.0,
+                    "fillDir": "Right"
+                }
+            }
+        },
+        {
             "name": "SpeedText",
             "components": {
                 "transform": { "position": [600, 460, 0], "sizeDelta": [400, 90] },

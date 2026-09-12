@@ -70,6 +70,14 @@ namespace app
 			static constexpr float ROAD_DASH_ON       = 4.0f;    // 破線の描き [m]
 			static constexpr float ROAD_DASH_OFF      = 4.0f;    // 破線の空き [m]
 
+			// ブーストパッド (P21)。路面ライン装飾と同じく、テクスチャを使わずメッシュを分けて色で出す。
+			static constexpr float BOOST_PAD_LENGTH      = 9.0f;    // パッドの進行方向の長さ [m]
+			static constexpr float BOOST_PAD_LIFT        = 0.03f;   // 路面上面から浮かせる量 [m] (ライン装飾より上)
+			static constexpr float BOOST_ARROW_LIFT      = 0.05f;   // 矢印はさらに上へ (パッドとの z-fight 回避)
+			static constexpr int   BOOST_ARROW_COUNT     = 3;       // 1 パッドに描く矢印の数
+			static constexpr float BOOST_ARROW_LENGTH    = 1.8f;    // 矢印 1 個の長さ [m]
+			static constexpr float BOOST_ARROW_WIDTH_RATE = 0.72f;  // 矢印の幅 / パッド幅
+
 			// コイン取得エフェクト (常駐エミッタを移動+Restart で使い回す)。
 			static const char* COLLECT_FX_PATH = "Assets/Particle/FX_Explosion.particle";
 
@@ -494,6 +502,112 @@ namespace app
 					{
 						const uint32_t s = base + static_cast<uint32_t>(k * 2);
 						EmitRoadQuad(outIndices, s + 0, s + 2, s + 3, s + 1);
+					}
+				}
+			}
+
+
+			/**
+			 * ブーストパッドの下地メッシュ (パッドごとに 1 枚の帯)。
+			 * 路面ライン装飾と同じく、パッド中心の distance を挟む区間をスプラインに沿わせて張る。
+			 * @param stageData   コーススプラインと boostPads
+			 * @param outVertices 生成した頂点
+			 * @param outIndices  生成したインデックス
+			 */
+			void BuildBoostPadPlateMesh(const stage::StageData& stageData,
+			                            std::vector<aq::graphics::VertexData>& outVertices,
+			                            std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+
+				const float total = stageData.spline.GetTotalLength();
+				if (total <= 0.0f) { return; }
+
+				const float lift = ROAD_THICKNESS * 0.5f + BOOST_PAD_LIFT - ROAD_SINK;
+
+				for (const auto& pad : stageData.boostPads)
+				{
+					const float start = pad.distance - BOOST_PAD_LENGTH * 0.5f;
+					const float end   = pad.distance + BOOST_PAD_LENGTH * 0.5f;
+					if (end <= 0.0f || start >= total) { continue; }
+
+					const float halfWidth = pad.width * 0.5f;
+					const int   stepCount = static_cast<int>(BOOST_PAD_LENGTH / ROAD_SECTION_STEP) + 1;
+					const uint32_t base   = static_cast<uint32_t>(outVertices.size());
+
+					for (int k = 0; k <= stepCount; ++k)
+					{
+						const float d = start + (end - start) * static_cast<float>(k) / static_cast<float>(stepCount);
+						const auto  frame = stageData.spline.Evaluate(d);
+						const aq::math::Vector3 center = frame.position + frame.up * lift
+						                               + frame.right * pad.lateral;
+						const float v = d / ROAD_UV_LENGTH;
+
+						PushRoadVertex(outVertices, center + frame.right * -halfWidth, frame.up, 0.0f, v);
+						PushRoadVertex(outVertices, center + frame.right *  halfWidth, frame.up, 1.0f, v);
+					}
+					for (int k = 0; k < stepCount; ++k)
+					{
+						const uint32_t q = base + static_cast<uint32_t>(k * 2);
+						EmitRoadQuad(outIndices, q + 0, q + 2, q + 3, q + 1);
+					}
+				}
+			}
+
+
+			/**
+			 * ブーストパッドの矢印メッシュ (進行方向を指す三角形を等間隔に並べる)。
+			 * 走行中に一瞬しか見えないので、形は「前を向いた三角形」まで単純化する。
+			 * 裏面も張るのは、ループの反転区間に置かれても欠けないようにするため。
+			 * @param stageData   コーススプラインと boostPads
+			 * @param outVertices 生成した頂点
+			 * @param outIndices  生成したインデックス
+			 */
+			void BuildBoostPadArrowMesh(const stage::StageData& stageData,
+			                            std::vector<aq::graphics::VertexData>& outVertices,
+			                            std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+
+				const float total = stageData.spline.GetTotalLength();
+				if (total <= 0.0f) { return; }
+
+				const float lift  = ROAD_THICKNESS * 0.5f + BOOST_ARROW_LIFT - ROAD_SINK;
+				// 矢印 1 個ぶんの取り分。パッド長を等分し、その中の前寄りへ矢印を置く。
+				const float pitch = BOOST_PAD_LENGTH / static_cast<float>(BOOST_ARROW_COUNT);
+
+				for (const auto& pad : stageData.boostPads)
+				{
+					const float halfWidth = pad.width * 0.5f * BOOST_ARROW_WIDTH_RATE;
+					const float start     = pad.distance - BOOST_PAD_LENGTH * 0.5f;
+
+					for (int i = 0; i < BOOST_ARROW_COUNT; ++i)
+					{
+						const float rearD = start + pitch * static_cast<float>(i);
+						const float tipD  = rearD + BOOST_ARROW_LENGTH;
+						if (tipD <= 0.0f || rearD >= total) { continue; }
+
+						const auto rearFrame = stageData.spline.Evaluate(rearD);
+						const auto tipFrame  = stageData.spline.Evaluate(tipD);
+						const aq::math::Vector3 rearCenter = rearFrame.position + rearFrame.up * lift
+						                                   + rearFrame.right * pad.lateral;
+						const aq::math::Vector3 tipCenter  = tipFrame.position + tipFrame.up * lift
+						                                   + tipFrame.right * pad.lateral;
+
+						const uint32_t base = static_cast<uint32_t>(outVertices.size());
+						PushRoadVertex(outVertices, rearCenter + rearFrame.right * -halfWidth, rearFrame.up, 0.0f, 0.0f);
+						PushRoadVertex(outVertices, rearCenter + rearFrame.right *  halfWidth, rearFrame.up, 1.0f, 0.0f);
+						PushRoadVertex(outVertices, tipCenter,                                 tipFrame.up,  0.5f, 1.0f);
+
+						// 表 + 巻き順を反転した裏。頂点は共有するので頂点数は増えない。
+						outIndices.push_back(base + 0);
+						outIndices.push_back(base + 2);
+						outIndices.push_back(base + 1);
+						outIndices.push_back(base + 0);
+						outIndices.push_back(base + 1);
+						outIndices.push_back(base + 2);
 					}
 				}
 			}
@@ -978,8 +1092,17 @@ namespace app
 					CreateRoadMeshEntity(flow, "RoadCenterDashes", roadVertices, roadIndices,
 					                     aq::math::Vector4(0.95f, 0.97f, 1.00f, 1.0f));
 
-					aq::StartupMarkf("[load]   road ribbon %zu sections / %zu vertices",
-					                 sectionDistances.size(), ribbonVertexCount);
+					// ブーストパッド (P21)。踏むと一定時間だけ最高速が上がる。下地と矢印で色を分ける。
+					BuildBoostPadPlateMesh(*stageData, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "BoostPads", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.10f, 0.55f, 0.75f, 1.0f));
+
+					BuildBoostPadArrowMesh(*stageData, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "BoostPadArrows", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.70f, 1.00f, 1.00f, 1.0f));
+
+					aq::StartupMarkf("[load]   road ribbon %zu sections / %zu vertices / boost pads %zu",
+					                 sectionDistances.size(), ribbonVertexCount, stageData->boostPads.size());
 				}
 				aq::StartupMark("[load]   road mesh done");
 
@@ -1227,10 +1350,19 @@ namespace app
 						character->grounded         = true;
 						character->fallen           = false;
 						character->worldVelocity    = aq::math::Vector3(0.0f, 0.0f, 0.0f);
+						// ブースト状態 (P21)。prevDistance を戻さないと「巨大な前フレーム距離」が残り、
+						// 跨ぎ判定が成立せず前半のパッドが全て無視される。
+						character->boostTimer       = 0.0f;
+						character->prevDistance     = character->distance;
 					}
 					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(session->playerHandle)) {
-						score->coinCount = 0;
-						score->fallCount = 0;
+						score->coinCount  = 0;
+						score->fallCount  = 0;
+						// コンボとスコア (P21)。CoinSystem::ReactivateAll は取得フラグしか戻さない。
+						score->comboCount = 0;
+						score->comboTimer = 0.0f;
+						score->bestCombo  = 0;
+						score->score      = 0;
 					}
 				}
 				flow.PlayResult() = PlayResult();
@@ -1507,7 +1639,14 @@ namespace app
 			const auto* score    = ctx.GetComponent<app::ecs::PlayerScoreComponent>(session->playerHandle);
 			const auto* playerTc = ctx.GetComponent<aq::ecs::TransformComponent>(session->playerHandle);
 			if (auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top())) {
-				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f);
+				// コンボ (P21)。倍率 1 のときは HUD 側が非表示にする。
+				const uint32_t comboMultiplier =
+					app::ecs::CoinSystem::CalcMultiplier(score ? score->comboCount : 0);
+				const float comboWindow = app::ecs::CoinSystem::GetComboWindowSec();
+				const float comboRate   = (score && comboWindow > 0.0f)
+				                        ? aq::math::Clamp01(score->comboTimer / comboWindow) : 0.0f;
+				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f,
+				               comboMultiplier, comboRate);
 
 				// 俯瞰カメラは 画面右=+X / 画面上=+Z。UI の v は下+なので Z を反転する。
 				if (playerTc && session->minimapHalfExtent > 1.0f) {
@@ -1533,6 +1672,8 @@ namespace app
 			result.cleared      = goal;
 			result.clearTimeSec = elapsed_;
 			result.coinCount    = score ? score->coinCount : 0;
+			result.score        = score ? score->score     : 0;
+			result.bestCombo    = score ? score->bestCombo : 0;
 
 			aq::ui::UIContext::Get().Screens().Replace("AquaDashResult");
 			flow.ChangeState(std::make_unique<ResultState>());
@@ -1563,9 +1704,11 @@ namespace app
 				// ランクはクリア時のみ (設計 03: ゲームオーバーはランクなし)。
 				std::string rank;
 				if (result.cleared && session && session->activeStage) {
-					rank = session->activeStage->CalcRank(result.coinCount, result.clearTimeSec);
+					// ランクはコイン枚数ではなくスコア (コンボ倍率込み) で判定する (P21)。
+					rank = session->activeStage->CalcRank(result.score, result.clearTimeSec);
 				}
-				screen->SetResult(result.cleared, result.clearTimeSec, result.coinCount, rank.c_str());
+				screen->SetResult(result.cleared, result.clearTimeSec, result.coinCount,
+				                  result.score, result.bestCombo, rank.c_str());
 				screen->SetCursor(cursor_);
 			}
 		}

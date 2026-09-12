@@ -23,6 +23,12 @@ namespace app
 			static constexpr float COARSE_WINDOW  = 4.0f;   // スプライン距離での粗い絞り込み幅 [m]
 			static constexpr float COLLECT_RADIUS = 1.5f;   // 3D 距離での取得半径 [m]
 
+			/** コンボとスコア */
+			static constexpr float    COMBO_WINDOW_SEC     = 2.0f;   // 次のコインまでの猶予 [s]
+			static constexpr uint32_t COIN_BASE_SCORE      = 100u;   // コイン 1 枚の素点 [点]
+			static constexpr uint32_t COMBO_STEP           = 3u;     // 倍率が 1 段上がる枚数 [枚]
+			static constexpr uint32_t COMBO_MAX_MULTIPLIER = 8u;     // 倍率の上限 [倍]
+
 			// 寸法 (外径 0.9m) は CoinRing メッシュへ焼き込み済みなので、
 			// インスタンス点は等倍で置き、ここでは色だけを与える。
 			/** インスタンス描画の見た目 */
@@ -123,6 +129,18 @@ namespace app
 
 			const float dt = aq::Engine::GetDeltaTime();
 
+			// コンボの猶予を減らす。切れたらコンボ数だけ落とし、スコアと最大コンボは残す。
+			aq::ecs::Foreach<PlayerScoreComponent>([dt](const aq::ecs::Entity&, PlayerScoreComponent* score)
+				{
+					if (score->comboTimer <= 0.0f) { return; }
+
+					score->comboTimer -= dt;
+					if (score->comboTimer <= 0.0f) {
+						score->comboTimer = 0.0f;
+						score->comboCount = 0;
+					}
+				});
+
 			// 回転演出。位相だけを進め、姿勢への反映は末尾の再構築が行う。
 			// 取得済みは描画されないので更新しない。
 			aq::ecs::Foreach<CoinComponent>([dt](const aq::ecs::Entity&, CoinComponent* coin)
@@ -167,6 +185,12 @@ namespace app
 							coin->collected = true;
 							score->coinCount++;
 
+							// コンボ加算。猶予が残っていれば伸ばし、切れていれば 1 から数え直す。
+							score->comboCount = (score->comboTimer > 0.0f) ? score->comboCount + 1 : 1;
+							score->comboTimer = COMBO_WINDOW_SEC;
+							if (score->bestCombo < score->comboCount) { score->bestCombo = score->comboCount; }
+							score->score += COIN_BASE_SCORE * CoinSystem::CalcMultiplier(score->comboCount);
+
 							PlayCollectSE();
 							PlayCollectEffect(*session, coinTc->position);
 							PlayCollectRumble();
@@ -191,6 +215,22 @@ namespace app
 				aq::ecs::EntityContext::Get().GetSingletonComponent<const SessionComponent>();
 			if (!session) { return; }
 			RebuildCoinInstances(*session);
+		}
+
+
+		uint32_t CoinSystem::CalcMultiplier(const uint32_t comboCount)
+		{
+			if (comboCount == 0) { return 1u; }
+
+			// COMBO_STEP 枚ごとに 1 段上げ、上限で頭打ちにする。
+			const uint32_t multiplier = 1u + (comboCount - 1u) / COMBO_STEP;
+			return multiplier > COMBO_MAX_MULTIPLIER ? COMBO_MAX_MULTIPLIER : multiplier;
+		}
+
+
+		float CoinSystem::GetComboWindowSec()
+		{
+			return COMBO_WINDOW_SEC;
 		}
 	}
 }

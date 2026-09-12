@@ -20,6 +20,9 @@ namespace app
 			/** ミニマップ枠の不透明度。InGame.screen.json の MinimapFrame.color.a と一致させる */
 			static constexpr float MINIMAP_FRAME_ALPHA = 0.55f;
 
+			/** コンボゲージの不透明度。InGame.screen.json の ComboGauge.color.a と一致させる */
+			static constexpr float COMBO_GAUGE_ALPHA = 0.9f;
+
 
 			// テキストの不透明度。a==0 はスタイル既定色扱い (不可視にできない) になるため最小値でクランプ。
 			void SetTextAlpha(aq::ui::UIObject* obj, const float a)
@@ -147,6 +150,9 @@ namespace app
 			coinText_  = Resolve(FindHandle("CoinText"));
 			speedText_ = Resolve(FindHandle("SpeedText"));
 
+			comboText_  = Resolve(FindHandle("ComboText"));
+			comboGauge_ = Resolve(FindHandle("ComboGauge"));
+
 			minimapFrame_  = Resolve(FindHandle("MinimapFrame"));
 			minimap_       = Resolve(FindHandle("Minimap"));
 			minimapMarker_ = Resolve(FindHandle("MinimapMarker"));
@@ -155,10 +161,15 @@ namespace app
 			SetImageAlpha(minimapFrame_,  0.0f);
 			SetImageAlpha(minimap_,       0.0f);
 			SetImageAlpha(minimapMarker_, 0.0f);
+
+			// コンボは最初の SetHUD が倍率を渡してくるまで隠しておく。
+			SetImageAlpha(comboGauge_, 0.0f);
+			SetTextAlpha(comboText_,   0.0f);
 		}
 
 
-		void InGameScreen::SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh)
+		void InGameScreen::SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh,
+		                          const uint32_t comboMultiplier, const float comboRate)
 		{
 			if (timeText_) {
 				if (auto* text = timeText_->GetComponent<aq::ui::UITextComponent>()) {
@@ -187,6 +198,30 @@ namespace app
 					text->content = buf;
 				}
 			}
+
+			// 倍率 1 は「コンボ無し」なので倍率もゲージも出さない。非表示は content を空にしてから
+			// アルファを落とす (SetTextAlpha は最小 0.02 にクランプされ、うっすら残ってしまうため)。
+			const bool showCombo = comboMultiplier > 1u;
+			if (comboText_) {
+				if (auto* text = comboText_->GetComponent<aq::ui::UITextComponent>()) {
+					if (showCombo) {
+						char buf[16];
+						std::snprintf(buf, sizeof(buf), "x%u", comboMultiplier);
+						text->content = buf;
+					} else {
+						text->content = "";
+					}
+				}
+			}
+			SetTextAlpha(comboText_, showCombo ? 1.0f : 0.0f);
+
+			// ゲージは fillAmount で右端を削る (矩形の左端は動かないので左詰めで縮む)。
+			if (comboGauge_) {
+				if (auto* image = comboGauge_->GetComponent<aq::ui::UIImageComponent>()) {
+					image->fillAmount = aq::math::Clamp01(comboRate);
+				}
+			}
+			SetImageAlpha(comboGauge_, showCombo ? COMBO_GAUGE_ALPHA : 0.0f);
 		}
 
 
@@ -231,17 +266,20 @@ namespace app
 		 */
 		void ResultScreen::OnEnter()
 		{
-			header_   = Resolve(FindHandle("Header"));
-			time_     = Resolve(FindHandle("Time"));
-			coin_     = Resolve(FindHandle("ResultCoin"));
-			rank_     = Resolve(FindHandle("Rank"));
-			items_[0] = Resolve(FindHandle("MenuRetry"));
-			items_[1] = Resolve(FindHandle("MenuNext"));
-			items_[2] = Resolve(FindHandle("MenuTitle"));
+			header_    = Resolve(FindHandle("Header"));
+			time_      = Resolve(FindHandle("Time"));
+			coin_      = Resolve(FindHandle("ResultCoin"));
+			score_     = Resolve(FindHandle("ScoreText"));
+			bestCombo_ = Resolve(FindHandle("BestComboText"));
+			rank_      = Resolve(FindHandle("Rank"));
+			items_[0]  = Resolve(FindHandle("MenuRetry"));
+			items_[1]  = Resolve(FindHandle("MenuNext"));
+			items_[2]  = Resolve(FindHandle("MenuTitle"));
 		}
 
 
-		void ResultScreen::SetResult(const bool cleared, const float timeSec, const uint32_t coinCount, const char* rank)
+		void ResultScreen::SetResult(const bool cleared, const float timeSec, const uint32_t coinCount,
+		                             const uint32_t score, const uint32_t bestCombo, const char* rank)
 		{
 			if (header_) {
 				if (auto* text = header_->GetComponent<aq::ui::UITextComponent>()) {
@@ -268,6 +306,22 @@ namespace app
 				if (auto* text = coin_->GetComponent<aq::ui::UITextComponent>()) {
 					char buf[32];
 					std::snprintf(buf, sizeof(buf), "COIN  %02u", coinCount);
+					text->content = buf;
+				}
+			}
+
+			if (score_) {
+				if (auto* text = score_->GetComponent<aq::ui::UITextComponent>()) {
+					char buf[32];
+					std::snprintf(buf, sizeof(buf), "SCORE  %u", score);
+					text->content = buf;
+				}
+			}
+
+			if (bestCombo_) {
+				if (auto* text = bestCombo_->GetComponent<aq::ui::UITextComponent>()) {
+					char buf[32];
+					std::snprintf(buf, sizeof(buf), "BEST COMBO  %u", bestCombo);
 					text->content = buf;
 				}
 			}

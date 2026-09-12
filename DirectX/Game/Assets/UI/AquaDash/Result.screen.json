@@ -29,7 +29,7 @@
         {
             "name": "Time",
             "components": {
-                "transform": { "position": [0, -170, 0], "sizeDelta": [1200, 70] },
+                "transform": { "position": [0, -230, 0], "sizeDelta": [1200, 70] },
                 "text": {
                     "content": "TIME  00:00.00",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -43,7 +43,7 @@
         {
             "name": "ResultCoin",
             "components": {
-                "transform": { "position": [0, -90, 0], "sizeDelta": [1200, 70] },
+                "transform": { "position": [0, -150, 0], "sizeDelta": [1200, 70] },
                 "text": {
                     "content": "COIN  00",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -55,9 +55,37 @@
             }
         },
         {
+            "name": "ScoreText",
+            "components": {
+                "transform": { "position": [0, -70, 0], "sizeDelta": [1200, 70] },
+                "text": {
+                    "content": "SCORE  0",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 44,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 0.95]
+                }
+            }
+        },
+        {
+            "name": "BestComboText",
+            "components": {
+                "transform": { "position": [0, 10, 0], "sizeDelta": [1200, 70] },
+                "text": {
+                    "content": "BEST COMBO  0",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 44,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [1.0, 0.6, 0.2, 1.0]
+                }
+            }
+        },
+        {
             "name": "Rank",
             "components": {
-                "transform": { "position": [0, 30, 0], "sizeDelta": [600, 170] },
+                "transform": { "position": [0, 140, 0], "sizeDelta": [600, 170] },
                 "text": {
                     "content": "S",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -71,7 +99,7 @@
         {
             "name": "MenuRetry",
             "components": {
-                "transform": { "position": [0, 175, 0], "sizeDelta": [800, 60] },
+                "transform": { "position": [0, 280, 0], "sizeDelta": [800, 60] },
                 "text": {
                     "content": "RETRY",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -85,7 +113,7 @@
         {
             "name": "MenuNext",
             "components": {
-                "transform": { "position": [0, 260, 0], "sizeDelta": [800, 60] },
+                "transform": { "position": [0, 365, 0], "sizeDelta": [800, 60] },
                 "text": {
                     "content": "NEXT STAGE",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",
@@ -99,7 +127,7 @@
         {
             "name": "MenuTitle",
             "components": {
-                "transform": { "position": [0, 345, 0], "sizeDelta": [800, 60] },
+                "transform": { "position": [0, 450, 0], "sizeDelta": [800, 60] },
                 "text": {
                     "content": "BACK TO TITLE",
                     "textStylePath": "Assets/Styles/UI.textstyle.json",

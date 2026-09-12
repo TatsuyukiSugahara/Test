@@ -11,11 +11,20 @@ namespace app
 	{
 		namespace
 		{
-			/** 速度連動 FOV (スピード感演出)。エンジンのカメラ既定は 90° */
-			static constexpr float BASE_FOV_DEG    = 90.0f;
-			static constexpr float MAX_FOV_ADD_DEG = 13.0f;   // 最高速時の加算量
-			static constexpr float FOV_SPEED_MIN   = 30.0f;   // [m/s] これ以下は基準 FOV
-			static constexpr float FOV_SPEED_MAX   = 83.0f;   // [m/s] 最高速
+			/**
+			 * 速度連動 FOV (スピード感演出)。エンジンのカメラ既定は 90°。
+			 *
+			 * 加算量は「通常域」と「ブースト域」の 2 段に分けている。1 本の InverseLerp を
+			 * ブースト最高速まで伸ばすと、通常の最高速 (83m/s) での画角が従来より狭くなり、
+			 * ブーストを入れたぶん普段の見た目が大人しくなってしまうため。
+			 */
+			static constexpr float BASE_FOV_DEG      = 90.0f;
+			static constexpr float FOV_SPEED_MIN     = 30.0f;   // [m/s] これ以下は基準 FOV
+			static constexpr float FOV_SPEED_MAX     = 83.0f;   // [m/s] 通常の最高速
+			static constexpr float MAX_FOV_ADD_DEG   = 13.0f;   // 通常の最高速での加算量 (P21 以前と同値)
+			// ブースト最高速 (MAX_SPEED 83 × BOOST_SPEED_MULTIPLIER 1.50)。ここまでで更に足す。
+			static constexpr float FOV_BOOST_SPEED_MAX = 124.5f;   // [m/s]
+			static constexpr float FOV_BOOST_ADD_DEG   = 5.0f;     // ブースト最高速での追加加算量
 
 
 			// 指数平滑の補間係数 (フレームレート非依存)。
@@ -88,11 +97,17 @@ namespace app
 					// 速度連動 FOV (リザルト中は基準へ戻す)。急変を避けて平滑する。
 					{
 						float speedRate = 0.0f;
+						float boostRate = 0.0f;
 						if (!session->gameplayPaused) {
 							speedRate = aq::math::Clamp01(
 								aq::math::InverseLerp(FOV_SPEED_MIN, FOV_SPEED_MAX, character->speed));
+							// 通常最高速を超えたぶんだけ更に広げる (ブースト中だけ 0 より大きくなる)。
+							boostRate = aq::math::Clamp01(
+								aq::math::InverseLerp(FOV_SPEED_MAX, FOV_BOOST_SPEED_MAX, character->speed));
 						}
-						const float targetFov = BASE_FOV_DEG + MAX_FOV_ADD_DEG * speedRate;
+						const float targetFov = BASE_FOV_DEG
+						                      + MAX_FOV_ADD_DEG   * speedRate
+						                      + FOV_BOOST_ADD_DEG * boostRate;
 						autoCam->smoothedFovDeg =
 							aq::math::Lerp(autoCam->smoothedFovDeg, targetFov, SmoothFactor(6.0f, dt));
 					}

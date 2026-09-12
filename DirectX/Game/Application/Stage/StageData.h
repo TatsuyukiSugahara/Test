@@ -64,6 +64,15 @@ namespace app
 		};
 
 
+		/** ブーストパッド配置 (スプライン座標) */
+		struct BoostPadPlacement
+		{
+			float distance = 0.0f;
+			float lateral  = 0.0f;
+			float width    = 6.0f;
+		};
+
+
 		/** ランクしきい値 (スコア降順に判定) */
 		struct RankThreshold
 		{
@@ -95,16 +104,21 @@ namespace app
 			float       terrainHeightOffset = 0.0f;   // 地形エンティティの Y (R=0 の高さ)
 			uint32_t    terrainResolution   = 128;
 
+			/** ブーストパッド (省略可。踏むと一定時間だけ最高速が上がる。distance 昇順) */
+			std::vector<BoostPadPlacement> boostPads;
+
 			/** 評価 */
 			std::vector<CoinPlacement> coins;
 			float                      parTimeSec = 180.0f;
 			std::vector<RankThreshold> ranks;
 
 			/**
-			 * ランク判定。score = 0.6×コイン取得率 + 0.4×min(1, parTime/クリアタイム) を
+			 * ランク判定。score = 0.6×スコア率 + 0.4×min(1, parTime/クリアタイム) を
 			 * thresholds の上から判定する (設計 03 §3)。該当なしは末尾ランク。
+			 * @param score   コンボ倍率込みの獲得スコア
+			 * @param timeSec クリアタイム [s]
 			 */
-			std::string CalcRank(const uint32_t coinCount, const float timeSec) const;
+			std::string CalcRank(const uint32_t score, const float timeSec) const;
 
 			/**
 			 * ファイルから読み込む (CPU 処理のみ。ワーカースレッドから呼んでよい)。

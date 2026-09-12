@@ -12,6 +12,13 @@ namespace app
 			// 1 セグメントあたりの弧長サンプル数。カーブ半径に対して十分細かい値。
 			static constexpr int SEGMENT_SAMPLE_COUNT = 32;
 
+			// コイン 1 枚の素点 (コンボ倍率 1 倍で取ったときのスコア)。
+			static constexpr uint32_t COIN_BASE_SCORE = 100;
+
+			// ランクのスコア率が満点になる平均コンボ倍率。全コインを平均 3 倍で
+			// 取り切れば scoreRate = 1 になる (設計 05 §P21-2)。
+			static constexpr float TARGET_MULTIPLIER = 3.0f;
+
 
 			// Catmull-Rom 補間 (t: 0..1)。
 			aq::math::Vector3 CatmullRom(
@@ -151,18 +158,23 @@ namespace app
 		/**
 		 * ステージ定義
 		 */
-		std::string StageData::CalcRank(const uint32_t coinCount, const float timeSec) const
+		std::string StageData::CalcRank(const uint32_t score, const float timeSec) const
 		{
-			const float coinRate = coins.empty()
-				? 1.0f
-				: static_cast<float>(coinCount) / static_cast<float>(coins.size());
+			// コインの無いステージはスコア率を満点扱いにする (0 除算よけ)。
+			float scoreRate = 1.0f;
+			if (!coins.empty()) {
+				const float targetScore = static_cast<float>(coins.size())
+					* static_cast<float>(COIN_BASE_SCORE) * TARGET_MULTIPLIER;
+				scoreRate = static_cast<float>(score) / targetScore;
+				if (scoreRate > 1.0f) { scoreRate = 1.0f; }
+			}
 			const float timeRate = timeSec > 0.0001f
 				? (parTimeSec / timeSec < 1.0f ? parTimeSec / timeSec : 1.0f)
 				: 1.0f;
-			const float score = 0.6f * coinRate + 0.4f * timeRate;
+			const float rankScore = 0.6f * scoreRate + 0.4f * timeRate;
 
 			for (const auto& threshold : ranks) {
-				if (score >= threshold.score) { return threshold.rank; }
+				if (rankScore >= threshold.score) { return threshold.rank; }
 			}
 			return ranks.empty() ? std::string("C") : ranks.back().rank;
 		}
@@ -221,6 +233,21 @@ namespace app
 				placement.height   = coin["height"].AsFloat(1.0f);
 				data->coins.push_back(placement);
 			}
+
+			// ブーストパッド (省略可。無ければブーストパッドの無いステージになる)
+			for (const auto& boost : root["boosts"].GetArray()) {
+				BoostPadPlacement placement;
+				placement.distance = boost["distance"].AsFloat();
+				placement.lateral  = boost["lateral"].AsFloat();
+				placement.width    = boost["width"].AsFloat(6.0f);
+				data->boostPads.push_back(placement);
+			}
+			// 走行側が前方だけ見れば済むように distance 昇順へ整列しておく。
+			std::sort(data->boostPads.begin(), data->boostPads.end(),
+				[](const BoostPadPlacement& lhs, const BoostPadPlacement& rhs)
+				{
+					return lhs.distance < rhs.distance;
+				});
 
 			// ランク
 			data->parTimeSec = root["rank"]["parTimeSec"].AsFloat(180.0f);

@@ -35,6 +35,12 @@ namespace app
 
 			uint32_t coinCount = 0;
 			uint32_t fallCount = 0;
+
+			/** コンボ関連 */
+			uint32_t comboCount = 0;      // 現在のコンボ数 (途切れると 0)
+			float    comboTimer = 0.0f;   // コンボ継続の残り時間 [s]
+			uint32_t bestCombo  = 0;      // このプレイでの最大コンボ数 (リザルト表示用)
+			uint32_t score      = 0;      // コンボ倍率込みの合計スコア
 		};
 
 
@@ -54,6 +60,19 @@ namespace app
 		public:
 			/** 全コインを未取得に戻して描画を組み直す (「もう一度」用) */
 			static void ReactivateAll();
+
+			/**
+			 * コンボ数からスコア倍率を求める (HUD 表示と取得時の加算で式を二重に持たないため)
+			 * @param comboCount 現在のコンボ数 (0 = コンボ無し)
+			 * @return 1 〜 COMBO_MAX_MULTIPLIER の倍率
+			 */
+			static uint32_t CalcMultiplier(const uint32_t comboCount);
+
+			/**
+			 * コンボ継続の猶予 [s]。HUD のゲージが残り時間を 0-1 へ正規化するのに要る。
+			 * しきい値は .cpp の匿名 namespace にあるので、値を二重に持たないようここから引く。
+			 */
+			static float GetComboWindowSec();
 		};
 	}
 }

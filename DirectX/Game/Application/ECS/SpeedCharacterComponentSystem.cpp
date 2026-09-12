@@ -5,6 +5,8 @@
 #include "GameAction.h"
 #include "Stage/StageData.h"
 #include "Component/AnimationComponentSystem.h"
+#include "Sound/SoundClip.h"
+#include "Sound/SoundEngine.h"
 
 
 namespace app
@@ -22,6 +24,14 @@ namespace app
 			static constexpr float LATERAL_MARGIN    = 0.5f;    // 路面端の余白
 			static constexpr float JUMP_SPEED        = 13.0f;   // [m/s]
 			static constexpr float GRAVITY           = 30.0f;   // [m/s^2]
+
+			/** ブーストパッド (設計 05 §P21-1) */
+			static constexpr float BOOST_SPEED_MULTIPLIER = 1.50f;   // MAX_SPEED に対する倍率 (≒125m/s ≒448km/h)
+			static constexpr float BOOST_SEC              = 2.0f;    // [s] ブーストの持続時間
+			// ブースト切れ後に MAX_SPEED まで落とす減速度。通常の DRAG_DECEL とは
+			// 別にして「ブーストが切れて伸びが止まる」感触を作る。
+			static constexpr float BOOST_DECEL            = 18.0f;   // [m/s^2]
+			static const char* BOOST_SE_PATH = "Assets/Sound/Boost.wav";
 
 			/** ループ脱落判定 */
 			static constexpr float INVERTED_UP_Y     = 0.25f;   // 路面 up がこれ未満なら「上下逆さ寄り」
@@ -75,6 +85,16 @@ namespace app
 
 			// 速いほど R2 を重くして加速の手応えを出す (ほぼ停止しているときは解除)。
 			// パッドが未接続なら Pad 側で捨てられるので、ここでは接続を気にしない。
+			// ブースト SE を鳴らす (コイン取得 SE と同じ経路。サウンド未初期化の環境では黙って無視される)。
+			void PlayBoostSE()
+			{
+				if (aq::sound::SoundEngine::IsAvailable()) {
+					auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(BOOST_SE_PATH);
+					aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
+				}
+			}
+
+
 			void UpdateTriggerResistance(const float speed)
 			{
 				const float ratio    = aq::math::Clamp(speed / MAX_SPEED, 0.0f, 1.0f);
@@ -164,13 +184,43 @@ namespace app
 					} else {
 						character->speed -= DRAG_DECEL * dt;
 					}
-					character->speed = aq::math::Clamp(character->speed, 0.0f, MAX_SPEED);
+					// ブースト中だけ上限を引き上げる。
+					const float speedLimit = (character->boostTimer > 0.0f)
+						? MAX_SPEED * BOOST_SPEED_MULTIPLIER
+						: MAX_SPEED;
+					character->speed = aq::math::Clamp(character->speed, 0.0f, speedLimit);
 					UpdateTriggerResistance(character->speed);
 
-					// 前進 + レーン移動。
+					// ブーストの残り時間を減らす。切れた後は DRAG_DECEL より強い BOOST_DECEL で
+					// MAX_SPEED まで引き戻し、「伸びが止まる」感触を出す。
+					if (character->boostTimer > 0.0f) {
+						character->boostTimer -= dt;
+					} else if (character->speed > MAX_SPEED) {
+						character->speed -= BOOST_DECEL * dt;
+						if (character->speed < MAX_SPEED) { character->speed = MAX_SPEED; }
+					}
+
+					// 前進 + レーン移動。跨ぎ判定に使うので積分前の distance を退避しておく。
+					character->prevDistance = character->distance;
 					character->distance += character->speed * dt;
 					character->lateral  += input->moveX * LATERAL_SPEED * dt;
 					character->lateral   = aq::math::Clamp(character->lateral, -lateralLimit, lateralLimit);
+
+					// ブーストパッド: 最高速では 1 フレームで 2m 進むため位置の単純比較では
+					// 取りこぼす。前フレームとの区間にパッドが挟まったかで判定する。
+					// 複数のパッドを跨いだフレームでも発動は 1 回でよい。
+					for (const auto& pad : stageData->boostPads) {
+						if (pad.distance <= character->prevDistance) { continue; }
+						if (pad.distance >  character->distance)     { break; }   // boostPads は distance 昇順
+						if (fabsf(character->lateral - pad.lateral) > pad.width * 0.5f) { continue; }
+
+						// じわじわ加速させると「踏んだ」感触が出ないので即座に跳ね上げる。
+						const float boostSpeed = MAX_SPEED * BOOST_SPEED_MULTIPLIER;
+						if (character->speed < boostSpeed) { character->speed = boostSpeed; }
+						character->boostTimer = BOOST_SEC;
+						PlayBoostSE();
+						break;
+					}
 
 					// ジャンプ / 重力 (height は路面相対)。
 					if (character->grounded && input->jumpTriggered) {

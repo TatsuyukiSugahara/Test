@@ -174,8 +174,14 @@ namespace app
 		if (auto* postProcess = renderer_.GetPostProcessRenderer())
 		{
 			constexpr float BLUR_SPEED_MIN     = 30.0f;   // [m/s] これ以下はブラーなし
-			constexpr float BLUR_SPEED_MAX     = 83.0f;   // [m/s] 最高速
+			// ブースト最高速 (MAX_SPEED 83 × BOOST_SPEED_MULTIPLIER 1.50) に合わせる。
+			// 83 のままだとブースト中にブラーが強まらない。
+			constexpr float BLUR_SPEED_MAX     = 83.0f;   // [m/s] 通常の最高速
 			constexpr float BLUR_MAX_STRENGTH  = 0.6f;    // 速度ベクトル (px) に掛けるスケール
+			// ブースト域 (P21)。FOV と同じ理由で 2 段に分ける。1 本の InverseLerp をブースト最高速まで
+			// 伸ばすと、通常の最高速でのブラーが従来より弱くなってしまう。
+			constexpr float BLUR_BOOST_SPEED_MAX = 124.5f;  // [m/s] ブースト時の最高速
+			constexpr float BLUR_BOOST_STRENGTH  = 0.25f;   // ブースト最高速での追加強度
 
 			float strength = 0.0f;
 			// セッション状態はここでは読み取りのみ (書き込みは GameFlow の状態クラス)。
@@ -189,7 +195,10 @@ namespace app
 							ctx.GetComponent<app::ecs::SpeedCharacterComponent>(session->playerHandle)) {
 						const float rate = aq::math::Clamp01(
 							aq::math::InverseLerp(BLUR_SPEED_MIN, BLUR_SPEED_MAX, character->speed));
-						strength = rate * BLUR_MAX_STRENGTH;
+						// 通常最高速を超えたぶんだけ更に強める (ブースト中だけ 0 より大きくなる)。
+						const float boostRate = aq::math::Clamp01(
+							aq::math::InverseLerp(BLUR_SPEED_MAX, BLUR_BOOST_SPEED_MAX, character->speed));
+						strength = rate * BLUR_MAX_STRENGTH + boostRate * BLUR_BOOST_STRENGTH;
 					}
 				}
 			}

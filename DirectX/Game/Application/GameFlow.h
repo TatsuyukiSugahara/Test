@@ -21,6 +21,8 @@ namespace app
 			bool     cleared      = false;   // true=クリア / false=ゲームオーバー (落下)
 			float    clearTimeSec = 0.0f;    // ゴール (または終了) までの経過秒
 			uint32_t coinCount    = 0;       // 獲得コイン枚数
+			uint32_t score        = 0;       // コンボ倍率込みの合計スコア (P21。ランク判定の元)
+			uint32_t bestCombo    = 0;       // このプレイでの最大コンボ数 (P21。リザルト表示用)
 		};
 	}
 

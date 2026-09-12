@@ -41,6 +41,10 @@ namespace app
 			float verticalVelocity = 0.0f;
 			bool  grounded         = true;
 
+			/** ブースト状態 (パッドを踏むと一定時間だけ最高速が上がる) */
+			float boostTimer   = 0.0f;   // 残りブースト秒
+			float prevDistance = 0.0f;   // 跨ぎ判定用。前フレームの distance
+
 			/** 脱落状態 (ループで速度不足になった等。スプライン制御を離れワールド自由落下) */
 			bool              fallen        = false;
 			aq::math::Vector3 worldVelocity = {};   // fallen 中のワールド速度

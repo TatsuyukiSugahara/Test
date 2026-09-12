@@ -27,6 +27,11 @@ namespace aq
 				{ "Assets/Shader/SkeletalModelLit.fx", "VSMain", "Assets/Shader/SkeletalModelLit.fx", "PSMain",
 				  "Assets/Shader/SkeletalPBRGBuffer.fx", "PSMain" },                                              // SkeletalPBRLit
 			};
+
+			// forward(SkeletalModelLit.fx)の半透明アルファを載せる MaterialCB のパラメータ。
+			// params[0] は SimpleBox の単色・地形のタイリングで使われているため、
+			// 末尾の空きスロットを使う。**SkeletalModelLit.fx の params[7].x と一致させること**。
+			static constexpr uint32_t TRANSLUCENT_ALPHA_PARAM = 7;
 		}
 
 
@@ -161,6 +166,16 @@ namespace aq
 		}
 
 
+		void SkeletalMesh::SetForwardTranslucent(const bool enable, const float alpha)
+		{
+			translucent_ = enable;
+
+			// 無効化時は 0 を入れる。シェーダー側は 0 のとき従来どおりテクスチャの
+			// アルファをそのまま出すので、既定値のまま不透明描画が壊れない。
+			materialCB_.params[TRANSLUCENT_ALPHA_PARAM].x = enable ? alpha : 0.0f;
+		}
+
+
 		bool SkeletalMesh::FillRenderItem(rendering::RenderItem& item) const
 		{
 			const bool isPBR = shaderType_ == ShaderType::SkeletalPBRLit;
@@ -178,6 +193,7 @@ namespace aq
 
 			item.castShadow    = castShadow_;
 			item.receiveShadow = receiveShadow_;
+			item.translucent   = translucent_;
 			item.boneMatrices  = boneMatrices_;
 
 			// カリング用バウンディング。バインドポーズ AABB にアニメ変形分の

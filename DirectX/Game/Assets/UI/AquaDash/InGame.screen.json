@@ -88,6 +88,20 @@
             }
         },
         {
+            "name": "GhostDeltaText",
+            "components": {
+                "transform": { "position": [700, -405, 0], "sizeDelta": [400, 50] },
+                "text": {
+                    "content": "",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 36,
+                    "alignH": "Right",
+                    "alignV": "Middle",
+                    "color": [1.0, 1.0, 1.0, 1.0]
+                }
+            }
+        },
+        {
             "name": "SpeedText",
             "components": {
                 "transform": { "position": [600, 460, 0], "sizeDelta": [400, 90] },

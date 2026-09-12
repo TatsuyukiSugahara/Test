@@ -261,6 +261,13 @@ namespace aq
 {
 	namespace platform
 	{
+		namespace
+		{
+			// ユーザーデータを置くフォルダ名。ゲーム名が変わったらここを変える。
+			static constexpr char APP_FOLDER_NAME[] = "AquaDash";
+		}
+
+
 		// Cocoa オブジェクト群。MRR のため alloc / retain した分をデストラクタで release する。
 		struct MacWindowObjects
 		{
@@ -275,6 +282,8 @@ namespace aq
 			: objects_(nullptr)
 			, contentRoot_()
 			, contentRootResolved_(false)
+			, userDataDirectory_()
+			, userDataDirectoryResolved_(false)
 			, exitRequested_(false)
 		{
 		}
@@ -456,6 +465,45 @@ namespace aq
 
 			// 3) 空なら nullptr。Win32 と同じく Resource 側の FindProjectRoot 探索へ委ねる。
 			return contentRoot_.empty() ? nullptr : contentRoot_.c_str();
+		}
+
+
+		const char* PlatformMac::GetUserDataDirectory()
+		{
+			if (!userDataDirectoryResolved_)
+			{
+				userDataDirectoryResolved_ = true;
+
+				@autoreleasepool
+				{
+					// ~/Library/Application Support/AquaDash/ を使う。.app の Contents/Resources は
+					// 読み取り専用なので書き込み先にできない(設計書 Mac移植 の aqBundleApp)。
+					// ホーム配下は他アプリと共有なので、アプリ名の階層をここで足す。
+					NSArray* paths = NSSearchPathForDirectoriesInDomains(
+						NSApplicationSupportDirectory, NSUserDomainMask, YES);
+					if ([paths count] > 0)
+					{
+						NSString* appName   = [NSString stringWithUTF8String:APP_FOLDER_NAME];
+						NSString* directory = [[paths objectAtIndex:0] stringByAppendingPathComponent:appName];
+
+						// 無ければ作る(中間ディレクトリも含む)。既存なら成功扱いになる。
+						NSError* error = nil;
+						const BOOL created = [[NSFileManager defaultManager]
+							createDirectoryAtPath:directory
+							withIntermediateDirectories:YES
+							attributes:nil
+							error:&error];
+						if (created)
+						{
+							userDataDirectory_  = [directory UTF8String];
+							userDataDirectory_ += "/";
+						}
+					}
+				}
+			}
+
+			// 用意できなければ nullptr(GetContentRoot と同じ流儀)。
+			return userDataDirectory_.empty() ? nullptr : userDataDirectory_.c_str();
 		}
 	}
 }

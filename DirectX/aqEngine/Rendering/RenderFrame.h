@@ -74,6 +74,10 @@ namespace aq
 			bool                      castShadow    = false;
 			bool                      receiveShadow = false;
 
+			// 半透明(forward パスでアルファ合成する)。true のアイテムは forwardItems 内で
+			// 不透明の後にまとめて描かれる。シャドウパスとオフスクリーン(俯瞰)パスからは除外する。
+			bool                      translucent   = false;
+
 			// カリング用ローカル空間 AABB。hasBounds == false のアイテムは
 			// バウンディング未確定としてフラスタムカリングの対象外 (常に可視) とする。
 			math::AABB                localBounds;

@@ -48,6 +48,9 @@
     <ClCompile Include="Application\Stage\StageData.cpp">
       <Filter>Stage</Filter>
     </ClCompile>
+    <ClCompile Include="Application\Stage\GhostData.cpp">
+      <Filter>Stage</Filter>
+    </ClCompile>
     <ClCompile Include="Application\Flow\AquaDashStates.cpp">
       <Filter>Flow</Filter>
     </ClCompile>
@@ -87,6 +90,9 @@
       <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="Application\Stage\StageData.h">
+      <Filter>Stage</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\Stage\GhostData.h">
       <Filter>Stage</Filter>
     </ClInclude>
     <ClInclude Include="Application\Flow\AquaDashStates.h">

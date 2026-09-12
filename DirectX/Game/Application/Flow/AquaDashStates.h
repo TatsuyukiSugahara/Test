@@ -31,10 +31,14 @@ namespace app
 		private:
 			enum class Phase { WarmUp, ParseStage, WaitStage, Streaming };
 
-			/** ワーカータスクの成果物。ステージ定義と、それから作った地形の CPU 側データ + 草のベイク結果 */
+			/**
+			 * ワーカータスクの成果物。ステージ定義と、それから作った地形の CPU 側データ + 草のベイク結果。
+			 * ゴースト (P23) もファイル読み込みだけなので同じワーカー経路に相乗りさせる。
+			 */
 			struct StageLoadResult
 			{
 				std::shared_ptr<stage::StageData>     stage;
+				std::shared_ptr<stage::GhostData>     ghost;        // 自己ベスト。無ければ null (初回プレイ)
 				aq::terrain::HeightmapChunk::CpuData  terrainCpu;
 				aq::ecs::BakedData                    grassBaked;
 				aq::ecs::BakedData                    flowerBaked;
@@ -48,6 +52,8 @@ namespace app
 
 			/** 非同期ロード */
 			std::string                                     stagePath_;
+			std::string                                     stageId_;     // ゴーストの照合用 (StageList の id)
+			std::string                                     ghostPath_;   // <ユーザーデータ>/<id>.ghost。空なら保存機能が無効
 			std::future<StageLoadResult>                    stageFuture_;
 
 
@@ -67,12 +73,33 @@ namespace app
 		class InGameState : public IGameState
 		{
 		private:
+			/** 計時 */
 			float elapsed_ = 0.0f;
+
+			/** ゴーストの記録 (P23)。30Hz でサンプリングし、ベスト更新時だけ書き出す */
+			std::vector<stage::GhostSample> recording_;
+			float                           sampleTimer_ = 0.0f;   // 前回サンプリングからの経過秒
+
+			/** ゴーストの再生 (P23)。ゴーストが無いプレイでは ghost_ が null */
+			std::shared_ptr<stage::GhostData> ghost_;
+			float                             ghostDeltaSec_ = 0.0f;   // ゴーストとの時間差 [s] (+ で遅れ)
+			bool                              ghostFinished_ = false;  // 記録の終端を過ぎた (非表示中)
 
 
 		public:
 			void OnEnter (GameFlow& flow)                 override;
 			void OnUpdate(GameFlow& flow, const float dt) override;
+
+
+			/**
+			 * ゴースト関連 (HUD 表示用)
+			 */
+		public:
+			/** ゴーストとの時間差 [s]。正= ゴーストより遅れている / 負= 勝っている */
+			inline float GhostDeltaSec() const { return ghostDeltaSec_; }
+
+			/** ゴーストを再生中か (無い走行では false。HUD の差分表示はこれで出し分ける) */
+			inline bool HasGhost() const { return ghost_ != nullptr; }
 		};
 
 

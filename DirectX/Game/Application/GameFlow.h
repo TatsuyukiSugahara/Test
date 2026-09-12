@@ -4,6 +4,7 @@
 #include "Math/Vector.h"
 #include "UI/Screen/UIScreen.h"
 #include "Stage/StageData.h"
+#include "Stage/GhostData.h"
 #include <memory>
 
 namespace app
@@ -130,6 +131,10 @@ namespace app
 		std::vector<stage::StageListEntry> stageList_;                // タイトルで読む一覧
 		std::vector<aq::ecs::EntityHandle> stageEntities_;            // タイトル復帰時に破棄する生成物
 
+		/** ゴーストリプレイ (P23)。ロード時に読み、クリアでベスト更新したら差し替える */
+		std::shared_ptr<stage::GhostData> ghost_;         // 自己ベストの走行記録。無ければ null (初回プレイ)
+		aq::ecs::EntityHandle             ghostHandle_;   // 再生用エンティティ。ghost_ が無ければ生成しない
+
 		static GameFlow* instance_;
 
 	// ── メンバ関数 ──
@@ -160,6 +165,12 @@ namespace app
 
 		/** ステージ生成物のハンドル (タイトル復帰時にまとめて破棄する) */
 		std::vector<aq::ecs::EntityHandle>& StageEntities() { return stageEntities_; }
+
+		/** 自己ベストのゴースト (ローディングが読み、インゲームが再生 / 更新する。無ければ null) */
+		std::shared_ptr<stage::GhostData>& Ghost() { return ghost_; }
+
+		/** ゴースト再生用エンティティ (ゴーストが無いプレイでは無効ハンドルのまま) */
+		aq::ecs::EntityHandle& GhostHandle() { return ghostHandle_; }
 
 		// 影の注視点 (GetFocusPosition) の対象を差し替える。
 		void SetPlayerHandle(const aq::ecs::EntityHandle& handle) { playerHandle_ = handle; }

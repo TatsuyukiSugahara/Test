@@ -63,6 +63,8 @@ namespace app
 
 			/** エアトリック表示 (滞空中の回転数テキスト) */
 			aq::ui::UIObject* trickText_ = nullptr;
+			/** ゴーストとの時間差表示 (P23。ゴーストが無い走行では非表示) */
+			aq::ui::UIObject* ghostDeltaText_ = nullptr;
 
 			/** ミニマップ (枠 / 俯瞰ベイク画像 / プレイヤーマーカー) */
 			aq::ui::UIObject* minimapFrame_  = nullptr;
@@ -85,7 +87,8 @@ namespace app
 			 */
 			void SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh,
 			            const uint32_t comboMultiplier, const float comboRate,
-			            const uint32_t trickCount, const bool trickActive);
+			            const uint32_t trickCount, const bool trickActive,
+			            const float ghostDeltaSec, const bool hasGhost);
 
 			/**
 			 * ミニマップに表示する俯瞰ベイク画像を差し替える。

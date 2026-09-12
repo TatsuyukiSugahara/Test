@@ -23,6 +23,7 @@ namespace aq
 			winrt::event_token                   suspendingToken_{};   // PLM
 			winrt::event_token                   resumingToken_{};
 			std::string                          contentRoot_;
+			std::string                          userDataDirectory_;   // 末尾セパレータ付き
 			bool                                 exitRequested_ = false;
 
 		public:
@@ -35,6 +36,7 @@ namespace aq
 			void OnSuspend() override;
 			void OnResume()  override;
 			const char* GetContentRoot() override;
+			const char* GetUserDataDirectory() override;
 
 			// アプリ終了を要求する(PLM の閉じ要求などから呼ぶ)。
 			void RequestExit() { exitRequested_ = true; }

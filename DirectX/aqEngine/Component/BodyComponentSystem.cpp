@@ -896,7 +896,7 @@ namespace aq
 			// SkeletalMesh: PBR は gbufferPS がない間スキップ、それ以外は gbufferPS 有無で振り分け
 			aq::ecs::Foreach<SkeletalMeshComponent>([&frame, &isVisible, &accumClusters](const aq::ecs::Entity&, SkeletalMeshComponent* comp)
 				{
-					if (!comp->IsCompleted()) return;
+					if (!comp->IsCompleted() || !comp->IsVisible()) return;
 					aq::rendering::RenderItem item;
 					if (!comp->GetSkeletalMesh()->FillRenderItem(item)) return;
 					if (!isVisible(item)) return;

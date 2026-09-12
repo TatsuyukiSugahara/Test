@@ -53,8 +53,10 @@ namespace aq
 					if (item.castShadow)
 						outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
 				}
+				// 半透明アイテム(ゴースト等)は影を落とさない。落とすと実体があるように
+				// 見えてしまい、半透明で「そこに居ない」ことを表す意図と食い違うため。
 				for (const RenderItem& item : frame.forwardItems) {
-					if (item.castShadow)
+					if (item.castShadow && !item.translucent)
 						outList.Enqueue<ShadowCastCommand>(item, shadowVS_);
 				}
 

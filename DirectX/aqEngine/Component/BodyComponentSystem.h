@@ -238,10 +238,19 @@ namespace aq
 			bool                             textureLoadRequested_;
 			aq::graphics::SkeletalMesh::ShaderType shaderType_
 				= aq::graphics::SkeletalMesh::ShaderType::SkeletalModelLit;
+			bool                             visible_ = true;   // false の間 gather から外す (描画しない)
 
 		public:
 			SkeletalMeshComponent();
 			~SkeletalMeshComponent();
+
+			/**
+			 * 描画するか。false の間は gather がこのメッシュを積まないので、
+			 * 生成済みのエンティティを消さずに表示だけ止められる
+			 * (スケールを 0 にする等の細工をしなくてよい)。
+			 */
+			void SetVisible(const bool visible) { visible_ = visible; }
+			bool IsVisible() const              { return visible_; }
 
 			/** モデルパス (TKM v101) とオプションのテクスチャパスを設定する */
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);

@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <string>
 #include "Platform/IPlatform.h"
 
 namespace aq
@@ -16,6 +17,10 @@ namespace aq
 			int       nCmdShow_;
 			HWND      hWnd_;
 
+			/** ユーザーデータの書き込み先(末尾セパレータ付き)。初回要求時に解決してキャッシュする */
+			std::string userDataDirectory_;
+			bool        userDataDirectoryResolved_;
+
 		public:
 			PlatformWin32(HINSTANCE hInstance, int nCmdShow);
 			~PlatformWin32() override;
@@ -24,6 +29,7 @@ namespace aq
 			bool CreateMainWindow(const WindowDesc& desc, aq::graphics::NativeWindowHandle& out) override;
 			bool PumpEvents() override;
 			const char* GetContentRoot() override;
+			const char* GetUserDataDirectory() override;
 
 		private:
 			static LRESULT CALLBACK MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

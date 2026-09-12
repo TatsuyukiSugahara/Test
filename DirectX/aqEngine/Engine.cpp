@@ -164,6 +164,12 @@ namespace aq
 	}
 
 
+	const char* Engine::GetUserDataDirectory() const
+	{
+		return platform_ ? platform_->GetUserDataDirectory() : nullptr;
+	}
+
+
 	void Engine::RunGame()
 	{
 		// メッセージ/イベントのポンプはプラットフォーム層に委譲する。

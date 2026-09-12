@@ -57,6 +57,7 @@ namespace aq
 			ShaderType        shaderType_    = ShaderType::SkeletalModelLit;
 			bool              castShadow_    = false;
 			bool              receiveShadow_ = false;
+			bool              translucent_   = false;   // forward の半透明描画 (SetForwardTranslucent)
 
 			// AnimationComponent から毎フレーム更新される。nullptr = バインドポーズ (単位行列)
 			std::shared_ptr<std::vector<math::Matrix4x4>> boneMatrices_;
@@ -93,6 +94,20 @@ namespace aq
 			{
 				SetTexture(rendering::TextureSlot::MetallicRoughness, r);
 			}
+
+			/**
+			 * forward(SkeletalModelLit)での半透明描画を切り替える。
+			 *
+			 * enable で RenderItem::translucent を立て、Renderer が不透明の後に
+			 * AlphaBlend で描くようにする。alpha はマテリアルパラメータへ載せ、
+			 * SkeletalModelLit.fx の PS が出力アルファへ掛ける。
+			 * ディファード(SkeletalPBRLit)側のディザ擬似半透明は SetTranslucent(float) で、こちらとは別物。
+			 * こちらとは別物。
+			 *
+			 * @param enable 半透明として描くか。false で従来どおりの不透明描画へ戻る
+			 * @param alpha  不透明度 (0, 1]。0 以下はシェーダー側で不透明として扱われる
+			 */
+			void SetForwardTranslucent(const bool enable, const float alpha);
 
 			// 両 CB に同時反映（SetReceiveShadow 等がロード前に呼ばれても正しく動く）
 			void SetMaterialFlag(MaterialFlags flag, bool enable)

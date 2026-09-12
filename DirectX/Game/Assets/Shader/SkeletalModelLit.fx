@@ -116,5 +116,12 @@ float4 PSMain(PSInput input) : SV_TARGET
                                    emissive * emissiveScale, gloss, specularIntensity,
                                    dirShadow);
 
-    return float4(lit, albedoSample.a);
+    // 半透明 (ゴースト等)。MaterialCB (b2) は Lighting.fx -> MaterialCB.h 経由で宣言済み。
+    // params[7].x = SkeletalMesh::SetTranslucent(enable, alpha) が載せる不透明度。
+    // 既定値 0 のときは何も掛けず従来どおりテクスチャのアルファをそのまま出す
+    // (既存の不透明メッシュの見た目を変えないため)。
+    float translucentAlpha = params[7].x;
+    float alpha = (translucentAlpha > 0.0) ? (albedoSample.a * translucentAlpha) : albedoSample.a;
+
+    return float4(lit, alpha);
 }

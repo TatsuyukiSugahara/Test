@@ -149,6 +149,33 @@ namespace aq
 		}
 
 
+		const char* PlatformUWP::GetUserDataDirectory()
+		{
+			if (userDataDirectory_.empty())
+			{
+				// UWP は %LOCALAPPDATA% を直接扱えないので、アプリのローカルフォルダ
+				// (LocalState) を使う。StartupLog の出力先と同じ場所。
+				// このフォルダは既にパッケージ専用のサンドボックスなので、
+				// アプリ名のサブフォルダは足さない(Android / iOS のコンテナと同じ理由)。
+				// フォルダは OS が用意済みのため作成も不要。
+				try
+				{
+					const auto path = winrt::Windows::Storage::ApplicationData::Current().LocalFolder().Path();
+					userDataDirectory_ = ToUtf8(std::wstring_view(path));
+					if (!userDataDirectory_.empty())
+					{
+						userDataDirectory_ += "\\";
+					}
+				}
+				catch (...)
+				{
+					return nullptr;
+				}
+			}
+			return userDataDirectory_.empty() ? nullptr : userDataDirectory_.c_str();
+		}
+
+
 		void PlatformUWP::GetPixelSize(uint32_t& outWidth, uint32_t& outHeight) const
 		{
 			const auto bounds = window_.Bounds();   // 論理サイズ(DIP)

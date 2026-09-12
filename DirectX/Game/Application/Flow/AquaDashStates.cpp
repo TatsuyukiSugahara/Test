@@ -54,6 +54,17 @@ namespace app
 			// unityChan.tkm はメートル基準でない (素のままだと約 6m)。世界は 1m=1.0 なので縮めて使う。
 			static constexpr float PLAYER_MODEL_SCALE = 0.25f;
 
+			// ゴーストリプレイ (P23)。
+			// 記録は毎フレームではなく固定レートで取る。再生側が 2 サンプルを線形補間するので
+			// 30Hz でも十分滑らかで、90 秒のクリアでも 2700 サンプル (54KB) に収まる。
+			static constexpr float GHOST_SAMPLE_HZ       = 30.0f;
+			static constexpr float GHOST_SAMPLE_INTERVAL = 1.0f / GHOST_SAMPLE_HZ;   // サンプリング間隔 [s]
+			// ゴーストの不透明度 (forward の半透明描画へ渡す)。薄すぎると見失い、
+			// 濃すぎると実体と紛らわしいので中間に置く。
+			static constexpr float GHOST_ALPHA           = 0.45f;
+			// ゴーストファイルの拡張子 (保存先は <ユーザーデータ>/<ステージ ID>.ghost)。
+			static const char* GHOST_FILE_EXTENSION = ".ghost";
+
 			// 路面リボン (スプライン追従の連続メッシュ)。断面ピッチが細かいほどカーブが滑らかになるが頂点が増える。
 			static constexpr float ROAD_SECTION_STEP  = 2.0f;    // 断面の間隔 [m]
 			static constexpr float ROAD_THICKNESS     = 0.3f;    // 路面の厚み [m]
@@ -210,6 +221,41 @@ namespace app
 			app::ecs::SessionComponent* GetSession()
 			{
 				return aq::ecs::EntityContext::Get().GetSingletonComponent<app::ecs::SessionComponent>();
+			}
+
+
+			// 選択中ステージの ID (StageList の id)。一覧が空なら空文字。
+			std::string CurrentStageId(GameFlow& flow)
+			{
+				const auto& list = flow.StageList();
+				if (list.empty()) { return std::string(); }
+				const int index = aq::math::Clamp(flow.SelectedStageIndex(), 0, static_cast<int>(list.size()) - 1);
+				return list[index].id;
+			}
+
+
+			// ゴーストの保存先 <ユーザーデータ>/<ステージ ID>.ghost を組み立てる。
+			// 書き込み先を用意できないプラットフォームでは空文字を返し、呼び出し側は
+			// 保存も読み込みも行わない (ゴースト機能を黙って無効化する)。
+			std::string MakeGhostPath(const std::string& stageId)
+			{
+				if (stageId.empty()) { return std::string(); }
+				const char* userDirectory = aq::Engine::Get().GetUserDataDirectory();
+				if (userDirectory == nullptr) { return std::string(); }
+				return std::string(userDirectory) + stageId + GHOST_FILE_EXTENSION;
+			}
+
+
+			// ゴーストの表示を切り替える。SkeletalMeshComponent には BoxStaticMeshComponent の
+			// SetVisible に当たる可視フラグが無いため、スケールを 0 にして三角形を退化させ
+			// 画素が出ない状態にする。エンティティは残すので RETRY でそのまま表示へ戻せる。
+			void SetGhostVisible(GameFlow& flow, const bool visible)
+			{
+				auto& ctx = aq::ecs::EntityContext::Get();
+				if (!ctx.IsValid(flow.GhostHandle())) { return; }
+				if (auto* skelComp = ctx.GetComponent<aq::ecs::SkeletalMeshComponent>(flow.GhostHandle())) {
+					skelComp->SetVisible(visible);
+				}
 			}
 
 
@@ -1365,6 +1411,62 @@ namespace app
 				flow.SetPlayerHandle(session->playerHandle);   // 影の注視点用
 				aq::StartupMark("[load]   player done");
 
+				// ゴースト (P23)。自己ベストの記録があるときだけ作る (初回プレイでは作らない)。
+				// プレイヤーと同じモデル / アニメ / スケールを半透明で重ねる。
+				// **記録が無くてもエンティティは作り、表示だけ止める**。初回プレイでクリアした直後の
+				// RETRY はステージを再ロードしないので、ここで作らないと「初めてゴーストが
+				// 手に入った次の走行」で姿が出ない (タイトルへ戻るまで出ない) ことになる。
+				flow.GhostHandle() = aq::ecs::EntityHandle();
+				{
+					auto entity = ctx.CreateEntity<
+						aq::ecs::TransformComponent,
+						aq::ecs::HierarchicalTransformComponent,
+						aq::ecs::SkeletalMeshComponent,
+						aq::ecs::AnimationComponent>();
+
+					// 初期姿勢は記録の先頭 (走り出すまでスタート地点に立たせておく)。
+					// 記録が無ければスポーン地点に置いておくだけ (どのみち非表示)。
+					stage::GhostSample first = {};
+					first.distance = stageData->spawnDistance;
+					if (flow.Ghost()) { flow.Ghost()->Evaluate(0.0f, first); }
+					const auto ghostFrame = stageData->spline.Evaluate(first.distance);
+					auto* tc = entity.GetComponent<aq::ecs::TransformComponent>();
+					tc->position = ghostFrame.position + ghostFrame.right * first.lateral
+					             + ghostFrame.up * first.height;
+					tc->rotation = ghostFrame.ToRotation();
+					tc->scale.Set(PLAYER_MODEL_SCALE);
+
+					auto* skelComp = entity.GetComponent<aq::ecs::SkeletalMeshComponent>();
+					// forward の半透明はディファード (SkeletalPBRLit) では効かないので、
+					// forward 側の SkeletalModelLit を選ぶ。SetShaderType は SetModelPath より
+					// 前に呼ぶこと (ロード後の変更は再初期化されない)。
+					skelComp->SetShaderType(aq::graphics::SkeletalMesh::ShaderType::SkeletalModelLit);
+					skelComp->SetModelPath(PLAYER_MODEL_PATH);
+					skelComp->GetSkeletalMesh()->SetForwardTranslucent(true, GHOST_ALPHA);
+					// 影を落とすと「実体がそこにある」ように見えてゴーストらしさが消えるので落とさない。
+					skelComp->GetSkeletalMesh()->SetCastShadow(false);
+					skelComp->GetSkeletalMesh()->SetReceiveShadow(true);
+					skelComp->GetSkeletalMesh()->SetReceivesDecal(false);
+
+					// 走行中の再生しかしないので走りアニメだけ持たせる。
+					auto* animComp = entity.GetComponent<aq::ecs::AnimationComponent>();
+					animComp->AddAnimation(aqHash32("run"), PLAYER_RUN_ANIM);
+					animComp->Play(aqHash32("run"), true);
+#ifdef AQ_DEBUG_IMGUI
+					entity.GetComponent<aq::ecs::EntityDebugTag>()->SetName("Ghost");
+#endif
+					flow.GhostHandle() = entity.GetHandle();
+					flow.StageEntities().push_back(entity.GetHandle());
+					// 記録が無いうちは非表示。InGameState が記録を得た時点で表示へ切り替える。
+					skelComp->SetVisible(flow.Ghost() != nullptr);
+					if (flow.Ghost()) {
+						aq::StartupMarkf("[load]   ghost done (%.2f s / %zu samples)",
+						                 flow.Ghost()->clearTimeSec, flow.Ghost()->samples.size());
+					} else {
+						aq::StartupMark("[load]   ghost none (first run)");
+					}
+				}
+
 				// 自動カメラ。
 				{
 					auto entity = ctx.CreateEntity<app::ecs::AutoCameraComponent>();
@@ -1518,6 +1620,9 @@ namespace app
 					}
 				}
 				flow.StageEntities().clear();
+				// ゴーストはステージ単位のデータ。次のロードで読み直すのでここで手放す。
+				flow.GhostHandle() = aq::ecs::EntityHandle();
+				flow.Ghost().reset();
 				if (session) {
 					session->playerHandle        = aq::ecs::EntityHandle();
 					session->collectFxHandle     = aq::ecs::EntityHandle();
@@ -1596,6 +1701,11 @@ namespace app
 			const auto& list = flow.StageList();
 			const int index = flow.SelectedStageIndex();
 			stagePath_ = list[index >= 0 && index < static_cast<int>(list.size()) ? index : 0].stagePath;
+
+			// ゴースト (P23)。パスの組み立てはメインスレッドで済ませ、ワーカーへは文字列だけ渡す。
+			// 書き込み先を用意できないプラットフォームでは空文字になり、読み込みも保存も行わない。
+			stageId_   = CurrentStageId(flow);
+			ghostPath_ = MakeGhostPath(stageId_);
 			aq::StartupMarkf("[load] LoadingState enter (%s)", stagePath_.c_str());
 		}
 
@@ -1615,12 +1725,20 @@ namespace app
 			{
 				// ステージ定義のパースと地形の CPU 前計算 (画像デコード/頂点生成/画素変換) はワーカースレッドで行う。
 				// GPU リソース生成だけをメインスレッド (CreateStageWorld) に残す。
-				const std::string path = stagePath_;
-				stageFuture_ = aq::util::ThreadPool::Get().Submit([path]()
+				const std::string path      = stagePath_;
+				const std::string ghostPath = ghostPath_;
+				const std::string stageId   = stageId_;
+				stageFuture_ = aq::util::ThreadPool::Get().Submit([path, ghostPath, stageId]()
 					{
 						StageLoadResult result;
 						result.stage = stage::StageData::LoadFromFile(path.c_str());
 						aq::StartupMark("[load] stage json parsed (worker)");
+
+						// ゴースト (P23)。ファイル読み込みだけなのでステージ本体と同じワーカーで読む。
+						// 無ければ null のまま進む (初回プレイ)。
+						if (!ghostPath.empty()) {
+							result.ghost = stage::GhostData::LoadFromFile(ghostPath.c_str(), stageId.c_str());
+						}
 						if (result.stage) {
 							const CourseExtents ext = ComputeCourseExtents(*result.stage);
 							const aq::terrain::HeightmapChunk::Desc terrainDesc = MakeTerrainDesc(*result.stage, ext);
@@ -1657,6 +1775,8 @@ namespace app
 				}
 
 				if (auto* session = GetSession()) { session->activeStage = stageData; }
+				// ゴーストは CreateStageWorld が再生用エンティティを作るかどうかの判断に使うので先に渡す。
+				flow.Ghost() = result.ghost;
 				aq::StartupMark("[load] worker result received");
 				// ワーカーが別々に持ってきた草と花のベイク結果をまとめ直してから渡す。
 				GrassBakeResult scattered;
@@ -1701,6 +1821,15 @@ namespace app
 		void InGameState::OnEnter(GameFlow& flow)
 		{
 			elapsed_ = 0.0f;
+
+			// ゴースト (P23)。RETRY で前回の記録が残らないよう、記録はここで必ず捨てる。
+			recording_.clear();
+			sampleTimer_   = 0.0f;
+			ghost_         = flow.Ghost();
+			ghostDeltaSec_ = 0.0f;
+			ghostFinished_ = false;
+			// 前走でゴール後に隠していたら戻す。記録がまだ無い初回プレイでは隠したまま。
+			SetGhostVisible(flow, flow.Ghost() != nullptr);
 
 			auto* session = GetSession();
 			if (!session) { return; }
@@ -1779,7 +1908,8 @@ namespace app
 				                          || character->trickCompletedCount > 0);
 				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f,
 				               comboMultiplier, comboRate,
-				               character->trickCompletedCount, trickActive);
+				               character->trickCompletedCount, trickActive,
+				               GhostDeltaSec(), HasGhost());
 
 				// 俯瞰カメラは 画面右=+X / 画面上=+Z。UI の v は下+なので Z を反転する。
 				if (playerTc && session->minimapHalfExtent > 1.0f) {
@@ -1787,6 +1917,65 @@ namespace app
 					const float u = 0.5f + (playerTc->position.x - session->minimapCenterXZ.x) / span;
 					const float v = 0.5f - (playerTc->position.z - session->minimapCenterXZ.y) / span;
 					screen->SetMinimapMarker(u, v);
+				}
+			}
+
+			// ゴーストの記録 (P23)。毎フレームではなく 30Hz で積む。再生側が 2 サンプルを
+			// 線形補間するので、これ以上細かく録ってもデータが増えるだけで滑らかさは変わらない。
+			sampleTimer_ += dt;
+			if (recording_.empty() || sampleTimer_ >= GHOST_SAMPLE_INTERVAL)
+			{
+				sampleTimer_ = 0.0f;
+
+				stage::GhostSample sample;
+				sample.timeSec  = elapsed_;
+				sample.distance = character->distance;
+				sample.lateral  = character->lateral;
+				sample.height   = character->height;
+				sample.roll     = character->trickRoll;
+				recording_.push_back(sample);
+			}
+
+			// ゴーストの再生 (P23)。記録を時刻で補間し、プレイヤーと同じ式で Transform を書き出す。
+			if (ghost_ && !ghost_->samples.empty())
+			{
+				const float        ghostEndSec = ghost_->samples.back().timeSec;
+				stage::GhostSample ghostSample;
+				if (elapsed_ <= ghostEndSec && ghost_->Evaluate(elapsed_, ghostSample))
+				{
+					// 再生用エンティティはゴーストを読めたロードでしか作られない
+					// (クリア直後の RETRY など、記録だけ持っていて実体が無い場合がある)。
+					auto* ghostTc = ctx.IsValid(flow.GhostHandle())
+						? ctx.GetComponent<aq::ecs::TransformComponent>(flow.GhostHandle()) : nullptr;
+					if (ghostTc != nullptr)
+					{
+						const stage::CourseSpline::Frame ghostFrame = stageData->spline.Evaluate(ghostSample.distance);
+						ghostTc->position = ghostFrame.position + ghostFrame.right * ghostSample.lateral
+						                  + ghostFrame.up * ghostSample.height;
+						ghostTc->rotation = ghostFrame.ToRotation();
+
+						// トリック中の傾き。合成順はプレイヤー (SpeedCharacterSystem) と同じで、
+						// 路面姿勢を先に適用し、ワールド空間の tangent 軸まわりの回転を後ろに掛ける。
+						if (ghostSample.roll != 0.0f) {
+							aq::math::Quaternion roll;
+							roll.SetRotation(ghostFrame.tangent, ghostSample.roll);
+							ghostTc->rotation = ghostTc->rotation * roll;
+						}
+					}
+				}
+				else if (!ghostFinished_)
+				{
+					// 記録の終端 (ゴーストのゴール) を過ぎた。以降は出さない。
+					ghostFinished_ = true;
+					SetGhostVisible(flow, false);
+				}
+
+				// ゴーストとの時間差。距離差ではなく「同じ distance に到達した時刻」の差で出す
+				// (タイムアタックの指標として直感的なため。設計 05 §P23-5)。
+				// 正 = ゴーストより遅れている / 負 = 勝っている。表示は HUD 側が行う。
+				float ghostTimeSec = 0.0f;
+				if (ghost_->TimeAtDistance(character->distance, ghostTimeSec)) {
+					ghostDeltaSec_ = elapsed_ - ghostTimeSec;
 				}
 			}
 
@@ -1807,6 +1996,47 @@ namespace app
 			result.coinCount    = score ? score->coinCount : 0;
 			result.score        = score ? score->score     : 0;
 			result.bestCombo    = score ? score->bestCombo : 0;
+
+			// ゴーストの保存 (P23)。STAGE CLEAR のときだけ書き出す (落下では書き出さない)。
+			if (goal && !recording_.empty())
+			{
+				// ゴール時点の姿勢を末尾へ足す。これが無いと記録の終端が最後のサンプリング時刻で
+				// 切れ、ゴール直前の時間差がその時刻で頭打ちになる。
+				stage::GhostSample last;
+				last.timeSec  = elapsed_;
+				last.distance = character->distance;
+				last.lateral  = character->lateral;
+				last.height   = character->height;
+				last.roll     = character->trickRoll;
+				recording_.push_back(last);
+
+				// それまでのベストより速いときだけ上書きする (ゴーストが無ければ無条件)。
+				const bool        isBest    = !ghost_ || elapsed_ < ghost_->clearTimeSec;
+				const std::string stageId   = CurrentStageId(flow);
+				const std::string ghostPath = MakeGhostPath(stageId);
+				if (isBest && !ghostPath.empty())
+				{
+					// 次の走行 (ロードを挟まない RETRY を含む) が新しいベストと比べられるよう、
+					// メモリ側のベストもここで差し替える。
+					auto best = std::make_shared<stage::GhostData>();
+					best->clearTimeSec = elapsed_;
+					best->samples      = recording_;
+					flow.Ghost() = best;
+
+					// 書き出しはワーカーで行い、リザルト表示をブロックしない (R-16)。
+					// 書き出し中にステージが破棄されても安全なように、サンプル列は値でコピーして渡す
+					// (ワーカーからは ECS / GPU リソース / シングルトンに触れない)。
+					const std::vector<stage::GhostSample> samples      = recording_;
+					const float                           clearTimeSec = elapsed_;
+					aq::util::ThreadPool::Get().Submit([ghostPath, stageId, samples, clearTimeSec]()
+						{
+							stage::GhostData data;
+							data.clearTimeSec = clearTimeSec;
+							data.samples      = samples;
+							stage::GhostData::SaveToFile(ghostPath.c_str(), data, stageId.c_str());
+						});
+				}
+			}
 
 			aq::ui::UIContext::Get().Screens().Replace("AquaDashResult");
 			flow.ChangeState(std::make_unique<ResultState>());

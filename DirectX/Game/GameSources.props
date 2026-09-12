@@ -20,6 +20,7 @@
     <ClCompile Include="Application\ECS\CoinComponentSystem.cpp" />
     <ClCompile Include="Application\Flow\AquaDashStates.cpp" />
     <ClCompile Include="Application\Stage\StageData.cpp" />
+    <ClCompile Include="Application\Stage\GhostData.cpp" />
     <ClCompile Include="Application\UI\AquaDashScreens.cpp" />
     <ClCompile Include="Application\Main.cpp" />
     <ClCompile Include="Application\UWPMain.cpp" />
@@ -39,6 +40,7 @@
     <ClInclude Include="Application\ECS\SessionComponent.h" />
     <ClInclude Include="Application\Flow\AquaDashStates.h" />
     <ClInclude Include="Application\Stage\StageData.h" />
+    <ClInclude Include="Application\Stage\GhostData.h" />
     <ClInclude Include="Application\UI\AquaDashScreens.h" />
     <ClInclude Include="Application\stdafx.h" />
     <ClInclude Include="Application\Utility.h" />

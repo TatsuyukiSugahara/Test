@@ -30,6 +30,10 @@ namespace aq
 			std::string contentRoot_;
 			bool        contentRootResolved_;
 
+			/** ユーザーデータの書き込み先(末尾セパレータ付き)。初回要求時に解決してキャッシュする */
+			std::string userDataDirectory_;
+			bool        userDataDirectoryResolved_;
+
 			/** 終了要求(ウィンドウの閉じるボタン) */
 			bool exitRequested_;
 
@@ -42,6 +46,7 @@ namespace aq
 			bool CreateMainWindow(const WindowDesc& desc, aq::graphics::NativeWindowHandle& out) override;
 			bool PumpEvents() override;
 			const char* GetContentRoot() override;
+			const char* GetUserDataDirectory() override;
 
 			// アプリ終了を要求する(ウィンドウデリゲートから呼ぶ)。
 			inline void RequestExit() { exitRequested_ = true; }

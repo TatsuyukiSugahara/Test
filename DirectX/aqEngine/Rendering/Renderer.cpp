@@ -99,6 +99,31 @@ namespace aq
 				runCull(frame.forwardItems);
 			}
 
+			// forward アイテムを「不透明 → 半透明」の順に積む。半透明の間だけ AlphaBlend にし、
+			// 描き終えたら後続パス (海・パーティクル・ポスト・UI) のために Opaque へ戻す
+			// (パーティクルと同じ流儀)。半透明が 1 つも無ければ BlendMode は一切積まない
+			// (= 従来の不透明だけのフレームはコマンド列も従来どおり)。
+			auto recordForwardItems = [this, &outList](const RenderFrame& f)
+			{
+				bool hasTranslucent = false;
+				for (const RenderItem& item : f.forwardItems) {
+					if (item.translucent) {
+						hasTranslucent = true;
+						continue;
+					}
+					RecordDrawItem(item, f.camera, outList);
+				}
+				if (!hasTranslucent) { return; }
+
+				outList.Enqueue<SetBlendModeCommand>(graphics::BlendMode::AlphaBlend);
+				for (const RenderItem& item : f.forwardItems) {
+					if (item.translucent) {
+						RecordDrawItem(item, f.camera, outList);
+					}
+				}
+				outList.Enqueue<SetBlendModeCommand>(graphics::BlendMode::Opaque);
+			};
+
 			if (deferredRenderer_)
 			{
 				// Pass 2a: G-Buffer パス（deferred items を MRT に書き込む）
@@ -122,9 +147,7 @@ namespace aq
 				// Pass 2c: 空（ライティング直後・フォワード直前。RT と深度は直前でバインド済み）
 				BuildSkyCommandList(frame, outList);
 
-				for (const RenderItem& item : frame.forwardItems) {
-					RecordDrawItem(item, frame.camera, outList);
-				}
+				recordForwardItems(frame);
 				for (const InstancedRenderItem& item : frame.instancedItems) {
 					outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
 				}
@@ -135,9 +158,7 @@ namespace aq
 				for (const RenderItem& item : frame.items) {
 					RecordDrawItem(item, frame.camera, outList);
 				}
-				for (const RenderItem& item : frame.forwardItems) {
-					RecordDrawItem(item, frame.camera, outList);
-				}
+				recordForwardItems(frame);
 				for (const InstancedRenderItem& item : frame.instancedItems) {
 					outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
 				}
@@ -193,6 +214,31 @@ namespace aq
 			// GPU クラスタカリングと Hi-Z は単一カメラ前提のため分割画面では使わない
 			// (フラスタムカリングは BuildRenderFrame 側でビュー毎に済んでいる)。
 
+			// forward アイテムを「不透明 → 半透明」の順に積む。半透明の間だけ AlphaBlend にし、
+			// 描き終えたら後続パス (海・パーティクル・ポスト・UI) のために Opaque へ戻す
+			// (パーティクルと同じ流儀)。半透明が 1 つも無ければ BlendMode は一切積まない
+			// (= 従来の不透明だけのフレームはコマンド列も従来どおり)。
+			auto recordForwardItems = [this, &outList](const RenderFrame& f)
+			{
+				bool hasTranslucent = false;
+				for (const RenderItem& item : f.forwardItems) {
+					if (item.translucent) {
+						hasTranslucent = true;
+						continue;
+					}
+					RecordDrawItem(item, f.camera, outList);
+				}
+				if (!hasTranslucent) { return; }
+
+				outList.Enqueue<SetBlendModeCommand>(graphics::BlendMode::AlphaBlend);
+				for (const RenderItem& item : f.forwardItems) {
+					if (item.translucent) {
+						RecordDrawItem(item, f.camera, outList);
+					}
+				}
+				outList.Enqueue<SetBlendModeCommand>(graphics::BlendMode::Opaque);
+			};
+
 			for (uint32_t v = 0; v < viewCount; ++v)
 			{
 				RenderFrame&    frame = frames[v];
@@ -215,9 +261,7 @@ namespace aq
 					// Pass 2c: 空（ライティング直後・フォワード直前。RT と深度は直前でバインド済み）
 					BuildSkyCommandList(frame, outList);
 
-					for (const RenderItem& item : frame.forwardItems) {
-						RecordDrawItem(item, frame.camera, outList);
-					}
+					recordForwardItems(frame);
 					for (const InstancedRenderItem& item : frame.instancedItems) {
 						outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
 					}
@@ -227,9 +271,7 @@ namespace aq
 					for (const RenderItem& item : frame.items) {
 						RecordDrawItem(item, frame.camera, outList);
 					}
-					for (const RenderItem& item : frame.forwardItems) {
-						RecordDrawItem(item, frame.camera, outList);
-					}
+					recordForwardItems(frame);
 					for (const InstancedRenderItem& item : frame.instancedItems) {
 						outList.Enqueue<InstancedDrawItemCommand>(item, frame.camera);
 					}

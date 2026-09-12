@@ -91,6 +91,12 @@ namespace aq
 		// UWP はパッケージ install フォルダを返す。platform_ 未設定時も nullptr。
 		const char* GetContentRoot() const;
 
+		/**
+		 * セーブデータなど、アプリが書き込んでよいディレクトリ (末尾セパレータ付き)。
+		 * 用意できないプラットフォームでは nullptr。詳細は IPlatform::GetUserDataDirectory。
+		 */
+		const char* GetUserDataDirectory() const;
+
 		// static ラッパー (Engine::Get() を省略して呼べる)
 		static float GetDeltaTime() { return Get().gameTimer_.GetDeltaTime(); }
 		static float GetTotalTime() { return Get().gameTimer_.GetTotalTime(); }

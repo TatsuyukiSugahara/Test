@@ -154,6 +154,7 @@ namespace app
 			comboGauge_ = Resolve(FindHandle("ComboGauge"));
 
 			trickText_ = Resolve(FindHandle("TrickText"));
+			ghostDeltaText_ = Resolve(FindHandle("GhostDeltaText"));
 
 			minimapFrame_  = Resolve(FindHandle("MinimapFrame"));
 			minimap_       = Resolve(FindHandle("Minimap"));
@@ -170,12 +171,14 @@ namespace app
 
 			// トリック表示も同様に、滞空してトリックが始まるまで隠しておく。
 			SetTextAlpha(trickText_, 0.0f);
+			SetTextAlpha(ghostDeltaText_, 0.0f);
 		}
 
 
 		void InGameScreen::SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh,
 		                          const uint32_t comboMultiplier, const float comboRate,
-		                          const uint32_t trickCount, const bool trickActive)
+		                          const uint32_t trickCount, const bool trickActive,
+		                          const float ghostDeltaSec, const bool hasGhost)
 		{
 			if (timeText_) {
 				if (auto* text = timeText_->GetComponent<aq::ui::UITextComponent>()) {
@@ -245,6 +248,24 @@ namespace app
 				}
 			}
 			SetTextAlpha(trickText_, trickActive ? 1.0f : 0.0f);
+
+			// ゴーストとの時間差 (P23)。正 = 遅れているので赤、負 = 勝っているので緑。
+			// 符号を必ず付ける (+1.23 / -0.45)。ゴーストが無い走行では非表示。
+			if (ghostDeltaText_) {
+				if (auto* text = ghostDeltaText_->GetComponent<aq::ui::UITextComponent>()) {
+					if (!hasGhost) {
+						text->content = "";
+					} else {
+						char buf[32];
+						std::snprintf(buf, sizeof(buf), "%+.2f", ghostDeltaSec);
+						text->content = buf;
+						text->color = (ghostDeltaSec > 0.0f)
+							? aq::math::Vector4(1.00f, 0.35f, 0.30f, 1.0f)    // 遅れ
+							: aq::math::Vector4(0.40f, 1.00f, 0.50f, 1.0f);   // 勝ち
+					}
+				}
+			}
+			SetTextAlpha(ghostDeltaText_, hasGhost ? 1.0f : 0.0f);
 		}
 
 

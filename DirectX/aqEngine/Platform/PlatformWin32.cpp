@@ -18,10 +18,19 @@ namespace aq
 {
 	namespace platform
 	{
+		namespace
+		{
+			// ユーザーデータを置くフォルダ名。ゲーム名が変わったらここを変える。
+			static constexpr char APP_FOLDER_NAME[] = "AquaDash";
+		}
+
+
 		PlatformWin32::PlatformWin32(HINSTANCE hInstance, int nCmdShow)
 			: hInstance_(hInstance)
 			, nCmdShow_(nCmdShow)
 			, hWnd_(nullptr)
+			, userDataDirectory_()
+			, userDataDirectoryResolved_(false)
 		{
 		}
 
@@ -82,6 +91,38 @@ namespace aq
 			// Win32 は従来どおり Resource 側の探索（ソースツリー基点）に委ねる。
 			// UWP ではパッケージ install フォルダを返す実装に差し替える。
 			return nullptr;
+		}
+
+
+		const char* PlatformWin32::GetUserDataDirectory()
+		{
+			if (!userDataDirectoryResolved_)
+			{
+				userDataDirectoryResolved_ = true;
+
+				// %LOCALAPPDATA%\AquaDash\ を使う。実行ディレクトリは Program Files 配下だと
+				// 書き込めないため、ユーザーごとのローカルアプリデータへ置く。
+				// ユーザーホームは他アプリと共有なので、アプリ名の階層をここで足す。
+				char localAppData[MAX_PATH] = {};
+				const DWORD len = ::GetEnvironmentVariableA(
+					"LOCALAPPDATA", localAppData, static_cast<DWORD>(_countof(localAppData)));
+				if (len > 0 && len < _countof(localAppData))
+				{
+					std::string directory = localAppData;
+					directory += "\\";
+					directory += APP_FOLDER_NAME;
+
+					// 既にあれば ERROR_ALREADY_EXISTS で失敗するので、それは成功として扱う。
+					if (::CreateDirectoryA(directory.c_str(), nullptr)
+					 || ::GetLastError() == ERROR_ALREADY_EXISTS)
+					{
+						directory += "\\";
+						userDataDirectory_ = directory;
+					}
+				}
+			}
+
+			return userDataDirectory_.empty() ? nullptr : userDataDirectory_.c_str();
 		}
 
 

@@ -74,7 +74,10 @@ namespace aq
 			// フォワードパス。GBuffer0 の深度でテストしながら描く。
 			outList.Enqueue<SetRenderTargetWithDepthCommand>(
 				sceneRTHandle_, deferredRenderer_->GetGBuffer0Handle());
+			// 半透明アイテム(ゴースト等)は描かない。このパスはミニマップ等の俯瞰表示用で
+			// ブレンド設定を切り替えないため、そのまま描くと不透明として出てしまう。
 			for (const RenderItem& item : frame.forwardItems) {
+				if (item.translucent) { continue; }
 				outList.Enqueue<DrawItemCommand>(item, frame.camera);
 			}
 			for (const InstancedRenderItem& item : frame.instancedItems) {

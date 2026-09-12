@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "SpeedCharacterComponentSystem.h"
 #include "SessionComponent.h"
+#include "CoinComponentSystem.h"
 #include "GameInput.h"
 #include "GameAction.h"
 #include "Stage/StageData.h"
@@ -32,6 +33,18 @@ namespace app
 			// 別にして「ブーストが切れて伸びが止まる」感触を作る。
 			static constexpr float BOOST_DECEL            = 18.0f;   // [m/s^2]
 			static const char* BOOST_SE_PATH = "Assets/Sound/Boost.wav";
+
+			/** エアトリック (設計 05 §P22-2) */
+			// 打ち上げ直後の低空でトリックに入ると、回転し切る前に着地して失敗しか出ない。
+			// 通常ジャンプの範囲では始まらない高さをしきい値にして、ジャンプ台専用の操作にする。
+			static constexpr float    TRICK_MIN_HEIGHT      = 1.5f;    // [m] これ未満の高さでは A を押してもトリックにしない
+			static constexpr float    TRICK_SPIN_SEC        = 0.45f;   // [s] 1 回転にかかる時間
+			static constexpr uint32_t TRICK_SCORE           = 300u;    // 1 回転あたりの加点
+			static constexpr float    TRICK_BOOST_SEC       = 1.2f;    // [s] 着地成功時のブースト時間
+			static constexpr float    TRICK_FAIL_SPEED_RATE = 0.6f;    // 回転の途中で着地したときの速度倍率
+			static constexpr float    TRICK_TWO_PI          = 6.28318530718f;   // [rad] 1 回転ぶんの角度
+			static const char* TRICK_SPIN_SE_PATH = "Assets/Sound/TrickSpin.wav";
+			static const char* TRICK_LAND_SE_PATH = "Assets/Sound/TrickLand.wav";
 
 			/** ループ脱落判定 */
 			static constexpr float INVERTED_UP_Y     = 0.25f;   // 路面 up がこれ未満なら「上下逆さ寄り」
@@ -90,6 +103,26 @@ namespace app
 			{
 				if (aq::sound::SoundEngine::IsAvailable()) {
 					auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(BOOST_SE_PATH);
+					aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
+				}
+			}
+
+
+			// トリックの回転開始 SE。
+			void PlayTrickSpinSE()
+			{
+				if (aq::sound::SoundEngine::IsAvailable()) {
+					auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(TRICK_SPIN_SE_PATH);
+					aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
+				}
+			}
+
+
+			// トリックの着地成功 SE (失敗時は鳴らさない)。
+			void PlayTrickLandSE()
+			{
+				if (aq::sound::SoundEngine::IsAvailable()) {
+					auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(TRICK_LAND_SE_PATH);
 					aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
 				}
 			}
@@ -222,11 +255,54 @@ namespace app
 						break;
 					}
 
+					// ジャンプ台: ブーストパッドとまったく同じ跨ぎ判定。
+					// 前進速度は変えず滞空だけを作り、それをトリックの機会に充てる。
+					for (const auto& ramp : stageData->ramps) {
+						if (ramp.distance <= character->prevDistance) { continue; }
+						if (ramp.distance >  character->distance)     { break; }   // ramps は distance 昇順
+						if (fabsf(character->lateral - ramp.lateral) > ramp.width * 0.5f) { continue; }
+
+						character->verticalVelocity = ramp.power;
+						character->grounded         = false;
+						break;
+					}
+
 					// ジャンプ / 重力 (height は路面相対)。
 					if (character->grounded && input->jumpTriggered) {
 						character->verticalVelocity = JUMP_SPEED;
 						character->grounded         = false;
 					}
+
+					// エアトリックの開始。接地中のジャンプ判定より後に置くことで、
+					// 地上では必ずジャンプが優先される (踏み切った直後は height が 0 なので始まらない)。
+					if (!character->grounded && character->height >= TRICK_MIN_HEIGHT && input->jumpTriggered) {
+						++character->trickPendingCount;
+						// 回転していなければ積んだぶんを 1 つ消費して即座に回り始める。
+						if (character->trickSpinTimer <= 0.0f) {
+							--character->trickPendingCount;
+							character->trickSpinTimer = TRICK_SPIN_SEC;
+							PlayTrickSpinSE();
+						}
+					}
+
+					// エアトリックの進行。1 回転し切るたびにチェーンを 1 つ消費して次の回転へ移り、
+					// 残っていなければ見た目の回転角を 0 へ戻して終了する。
+					if (character->trickSpinTimer > 0.0f) {
+						character->trickSpinTimer -= dt;
+						character->trickRoll      += (TRICK_TWO_PI / TRICK_SPIN_SEC) * dt;
+						if (character->trickSpinTimer <= 0.0f) {
+							++character->trickCompletedCount;
+							if (character->trickPendingCount > 0) {
+								--character->trickPendingCount;
+								character->trickSpinTimer = TRICK_SPIN_SEC;
+								PlayTrickSpinSE();
+							} else {
+								character->trickSpinTimer = 0.0f;
+								character->trickRoll      = 0.0f;
+							}
+						}
+					}
+
 					if (!character->grounded) {
 						character->verticalVelocity -= GRAVITY * dt;
 						character->height           += character->verticalVelocity * dt;
@@ -234,6 +310,27 @@ namespace app
 							character->height           = 0.0f;
 							character->verticalVelocity = 0.0f;
 							character->grounded         = true;
+
+							// 着地の評価。回転を完了し切っていれば加点 + ブースト、
+							// 途中で着地したら加点なしで減速させる。
+							if (character->trickSpinTimer <= 0.0f && character->trickCompletedCount > 0) {
+								auto* score = ctx.GetComponent<PlayerScoreComponent>(handle);
+								if (score) {
+									score->score += TRICK_SCORE * character->trickCompletedCount;
+								}
+								// ブーストパッドと同じ扱い。即座に速度を引き上げて伸びを作る。
+								const float boostSpeed = MAX_SPEED * BOOST_SPEED_MULTIPLIER;
+								if (character->speed < boostSpeed) { character->speed = boostSpeed; }
+								character->boostTimer = TRICK_BOOST_SEC;
+								PlayTrickLandSE();
+							} else if (character->trickSpinTimer > 0.0f) {
+								character->speed *= TRICK_FAIL_SPEED_RATE;
+							}
+
+							character->trickSpinTimer      = 0.0f;
+							character->trickPendingCount   = 0;
+							character->trickCompletedCount = 0;
+							character->trickRoll           = 0.0f;
 						}
 					}
 
@@ -241,6 +338,15 @@ namespace app
 					const stage::CourseSpline::Frame frame = stageData->spline.Evaluate(character->distance);
 					tc->position = frame.position + frame.right * character->lateral + frame.up * character->height;
 					tc->rotation = frame.ToRotation();
+
+					// トリック中だけ進行方向軸まわりの回転を重ねる。
+					// operator* は local * parent なので、路面姿勢を先に適用し、
+					// ワールド空間の tangent 軸まわりの回転を親側 (後ろ) に掛ける。
+					if (character->trickRoll != 0.0f) {
+						aq::math::Quaternion roll;
+						roll.SetRotation(frame.tangent, character->trickRoll);
+						tc->rotation = tc->rotation * roll;
+					}
 
 					// ループ頂点付近 (路面 up が下向き) で速度が足りなければ、遠心力で
 					// 張り付いていられず重力に負けて剥がれる、という表現。

@@ -153,6 +153,8 @@ namespace app
 			comboText_  = Resolve(FindHandle("ComboText"));
 			comboGauge_ = Resolve(FindHandle("ComboGauge"));
 
+			trickText_ = Resolve(FindHandle("TrickText"));
+
 			minimapFrame_  = Resolve(FindHandle("MinimapFrame"));
 			minimap_       = Resolve(FindHandle("Minimap"));
 			minimapMarker_ = Resolve(FindHandle("MinimapMarker"));
@@ -165,11 +167,15 @@ namespace app
 			// コンボは最初の SetHUD が倍率を渡してくるまで隠しておく。
 			SetImageAlpha(comboGauge_, 0.0f);
 			SetTextAlpha(comboText_,   0.0f);
+
+			// トリック表示も同様に、滞空してトリックが始まるまで隠しておく。
+			SetTextAlpha(trickText_, 0.0f);
 		}
 
 
 		void InGameScreen::SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh,
-		                          const uint32_t comboMultiplier, const float comboRate)
+		                          const uint32_t comboMultiplier, const float comboRate,
+		                          const uint32_t trickCount, const bool trickActive)
 		{
 			if (timeText_) {
 				if (auto* text = timeText_->GetComponent<aq::ui::UITextComponent>()) {
@@ -222,6 +228,23 @@ namespace app
 				}
 			}
 			SetImageAlpha(comboGauge_, showCombo ? COMBO_GAUGE_ALPHA : 0.0f);
+
+			// トリックも倍率表示と同じ流儀で、非トリック時は content を空にしてからアルファを落とす。
+			// 1 回転目を回している間はまだ完了数が 0 なので、倍率を付けずに "TRICK" だけ出す。
+			if (trickText_) {
+				if (auto* text = trickText_->GetComponent<aq::ui::UITextComponent>()) {
+					if (!trickActive) {
+						text->content = "";
+					} else if (trickCount > 0u) {
+						char buf[32];
+						std::snprintf(buf, sizeof(buf), "TRICK x%u", trickCount);
+						text->content = buf;
+					} else {
+						text->content = "TRICK";
+					}
+				}
+			}
+			SetTextAlpha(trickText_, trickActive ? 1.0f : 0.0f);
 		}
 
 

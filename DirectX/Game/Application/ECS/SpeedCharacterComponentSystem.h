@@ -45,6 +45,12 @@ namespace app
 			float boostTimer   = 0.0f;   // 残りブースト秒
 			float prevDistance = 0.0f;   // 跨ぎ判定用。前フレームの distance
 
+			/** エアトリック状態 (滞空中に A を押すと進行方向軸まわりに回る) */
+			float    trickSpinTimer      = 0.0f;   // 回転中の残り時間 [s]。0 なら回転していない
+			uint32_t trickPendingCount   = 0;      // 積まれた回転数 (チェーン)
+			uint32_t trickCompletedCount = 0;      // この滞空で完了した回転数
+			float    trickRoll           = 0.0f;   // 見た目の回転角 [rad]
+
 			/** 脱落状態 (ループで速度不足になった等。スプライン制御を離れワールド自由落下) */
 			bool              fallen        = false;
 			aq::math::Vector3 worldVelocity = {};   // fallen 中のワールド速度

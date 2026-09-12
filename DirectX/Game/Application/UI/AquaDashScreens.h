@@ -46,6 +46,7 @@ namespace app
 		/**
 		 * インゲーム HUD (R-14)。右上=経過時間 / 左下=コイン枚数 / 右下=速度 / 左上=ミニマップを表示する。
 		 * コイン枚数の上にはコンボ中だけスコア倍率と残り時間ゲージを出す。
+		 * 画面中央やや上にはエアトリック中だけ回転数を出す。
 		 * 値の計算は InGameState 側が行い、本クラスは見た目の反映のみ担当する。
 		 */
 		class InGameScreen : public aq::ui::UIScreen
@@ -59,6 +60,9 @@ namespace app
 			/** コンボ表示 (倍率テキストと残り時間ゲージ) */
 			aq::ui::UIObject* comboText_  = nullptr;
 			aq::ui::UIObject* comboGauge_ = nullptr;
+
+			/** エアトリック表示 (滞空中の回転数テキスト) */
+			aq::ui::UIObject* trickText_ = nullptr;
 
 			/** ミニマップ (枠 / 俯瞰ベイク画像 / プレイヤーマーカー) */
 			aq::ui::UIObject* minimapFrame_  = nullptr;
@@ -76,9 +80,12 @@ namespace app
 			 * @param speedKmh        表示用に km/h 換算済みの速度
 			 * @param comboMultiplier 現在のスコア倍率 (1 = コンボ無し。このとき倍率表示は隠す)
 			 * @param comboRate       コンボ継続の残り時間の割合 (0-1)
+			 * @param trickCount      この滞空で完了した回転数
+			 * @param trickActive     滞空中にトリックが進行中か (false のときトリック表示は隠す)
 			 */
 			void SetHUD(const float timeSec, const uint32_t coinCount, const float speedKmh,
-			            const uint32_t comboMultiplier, const float comboRate);
+			            const uint32_t comboMultiplier, const float comboRate,
+			            const uint32_t trickCount, const bool trickActive);
 
 			/**
 			 * ミニマップに表示する俯瞰ベイク画像を差し替える。

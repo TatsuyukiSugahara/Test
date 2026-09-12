@@ -78,6 +78,15 @@ namespace app
 			static constexpr float BOOST_ARROW_LENGTH    = 1.8f;    // 矢印 1 個の長さ [m]
 			static constexpr float BOOST_ARROW_WIDTH_RATE = 0.72f;  // 矢印の幅 / パッド幅
 
+			// ジャンプ台 (P22)。ブーストパッドと同じ「平らな板 + 矢印」方式。楔形の台を置くと
+			// プレイヤーの height が路面相対で台を登らないため、メッシュを突き抜けてしまう。
+			// 矢印はブーストパッド (前向きの三角) と区別できるよう、上向きの台形にする。
+			static constexpr float RAMP_PAD_LENGTH        = 9.0f;    // 台の進行方向の長さ [m]
+			static constexpr int   RAMP_ARROW_COUNT       = 3;       // 1 台に描く矢印の数
+			static constexpr float RAMP_ARROW_LENGTH      = 1.8f;    // 矢印 1 個の長さ [m]
+			static constexpr float RAMP_ARROW_WIDTH_RATE  = 0.72f;   // 矢印の根元の幅 / 台の幅
+			static constexpr float RAMP_ARROW_TIP_RATE    = 0.30f;   // 矢印の先端の幅 / 根元の幅 (台形)
+
 			// コイン取得エフェクト (常駐エミッタを移動+Restart で使い回す)。
 			static const char* COLLECT_FX_PATH = "Assets/Particle/FX_Explosion.particle";
 
@@ -614,6 +623,109 @@ namespace app
 
 
 			/**
+			 * ジャンプ台の下地メッシュ (台ごとに 1 枚の帯)。形はブーストパッドと同じで、
+			 * 色だけ変えて区別する (色は CreateRoadMeshEntity の呼び出し側で与える)。
+			 * @param stageData   コーススプラインと ramps
+			 * @param outVertices 生成した頂点
+			 * @param outIndices  生成したインデックス
+			 */
+			void BuildRampPadPlateMesh(const stage::StageData& stageData,
+			                           std::vector<aq::graphics::VertexData>& outVertices,
+			                           std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+
+				const float total = stageData.spline.GetTotalLength();
+				if (total <= 0.0f) { return; }
+
+				const float lift = ROAD_THICKNESS * 0.5f + BOOST_PAD_LIFT - ROAD_SINK;
+
+				for (const auto& ramp : stageData.ramps)
+				{
+					const float start = ramp.distance - RAMP_PAD_LENGTH * 0.5f;
+					const float end   = ramp.distance + RAMP_PAD_LENGTH * 0.5f;
+					if (end <= 0.0f || start >= total) { continue; }
+
+					const float halfWidth = ramp.width * 0.5f;
+					const int   stepCount = static_cast<int>(RAMP_PAD_LENGTH / ROAD_SECTION_STEP) + 1;
+					const uint32_t base   = static_cast<uint32_t>(outVertices.size());
+
+					for (int k = 0; k <= stepCount; ++k)
+					{
+						const float d = start + (end - start) * static_cast<float>(k) / static_cast<float>(stepCount);
+						const auto  frame = stageData.spline.Evaluate(d);
+						const aq::math::Vector3 center = frame.position + frame.up * lift
+						                               + frame.right * ramp.lateral;
+						const float v = d / ROAD_UV_LENGTH;
+
+						PushRoadVertex(outVertices, center + frame.right * -halfWidth, frame.up, 0.0f, v);
+						PushRoadVertex(outVertices, center + frame.right *  halfWidth, frame.up, 1.0f, v);
+					}
+					for (int k = 0; k < stepCount; ++k)
+					{
+						const uint32_t q = base + static_cast<uint32_t>(k * 2);
+						EmitRoadQuad(outIndices, q + 0, q + 2, q + 3, q + 1);
+					}
+				}
+			}
+
+
+			/**
+			 * ジャンプ台の矢印メッシュ (上向きを表す台形を等間隔に並べる)。
+			 * ブーストパッドの矢印は「前を向いた三角形」なので、こちらは先端を細めた台形にして
+			 * 一瞬でも別物と分かるようにする。裏面も張るのはブーストパッドと同じ理由。
+			 * @param stageData   コーススプラインと ramps
+			 * @param outVertices 生成した頂点
+			 * @param outIndices  生成したインデックス
+			 */
+			void BuildRampPadArrowMesh(const stage::StageData& stageData,
+			                           std::vector<aq::graphics::VertexData>& outVertices,
+			                           std::vector<uint32_t>& outIndices)
+			{
+				outVertices.clear();
+				outIndices.clear();
+
+				const float total = stageData.spline.GetTotalLength();
+				if (total <= 0.0f) { return; }
+
+				const float lift  = ROAD_THICKNESS * 0.5f + BOOST_ARROW_LIFT - ROAD_SINK;
+				const float pitch = RAMP_PAD_LENGTH / static_cast<float>(RAMP_ARROW_COUNT);
+
+				for (const auto& ramp : stageData.ramps)
+				{
+					const float baseHalf = ramp.width * 0.5f * RAMP_ARROW_WIDTH_RATE;
+					const float tipHalf  = baseHalf * RAMP_ARROW_TIP_RATE;
+					const float start    = ramp.distance - RAMP_PAD_LENGTH * 0.5f;
+
+					for (int i = 0; i < RAMP_ARROW_COUNT; ++i)
+					{
+						const float rearD = start + pitch * static_cast<float>(i);
+						const float tipD  = rearD + RAMP_ARROW_LENGTH;
+						if (tipD <= 0.0f || rearD >= total) { continue; }
+
+						const auto rearFrame = stageData.spline.Evaluate(rearD);
+						const auto tipFrame  = stageData.spline.Evaluate(tipD);
+						const aq::math::Vector3 rearCenter = rearFrame.position + rearFrame.up * lift
+						                                   + rearFrame.right * ramp.lateral;
+						const aq::math::Vector3 tipCenter  = tipFrame.position + tipFrame.up * lift
+						                                   + tipFrame.right * ramp.lateral;
+
+						const uint32_t q = static_cast<uint32_t>(outVertices.size());
+						PushRoadVertex(outVertices, rearCenter + rearFrame.right * -baseHalf, rearFrame.up, 0.0f, 0.0f);
+						PushRoadVertex(outVertices, tipCenter  + tipFrame.right  * -tipHalf,  tipFrame.up,  0.0f, 1.0f);
+						PushRoadVertex(outVertices, tipCenter  + tipFrame.right  *  tipHalf,  tipFrame.up,  1.0f, 1.0f);
+						PushRoadVertex(outVertices, rearCenter + rearFrame.right *  baseHalf, rearFrame.up, 1.0f, 0.0f);
+
+						// 表 (手前左 → 奥左 → 奥右 → 手前右) + 巻き順を反転した裏。
+						EmitRoadQuad(outIndices, q + 0, q + 1, q + 2, q + 3);
+						EmitRoadQuad(outIndices, q + 0, q + 3, q + 2, q + 1);
+					}
+				}
+			}
+
+
+			/**
 			 * 手続き生成した路面メッシュを登録し、インスタンス点 1 個のエンティティとして置く。
 			 * 形状はワールド座標で焼き込んであるので、点は原点・無回転・等倍でよい。
 			 * メッシュ名が登録済みならそれが再利用される (RETRY やステージ再入場で作り直しにならない)。
@@ -1101,8 +1213,19 @@ namespace app
 					CreateRoadMeshEntity(flow, "BoostPadArrows", roadVertices, roadIndices,
 					                     aq::math::Vector4(0.70f, 1.00f, 1.00f, 1.0f));
 
-					aq::StartupMarkf("[load]   road ribbon %zu sections / %zu vertices / boost pads %zu",
-					                 sectionDistances.size(), ribbonVertexCount, stageData->boostPads.size());
+					// ジャンプ台 (P22)。ブーストパッドと区別できるようオレンジ系にする。
+					BuildRampPadPlateMesh(*stageData, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RampPads", roadVertices, roadIndices,
+					                     aq::math::Vector4(0.85f, 0.45f, 0.08f, 1.0f));
+
+					BuildRampPadArrowMesh(*stageData, roadVertices, roadIndices);
+					CreateRoadMeshEntity(flow, "RampPadArrows", roadVertices, roadIndices,
+					                     aq::math::Vector4(1.00f, 0.92f, 0.70f, 1.0f));
+
+					aq::StartupMarkf("[load]   road ribbon %zu sections / %zu vertices"
+					                 " / boost pads %zu / ramps %zu",
+					                 sectionDistances.size(), ribbonVertexCount,
+					                 stageData->boostPads.size(), stageData->ramps.size());
 				}
 				aq::StartupMark("[load]   road mesh done");
 
@@ -1354,6 +1477,11 @@ namespace app
 						// 跨ぎ判定が成立せず前半のパッドが全て無視される。
 						character->boostTimer       = 0.0f;
 						character->prevDistance     = character->distance;
+						// エアトリック (P22)。特に trickRoll を残すと機体が傾いたまま復帰する。
+						character->trickSpinTimer      = 0.0f;
+						character->trickPendingCount   = 0;
+						character->trickCompletedCount = 0;
+						character->trickRoll           = 0.0f;
 					}
 					if (auto* score = ctx.GetComponent<app::ecs::PlayerScoreComponent>(session->playerHandle)) {
 						score->coinCount  = 0;
@@ -1645,8 +1773,13 @@ namespace app
 				const float comboWindow = app::ecs::CoinSystem::GetComboWindowSec();
 				const float comboRate   = (score && comboWindow > 0.0f)
 				                        ? aq::math::Clamp01(score->comboTimer / comboWindow) : 0.0f;
+				// エアトリック (P22)。滞空中に回転しているか、回し終えて着地待ちの間だけ出す。
+				const bool trickActive = !character->grounded
+				                      && (character->trickSpinTimer > 0.0f
+				                          || character->trickCompletedCount > 0);
 				screen->SetHUD(elapsed_, score ? score->coinCount : 0, character->speed * 3.6f,
-				               comboMultiplier, comboRate);
+				               comboMultiplier, comboRate,
+				               character->trickCompletedCount, trickActive);
 
 				// 俯瞰カメラは 画面右=+X / 画面上=+Z。UI の v は下+なので Z を反転する。
 				if (playerTc && session->minimapHalfExtent > 1.0f) {

@@ -74,6 +74,20 @@
             }
         },
         {
+            "name": "TrickText",
+            "components": {
+                "transform": { "position": [0, -180, 0], "sizeDelta": [700, 90] },
+                "text": {
+                    "content": "",
+                    "textStylePath": "Assets/Styles/UI.textstyle.json",
+                    "fontSize": 56,
+                    "alignH": "Center",
+                    "alignV": "Middle",
+                    "color": [0.7, 1.0, 1.0, 1.0]
+                }
+            }
+        },
+        {
             "name": "SpeedText",
             "components": {
                 "transform": { "position": [600, 460, 0], "sizeDelta": [400, 90] },

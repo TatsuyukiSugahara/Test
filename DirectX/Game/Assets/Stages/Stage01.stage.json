@@ -1537,6 +1537,20 @@
    "width": 6.0
   }
  ],
+ "ramps": [
+  {
+   "distance": 3370.0,
+   "lateral": 0.0,
+   "width": 6.0,
+   "power": 26.0
+  },
+  {
+   "distance": 4550.0,
+   "lateral": 0.0,
+   "width": 6.0,
+   "power": 26.0
+  }
+ ],
  "rank": {
   "parTimeSec": 153.0,
   "thresholds": [

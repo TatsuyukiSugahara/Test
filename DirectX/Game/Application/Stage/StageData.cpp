@@ -249,6 +249,22 @@ namespace app
 					return lhs.distance < rhs.distance;
 				});
 
+			// ジャンプ台 (省略可。無ければジャンプ台の無いステージになる)
+			for (const auto& ramp : root["ramps"].GetArray()) {
+				RampPlacement placement;
+				placement.distance = ramp["distance"].AsFloat();
+				placement.lateral  = ramp["lateral"].AsFloat();
+				placement.width    = ramp["width"].AsFloat(6.0f);
+				placement.power    = ramp["power"].AsFloat(26.0f);
+				data->ramps.push_back(placement);
+			}
+			// ブーストパッドと同様、走行側が前方だけ見れば済むように distance 昇順へ整列しておく。
+			std::sort(data->ramps.begin(), data->ramps.end(),
+				[](const RampPlacement& lhs, const RampPlacement& rhs)
+				{
+					return lhs.distance < rhs.distance;
+				});
+
 			// ランク
 			data->parTimeSec = root["rank"]["parTimeSec"].AsFloat(180.0f);
 			for (const auto& threshold : root["rank"]["thresholds"].GetArray()) {

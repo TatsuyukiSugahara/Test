@@ -73,6 +73,16 @@ namespace app
 		};
 
 
+		/** ジャンプ台の配置 (スプライン座標) */
+		struct RampPlacement
+		{
+			float distance = 0.0f;
+			float lateral  = 0.0f;
+			float width    = 6.0f;
+			float power    = 26.0f;   // 打ち上げの初速 [m/s]
+		};
+
+
 		/** ランクしきい値 (スコア降順に判定) */
 		struct RankThreshold
 		{
@@ -106,6 +116,9 @@ namespace app
 
 			/** ブーストパッド (省略可。踏むと一定時間だけ最高速が上がる。distance 昇順) */
 			std::vector<BoostPadPlacement> boostPads;
+
+			/** ジャンプ台 (省略可。踏むと打ち上がりトリックの機会になる。distance 昇順) */
+			std::vector<RampPlacement> ramps;
 
 			/** 評価 */
 			std::vector<CoinPlacement> coins;

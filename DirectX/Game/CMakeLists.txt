@@ -82,6 +82,14 @@ if(MSVC)
 	target_link_options(Game PRIVATE /ignore:4099)
 endif()
 
+if(ANDROID)
+	# ANativeActivity_onCreate は native_app_glue(静的ライブラリ)の中にあり、
+	# アプリ側の誰も参照しないためリンカがそのアーカイブメンバを落としてしまう。
+	# 落ちると NativeActivity がエントリを見つけられず起動時に落ちるので、
+	# 未定義シンボルとして明示的に要求して取り込ませる。
+	target_link_options(Game PRIVATE "-u" "ANativeActivity_onCreate")
+endif()
+
 
 # ----------------------------------------------------------------------------
 #  デバッグ実行時の作業ディレクトリ

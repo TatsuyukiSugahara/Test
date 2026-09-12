@@ -100,7 +100,8 @@
         "AQ_GRAPHICS_API": "Vulkan",
         "CMAKE_TOOLCHAIN_FILE": "$env{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake",
         "ANDROID_PLATFORM": "android-33",
-        "ANDROID_STL": "c++_static"
+        "ANDROID_STL": "c++_static",
+        "ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES": "ON"
       }
     },
     {

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	AquaDash / Android マニフェスト
+
+	Gradle を使わず aapt2 で直接 APK を作るため、このファイル 1 枚だけで
+	パッケージ情報を完結させる(Tools/PackageApk/package_apk.ps1 が入力として使う)。
+	Debug / Release の差である android:debuggable はここには書かず、
+	Debug 構成では aapt2 link のオプション(debug-mode)で注入する。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+	package="com.aqengine.aquadash"
+	android:versionCode="1"
+	android:versionName="0.1.0">
+
+	<!-- Android 13(API 33)が Vulkan 1.3 の下限。ターゲットは android-34 -->
+	<uses-sdk
+		android:minSdkVersion="33"
+		android:targetSdkVersion="34" />
+
+	<!--
+		Vulkan 1.3 を要求する。
+		android:version は VK_MAKE_API_VERSION と同じ整数エンコードで、
+		(major << 22) | (minor << 12) | patch。
+		1.3.0 なら (1 << 22) | (3 << 12) = 4194304 + 12288 = 4206592 (0x00403000)。
+	-->
+	<uses-feature
+		android:name="android.hardware.vulkan.version"
+		android:version="4206592"
+		android:required="true" />
+
+	<application
+		android:label="AquaDash"
+		android:allowBackup="false"
+		android:hasCode="false"
+		android:extractNativeLibs="true">
+
+		<!--
+			Java/Kotlin のコードを一切持たないので、Activity はフレームワークの
+			NativeActivity をそのまま使う(android:hasCode="false" と対で必須)。
+			android.app.lib_name は System.loadLibrary に渡される名前で、
+			libGame.so の "Game" を指定する。
+			configChanges を並べているのは、回転やウィンドウサイズ変更で
+			Activity が作り直されると ANativeWindow ごと失われ、
+			サーフェス再生成の検証がライフサイクルの検証と混ざるため。
+			(向きの固定と合わせて、P1 では Activity を作り直させない)
+		-->
+		<activity
+			android:name="android.app.NativeActivity"
+			android:label="AquaDash"
+			android:exported="true"
+			android:launchMode="singleTask"
+			android:screenOrientation="landscape"
+			android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+			android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density|uiMode">
+
+			<meta-data
+				android:name="android.app.lib_name"
+				android:value="Game" />
+
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN" />
+				<category android:name="android.intent.category.LAUNCHER" />
+			</intent-filter>
+		</activity>
+	</application>
+</manifest>

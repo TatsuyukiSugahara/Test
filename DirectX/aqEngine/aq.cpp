@@ -1,4 +1,5 @@
 #include "aq.h"
+#include "Platform/Common/DebugOutput.h"
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -45,6 +46,11 @@ namespace aq
 		// (作れないまま黙って捨てられ、実機で何も分からなくなる)。書き込める
 		// LocalState へ回す。Xbox 実機はデバッガを繋げないのでこのログが頼りになる。
 		StartupLog(line);
+#elif defined(AQ_PLATFORM_ANDROID)
+		// Android はカレントディレクトリ("/")へ書けず、標準出力/標準エラーも既定では
+		// どこにも出ない。logcat が唯一の到達先なので DebugOutput へ流す
+		// (`adb logcat -s AquaDash` で見える)。
+		aq::debug::OutputString(line);
 #else
 		static FILE* fp = nullptr;
 		static bool  opened = false;

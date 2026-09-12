@@ -434,6 +434,33 @@ $bin = "$env:ANDROID_NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin"
 6 本になる。`libc++_shared.so` が出ないのは `ANDROID_STL=c++_static` で
 静的リンクしているため(同梱する `.so` を増やさないための選択)。
 
+`llvm-readelf -l` で LOAD セグメントのアライメントも見ておくとよい。**16KB(0x4000)で
+揃っている必要がある**(Android 15 以降の要求。4KB のままだと実機で互換性警告が出る)。
+プリセットの `ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON` がこれを担っているが、
+**リンカフラグはビルドツリーの初回 configure でキャッシュに焼かれる**ので、
+この設定を変えたときは `build/android-arm64` を作り直すこと。
+
+### 6.4 APK を作って実機で動かす
+
+APK 化(Gradle は使わない)と `adb` の手順は
+[Tools/PackageApk/README.md](../PackageApk/README.md) が正本。最短で言うと:
+
+```powershell
+# 1. ネイティブをビルド(§6.3)
+# 2. APK を作る(既定値はこの開発機向けに埋めてあるので引数なしで動く)
+powershell -ExecutionPolicy Bypass -File Tools\PackageApk\package_apk.ps1
+
+# 3. 入れて起動し、ログを見る
+$adb = "C:\Program Files (x86)\Android\android-sdk\platform-tools\adb.exe"
+& $adb install -r build\android-arm64\AquaDash-debug.apk
+& $adb shell am start -n com.aqengine.aquadash/android.app.NativeActivity
+& $adb logcat -s AquaDash
+```
+
+`adb logcat -s AquaDash` に `[startup]` の行が出る。Android は
+カレントディレクトリへ書けず標準出力もどこにも出ないため、`StartupMark` の出力先は
+logcat だけになっている(Win32 / Mac の `startup_timing.log` に相当)。
+
 ---
 
 ## 7. 既存 `DirectX.sln` との併存についての注意

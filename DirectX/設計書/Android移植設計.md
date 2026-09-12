@@ -4,19 +4,24 @@
 
 ## 現在の到達点
 
-**P0(ビルド基盤)完了。** NDK r27c で `libGame.so`(arm64-v8a)がエラー 0 でリンクまで通る。
-APK 化・実機起動は P1 以降。
+**P1(実機でクリア画面)完了。** Pixel 7a / Android 16 で APK が起動し、Vulkan のクリア色が
+全面に出て、終了までリークなしで通る。次は P2(アセットを APK へ入れて実シーン)。
 
 | | 状態 |
 |---|---|
 | Android ビルド | `cmake --preset android-arm64` → `--build --preset android-arm64-debug` が通る。エラー 0 / 警告 23 |
-| 成果物 | `build/android-arm64/lib/Debug/libGame.so`(ELF64 / AArch64 / DYN、Debug 87MB) |
-| 依存 `.so` | liblog / libandroid / libvulkan / libm / libdl / libc の 6 本。libc++ は静的リンク |
+| 成果物 | `build/android-arm64/lib/Debug/libGame.so`(ELF64 / AArch64 / DYN、Debug 84MB)。LOAD セグメントは 16KB(0x4000)境界 |
+| APK | `build/android-arm64/AquaDash-debug.apk`(21.7MB / v3 署名 / `native-code: arm64-v8a`) |
+| 実機 | **Google Pixel 7a(lynx)/ Android 16(API 36)/ arm64-v8a / Mali** で確認 |
+| 起動 | `android_main` 0.6ms → ウィンドウ 2282x1080 取得 27ms → Vulkan デバイス 69ms → フレーム提示。logcat タグ `AquaDash` |
+| 画面 | 全面 RGB(25,89,153) = 指定した clear color (0.10, 0.35, 0.60) と一致 |
+| 終了 | BACK キーで `TERM_WINDOW` → `DESTROY` → `MemoryTracker: No leaks detected` → `android_main exit`。クラッシュなし |
 | Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。起動〜終了コード 0 |
 | Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` の一本化が `PlatformMac.mm` に及ぶので次に Mac を触るとき要確認 |
-| 実機 | 未着手(P1) |
+| validation | **未確認**。検証レイヤの `.so` がどこにも無く同梱できない(§4.6) |
 
-導入手順とハマりどころは [Tools/SetupCMake/README.md](../Tools/SetupCMake/README.md) §6 が正本。
+導入手順とハマりどころは [Tools/SetupCMake/README.md](../Tools/SetupCMake/README.md) §6、
+APK 化と実機投入は [Tools/PackageApk/README.md](../Tools/PackageApk/README.md) が正本。
 
 対象: `aqEngine/` + `Game/`。既存の Vulkan バックエンドを Android(NDK)で動かし、実機で
 AquaDash が起動〜プレイできる状態までを設計する。
@@ -29,7 +34,7 @@ AquaDash が起動〜プレイできる状態までを設計する。
 - [Xbox移植設計.md](Xbox移植設計.md) — `IPlatform` 抽象の導入元。
 - [Sound設計.md](Sound設計.md) §8 — Oboe バックエンドの一次資料(本書では重複させない)。
 
-**本書のステータス: P0 完了。** §0.4 の判断は 2026-09-12 に確定した。次は P1。
+**本書のステータス: P1 完了。** §0.4 の判断は 2026-09-12 に確定した。次は P2。
 
 ---
 
@@ -149,27 +154,33 @@ Mac 固有 `#ifdef` はリポジトリ全体で **49 箇所**。抽象の穴は�
 - `WIN32` / `APPLE` はいずれも偽。`CMAKE_SYSTEM_NAME` は `Android`。
 - `CMAKE_MSVC_RUNTIME_LIBRARY` 等の MSVC 専用設定は `if(MSVC)` で既にガード済。
 
-### 2.3 ターゲット種別と Gradle
+### 2.3 ターゲット種別と APK 化 — Gradle は使わない(P1 で変更)
 
 Android アプリの実行主体は Java/Kotlin 側の Activity で、ネイティブは `.so` として読み込まれる。
+ターゲット種別は Android のみ共有ライブラリ(`libGame.so`)。ここは当初設計どおり。
+
+**APK 化は Gradle ではなく Android SDK の build-tools を直接叩く**方式に変えた。理由:
+
+- この開発機に **Gradle が入っていない**。Gradle 本体と Android Gradle Plugin・その依存を
+  Maven から取得する必要があり、ネットワークに依存したビルドになる。
+- アプリは **Java コードを 1 行も持たない**(`NativeActivity` は framework のクラス)。
+  マニフェストに `android:hasCode="false"` を付ければ `classes.dex` すら要らないので、
+  Gradle が担う仕事は「aapt2 + zipalign + apksigner を順に呼ぶ」だけになる。
+  そのために Gradle を導入するのは釣り合わない。
+- CMake ビルドは Gradle からも `externalNativeBuild` でそのまま呼べる形のままなので、
+  **後から Gradle を足すのは加算的**(Android Studio でネイティブデバッグしたくなった
+  時点で導入すればよい)。
 
 ```
-DirectX/Android/                 (新設)
-├─ settings.gradle
-├─ build.gradle
-├─ gradle.properties
-└─ app/
-   ├─ build.gradle              externalNativeBuild { cmake { path ../../CMakeLists.txt } }
-   └─ src/main/
-      ├─ AndroidManifest.xml    android.app.NativeActivity or GameActivity
-      └─ assets/ (or jniLibs/)  §7 参照
+DirectX/Android/
+└─ AndroidManifest.xml           NativeActivity / android.app.lib_name = Game
+
+DirectX/Tools/PackageApk/
+├─ package_apk.ps1               aapt2 link → lib/<abi>/*.so 追加 → zipalign → apksigner
+└─ README.md
 ```
 
-- `externalNativeBuild` から**既存の `DirectX/CMakeLists.txt` をそのまま呼ぶ**。CMake の定義を
-  Gradle 側へ二重化しない。
-- 出力は `libGame.so`。Manifest の `android.app.lib_name` にライブラリ名を指定する。
-- 置き場所を `DirectX/Android/` にするのは、`DirectX/` 配下で完結させ既存の `.sln` / vcxproj と
-  干渉させないため。
+置き場所を `DirectX/` 配下にするのは、既存の `.sln` / vcxproj と干渉させないため。
 
 ### 2.4 ツールチェーン / ABI / API レベル
 
@@ -208,12 +219,23 @@ DirectX/Android/                 (新設)
 
 ### 3.1 責務表
 
-| ファイル(新設) | 責務 |
-|---|---|
-| `aqEngine/Platform/Android/PlatformAndroid.h/.cpp` | `IPlatform` 実装。`ANativeWindow*` の保持、`ALooper` によるイベントポンプ、`GetContentRoot`、ライフサイクル状態の保持 |
-| `aqEngine/Platform/Android/AndroidApp.h/.cpp` | `android_app`(native_app_glue / GameActivity)のコールバックを受け、`PlatformAndroid` へ橋渡しする層。Android の型を `PlatformAndroid` の外へ漏らさない |
-| `aqEngine/Platform/Common/DebugOutputAndroid.cpp` | `__android_log_print` による `DebugOutput` 実装 |
-| `Game/Application/AndroidMain.cpp` | `android_main`。`Main.cpp` / `MacMain.mm` と同型のブートストラップ |
+| ファイル | 責務 | 状態 |
+|---|---|---|
+| `aqEngine/Platform/Android/PlatformAndroid.h/.cpp` | `IPlatform` 実装。`ANativeWindow*` の保持、`ALooper` によるイベントポンプ、`APP_CMD_*` の受け取り、`GetContentRoot` / `GetUserDataDirectory` | P1 で実装 |
+| `aqEngine/Platform/Common/DebugOutputAndroid.cpp` | `__android_log_write` による `DebugOutput` 実装(タグ `AquaDash`) | P0 で実装 |
+| `Game/Application/AndroidMain.cpp` | `android_main`。`Main.cpp` / `MacMain.mm` と同型のブートストラップ | P1 で実装 |
+| native_app_glue(NDK 同梱ソース) | `ANativeActivity_onCreate` の提供と `android_main` の呼び出し。CMake で独立した静的ライブラリにする | P1 で配線 |
+
+**`AndroidApp` 層は作らなかった。** 当初は「glue のコールバックを受けて `PlatformAndroid` へ
+橋渡しする層」を分ける設計だったが、実際に必要だったのは
+`app->userData` に `this` を積んで C 関数から転送するサンク 1 つだけで、
+層を増やすほどの中身が無かった。Android の型は `PlatformAndroid.cpp` に閉じており、
+ヘッダには `struct android_app;` / `struct ANativeWindow;` の前方宣言しか出していない。
+
+**`ANativeActivity_onCreate` のリンク落ちに注意。** native_app_glue は静的ライブラリで、
+この関数をアプリ側の誰も参照しないためリンカがアーカイブメンバごと捨ててしまう。
+捨てられると NativeActivity がエントリを見つけられず起動時に落ちる。
+`Game` のリンクオプションに `-u ANativeActivity_onCreate` を入れて取り込ませている。
 
 改修対象:
 
@@ -238,9 +260,16 @@ DirectX/Android/                 (新設)
 4. `Engine::Create` → `CreateApplication<app::Application>` → `Initialize`(`platform` を注入)→ `RunGame`
 5. `Finalize`
 
-**`NativeActivity` か `GameActivity` か**は §0.4-3(タッチ方針)と併せて決める。
-`GameActivity` はタッチ/キー/ゲームパッド(Paddleboat)/テキスト入力が統合されており、
-入力実装が薄くなる代わりに Gradle 依存(`androidx.games:games-activity`)が増える。**推奨は GameActivity。**
+**`NativeActivity` を採る(P1 で決定)。** 当初は `GameActivity` を推していたが、
+`GameActivity` は `androidx.games:games-activity` という **Maven 依存 = Gradle 必須**で、
+この開発機には Gradle が入っておらずネットワーク取得にも依存したくない(§2.3)。
+`NativeActivity` + native_app_glue は **NDK に同梱のソースだけで完結**する。
+
+タッチ・ゲームパッドは `AInputEvent` から自前で取れるため、§5.2 の仮想パッド設計
+(`ITouchBackend` → `VirtualPadBackend` → `CompositePadBackend`)には `GameActivity` は要らない。
+`GameActivity` の利点が残るのはテキスト入力と機種差の正規化(Paddleboat)で、
+P4 でそこが痛くなったら移行を検討する(エントリは `android_main` のままなので、
+移行時の差分は glue の差し替えに収まる)。
 
 ### 3.3 ライフサイクル ★本移植で最大の新規設計
 
@@ -305,16 +334,19 @@ Vulkan バックエンドが Win32 分岐へ落ちてコンパイルできない
 → **§0.4-2 の判断待ち。推奨は Android 13+ / Vulkan 1.3 に割り切る**(改修が最小で、
 性能検証にも新しめの端末を使うことになるため)。
 
-P1 で実機の対応状況を確認する項目:
+P1 の実機確認結果(Pixel 7a / Android 16 / Mali。`adb shell cmd gpu vkjson` と実起動):
 
-- [ ] `VkPhysicalDeviceProperties::apiVersion`
-- [ ] `dynamicRendering` / `synchronization2` / `scalarBlockLayout`
-- [ ] `samplerAnisotropy`
-- [ ] 負のビューポート高さ(`maintenance1` = 1.1 core なので可のはず)
-- [ ] `R16G16B16A16_SFLOAT` の `COLOR_ATTACHMENT` + `STORAGE`(HDR メイン RT と Bloom compute が要求)
-- [ ] `D32_SFLOAT` の depth attachment + サンプル
-- [ ] `vkCmdBlitImage2`(`VK_KHR_copy_commands2` / 1.3 core。`CopyToBackBuffer` が使用)
-- [ ] スワップチェーンのサーフェスフォーマット(BGRA 前提だと通らない端末がある。選択ロジックの確認)
+- [x] `apiVersion` = **4210688 (0x00404000) = Vulkan 1.4**。要求している 1.3 に余裕で足りる
+- [x] `dynamicRendering` = 1 / `synchronization2` = 1 / `scalarBlockLayout` = 1(いずれも vkjson で確認)
+- [x] `samplerAnisotropy` — デバイス生成時に有効化しており、生成が成功しているので対応
+- [x] `R16G16B16A16_SFLOAT` の `COLOR_ATTACHMENT` + `STORAGE` — HDR メイン RT の生成が成功
+- [x] `vkCmdBlitImage2` — `CopyToBackBuffer` が実際に走ってフレームが提示されている
+- [x] スワップチェーンのサーフェスフォーマット — 選択が通り提示成功
+- [ ] 負のビューポート高さ(Y-flip)— クリアのみの経路では踏まない。P2 で実シーンを描いて確認
+- [ ] `D32_SFLOAT` の depth attachment + サンプル — 同上(P2)
+
+**副産物**: `dynamicRenderingLocalRead` = 1 も報告された。タイラー GPU で
+サブパス相当のオンチップ読み出しができるため、P6 の帯域対策の候補になる。
 
 ### 4.3 スワップチェーン再生成と画面回転 ★既存実装の欠落
 
@@ -354,8 +386,15 @@ Bloom/トーンマップ compute → blit** で、モバイル GPU にはメモ�
 
 ### 4.6 検証レイヤ / imgui
 
-- 検証レイヤは NDK 同梱の `libVkLayer_khronos_validation.so` を `jniLibs` へ入れると有効化できる。
-  Debug 構成のみ同梱。出力は logcat。
+- **検証レイヤは NDK に同梱されていない**(P1 の実測)。NDK r27c / r23c・Android SDK・
+  Windows 版 Vulkan SDK を全て再帰検索しても `libVkLayer_khronos_validation.so` は 1 つも無い
+  (新しい NDK は同梱をやめており、Windows 版 Vulkan SDK には `.dll` しか入っていない)。
+  入手は Vulkan-ValidationLayers の android-binaries リリースからになる(ネットワーク取得)。
+  **そのため P1 の「validation エラー 0」は未確認のまま。**
+- 置き場所は分かっている。実機の logcat に
+  `vulkan: searching for layers in '<apk>!/lib/arm64-v8a'` が出ており、
+  **APK の `lib/<abi>/` に置けばローダが拾う**。`package_apk.ps1` に
+  `-ValidationLayerPath` を渡せば同梱できるので、`.so` を用意すれば有効化できる。
 - imgui は **描画は既存の自前 [VulkanImGui](../aqEngine/Graphics/Vulkan/VulkanImGui.h) をそのまま使える**。
   入力側に `imgui_impl_android` を追加する(Mac の P4b と同じ構図)。
   [Core/Application.cpp](../aqEngine/Core/Application.cpp) の init / NewFrame / Shutdown に分岐を足す。
@@ -442,7 +481,12 @@ Bloom/トーンマップ compute → blit** で、モバイル GPU にはメモ�
 
 その他:
 
-- セーブデータ・ログの書き込み先は `internalDataPath`。カレントディレクトリ前提の箇所を洗う。
+- セーブデータ・ログの書き込み先は `internalDataPath`。`PlatformAndroid::GetUserDataDirectory`
+  が末尾セパレータ付きで返す(P1 で実装済み)。カレントディレクトリ前提の箇所を洗う。
+- **Windows の `aapt2 -A` はサブディレクトリの区切りを `\` のまま zip エントリ名にする**
+  (`assets/spv\Foo.spv` のようになる)。`AAssetManager` は `/` 区切りで引くため、
+  `Assets/` をサブフォルダ込みで入れる P2 では **aapt2 の `-A` に頼らず自前で zip へ
+  追加する**か、フラットに並べる必要がある(P1 のパッケージング実装で判明)。
 - APK サイズが上限に触れるようなら Play Asset Delivery。当面は非対象。
 - `ImageLoader` の `wchar_t` パス経路(`ToWidePath`)が Android clang で通るか P0 で確認する
   (Mac で通っているので流用できる見込み)。
@@ -512,20 +556,50 @@ Null(何もしない `IPlatform`)で構わない。
 
 ### P1: 実機でクリア画面
 
-Gradle プロジェクト + `PlatformAndroid` + Android サーフェス。
-
-- `DirectX/Android/` の Gradle 一式、`AndroidManifest.xml`
-- `Platform/Android/`(`PlatformAndroid` / `AndroidApp`)
+- `DirectX/Android/AndroidManifest.xml`(NativeActivity / Vulkan 1.3 要求 / 横向き固定)
+- `Tools/PackageApk/`(aapt2 → zipalign → apksigner の APK 化。Gradle は使わない)
+- `Platform/Android/PlatformAndroid`(ウィンドウ待ち・イベントポンプ・ユーザーデータ基点)
 - `Game/Application/AndroidMain.cpp`(`android_main`)
+- native_app_glue の CMake 配線と `-u ANativeActivity_onCreate`
 - 検証レイヤの同梱(Debug)
 - (`DebugOutputAndroid.cpp` と Vulkan サーフェス分岐は P0 で済み)
 
+**`AndroidMain.cpp` は P1 では Engine を起動しない。** `Engine::Initialize` はシェーダと
+テクスチャの読み込みを伴い、APK 内の assets は通常のファイルパスでは開けないため、
+アセット経路が入る P2 までゲーム本体は動かせない。P1 はグラフィクスデバイスだけを立てて
+クリア色を提示し、**プラットフォーム層 → ANativeWindow → Vulkan サーフェス/スワップチェーン/提示**
+が実機で通ることに検証対象を絞る。この足場は P2 で Engine ブートに置き換える
+(`Main.cpp` / `MacMain.mm` と同型になる)。
+
+**バックグラウンド復帰は P1 では未対応。** ウィンドウを失ったら描画を止めるだけで、
+サーフェスの作り直しはしていない(P3)。ホームに戻す操作は P3 まで想定外。
+
 **評価チェックリスト**
-- [ ] APK が実機にインストールでき、起動する
-- [ ] logcat に起動マークが出る
-- [ ] Vulkan のクリア色が画面に出る
-- [ ] validation エラー 0
-- [ ] §4.2 のフィーチャ確認結果を本書へ追記した
+- [x] `libGame.so` に `ANativeActivity_onCreate` と `android_main` が GLOBAL で公開されている
+- [x] APK が実機にインストールでき、起動する(Pixel 7a / Android 16。`adb install -r` → Success)
+- [x] logcat に起動マークが出る(`adb logcat -s AquaDash`)
+- [x] Vulkan のクリア色が画面に出る(`screencap` を 25 点サンプルして全面 RGB(25,89,153)。指定値と一致)
+- [ ] validation エラー 0 ← **検証レイヤの `.so` が入手できず未確認**(§4.6)
+- [x] §4.2 のフィーチャ確認結果を本書へ追記した
+- [x] 終了処理がクリーン(`MemoryTracker: No leaks detected` / クラッシュなし)
+
+**P1 で分かったこと / 設計からの差分**
+
+1. **16KB ページ境界が必須**。Android 15 以降は `.so` の LOAD セグメントが 16KB 境界に
+   揃っていないと互換性警告が出る(Android 16 実機で「ELF のアライメント チェックに失敗」
+   ダイアログが表示された。動作自体はする)。NDK r27c は既定で 4KB(0x1000)なので、
+   プリセットに `ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON` を追加して
+   `-Wl,-z,max-page-size=16384` を付け、0x4000 に揃えた。
+   **リンカフラグはビルドツリー初回 configure でキャッシュに焼かれる**ため、
+   この変更を入れたときは `build/android-arm64` を作り直す必要がある。
+2. **`StartupMark` が Android では何も出していなかった**。出力先がカレントディレクトリの
+   ファイルと `OutputDebugStringA` だけで、Android は CWD が `/` で書けず標準出力も
+   どこにも出ない。`aq::debug::OutputString`(= logcat)へ流すよう `aq.cpp` を直した。
+   これが無いと起動の到達点が一切見えない。
+3. **Gradle を使わない**(§2.3)。**`NativeActivity` を採用**(§3.2)。**`AndroidApp` 層は作らなかった**(§3.1)。
+4. `uses-feature android.hardware.vulkan.version required="true"` を入れてあるので、
+   Vulkan 1.3 非対応端末ではインストール段階で弾かれる。動かない報告が来たら最初にここを疑う。
+5. APK にアイコンとリソースが無いため、ランチャーには既定アイコンで並ぶ(起動には影響しない)。
 
 ### P2: 実機で実シーン
 

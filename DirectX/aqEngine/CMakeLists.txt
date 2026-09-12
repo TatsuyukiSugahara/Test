@@ -188,10 +188,37 @@ target_link_libraries(aqEngine PUBLIC
 #  Game へも伝播させる必要があるので PUBLIC。
 # ----------------------------------------------------------------------------
 if(ANDROID)
+	# ----------------------------------------------------------------------
+	#  native_app_glue
+	#
+	#  NDK はこれをプリビルドではなくソースで配っているので、ここでビルドする。
+	#  役割は 2 つ:
+	#   - NativeActivity が探す ANativeActivity_onCreate を提供する
+	#   - 専用スレッドでアプリの android_main を呼び、Activity のライフサイクルと
+	#     入力を ALooper 経由のキューに変換する(PlatformAndroid が読む側)
+	#
+	#  C のソースなので aqEngine(PCH = aq.h)には混ぜず、独立ターゲットにする。
+	# ----------------------------------------------------------------------
+	if(DEFINED ANDROID_NDK)
+		set(AQ_ANDROID_NDK_ROOT "${ANDROID_NDK}")
+	else()
+		set(AQ_ANDROID_NDK_ROOT "${CMAKE_ANDROID_NDK}")
+	endif()
+	set(AQ_NATIVE_APP_GLUE_DIR "${AQ_ANDROID_NDK_ROOT}/sources/android/native_app_glue")
+
+	if(NOT EXISTS "${AQ_NATIVE_APP_GLUE_DIR}/android_native_app_glue.c")
+		message(FATAL_ERROR "native_app_glue が見つかりません: ${AQ_NATIVE_APP_GLUE_DIR}")
+	endif()
+
+	add_library(native_app_glue STATIC "${AQ_NATIVE_APP_GLUE_DIR}/android_native_app_glue.c")
+	target_include_directories(native_app_glue PUBLIC "${AQ_NATIVE_APP_GLUE_DIR}")
+	target_link_libraries(native_app_glue PUBLIC log android)
+
 	# NDK の sysroot が持つ共有ライブラリ。
 	#   log     : __android_log_write(DebugOutputAndroid.cpp)
-	#   android : ANativeWindow / AAssetManager / ALooper(P1 以降で使う)
+	#   android : ANativeWindow / AAssetManager / ALooper
 	target_link_libraries(aqEngine PUBLIC
+		native_app_glue
 		log
 		android
 	)

@@ -1,4 +1,5 @@
-// 草の房 (MeshPrimitives::BuildGrassTuftMesh) 用のインスタンシングシェーダ。
+// 草の房 (MeshPrimitives::BuildGrassTuftMesh) と花 (同 BuildFlowerMesh) 用のインスタンシングシェーダ。
+// 花は茎を持たない花冠だけのメッシュにしてあるので、per-instance 色 1 色のこのシェーダで塗れる。
 // 入力レイアウトは InstancedSimple.fx と同じ (slot0 = 位置/法線/UV、slot1 = I_WORLD0..3 + I_COLOR)。
 // 違いは VS の風変位と PS の縦グラデーションの 2 点だけ。
 // uv.y は「根元 0 / 先端 1」の葉の高さで、風の振幅と色グラデーションの両方がこれを使う。
@@ -55,7 +56,10 @@ PSInput VSMain(VSInput input)
     // 株ごとの揺れをずらす。重みは uv.y の2乗なので根元(uv.y=0)は動かず、先端ほど大きく揺れる。
     float phase = windParams.x * windParams.z + worldPos.x * 0.15f + worldPos.z * 0.13f;
     float sway  = sin(phase) * windParams.y * input.tex.y * input.tex.y;
-    worldPos.xyz += windDirection.xyz * sway;
+    // 低周波の突風で振幅を 0.55〜1.0 倍する。位相は時間 0.23rad/s + 波長 800m 前後のワールド位置なので、
+    // 揺れ本体よりずっとゆっくり広く動き、野原を波が渡って見える。
+    float gust = 0.55f + 0.45f * sin(windParams.x * 0.23f + worldPos.x * 0.008f + worldPos.z * 0.006f);
+    worldPos.xyz += windDirection.xyz * (sway * gust);
 
     float4 position = mul(view, worldPos);
     position = mul(project, position);
@@ -75,7 +79,7 @@ float4 PSMain(PSInput input) : SV_Target0
     float3 n = normalize(input.normal);
     float3 lightDir = normalize(float3(0.3f, 1.0f, 0.4f));
     float shade = 0.6f + 0.4f * saturate(dot(n, lightDir));
-    // 縦グラデーション。根元を暗くして地面との接地感を出す。
-    float gradient = lerp(0.45f, 1.0f, input.uv.y);
+    // 縦グラデーション。根元を暗くして地面との接地感を出す (根元を 0.32 まで落として影を強めている)。
+    float gradient = lerp(0.32f, 1.0f, input.uv.y);
     return float4(input.color.rgb * shade * gradient, input.color.a);
 }

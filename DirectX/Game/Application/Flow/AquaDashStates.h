@@ -37,6 +37,7 @@ namespace app
 				std::shared_ptr<stage::StageData>     stage;
 				aq::terrain::HeightmapChunk::CpuData  terrainCpu;
 				aq::ecs::BakedData                    grassBaked;
+				aq::ecs::BakedData                    flowerBaked;
 			};
 
 			/** 進行状態 */

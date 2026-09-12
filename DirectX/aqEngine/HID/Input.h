@@ -7,6 +7,7 @@
 #include "HID/IKeyboardBackend.h"      // KeyBoardType / KeyboardState / IKeyboardBackend
 #include "HID/IMouseBackend.h"         // MouseState / IMouseBackend
 #include "HID/IPadBackend.h"           // PadButton / PadAxis / PadState / IPadBackend
+#include "HID/ITouchBackend.h"         // TouchPoint / TouchState / ITouchBackend
 
 namespace aq
 {
@@ -177,6 +178,13 @@ namespace aq
 			void      Vibrate      (uint32_t padIndex, float left, float right);
 			void      StopVibration(uint32_t padIndex);
 
+			/**
+			 * 現在触れているタッチ点。タッチを持たない環境では常に count = 0。
+			 * 仮想パッドの判定は VirtualPadBackend が内部で行うので、ここを読むのは
+			 * UI のタップ判定や、仮想パッドの描画のように生の座標が要る側。
+			 */
+			const TouchState& GetTouchState() const { return touch_; }
+
 			/** ImGui がキーボード入力を使用中は true に設定する。wrapper 関数が false/0 を返す。 */
 			void SuppressKeyboard(bool suppress) { suppressKeyboard_ = suppress; }
 			/** ImGui がマウス入力を使用中は true に設定する。wrapper 関数が false/0 を返す。 */
@@ -193,11 +201,19 @@ namespace aq
 			// これらが生ポインタで参照するため、破棄はバックエンドが後になる必要がある。
 			std::unique_ptr<IKeyboardBackend> keyboardBackend_;
 			std::unique_ptr<IMouseBackend>    mouseBackend_;
+
+			// タッチはパッドより先に宣言する。仮想パッド(VirtualPadBackend)が
+			// ITouchBackend を生ポインタで参照するため、破棄はタッチが後になる必要がある
+			// (メンバは宣言の逆順に壊れる)。
+			std::unique_ptr<ITouchBackend>    touchBackend_;
 			std::unique_ptr<IPadBackend>      padBackend_;
 
 			std::unique_ptr<KeyBoard>         keyBoard_;
 			std::unique_ptr<Mouse>            mouse_;
 			Pad                               pads_[MAX_PAD_COUNT];
+
+			/** 毎フレーム touchBackend_ から取り込んだタッチ点 */
+			TouchState                        touch_{};
 
 			using Clock = std::chrono::high_resolution_clock;
 			Clock::time_point lastTime_;

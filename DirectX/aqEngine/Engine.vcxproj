@@ -257,6 +257,8 @@
     <ClCompile Include="HID\Win32\DirectInputKeyboardBackend.cpp" />
     <ClCompile Include="HID\Win32\DirectInputMouseBackend.cpp" />
     <ClCompile Include="HID\WinRTGamepadBackend.cpp" />
+    <ClCompile Include="HID\VirtualPadBackend.cpp" />
+    <ClCompile Include="HID\CompositePadBackend.cpp" />
     <ClCompile Include="Util\GameTimer.cpp" />
     <ClCompile Include="Util\Profiler.cpp" />
     <ClCompile Include="Util\Debug\ProfilerDebugPanel.cpp" />
@@ -537,6 +539,11 @@
     <ClInclude Include="HID\NullKeyboardBackend.h" />
     <ClInclude Include="HID\NullMouseBackend.h" />
     <ClInclude Include="HID\NullPadBackend.h" />
+    <ClInclude Include="HID\ITouchBackend.h" />
+    <ClInclude Include="HID\NullTouchBackend.h" />
+    <ClInclude Include="HID\TouchBackend.h" />
+    <ClInclude Include="HID\VirtualPadBackend.h" />
+    <ClInclude Include="HID\CompositePadBackend.h" />
     <ClInclude Include="HID\Win32\DirectInputKeyboardBackend.h" />
     <ClInclude Include="HID\Win32\DirectInputMouseBackend.h" />
     <ClInclude Include="HID\XInputPadBackend.h" />

@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "Input.h"
 #include "HID/KeyboardMouseBackend.h"
+#include "HID/TouchBackend.h"
 #include "HID/PadBackend.h"
 
 
@@ -293,13 +294,26 @@ namespace aq
 		InputManager::InputManager()
 			: lastTime_(Clock::now())
 		{
-			// パッドバックエンドはプラットフォームで選択(Win32=XInput / UWP=Windows.Gaming.Input)。
+			// パッドバックエンドはプラットフォームで選択(Win32=XInput / UWP=Windows.Gaming.Input /
+			// Android=物理コントローラ + 仮想パッドの合成)。
 			// キーボード / マウスの Setup 成否に依らず動くよう、ここで生成しておく。
 			for (uint32_t i = 0; i < MAX_PAD_COUNT; ++i)
 			{
 				pads_[i].SetIndex(i);
 			}
-			padBackend_ = std::make_unique<DefaultPadBackend>();
+
+			// タッチはパッドより先に作る。Android の仮想パッドがこれを参照するため。
+			// タッチを持たない環境では Null が入り、上位は分岐せずに済む。
+			touchBackend_ = std::make_unique<DefaultTouchBackend>();
+
+			// 生成のしかたがプラットフォームで違う(仮想パッドはタッチを要求する)ので、
+			// 組み立ては PadBackend.h のファクトリへ寄せてここには #if を持ち込まない。
+			//
+			// 仮想パッドへ渡すのは ITouchBackend ではなく **取り込み済みの TouchState**。
+			// タッチの取得は「取得までに一度でも押されたら押下として返す」ラッチを持ち、
+			// 取得で消費されるため、同一フレームに 2 回取ると 2 回目が空になる。
+			// Update で 1 回だけ取り込み、UI と仮想パッドが同じ値を読む形にしている。
+			padBackend_ = CreateDefaultPadBackend(&touch_);
 			for (uint32_t i = 0; i < MAX_PAD_COUNT; ++i)
 			{
 				pads_[i].SetBackend(padBackend_.get());
@@ -314,6 +328,9 @@ namespace aq
 			mouse_.reset();
 			keyboardBackend_.reset();
 			mouseBackend_.reset();
+			// 仮想パッドが ITouchBackend を参照しているので、パッドを先に壊す
+			padBackend_.reset();
+			touchBackend_.reset();
 		}
 
 
@@ -343,6 +360,10 @@ namespace aq
 			const auto  now = Clock::now();
 			const float dt  = std::chrono::duration<float>(now - lastTime_).count();
 			lastTime_ = now;
+
+			// タッチはパッドより先に取り込む。仮想パッドが Pad::Update の中で
+			// ITouchBackend を読むため、同じフレームの値が見えている必要がある。
+			if (touchBackend_) touchBackend_->Poll(touch_);
 
 			if (keyBoard_) keyBoard_->Update(dt);
 			if (mouse_)    mouse_->Update(dt);

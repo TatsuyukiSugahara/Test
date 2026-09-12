@@ -2,6 +2,9 @@
 #include "Application.h"
 #include "ECS/EntityContext.h"
 #include "HID/Input.h"
+#if defined(AQ_PLATFORM_ANDROID)
+#include "HID/VirtualPadBackend.h"   // 仮想パッドの当たり判定レイアウト(暫定の可視化用)
+#endif
 #include "UI/Input/UIInputSystem.h"
 #include "UI/Rendering/UIBatchRenderer.h"
 #include "Component/AnimationComponentSystem.h"
@@ -526,6 +529,54 @@ namespace aq
 			aq::graphics::MetalImGui::NewFrame();
 #endif
 			ImGui::NewFrame();
+
+#if defined(AQ_PLATFORM_ANDROID)
+			// 仮想パッドの位置を画面に出す。
+			// **暫定の可視化**で、当たり判定と同じレイアウト値を円で描くだけ。
+			// これが無いと指をどこへ置けばよいか分からず操作できない。
+			// TODO: 実機で操作感を詰めたら、デバッグ描画ではなく UI 層(UIObject)の
+			//       正式な見た目へ置き換える。触っている点の表示も、そのとき外す。
+			{
+				const float screenW = static_cast<float>(Engine::Get().GetScreenWidth());
+				const float screenH = static_cast<float>(Engine::Get().GetScreenHeight());
+
+				// 判定側が SetLayout を使っていないので既定値で一致する。
+				// レイアウトを動かせるようにしたら、実体から読むよう直すこと。
+				const aq::hid::VirtualPadBackend::Layout layout;
+				ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+
+				const auto drawPadCircle =
+					[&](const aq::hid::VirtualPadBackend::Circle& circle, ImU32 fill, const char* label)
+				{
+					const ImVec2 center(circle.centerX * screenW, circle.centerY * screenH);
+					const float  radius = circle.radius * screenH;
+					drawList->AddCircleFilled(center, radius, fill, 32);
+					drawList->AddCircle(center, radius, IM_COL32(255, 255, 255, 140), 32, 2.0f);
+					if (label)
+					{
+						const ImVec2 size = ImGui::CalcTextSize(label);
+						drawList->AddText(ImVec2(center.x - size.x * 0.5f, center.y - size.y * 0.5f),
+						                  IM_COL32(255, 255, 255, 200), label);
+					}
+				};
+
+				drawPadCircle(layout.leftStick,   IM_COL32(255, 255, 255,  28), nullptr);
+				drawPadCircle(layout.buttonA,     IM_COL32(120, 220, 255,  56), "A");
+				drawPadCircle(layout.buttonB,     IM_COL32(255, 200, 120,  56), "B");
+				drawPadCircle(layout.buttonStart, IM_COL32(200, 200, 200,  40), "START");
+
+				// 触れている点。押しているのに反応しないときの切り分けに使う。
+				const aq::hid::TouchState& touch = aq::hid::InputManager::Get().GetTouchState();
+				const uint32_t touchCount = (touch.count < aq::hid::TouchState::MAX_POINT_COUNT)
+				                          ? touch.count : aq::hid::TouchState::MAX_POINT_COUNT;
+				for (uint32_t i = 0; i < touchCount; ++i)
+				{
+					if (!touch.points[i].pressed) { continue; }
+					drawList->AddCircleFilled(ImVec2(touch.points[i].x, touch.points[i].y),
+					                          24.0f, IM_COL32(255, 80, 80, 150), 24);
+				}
+			}
+#endif // AQ_PLATFORM_ANDROID
 
 			// FPS オーバーレイ (常時表示・左上)
 			{

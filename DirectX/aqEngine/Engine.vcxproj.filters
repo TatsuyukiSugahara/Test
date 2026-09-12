@@ -380,6 +380,12 @@
     <ClCompile Include="HID\WinRTGamepadBackend.cpp">
       <Filter>HID</Filter>
     </ClCompile>
+    <ClCompile Include="HID\VirtualPadBackend.cpp">
+      <Filter>HID</Filter>
+    </ClCompile>
+    <ClCompile Include="HID\CompositePadBackend.cpp">
+      <Filter>HID</Filter>
+    </ClCompile>
     <ClCompile Include="Util\GameTimer.cpp">
       <Filter>Util</Filter>
     </ClCompile>
@@ -1079,6 +1085,21 @@
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\PadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\ITouchBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\NullTouchBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\TouchBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\VirtualPadBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\CompositePadBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\Win32\DirectInputMouseBackend.h">

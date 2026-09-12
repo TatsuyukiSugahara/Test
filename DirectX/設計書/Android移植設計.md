@@ -20,7 +20,8 @@ Pixel 7a / Android 16 で **AquaDash のタイトル画面がフル表示**さ�
 | 画面 | タイトル画面が正しく描画(ロゴ / TitleBG.png / Stage01_thumb.png / フォントアトラス / ImGui) |
 | 性能 | **60.1 FPS(16.64 ms)** — VSync 上限に張り付き |
 | 終了 | BACK キーで `TERM_WINDOW` → `DESTROY` → `MemoryTracker: No leaks detected`。クラッシュなし |
-| Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。実行もタイトル表示〜終了コード 0 |
+| 入力(P4) | 実装完了・**実機未確認**。タッチ → 仮想パッド → `PadState` が繋がり、物理コントローラと合成される |
+| Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。P2 時点では実行もタイトル表示〜終了コード 0 |
 | Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` 一本化と `ImageLoader` の変更が Mac に及ぶので次に Mac を触るとき要確認 |
 | validation | **未確認**。検証レイヤの `.so` がどこにも無く同梱できない(§4.6) |
 
@@ -38,8 +39,9 @@ AquaDash が起動〜プレイできる状態までを設計する。
 - [Xbox移植設計.md](Xbox移植設計.md) — `IPlatform` 抽象の導入元。
 - [Sound設計.md](Sound設計.md) §8 — Oboe バックエンドの一次資料(本書では重複させない)。
 
-**本書のステータス: P2 完了。** §0.4 の判断は 2026-09-12 に確定した。次は P4(入力)。
+**本書のステータス: P4 の実装完了・実機未確認。** §0.4 の判断は 2026-09-12 に確定した。
 P3(ライフサイクル)のうち回転対応は P2 で先に入った(§4.3)。
+**P4 は実機での動作確認が保留中**(ユーザー指示)。確認が済んだら P3 へ。
 
 ---
 
@@ -430,9 +432,23 @@ Bloom/トーンマップ compute → blit** で、モバイル GPU にはメモ�
 
 | 追加するもの | 役割 |
 |---|---|
-| `ITouchBackend`(新設) | 生のタッチ点の配列(id / 正規化座標 / 押下・移動・離上)を供給する抽象。プラットフォーム実装が書き込み、上位は読むだけ |
-| `VirtualPadBackend`(新設・`IPadBackend` 実装) | `ITouchBackend` を読み、画面上の仮想スティック/ボタンの当たり判定を経てパッド状態(スティック 2 本 + ボタン)へ変換する |
-| `CompositePadBackend`(新設・`IPadBackend` 実装) | `VirtualPadBackend` と物理パッド実装を束ね、**先に入力があった側**を採用して 1 つのパッドとして見せる。Android の `DefaultPadBackend` はこれ |
+| `ITouchBackend`(新設) | 生のタッチ点の配列(id / 座標 / 押下)を供給する抽象。プラットフォーム実装が書き込み、上位は読むだけ。座標は **Mouse の `cursorX/Y` と揃えてクライアント左上原点のピクセル** |
+| `VirtualPadBackend`(新設・`IPadBackend` 実装) | 画面上の仮想スティック/ボタンの当たり判定を経てパッド状態へ変換する。プラットフォーム非依存 |
+| `CompositePadBackend`(新設・`IPadBackend` 実装) | `VirtualPadBackend` と物理パッド実装を束ね、1 つのパッドとして見せる。Android の `DefaultPadBackend` はこれ |
+
+**合成規則は「ボタンは OR / 軸は絶対値の大きい方 / いずれか接続なら接続」**の無状態合成にした
+(当初案の「先に入力があった側を採用」は状態を持つぶん挙動が読みにくく、
+物理と仮想を同時に触ったときの結果が説明しづらいため)。
+
+**`VirtualPadBackend` は `ITouchBackend` を直に叩かず、取り込み済みの `const TouchState*` を読む。**
+タッチの取得は「取得までに一度でも押されたら押下として返す」ラッチを持ち(イベント駆動だと
+1 フレーム内で押して離された入力を取りこぼすため。Mac の `CocoaInputSink` と同じ処置)、
+**このラッチは取得で消費される**。`InputManager::Update` が毎フレーム 1 回だけ取り込み、
+UI のタップ判定と仮想パッドが同じ値を読む形にすれば、二重フェッチが構造的に起きない。
+
+**スティックを掴んだ指はボタン判定から除外する。** 掴んだ指は円の外へ出ても離すまで追従する
+(縁で掴みが外れると全開に倒したところで操作が切れる)ため、通りがかったボタンを
+誤爆させないようにしている。
 
 - **`ActionMap` / `InputBinding` の変更は不要**。既存のパッド用バインディングがそのまま効く。
 - `ITouchBackend` は仮想パッドのためだけでなく **UI のタップ判定**にも要る(こちらは
@@ -718,20 +734,60 @@ P3 で必要なのはこれを `IPlatform` へ持ち上げ、**サーフェス�
 - [ ] Windows でウィンドウリサイズしても描画が壊れない(共通コード改修の回帰)
 - [ ] Windows 3 構成 + Mac の回帰確認
 
-### P4: 入力
+### P4: 入力 — 実装完了・実機未確認
 
-- `ITouchBackend` の新設と Android 実装
-- 仮想パッド(§5.2 案 a)または決定した方式
-- `AndroidPadBackend`
-- `imgui_impl_android`
+| 追加したもの | 置き場所 |
+|---|---|
+| `ITouchBackend` / `TouchPoint` / `TouchState` | `HID/ITouchBackend.h`(プラットフォーム非依存) |
+| `NullTouchBackend` / 選択ヘッダ | `HID/NullTouchBackend.h` / `HID/TouchBackend.h` |
+| `VirtualPadBackend` | `HID/VirtualPadBackend.{h,cpp}`(非依存。iOS と共有する) |
+| `CompositePadBackend` | `HID/CompositePadBackend.{h,cpp}`(非依存) |
+| `AndroidInputSink` | `HID/Android/`。`PlatformAndroid` が投入し、バックエンドが読む(Mac の `CocoaInputSink` と同構造) |
+| `AndroidTouchBackend` / `AndroidPadBackend` | `HID/Android/`。sink から取り出すだけの薄い実装 |
+| 入力イベントの配線 | `PlatformAndroid` に `onInputEvent` のサンクとモーション/キーの振り分け |
+| 生成の一本化 | `HID/PadBackend.h` の `CreateDefaultPadBackend(const TouchState*)`。呼び出し側に `#if` を持ち込まない |
+| タッチの取り込み | `InputManager` が毎フレーム 1 回。`GetTouchState()` で UI からも読める |
 
-**評価チェックリスト**
+- **タイトルから先へ進めるのは `UIInputSystem::IsSubmit()` が Pad 0 の A を見ているため。**
+  仮想 A ボタンがそのまま submit になるので、UI 層の改修は要らなかった。
+- **`imgui_impl_android` は入れていない。** ImGui の描画は動いており(P2 で確認)、
+  指で ImGui を操作する必要が出たときに追加する。
+- **仮想パッドの描画は暫定。** `Application.cpp` の ImGui オーバーレイに当たり判定と同じ
+  円と A/B/START のラベル、触れている点を描いている。位置が見えないと操作できないため
+  入れたもので、実機で操作感を詰めたら UI 層(UIObject)の正式な見た目へ置き換える。
+
+**P4 で分かったこと**
+
+1. **`MAX_TOUCH_COUNT` は使えない名前だった。** Windows SDK の `winuser.h` が
+   `#define MAX_TOUCH_COUNT 256` を持っており、`TouchState` のメンバ宣言が
+   マクロ展開で壊れて Windows ビルドが 13 エラーになった(`MAX_POINT_COUNT` へ改名)。
+   Android の `PAGE_SIZE` と同じ「システムのマクロと同名」パターンだが、**向きが逆**で
+   「Android 対応のために足した新規コードが Windows を壊す」形。
+2. **タッチのラッチは二重フェッチに弱い。** 取得で消費されるため、同一フレームに 2 回
+   取ると 2 回目が空になる。`InputManager` が 1 回だけ取り、UI と仮想パッドが
+   同じ `TouchState` を読む形にして構造的に防いだ(§5.2)。
+3. **ハットスイッチ対応を追加した**(設計外)。十字キーを `AKEYCODE_DPAD_*` ではなく
+   `AXIS_HAT_X/Y` で送る機種があるため。キー由来のレベルとは別に持ち、取得時に OR する。
+4. **キーイベントは装置ソースで絞る**(`GAMEPAD|JOYSTICK|DPAD`)。物理キーボードの矢印キーが
+   十字キー扱いになってパッド接続と誤判定されるのを避けるため。
+5. **`AKEYCODE_BACK` は写像しない。** BACK キーで終了できる状態を壊さないため、
+   キーイベントを消費せず glue へ流す。
+6. **振動は no-op。** NDK に振動 API が無く、`Vibrator` / `VibratorManager` は Java 側のみ
+   (JNI が必要)。必要になった時点で追加する。
+7. **`/t:Rebuild` は VS Code を起動していると失敗する**(環境の話)。cppwinrt の生成ヘッダを
+   C/C++ 拡張がロックし `MSB3061` になる。増分ビルドなら通る。
+
+**評価チェックリスト**(**実機確認は保留中**。ビルドのみ検証済み)
+- [x] Android ビルドがエラー 0(新規警告なし。残る 1 件は既存の `OceanDebugPanel.h`)
+- [x] Windows 3 構成(D3D11 / D3D12 / Vulkan)がエラー 0・警告 54 件で従来と同数
 - [ ] タッチでタイトルからステージへ進める
 - [ ] **ステージが描画される(路面・キャラ・地形・影・UI)** ← P2 から移動。入力が前提のため
 - [ ] ステージ描画時のフレームレートを実機で計測して記録した(タイトルは 60 FPS 張り付き)
 - [ ] 仮想パッドでキャラが操作できる
+- [ ] 仮想パッドのレイアウト(位置・大きさ)が実機の持ち方で無理なく届く
 - [ ] 物理コントローラが接続時に使える
-- [ ] デバッグ UI が指で操作できる
+- [ ] 仮想パッドと物理コントローラを同時に触っても破綻しない(合成規則の確認)
+- [ ] デバッグ UI が指で操作できる(`imgui_impl_android` が必要かの判断もここで)
 
 ### P5: サウンド
 

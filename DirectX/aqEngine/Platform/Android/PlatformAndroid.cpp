@@ -3,8 +3,10 @@
 // (Win32 は PlatformWin32.cpp、UWP は PlatformUWP.cpp、Mac は PlatformMac.mm が代替)。
 #if defined(AQ_PLATFORM_ANDROID)
 #include "Platform/Android/PlatformAndroid.h"
+#include "HID/Android/AndroidInputSink.h"
 #include <android_native_app_glue.h>
 #include <android/asset_manager.h>
+#include <android/input.h>
 #include <android/looper.h>
 #include <android/native_window.h>
 #include <sys/stat.h>
@@ -17,6 +19,43 @@ namespace aq
 {
 	namespace platform
 	{
+		namespace
+		{
+			/**
+			 * 取り込むジョイスティックの軸。
+			 *
+			 * 左スティック(X / Y)・右スティック(Z / RZ)・トリガー(LTRIGGER / RTRIGGER。
+			 * BRAKE / GAS で送ってくる機種もある)・十字キー(HAT_X / HAT_Y。
+			 * DPAD キーを送らない機種向け)。
+			 * モーションイベントには軸の一覧が入っていないので、こちらから引く軸を決めておく。
+			 */
+			static constexpr int32_t JOYSTICK_AXES[] =
+			{
+				AMOTION_EVENT_AXIS_X,
+				AMOTION_EVENT_AXIS_Y,
+				AMOTION_EVENT_AXIS_Z,
+				AMOTION_EVENT_AXIS_RZ,
+				AMOTION_EVENT_AXIS_LTRIGGER,
+				AMOTION_EVENT_AXIS_RTRIGGER,
+				AMOTION_EVENT_AXIS_BRAKE,
+				AMOTION_EVENT_AXIS_GAS,
+				AMOTION_EVENT_AXIS_HAT_X,
+				AMOTION_EVENT_AXIS_HAT_Y,
+			};
+
+			/**
+			 * パッドのボタンとして扱う入力ソース(クラスビットを除いた装置ビット)。
+			 *
+			 * 物理キーボードの矢印キーまで十字キー扱いにしないため装置側で絞る
+			 * (Android では物理キーボード/マウスを想定しない)。クラスビットは
+			 * キーボードもゲームパッドも同じ BUTTON なので、比較前に落とす必要がある。
+			 */
+			static constexpr int32_t PAD_KEY_SOURCES =
+				(AINPUT_SOURCE_GAMEPAD | AINPUT_SOURCE_JOYSTICK | AINPUT_SOURCE_DPAD)
+				& ~AINPUT_SOURCE_CLASS_MASK;
+		}
+
+
 		PlatformAndroid::PlatformAndroid(android_app* app)
 			: app_(app)
 			, window_(nullptr)
@@ -30,8 +69,9 @@ namespace aq
 			{
 				// native_app_glue は C の関数ポインタしか受け取らないので、
 				// userData に this を積んでサンク経由でメンバ関数へ転送する。
-				app_->userData = this;
-				app_->onAppCmd = &PlatformAndroid::AppCmdThunk;
+				app_->userData     = this;
+				app_->onAppCmd     = &PlatformAndroid::AppCmdThunk;
+				app_->onInputEvent = &PlatformAndroid::InputEventThunk;
 			}
 		}
 
@@ -42,8 +82,9 @@ namespace aq
 			{
 				// glue はこの後もイベントを処理しうるので、解放済みの this を
 				// 掴ませないようにコールバックを外す。
-				app_->onAppCmd = nullptr;
-				app_->userData = nullptr;
+				app_->onAppCmd     = nullptr;
+				app_->onInputEvent = nullptr;
+				app_->userData     = nullptr;
 			}
 		}
 
@@ -328,6 +369,12 @@ namespace aq
 				aq::StartupMark("[android] cmd TERM_WINDOW");
 				break;
 
+			case APP_CMD_LOST_FOCUS:
+				// 通知シェードや別アプリへ切り替わった。押しっぱなしのまま持ち越すと
+				// 復帰後に勝手に動き続けるので、入力状態を落とす。
+				hid::AndroidInputSink::Get().OnFocusLost();
+				break;
+
 			case APP_CMD_PAUSE:
 				OnSuspend();
 				break;
@@ -344,6 +391,138 @@ namespace aq
 			default:
 				break;
 			}
+		}
+
+
+		int32_t PlatformAndroid::OnInputEvent(AInputEvent* event)
+		{
+			if (event == nullptr)
+			{
+				return 0;
+			}
+
+			switch (AInputEvent_getType(event))
+			{
+			case AINPUT_EVENT_TYPE_MOTION:
+			{
+				// スティック操作もモーションイベントで届く。タッチと同じ扱いにすると
+				// 画面を触っていない指が生えてしまうので、入力ソースで振り分ける。
+				const int32_t sourceClass = AInputEvent_getSource(event) & AINPUT_SOURCE_CLASS_MASK;
+				if (sourceClass == AINPUT_SOURCE_CLASS_JOYSTICK)
+				{
+					return OnJoystickMotion(event);
+				}
+				if (sourceClass == AINPUT_SOURCE_CLASS_POINTER)
+				{
+					return OnTouchMotion(event);
+				}
+				return 0;
+			}
+
+			case AINPUT_EVENT_TYPE_KEY:
+				return OnPadKey(event);
+
+			default:
+				return 0;
+			}
+		}
+
+
+		int32_t PlatformAndroid::OnTouchMotion(AInputEvent* event)
+		{
+			hid::AndroidInputSink& sink = hid::AndroidInputSink::Get();
+
+			const int32_t action = AMotionEvent_getAction(event);
+			const int32_t masked = action & AMOTION_EVENT_ACTION_MASK;
+
+			// action の上位バイトには「変化したのが何番目のポインタか」が入っている。
+			// POINTER_DOWN / POINTER_UP でのみ意味を持ち、DOWN / UP では 0 になる。
+			const size_t pointerIndex = static_cast<size_t>(
+				(action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
+
+			// ポインタの識別子は添字ではなく getPointerId で引く。添字は指を離すと詰められるが、
+			// 識別子は離すまで変わらない(上位はこちらで同じ指を追う)。
+			switch (masked)
+			{
+			case AMOTION_EVENT_ACTION_DOWN:
+			case AMOTION_EVENT_ACTION_POINTER_DOWN:
+				sink.OnTouchDown(AMotionEvent_getPointerId(event, pointerIndex),
+				                 AMotionEvent_getX(event, pointerIndex),
+				                 AMotionEvent_getY(event, pointerIndex));
+				return 1;
+
+			case AMOTION_EVENT_ACTION_MOVE:
+			{
+				// MOVE だけは「変化した 1 点」ではなく、触れている全点が入っている。
+				const size_t pointerCount = AMotionEvent_getPointerCount(event);
+				for (size_t i = 0; i < pointerCount; ++i)
+				{
+					sink.OnTouchMove(AMotionEvent_getPointerId(event, i),
+					                 AMotionEvent_getX(event, i),
+					                 AMotionEvent_getY(event, i));
+				}
+				return 1;
+			}
+
+			case AMOTION_EVENT_ACTION_UP:
+			case AMOTION_EVENT_ACTION_POINTER_UP:
+				sink.OnTouchUp(AMotionEvent_getPointerId(event, pointerIndex),
+				               AMotionEvent_getX(event, pointerIndex),
+				               AMotionEvent_getY(event, pointerIndex));
+				return 1;
+
+			case AMOTION_EVENT_ACTION_CANCEL:
+				// ジェスチャが OS 側に奪われた。全点を無効にする(タップは成立させない)。
+				sink.OnTouchCancel();
+				return 1;
+
+			default:
+				// HOVER / SCROLL など。タッチスクリーンには来ない。
+				return 0;
+			}
+		}
+
+
+		int32_t PlatformAndroid::OnJoystickMotion(AInputEvent* event)
+		{
+			hid::AndroidInputSink& sink = hid::AndroidInputSink::Get();
+
+			// 軸はポインタ 0 番から引く(ジョイスティックのポインタは常に 1 つ)。
+			for (const int32_t axis : JOYSTICK_AXES)
+			{
+				sink.OnPadAxis(axis, AMotionEvent_getAxisValue(event, axis, 0));
+			}
+			return 1;
+		}
+
+
+		int32_t PlatformAndroid::OnPadKey(AInputEvent* event)
+		{
+			const int32_t keyCode = AKeyEvent_getKeyCode(event);
+
+			// 戻るキーは飲み込まない。0 を返して glue -> NativeActivity へ流すことで
+			// アプリが終了する(現状これが唯一の終了手段)。
+			if (keyCode == AKEYCODE_BACK)
+			{
+				return 0;
+			}
+
+			if (((AInputEvent_getSource(event) & ~AINPUT_SOURCE_CLASS_MASK) & PAD_KEY_SOURCES) == 0)
+			{
+				return 0;
+			}
+
+			const int32_t action = AKeyEvent_getAction(event);
+			if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP)
+			{
+				// ACTION_MULTIPLE は文字入力用。パッドからは来ない。
+				return 0;
+			}
+
+			// 自動リピートの DOWN も素通しでよい(レベルは変わらないため)。
+			// 写像に無いキーコードは消費しない = 0 を返す。
+			const bool pressed = (action == AKEY_EVENT_ACTION_DOWN);
+			return hid::AndroidInputSink::Get().OnPadButton(keyCode, pressed) ? 1 : 0;
 		}
 
 
@@ -391,6 +570,16 @@ namespace aq
 				return;
 			}
 			static_cast<PlatformAndroid*>(app->userData)->OnAppCmd(cmd);
+		}
+
+
+		int32_t PlatformAndroid::InputEventThunk(android_app* app, AInputEvent* event)
+		{
+			if (app == nullptr || app->userData == nullptr)
+			{
+				return 0;
+			}
+			return static_cast<PlatformAndroid*>(app->userData)->OnInputEvent(event);
 		}
 	}
 }

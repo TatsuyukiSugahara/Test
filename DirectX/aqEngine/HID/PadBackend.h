@@ -47,19 +47,55 @@ namespace aq
 	}
 }
 #elif defined(AQ_PLATFORM_ANDROID)
-#include "HID/NullPadBackend.h"
+#include "HID/Android/AndroidPadBackend.h"
+#include "HID/CompositePadBackend.h"
+#include "HID/VirtualPadBackend.h"
 
 namespace aq
 {
 	namespace hid
 	{
-		// Android: P0 の時点では入力なし。P4 で入力ソースを問わない仮想パッド
-		// (タッチの仮想スティック / 物理コントローラのどちらも同じ IPadBackend として
-		//  見せる合成バックエンド)へ差し替える。ActionMap 側は無改修で切替できる。
-		// TODO(P4): CompositePadBackend(仮想パッド + AndroidPadBackend)へ差し替える。
-		using DefaultPadBackend = NullPadBackend;
+		// Android: 物理コントローラと仮想パッド(タッチ)を束ねて 1 つのパッドに見せる。
+		// 上位(ActionMap / ゲーム側)は入力ソースを区別しない。
+		// 組み立てには TouchState が要るので、生成は下の CreateDefaultPadBackend で行う。
+		using DefaultPadBackend = CompositePadBackend;
 	}
 }
 #else
 #error "DefaultPadBackend: 未対応のプラットフォームです"
 #endif
+
+
+// ============================================================
+//  既定パッドの生成
+//
+//  Android だけは「物理 + 仮想パッド」の組み立てが必要で、仮想パッドは
+//  取り込み済みの TouchState を要求する。呼び出し側(InputManager)に
+//  プラットフォーム分岐を持ち込まないため、生成をここへ寄せる。
+// ============================================================
+#include <memory>
+#include "HID/ITouchBackend.h"
+
+namespace aq
+{
+	namespace hid
+	{
+#if defined(AQ_PLATFORM_ANDROID)
+		inline std::unique_ptr<IPadBackend> CreateDefaultPadBackend(const TouchState* touch)
+		{
+			// 追加した順に合成する。ボタンは OR、軸は絶対値の大きい方が採られるので、
+			// 物理コントローラを繋いでいる間もタッチが邪魔をしない。
+			auto composite = std::make_unique<CompositePadBackend>();
+			composite->Add(std::make_unique<AndroidPadBackend>());
+			composite->Add(std::make_unique<VirtualPadBackend>(touch));
+			return composite;
+		}
+#else
+		inline std::unique_ptr<IPadBackend> CreateDefaultPadBackend(const TouchState* /*touch*/)
+		{
+			// タッチを持たないプラットフォームは合成する相手がいないので素で生成する。
+			return std::make_unique<DefaultPadBackend>();
+		}
+#endif
+	}
+}

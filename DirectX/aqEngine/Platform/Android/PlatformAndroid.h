@@ -8,6 +8,7 @@
 // native_app_glue の C 構造体。Android のヘッダをこのヘッダへ持ち込まないため前方宣言する。
 struct android_app;
 struct ANativeWindow;
+struct AInputEvent;
 
 namespace aq
 {
@@ -83,6 +84,23 @@ namespace aq
 			/** native_app_glue の onAppCmd から呼ばれる実体 */
 			void OnAppCmd(int32_t cmd);
 
+			/**
+			 * native_app_glue の onInputEvent から呼ばれる実体。
+			 * イベントを種類ごとに振り分けて AndroidInputSink へ投入する。
+			 *
+			 * @return 処理したら 1、していなければ 0(0 のときは OS の既定動作に流れる)
+			 */
+			int32_t OnInputEvent(AInputEvent* event);
+
+			/** 画面タッチ(ポインタ系のモーションイベント)。複数指をまとめて投入する */
+			int32_t OnTouchMotion(AInputEvent* event);
+
+			/** スティック / トリガー(ジョイスティック系のモーションイベント) */
+			int32_t OnJoystickMotion(AInputEvent* event);
+
+			/** パッドのボタン(キーイベント) */
+			int32_t OnPadKey(AInputEvent* event);
+
 			/** 保留中のイベントを 1 巡処理する。blockUntilEvent = true ならイベントが来るまで待つ */
 			void PollOnce(bool blockUntilEvent);
 
@@ -90,6 +108,9 @@ namespace aq
 		private:
 			/** native_app_glue へ渡す C 関数。app->userData から this を取り出して転送する */
 			static void AppCmdThunk(android_app* app, int32_t cmd);
+
+			/** 同上。入力イベント用 */
+			static int32_t InputEventThunk(android_app* app, AInputEvent* event);
 		};
 	}
 }

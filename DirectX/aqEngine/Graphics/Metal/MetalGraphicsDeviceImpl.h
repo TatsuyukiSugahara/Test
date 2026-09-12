@@ -147,6 +147,15 @@ namespace aq
 			 */
 			uint32_t GetFrameIndex() const;
 
+			/**
+			 * 単調増加のフレーム通し番号 (Present ごとに 1 増える)。
+			 *
+			 * GetFrameIndex() は FRAME_COUNT の剰余なので、「フレームが変わったか」の判定には
+			 * 使えない。レンダースレッドのスロット数と FRAME_COUNT が噛み合うと、同じ
+			 * リソースが常に同じ剰余値を見続けて「変わっていない」と誤判定するため。
+			 */
+			inline uint64_t GetFrameSerial() const { return frameCounter_; }
+
 
 			/**
 			 * ImGui (設計書 §12 P6)

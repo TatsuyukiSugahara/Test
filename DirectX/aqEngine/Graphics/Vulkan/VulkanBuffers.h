@@ -96,7 +96,7 @@ namespace aq
 			uint32_t          alignedSize_ = 0;  // 256 整列の 1 スロット分
 			uint32_t          dataSize_    = 0;  // 元データサイズ (Update の memcpy 量)
 			uint32_t          maxUpdates_  = 0;  // 1 フレームあたりの Update スロット数
-			uint32_t          lastFrame_   = 0xFFFFFFFFu;
+			uint64_t          lastFrameSerial_ = 0xFFFFFFFFFFFFFFFFull;  // 直近 Update 時のフレーム通し番号 (剰余ではない)
 			uint32_t          cursor_      = 0;  // 現フレーム内の Update カウンタ
 			VkDeviceSize      currentOffset_ = 0;
 		};

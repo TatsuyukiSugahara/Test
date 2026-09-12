@@ -69,6 +69,21 @@ namespace aq
 
 
 			/**
+			 * 単調増加のフレーム通し番号
+			 *
+			 * 「フレームが変わったか」の判定に剰余 (CurrentFrameIndex) を使ってはいけない。
+			 * FRAMES_IN_FLIGHT (レンダースレッドのスロット数) と metal::FRAME_COUNT が
+			 * どちらも 2 なので、あるスロットの定数バッファは**常に同じ剰余値**を見ることになり、
+			 * 「フレームが変わっていない」と誤判定してカーソルが永久にリセットされない。
+			 */
+			inline uint64_t CurrentFrameSerial()
+			{
+				const MetalGraphicsDeviceImpl* device = MetalGraphicsDeviceImpl::GetInstance();
+				return (device != nullptr) ? device->GetFrameSerial() : 0;
+			}
+
+
+			/**
 			 * このフレームが実際に始まっているか
 			 *
 			 * false の間は**コマンドバッファがまだ無い = 描画が 1 本も記録されていない**。
@@ -265,7 +280,7 @@ namespace aq
 			, alignedSize_(0)
 			, sliceCount_(0)
 			, cursor_(0)
-			, lastFrameIndex_(0xffffffffu)  // 最初の Update で必ずカーソルをリセットさせる
+			, lastFrameSerial_(0xffffffffffffffffull)  // 最初の Update で必ずカーソルをリセットさせる
 			, currentOffset_(0)
 			, exhaustedLogged_(false)
 		{
@@ -299,7 +314,7 @@ namespace aq
 				if (sliceCount_ > MAX_INITIAL_SLICE_COUNT)  { sliceCount_ = MAX_INITIAL_SLICE_COUNT; }
 
 				cursor_          = 0;
-				lastFrameIndex_  = 0xffffffffu;
+				lastFrameSerial_ = 0xffffffffffffffffull;
 				currentOffset_   = 0;
 				exhaustedLogged_ = false;
 
@@ -375,10 +390,14 @@ namespace aq
 			// 「まだフレームが開いていない」間も戻してよい(描画が 1 本も記録されていないため)。
 			// これが無いと、drawable が取れずに捨てられ続けるフレームで Update だけが積み上がり、
 			// リングが無駄に伸びる。
-			const uint32_t frameIndex = CurrentFrameIndex();
-			if (frameIndex != lastFrameIndex_ || !IsDeviceFrameOpen()) {
-				lastFrameIndex_ = frameIndex;
-				cursor_         = 0;
+			// 判定は**単調増加の通し番号**で行う。剰余の frameIndex で比べると、
+			// レンダースレッドのスロットと FRAME_COUNT の偶奇が噛み合ったときに
+			// 永久に等しくなり、カーソルがリセットされないままリングを食い潰す。
+			const uint32_t frameIndex  = CurrentFrameIndex();
+			const uint64_t frameSerial = CurrentFrameSerial();
+			if (frameSerial != lastFrameSerial_ || !IsDeviceFrameOpen()) {
+				lastFrameSerial_ = frameSerial;
+				cursor_          = 0;
 			}
 
 			if (cursor_ >= sliceCount_)

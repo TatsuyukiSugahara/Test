@@ -82,6 +82,11 @@ namespace aq
 			return g_staticDevice ? g_staticDevice->frameIndex_ : 0;
 		}
 
+		uint64_t VulkanGraphicsDeviceImpl::GetStaticFrameSerial()
+		{
+			return g_staticDevice ? g_staticDevice->frameSerial_ : 0;
+		}
+
 		// ── 初期化 ──────────────────────────────────────────────
 		bool VulkanGraphicsDeviceImpl::Initialize(NativeWindowHandle window, uint32_t width, uint32_t height)
 		{
@@ -617,6 +622,7 @@ namespace aq
 
 			frameOpen_ = false;
 			frameIndex_ = (frameIndex_ + 1) % FRAME_COUNT;
+			++frameSerial_;
 		}
 
 		void VulkanGraphicsDeviceImpl::TransitionImage(VkCommandBuffer cmd, VkImage image,

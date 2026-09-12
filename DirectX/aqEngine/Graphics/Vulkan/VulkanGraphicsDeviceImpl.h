@@ -74,6 +74,14 @@ namespace aq
 			// リソースクラス向け静的アクセサ (D3D11/D3D12 層の GetStaticDevice と同じパターン)
 			static VmaAllocator GetStaticAllocator();
 			static uint32_t     GetStaticFrameIndex();
+			/**
+			 * 単調増加のフレーム通し番号 (Present ごとに 1 増える)。
+			 *
+			 * GetStaticFrameIndex() は FRAME_COUNT の剰余なので「フレームが変わったか」の
+			 * 判定には使えない。レンダースレッドのスロット数と FRAME_COUNT が噛み合うと、
+			 * 同じリソースが常に同じ剰余値を見続けて誤判定する。
+			 */
+			static uint64_t     GetStaticFrameSerial();
 			static constexpr uint32_t GetFrameCount() { return FRAME_COUNT; }
 
 			/** 最初の記録呼び出しで遅延発火: フレームを開き、バックバッファを COLOR_ATTACHMENT へ遷移する。 */
@@ -147,6 +155,7 @@ namespace aq
 			};
 			FrameResources    frames_[FRAME_COUNT];
 			uint32_t          frameIndex_     = 0;
+			uint64_t          frameSerial_    = 0;   // 単調増加。剰余の frameIndex_ と違い「変わったか」の判定に使える
 			bool              frameOpen_      = false;
 
 			std::unique_ptr<VulkanPipelineLayout> pipelineLayout_;

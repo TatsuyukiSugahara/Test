@@ -177,7 +177,7 @@ namespace aq
 			/** リング関連 */
 			uint32_t sliceCount_;      // 1 フレーム領域あたりのスライス数
 			uint32_t cursor_;          // 現フレームで使い終えたスライス数
-			uint32_t lastFrameIndex_;  // 直近に Update したときのデバイスのフレーム番号
+			uint64_t lastFrameSerial_; // 直近に Update したときのフレーム通し番号 (剰余ではない)
 			uint32_t currentOffset_;   // 直近に書いたスライスの先頭バイトオフセット
 			bool     exhaustedLogged_; // 枯渇ログを 1 回だけ出すためのフラグ
 

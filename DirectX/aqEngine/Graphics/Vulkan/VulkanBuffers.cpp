@@ -162,8 +162,12 @@ namespace aq
 		void VulkanConstantBuffer::Update(const void* data)
 		{
 			if (!buf_.mapped || !data) return;
+			// リセット判定は**単調増加の通し番号**で行う。剰余の frameIndex で比べると、
+			// レンダースレッドのスロット数と FRAME_COUNT の偶奇が噛み合ったときに永久に
+			// 等しくなり、カーソルがリセットされずスロットを食い潰す (Metal 版と同じ不具合)。
 			const uint32_t fi = VulkanGraphicsDeviceImpl::GetStaticFrameIndex();
-			if (fi != lastFrame_) { lastFrame_ = fi; cursor_ = 0; }  // フレーム先頭でリセット
+			const uint64_t fs = VulkanGraphicsDeviceImpl::GetStaticFrameSerial();
+			if (fs != lastFrameSerial_) { lastFrameSerial_ = fs; cursor_ = 0; }  // フレーム先頭でリセット
 			const uint32_t slot = (cursor_ < maxUpdates_) ? cursor_ : (maxUpdates_ - 1);
 			++cursor_;
 			currentOffset_ = (VkDeviceSize)((size_t)fi * maxUpdates_ + slot) * alignedSize_;

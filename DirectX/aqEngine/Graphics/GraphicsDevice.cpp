@@ -48,6 +48,18 @@ namespace aq
 		void GraphicsDevice::WaitIdle()  { if (impl_) impl_->WaitIdle();  }
 
 
+		bool GraphicsDevice::RecreateSurface(NativeWindowHandle window)
+		{
+			return impl_ ? impl_->RecreateSurface(window) : false;
+		}
+
+
+		bool GraphicsDevice::GetSurfaceSize(uint32_t& outWidth, uint32_t& outHeight) const
+		{
+			return impl_ ? impl_->GetSurfaceSize(outWidth, outHeight) : false;
+		}
+
+
 		void GraphicsDevice::SetupRenderContext(RenderContext& outContext)
 		{
 			impl_->SetupRenderContext(outContext);

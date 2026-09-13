@@ -34,6 +34,8 @@ namespace aq
 
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) override;
 			void Finalize() override;
+			bool RecreateSurface(NativeWindowHandle window) override;
+			bool GetSurfaceSize(uint32_t& outWidth, uint32_t& outHeight) const override;
 			void SetupRenderContext(RenderContext& outContext) override;
 			uint32_t GetMainRenderTargetCount() const override;
 			IRenderTarget& GetMainRenderTarget(uint32_t index) override;
@@ -67,8 +69,12 @@ namespace aq
 			VulkanPipelineCache*  GetPipelineCache()  const { return pipelineCache_.get(); }
 			VkFormat         GetSwapchainFormat() const { return swapchainFormat_; }
 			VkExtent2D       GetSwapchainExtent() const { return swapchainExtent_; }
-			VkImageView      GetCurrentSwapchainView() const  { return swapchainViews_[imageIndex_]; }
-			VkImage          GetCurrentSwapchainImage() const { return swapchainImages_[imageIndex_]; }
+			// サーフェスの作り直しに失敗している間は空になりうるので、範囲を見てから引く。
+			VkImageView      GetCurrentSwapchainView() const  { return imageIndex_ < swapchainViews_.size()  ? swapchainViews_[imageIndex_]  : VK_NULL_HANDLE; }
+			VkImage          GetCurrentSwapchainImage() const { return imageIndex_ < swapchainImages_.size() ? swapchainImages_[imageIndex_] : VK_NULL_HANDLE; }
+
+			/** スワップチェーンが使える状態か。false の間はフレームを組み立てられない */
+			bool             IsSwapchainReady() const { return swapchain_ != VK_NULL_HANDLE && !swapchainImages_.empty(); }
 			VkDescriptorPool GetCurrentDescriptorPool() const { return frames_[frameIndex_].descPool; }
 
 			// リソースクラス向け静的アクセサ (D3D11/D3D12 層の GetStaticDevice と同じパターン)
@@ -116,7 +122,30 @@ namespace aq
 			bool PickPhysicalDeviceAndQueues();
 			bool CreateLogicalDevice();
 			bool CreateAllocator();
+
+			/**
+			 * スワップチェーンを作り直す (サーフェスは既存のものを使う)。
+			 *
+			 * 新しい方の生成が通ってから古い方を畳むので、失敗しても直前の
+			 * スワップチェーンが生きたまま残る (提示は OUT_OF_DATE のままだが破綻はしない)。
+			 * サーフェスのサイズは caps.currentExtent から取り直す。width/height は
+			 * currentExtent が「アプリ任せ」を返す環境でのみ使う。
+			 */
 			bool CreateSwapchain(uint32_t width, uint32_t height);
+
+			/** スワップチェーン・画像ビュー・present セマフォを破棄する (サーフェスは残す) */
+			void DestroySwapchainResources();
+
+			/** 現在のスワップチェーンの寸法がサーフェスとずれているか (SUBOPTIMAL の切り分けに使う) */
+			bool IsSwapchainExtentStale() const;
+
+			/**
+			 * 今フレームのスワップチェーン画像を取得する。
+			 * OUT_OF_DATE ならスワップチェーンを作り直して 1 度だけ取り直す。
+			 * @return 取得できたら true (false なら imageAvailable が未シグナルなので提示してはいけない)
+			 */
+			bool AcquireNextImage();
+
 			bool CreateFrameResources();
 			void TransitionImage(VkCommandBuffer cmd, VkImage image,
 			                     VkImageLayout oldLayout, VkImageLayout newLayout,
@@ -143,6 +172,12 @@ namespace aq
 			std::vector<VkImageView> swapchainViews_;
 			std::vector<VkSemaphore> presentSemaphores_;  // swapchain 画像単位 (present 待ち。再利用安全)
 			uint32_t          imageIndex_     = 0;  // vkAcquireNextImageKHR で取得した現在の画像
+
+			/** 今フレームの画像取得に成功したか。false なら imageAvailable は未シグナルなので待っても提示してもいけない */
+			bool              imageAcquired_  = false;
+
+			/** 提示先とスワップチェーンの寸法がずれている。フレーム境界で作り直す */
+			bool              swapchainDirty_ = false;
 
 			struct FrameResources
 			{

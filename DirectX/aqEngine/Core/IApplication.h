@@ -30,6 +30,12 @@ namespace aq
 		virtual void FlushRender() {}
 
 		/**
+		 * 提出済みの描画が CPU・GPU とも完了するまで待つ。
+		 * サーフェスの作り直しのように、在フライトの参照が残っていると壊れる操作の前に呼ぶ。
+		 */
+		virtual void WaitForRenderIdle() {}
+
+		/**
 		 * 登録用関数
 		 * NOTE:Initialize後に呼ばれる
 		 */

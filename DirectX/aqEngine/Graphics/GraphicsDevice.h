@@ -48,6 +48,12 @@ namespace aq
 			void OnSuspend();
 			void OnResume();
 
+			// 描画対象のウィンドウが差し替わったときのサーフェス再生成 (詳細は IGraphicsDeviceImpl)。
+			bool RecreateSurface(NativeWindowHandle window);
+
+			// 実際に提示している面のサイズ。取得できなければ false (詳細は IGraphicsDeviceImpl)。
+			bool GetSurfaceSize(uint32_t& outWidth, uint32_t& outHeight) const;
+
 			// 提出済みの全 GPU 作業の完了待ち(終了処理でリソースを破棄する前に呼ぶ)。実装へ委譲。
 			void WaitIdle();
 

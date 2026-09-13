@@ -44,6 +44,27 @@ namespace aq
 			virtual void OnResume()  {}
 
 			/**
+			 * 描画対象のウィンドウが差し替わったときに、サーフェスとスワップチェーンを作り直す。
+			 *
+			 * 作り直すのは サーフェス / スワップチェーン / その画像ビュー / present セマフォ に限る。
+			 * デバイス・パイプライン・オフスクリーン RT・テクスチャは保持する
+			 * (デバイスごと作り直すと復帰が重く、Android でもデバイスロスト自体は稀なため)。
+			 * 窓を手放さないプラットフォーム(Win32 / UWP / Mac)では起こらないので既定は no-op。
+			 *
+			 * @param window 新しいネイティブウィンドウ
+			 * @return 以後描画してよいなら true。false の間はフレームを飛ばして再試行してよい
+			 */
+			virtual bool RecreateSurface(NativeWindowHandle /*window*/) { return true; }
+
+			/**
+			 * 実際に提示している面のサイズ(ウィンドウ座標系)。
+			 * 回転やリサイズで初期化時の値とずれるため、ImGui の DisplaySize のように
+			 * スクリーン座標を扱う側はこちらを正とする。
+			 * 取得できないバックエンドは false を返し、呼び出し側は従来値を使い続ける。
+			 */
+			virtual bool GetSurfaceSize(uint32_t& /*outWidth*/, uint32_t& /*outHeight*/) const { return false; }
+
+			/**
 			 * 提出済みの全 GPU 作業が完了するまで待つ(GPU アイドル化)。
 			 * GPU が参照中かもしれないリソースを破棄する前(終了処理など)に呼ぶ。
 			 * 即時実行モデル(D3D11)では不要のため既定は no-op。

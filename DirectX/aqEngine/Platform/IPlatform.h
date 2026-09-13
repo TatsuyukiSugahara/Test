@@ -37,6 +37,17 @@ namespace aq
 			virtual void OnSuspend() {}
 			virtual void OnResume()  {}
 
+			// 描画してよい状態か。false の間、Engine はフレームを丸ごと飛ばす。
+			// Android はバックグラウンドへ回ると ANativeWindow を取り上げられ、提示先が
+			// 無い状態になる。窓を手放さないプラットフォーム(Win32 / UWP / Mac)は常に true。
+			virtual bool IsRenderable() const { return true; }
+
+			// 描画対象のウィンドウが差し替わったことを 1 回だけ取り出す(読み取りで消費するラッチ)。
+			// true を返したときだけ out に新しいハンドルが入り、Engine はサーフェスと
+			// スワップチェーンを作り直してから次のフレームへ進む。
+			// 同じ窓を使い続けるプラットフォームでは起こらないので既定は false。
+			virtual bool ConsumeSurfaceChanged(aq::graphics::NativeWindowHandle& /*out*/) { return false; }
+
 			// アセット読み込みの基点パス。
 			// Win32: ソースツリー / 実行ディレクトリ、UWP: パッケージ install フォルダ。
 			virtual const char* GetContentRoot() = 0;

@@ -63,7 +63,7 @@ namespace aq
 		 * Signal するだけで GPU 完了を待たないため、ドレイン後も GPU はまだリソースを
 		 * 読んでいることがある。GraphicsDevice::WaitIdle まで込みで初めて破棄が安全になる。
 		 */
-		void WaitForRenderIdle();
+		void WaitForRenderIdle() override;
 
 	public:
 		bool Initialize(aq::graphics::RenderContext& renderContext) override;

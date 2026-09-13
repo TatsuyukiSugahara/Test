@@ -176,8 +176,74 @@ namespace aq
 		// PumpEvents() が終了要求で false を返すまで Update を回す。
 		while (platform_->PumpEvents())
 		{
+			// 描画対象が差し替わったらサーフェスを作り直してから描く。
+			// Android ではバックグラウンド復帰・回転のたびにここへ来る。
+			if (!EnsureSurfaceUpToDate()) {
+				continue;
+			}
+
+			// 提示先が無い間(Android のバックグラウンド等)はフレームごと飛ばす。
+			// PumpEvents 側がイベント待ちでブロックするので、ここは空転しない。
+			if (!platform_->IsRenderable()) {
+				continue;
+			}
+
+			SyncScreenSize();
 			Update();
 		}
+	}
+
+
+	void Engine::SyncScreenSize()
+	{
+		// 回転やリサイズで提示面の寸法が変わる。ImGui の DisplaySize や仮想パッドの
+		// 当たり判定はスクリーン座標で持っているので、実際の面に追従させる。
+		// レンダー解像度 (オフスクリーン RT) は作り直さないため据え置き。
+		// ここはフレームの外 (直列構成ならレンダースレッドは停止中) で、読む値も
+		// レンダースレッドがフレーム境界でしか書き換えないもの。
+		uint32_t width  = 0;
+		uint32_t height = 0;
+		if (!aq::graphics::GraphicsDevice::Get().GetSurfaceSize(width, height)) {
+			return;
+		}
+		if (width == 0 || height == 0) {
+			return;
+		}
+		screenWidth_  = width;
+		screenHeight_ = height;
+	}
+
+
+	bool Engine::EnsureSurfaceUpToDate()
+	{
+		// 通知はラッチなので取りこぼさないよう毎回引く。実際に作り直せるまで
+		// surfaceDirty_ は落とさない(1 回失敗したら次のループで再試行する)。
+		aq::graphics::NativeWindowHandle newWindow;
+		if (platform_->ConsumeSurfaceChanged(newWindow)) {
+			window_       = newWindow;
+			surfaceDirty_ = true;
+		}
+		if (!surfaceDirty_) {
+			return true;
+		}
+
+		// 窓を取り上げられている間は作り直しても失敗するだけ。復帰時に改めて通知が来る。
+		if (!platform_->IsRenderable()) {
+			return false;
+		}
+
+		// 在フライトのコマンドが古いサーフェスの画像を参照したまま破棄されないよう、
+		// CPU・GPU 双方の完了を待ってから作り直す。
+		if (application_) {
+			application_->WaitForRenderIdle();
+		}
+
+		if (!aq::graphics::GraphicsDevice::Get().RecreateSurface(window_)) {
+			aq::StartupLog("  [engine] RecreateSurface FAILED");
+			return false;
+		}
+		surfaceDirty_ = false;
+		return true;
 	}
 
 

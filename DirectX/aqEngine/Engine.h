@@ -53,6 +53,9 @@ namespace aq
 		/** メインスレッドで CoInitializeEx(MTA) したか(プロセス寿命で保持し Finalize で解放) */
 		bool              comInitialized_   = false;
 
+		/** 描画対象が差し替わり、サーフェスの作り直しが済んでいない。成功するまでフレームを飛ばす */
+		bool              surfaceDirty_     = false;
+
 
 	private:
 		Engine();
@@ -74,6 +77,17 @@ namespace aq
 	private:
 		bool InitializeWindow(const InitializeParameter& initializeParameter);
 		bool InitializeGraphicsAPI(const InitializeParameter& initializeParameter);
+
+		/**
+		 * プラットフォームから「描画対象が差し替わった」通知を受け取り、
+		 * サーフェスとスワップチェーンを作り直す。
+		 * @return このフレームを描いてよいなら true(false なら作り直し待ち)
+		 */
+		bool EnsureSurfaceUpToDate();
+
+		/** 実際に提示している面の寸法をスクリーンサイズへ反映する(回転・リサイズ追従) */
+		void SyncScreenSize();
+
 		void Update();
 
 	public:

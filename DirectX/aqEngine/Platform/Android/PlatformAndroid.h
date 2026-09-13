@@ -33,6 +33,14 @@ namespace aq
 			/** 現在の描画対象。バックグラウンドでは nullptr になる */
 			ANativeWindow* window_;
 
+			/**
+			 * サーフェスを作り直す必要があるか(ConsumeSurfaceChanged の読み取りで落ちる)。
+			 *
+			 * 復帰時に渡ってくる ANativeWindow はポインタが同じでも中身(バッファの向き・寸法)が
+			 * 別物になりうるので、同一性では判定せず INIT_WINDOW / リサイズを受けた事実で立てる。
+			 */
+			bool surfaceChanged_;
+
 			/** 終了要求(Activity の破棄要求) */
 			bool exitRequested_;
 
@@ -58,7 +66,9 @@ namespace aq
 			const char* GetUserDataDirectory() override;
 
 			/** 描画可能か(ウィンドウが生きているか)。false の間はフレームを回してはいけない */
-			inline bool IsRenderable() const { return window_ != nullptr; }
+			bool        IsRenderable() const override { return window_ != nullptr; }
+
+			bool        ConsumeSurfaceChanged(aq::graphics::NativeWindowHandle& out) override;
 
 			/** 現在の ANativeWindow。ウィンドウが無ければ nullptr */
 			inline ANativeWindow* GetWindow() const { return window_; }

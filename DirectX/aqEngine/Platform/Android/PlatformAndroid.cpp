@@ -59,6 +59,7 @@ namespace aq
 		PlatformAndroid::PlatformAndroid(android_app* app)
 			: app_(app)
 			, window_(nullptr)
+			, surfaceChanged_(false)
 			, exitRequested_(false)
 			, contentRoot_()
 			, contentRootResolved_(false)
@@ -115,6 +116,8 @@ namespace aq
 			}
 
 			out.handle = window_;
+			// この窓で初期化が走るので、直後に作り直させる必要は無い。
+			surfaceChanged_ = false;
 			aq::StartupMarkf("[android] window ok (%dx%d)",
 			                 ANativeWindow_getWidth(window_),
 			                 ANativeWindow_getHeight(window_));
@@ -122,12 +125,24 @@ namespace aq
 		}
 
 
+		bool PlatformAndroid::ConsumeSurfaceChanged(aq::graphics::NativeWindowHandle& out)
+		{
+			// 窓が無い状態で作り直させても意味が無い(次の INIT_WINDOW で改めて立つ)。
+			if (!surfaceChanged_ || window_ == nullptr)
+			{
+				return false;
+			}
+			surfaceChanged_ = false;
+			out.handle      = window_;
+			return true;
+		}
+
+
 		bool PlatformAndroid::PumpEvents()
 		{
 			// ウィンドウが無い間はフレームを回しても提示先が無い。スピンして電池を
-			// 食うだけなので、イベントが来るまでブロックして待つ。
-			// 「描画できない間はメインループを止める」形を IPlatform へ持ち上げるのは
-			// サーフェス再生成とまとめて扱う必要があるため後続フェーズで行う。
+			// 食うだけなので、イベントが来るまでブロックして待つ
+			// (Engine 側も IsRenderable() が false の間はフレームを飛ばす)。
 			PollOnce(!IsRenderable());
 
 			if (app_ != nullptr && app_->destroyRequested != 0)
@@ -359,14 +374,26 @@ namespace aq
 			{
 			case APP_CMD_INIT_WINDOW:
 				window_ = (app_ != nullptr) ? app_->window : nullptr;
+				// 復帰でもここに来る。前と同じポインタが返ることもあるが、中身は別物なので
+				// 同一性で判断せず、必ずサーフェスを作り直させる。
+				surfaceChanged_ = (window_ != nullptr);
 				aq::StartupMark("[android] cmd INIT_WINDOW");
 				break;
 
 			case APP_CMD_TERM_WINDOW:
-				// 描画対象が破棄される。復帰時には別のウィンドウが渡ってくるため、
-				// サーフェス/スワップチェーンの作り直しが必要になる(後続フェーズ)。
-				window_ = nullptr;
+				// 描画対象が破棄される。IsRenderable() が false になり、Engine は
+				// 次の INIT_WINDOW までフレームを飛ばす。サーフェスの作り直しは
+				// 新しいウィンドウが来てから行うので、ここでは要求を落としておく。
+				window_         = nullptr;
+				surfaceChanged_ = false;
 				aq::StartupMark("[android] cmd TERM_WINDOW");
+				break;
+
+			case APP_CMD_WINDOW_RESIZED:
+			case APP_CMD_CONFIG_CHANGED:
+				// 回転・マルチウィンドウでのサイズ変更。ウィンドウは同じままなので
+				// TERM/INIT は来ない。スワップチェーンの寸法を取り直させる。
+				surfaceChanged_ = (window_ != nullptr);
 				break;
 
 			case APP_CMD_LOST_FOCUS:

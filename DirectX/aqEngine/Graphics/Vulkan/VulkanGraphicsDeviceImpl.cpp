@@ -451,11 +451,18 @@ namespace aq
 					break;
 				}
 			}
-			swapchainFormat_ = chosen.format;
-
-			swapchainExtent_ = caps.currentExtent.width != UINT32_MAX
+			// Android は起動直後・回転直後にサーフェスの実サイズが変わるので、常に
+			// currentExtent を正とする (UINT32_MAX は「アプリが決めてよい」の意味)。
+			const VkExtent2D extent = caps.currentExtent.width != UINT32_MAX
 				? caps.currentExtent
 				: VkExtent2D{ width, height };
+
+			// バックグラウンドや最小化では 0x0 が返る。寸法 0 のスワップチェーンは作れないので、
+			// 古い方を残したまま諦める (描画側は提示せずフレームを捨てる)。
+			if (extent.width == 0 || extent.height == 0)
+			{
+				return false;
+			}
 
 			uint32_t imageCount = caps.minImageCount + 1;
 			if (caps.maxImageCount > 0 && imageCount > caps.maxImageCount) imageCount = caps.maxImageCount;
@@ -473,7 +480,7 @@ namespace aq
 				preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 			}
 			aq::StartupMarkf("[vk] swapchain %ux%u currentTransform=0x%x -> preTransform=0x%x",
-			                 swapchainExtent_.width, swapchainExtent_.height,
+			                 extent.width, extent.height,
 			                 static_cast<unsigned>(caps.currentTransform),
 			                 static_cast<unsigned>(preTransform));
 
@@ -482,7 +489,7 @@ namespace aq
 			ci.minImageCount    = imageCount;
 			ci.imageFormat      = chosen.format;
 			ci.imageColorSpace  = chosen.colorSpace;
-			ci.imageExtent      = swapchainExtent_;
+			ci.imageExtent      = extent;
 			ci.imageArrayLayers = 1;
 			ci.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 			ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -490,7 +497,24 @@ namespace aq
 			ci.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 			ci.presentMode      = VK_PRESENT_MODE_FIFO_KHR;  // VSync。常に対応。
 			ci.clipped          = VK_TRUE;
-			if (!VK_VERIFY(vkCreateSwapchainKHR(device_, &ci, nullptr, &swapchain_))) return false;
+			// 作り直しのときは古い方を引き継ぐ。ドライバが画像を再利用できるうえ、
+			// 生成が失敗しても古い方が有効なまま残る。
+			ci.oldSwapchain     = swapchain_;
+
+			VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
+			if (!VK_VERIFY(vkCreateSwapchainKHR(device_, &ci, nullptr, &newSwapchain))) return false;
+
+			// ここから先は古い方へ戻せない。在フライトのコマンドが古い画像/ビューを
+			// 参照していることがあるので、破棄の前に GPU を空にする
+			// (回転や復帰は毎フレーム起きるものではないので素直に待ってよい)。
+			WaitDeviceIdle();
+			DestroySwapchainResources();
+
+			swapchain_       = newSwapchain;
+			swapchainFormat_ = chosen.format;
+			swapchainExtent_ = extent;
+			imageIndex_      = 0;
+			swapchainDirty_  = false;
 
 			uint32_t scCount = 0;
 			vkGetSwapchainImagesKHR(device_, swapchain_, &scCount, nullptr);
@@ -513,6 +537,76 @@ namespace aq
 				if (!VK_VERIFY(vkCreateSemaphore(device_, &si, nullptr, &presentSemaphores_[i]))) return false;
 			}
 			return true;
+		}
+
+		void VulkanGraphicsDeviceImpl::DestroySwapchainResources()
+		{
+			if (!device_) return;
+
+			for (VkSemaphore s : presentSemaphores_) vkDestroySemaphore(device_, s, nullptr);
+			presentSemaphores_.clear();
+			for (VkImageView v : swapchainViews_) vkDestroyImageView(device_, v, nullptr);
+			swapchainViews_.clear();
+			swapchainImages_.clear();
+			if (swapchain_) { vkDestroySwapchainKHR(device_, swapchain_, nullptr); swapchain_ = VK_NULL_HANDLE; }
+		}
+
+		bool VulkanGraphicsDeviceImpl::IsSwapchainExtentStale() const
+		{
+			VkSurfaceCapabilitiesKHR caps{};
+			if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice_, surface_, &caps) != VK_SUCCESS)
+			{
+				return false;
+			}
+			if (caps.currentExtent.width == UINT32_MAX)
+			{
+				return false;  // サイズはアプリ任せ。ずれようが無い
+			}
+			return caps.currentExtent.width  != swapchainExtent_.width
+			    || caps.currentExtent.height != swapchainExtent_.height;
+		}
+
+		bool VulkanGraphicsDeviceImpl::GetSurfaceSize(uint32_t& outWidth, uint32_t& outHeight) const
+		{
+			if (!IsSwapchainReady()) return false;
+			outWidth  = swapchainExtent_.width;
+			outHeight = swapchainExtent_.height;
+			return true;
+		}
+
+		bool VulkanGraphicsDeviceImpl::RecreateSurface(NativeWindowHandle window)
+		{
+			if (!device_ || window.handle == nullptr) return false;
+
+			// サーフェスごと捨てるので、それに繋がるスワップチェーンも先に畳む必要がある。
+			// CreateSwapchain の「古い方を残す」保険が効かない唯一の経路なので、
+			// 失敗したら呼び出し側 (Engine) がフレームを飛ばして再試行する契約にしている。
+			WaitDeviceIdle();
+			DestroySwapchainResources();
+			if (surface_)
+			{
+				vkDestroySurfaceKHR(instance_, surface_, nullptr);
+				surface_ = VK_NULL_HANDLE;
+			}
+
+			if (!CreateSurface(window.handle)) return false;
+
+			// 物理デバイスは作り直さないので、新しいサーフェスを既存のキューで提示できるかを確かめる。
+			// 通せない組み合わせのまま present すると挙動が未定義になる。
+			VkBool32 supported = VK_FALSE;
+			vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, gfxQueueFamily_, surface_, &supported);
+			if (!supported)
+			{
+				aq::StartupMark("[vk] recreated surface is not presentable on the graphics queue");
+				return false;
+			}
+
+			// 記録途中のフレームがあっても、その内容は古い画像に向いていて使えない。
+			// コマンドバッファは次の BeginFrame の vkResetCommandBuffer で巻き戻る。
+			frameOpen_     = false;
+			imageAcquired_ = false;
+
+			return CreateSwapchain(swapchainExtent_.width, swapchainExtent_.height);
 		}
 
 		bool VulkanGraphicsDeviceImpl::CreateFrameResources()
@@ -561,10 +655,13 @@ namespace aq
 			FrameResources& f = frames_[frameIndex_];
 
 			vkWaitForFences(device_, 1, &f.inFlight, VK_TRUE, UINT64_MAX);
+			imageIndex_    = 0;
+			imageAcquired_ = AcquireNextImage();
 			vkResetFences(device_, 1, &f.inFlight);
 
-			vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, f.imageAvailable, VK_NULL_HANDLE, &imageIndex_);
-
+			// 画像が取れなくてもコマンドバッファは必ず開ける。RenderContext はあらゆる記録の
+			// 先頭でここを呼ぶので、開かずに戻ると未記録状態のバッファへ vkCmd を積むことになる。
+			// 描き先のメイン RT はオフスクリーンなので、記録自体はスワップチェーン無しでも成立する。
 			vkResetCommandBuffer(f.cmd, 0);
 			if (f.descPool) vkResetDescriptorPool(device_, f.descPool, 0);
 			VkCommandBufferBeginInfo bi{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
@@ -572,16 +669,57 @@ namespace aq
 			vkBeginCommandBuffer(f.cmd, &bi);
 
 			// swapchain を COLOR_ATTACHMENT へ (最終的に CopyToBackBuffer がブリットで全面を埋める)。
-			TransitionImage(f.cmd, swapchainImages_[imageIndex_],
-			                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			                VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-			                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+			if (imageAcquired_)
+			{
+				TransitionImage(f.cmd, swapchainImages_[imageIndex_],
+				                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				                VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+				                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+			}
 			frameOpen_ = true;
+		}
+
+		bool VulkanGraphicsDeviceImpl::AcquireNextImage()
+		{
+			// OUT_OF_DATE はサーフェスとスワップチェーンの寸法が食い違っている合図で、
+			// 作り直さない限り何度呼んでも同じ結果になる。このとき imageAvailable は
+			// シグナルされないので、そのまま submit の待ちに使うとキューが止まる。
+			// SUBOPTIMAL は提示自体はできるため、今フレームは描き切ってから作り直す。
+			for (uint32_t attempt = 0; attempt < 2; ++attempt)
+			{
+				// サーフェスの作り直しに失敗した直後などはスワップチェーンが無い。
+				// 組み直せなければ今フレームの提示は諦め、次フレームで再試行する。
+				if (!IsSwapchainReady() && !CreateSwapchain(swapchainExtent_.width, swapchainExtent_.height))
+				{
+					break;
+				}
+
+				const VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
+				                                              frames_[frameIndex_].imageAvailable,
+				                                              VK_NULL_HANDLE, &imageIndex_);
+				if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)
+				{
+					// Android は preTransform に IDENTITY を要求している都合で、回転していなくても
+					// SUBOPTIMAL を返し続ける。寸法が変わったときだけ作り直す
+					// (無条件に作り直すと毎フレーム再生成してしまい描画が進まない)。
+					if (result == VK_SUBOPTIMAL_KHR && IsSwapchainExtentStale())
+					{
+						swapchainDirty_ = true;
+					}
+					return true;
+				}
+				if (result != VK_ERROR_OUT_OF_DATE_KHR) break;   // 作り直しても直らない種類の失敗
+				if (!CreateSwapchain(swapchainExtent_.width, swapchainExtent_.height)) break;
+			}
+
+			imageIndex_ = 0;
+			return false;
 		}
 
 		void VulkanGraphicsDeviceImpl::ClearMainTarget(const float color[4])
 		{
 			BeginFrameIfNeeded();
+			if (!imageAcquired_) return;   // 提示先が無いフレーム
 			FrameResources& f = frames_[frameIndex_];
 
 			VkRenderingAttachmentInfo att{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
@@ -604,16 +742,20 @@ namespace aq
 		void VulkanGraphicsDeviceImpl::Present()
 		{
 			BeginFrameIfNeeded();
+			if (!frameOpen_) return;
 			FrameResources& f = frames_[frameIndex_];
 
 			// RenderContext が dynamic rendering を開いたままなら閉じる。
 			if (activeContext_) activeContext_->EndRenderingIfActive();
 
 			// COLOR_ATTACHMENT_OPTIMAL → PRESENT_SRC_KHR
-			TransitionImage(f.cmd, swapchainImages_[imageIndex_],
-			                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-			                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-			                VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
+			if (imageAcquired_)
+			{
+				TransitionImage(f.cmd, swapchainImages_[imageIndex_],
+				                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+				                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+				                VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
+			}
 
 			vkEndCommandBuffer(f.cmd);
 
@@ -621,7 +763,8 @@ namespace aq
 			waitSem.semaphore = f.imageAvailable;
 			waitSem.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-			VkSemaphore presentSem = presentSemaphores_[imageIndex_];  // 画像単位 (再利用安全)
+			// 画像単位 (再利用安全)。画像を取れていないフレームでは誰も待たないので使わない。
+			VkSemaphore presentSem = imageAcquired_ ? presentSemaphores_[imageIndex_] : VK_NULL_HANDLE;
 			VkSemaphoreSubmitInfo signalSem{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO };
 			signalSem.semaphore = presentSem;
 			signalSem.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -629,26 +772,45 @@ namespace aq
 			VkCommandBufferSubmitInfo cmdInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO };
 			cmdInfo.commandBuffer = f.cmd;
 
+			// 画像を取れていないときは imageAvailable が未シグナルで、presentSem を待つ相手も
+			// 居ない。セマフォを絡めずコマンドだけ流し、フェンスの signal で辻褄を合わせる。
 			VkSubmitInfo2 submit{ VK_STRUCTURE_TYPE_SUBMIT_INFO_2 };
-			submit.waitSemaphoreInfoCount   = 1;
+			submit.waitSemaphoreInfoCount   = imageAcquired_ ? 1 : 0;
 			submit.pWaitSemaphoreInfos      = &waitSem;
 			submit.commandBufferInfoCount   = 1;
 			submit.pCommandBufferInfos      = &cmdInfo;
-			submit.signalSemaphoreInfoCount = 1;
+			submit.signalSemaphoreInfoCount = imageAcquired_ ? 1 : 0;
 			submit.pSignalSemaphoreInfos    = &signalSem;
 			vkQueueSubmit2(gfxQueue_, 1, &submit, f.inFlight);
 
-			VkPresentInfoKHR present{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-			present.waitSemaphoreCount = 1;
-			present.pWaitSemaphores    = &presentSem;
-			present.swapchainCount     = 1;
-			present.pSwapchains        = &swapchain_;
-			present.pImageIndices      = &imageIndex_;
-			vkQueuePresentKHR(gfxQueue_, &present);
+			if (imageAcquired_)
+			{
+				VkPresentInfoKHR present{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+				present.waitSemaphoreCount = 1;
+				present.pWaitSemaphores    = &presentSem;
+				present.swapchainCount     = 1;
+				present.pSwapchains        = &swapchain_;
+				present.pImageIndices      = &imageIndex_;
+
+				// 提示の戻り値も取得側と同じ扱い。OUT_OF_DATE は問答無用で作り直し、
+				// SUBOPTIMAL は寸法が変わったときだけ (Android は常時 SUBOPTIMAL を返すため)。
+				const VkResult result = vkQueuePresentKHR(gfxQueue_, &present);
+				if (result == VK_ERROR_OUT_OF_DATE_KHR
+				 || (result == VK_SUBOPTIMAL_KHR && IsSwapchainExtentStale()))
+				{
+					swapchainDirty_ = true;
+				}
+			}
 
 			frameOpen_ = false;
 			frameIndex_ = (frameIndex_ + 1) % FRAME_COUNT;
 			++frameSerial_;
+
+			// 作り直すのはフレームの外だけ。記録途中で壊すと在フライトの画像ビューを踏む。
+			if (swapchainDirty_)
+			{
+				CreateSwapchain(swapchainExtent_.width, swapchainExtent_.height);
+			}
 		}
 
 		void VulkanGraphicsDeviceImpl::TransitionImage(VkCommandBuffer cmd, VkImage image,
@@ -700,12 +862,7 @@ namespace aq
 				if (f.pool)           vkDestroyCommandPool(device_, f.pool, nullptr);
 				f = {};
 			}
-			for (VkSemaphore s : presentSemaphores_) vkDestroySemaphore(device_, s, nullptr);
-			presentSemaphores_.clear();
-			for (VkImageView v : swapchainViews_) vkDestroyImageView(device_, v, nullptr);
-			swapchainViews_.clear();
-			swapchainImages_.clear();
-			if (swapchain_) { vkDestroySwapchainKHR(device_, swapchain_, nullptr); swapchain_ = VK_NULL_HANDLE; }
+			DestroySwapchainResources();
 			if (uploadPool_) { vkDestroyCommandPool(device_, uploadPool_, nullptr); uploadPool_ = VK_NULL_HANDLE; }
 			if (allocator_) { vmaDestroyAllocator(allocator_); allocator_ = VK_NULL_HANDLE; }
 			vkDestroyDevice(device_, nullptr);
@@ -782,6 +939,7 @@ namespace aq
 			BeginFrameIfNeeded();
 			auto& rt = static_cast<VulkanRenderTarget&>(src);
 			if (activeContext_) activeContext_->EndRenderingIfActive();
+			if (!imageAcquired_) return;   // 提示先が無いフレーム。ブリットする相手がいない
 			VkCommandBuffer cmd = frames_[frameIndex_].cmd;
 			VkImage srcImg = rt.GetImage();
 			VkImage dstImg = swapchainImages_[imageIndex_];

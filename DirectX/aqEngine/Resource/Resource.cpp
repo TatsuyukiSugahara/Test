@@ -255,6 +255,8 @@ namespace aq
 
 			std::string FindProjectRoot()
 			{
+				// 関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
+				aq::memory::ScopedPersistentAlloc persistent;
 				static std::string cachedRoot;
 				if (!cachedRoot.empty()) {
 					return cachedRoot;

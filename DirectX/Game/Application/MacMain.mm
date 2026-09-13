@@ -124,8 +124,12 @@ int main(int argc, const char* argv[])
 			engineInstance.RunGame();
 		}
 		engineInstance.Finalize();
+		aq::Engine::Release();
 	}
 
+	// Engine もプラットフォーム(autoreleasepool 内のローカル)も壊れた後に畳む。
+	// ここで初めてリーク報告が意味を持つ。
+	aq::ShutdownMemory();
 	return 0;
 }
 #endif // AQ_PLATFORM_MAC

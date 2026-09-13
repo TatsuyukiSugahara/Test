@@ -39,6 +39,9 @@ namespace aq
 
 		Profiler::ThreadData& Profiler::Local()
 		{
+			// ThreadData はスレッドが死んでも threads_ (静的) が shared_ptr で持ち続ける。
+			// 終了時に生きているのが正常なのでリーク報告の対象外にする。
+			aq::memory::ScopedPersistentAlloc persistent;
 			thread_local ThreadData* tls = nullptr;
 			if (tls == nullptr)
 			{
@@ -71,6 +74,8 @@ namespace aq
 
 		void Profiler::PushScope(const char* name)
 		{
+			// samples / stack は ThreadData の一部で、伸びたバッファはプロセス終了まで残る。
+			aq::memory::ScopedPersistentAlloc persistent;
 			ThreadData& td = Local();
 			Sample s;
 			s.name        = name;
@@ -100,6 +105,8 @@ namespace aq
 
 		void Profiler::PublishThisThread()
 		{
+			// display / history も同じく ThreadData の一部。
+			aq::memory::ScopedPersistentAlloc persistent;
 			ThreadData& td = Local();
 			{
 				std::lock_guard<std::mutex> lock(td.publishMutex);

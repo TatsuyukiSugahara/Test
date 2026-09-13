@@ -27,7 +27,9 @@ namespace aq
 			// static 初期化で一度だけ算出する。
 			std::string FindProjectRoot()
 			{
-				static const std::string cached = []() -> std::string
+				// 関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
+			aq::memory::ScopedPersistentAlloc persistent;
+			static const std::string cached = []() -> std::string
 				{
 					// プラットフォームがコンテンツ基点を返す場合(UWP のパッケージ install
 					// フォルダ、Android の展開先など)はそれを採用し、ソースツリーの上方探索は

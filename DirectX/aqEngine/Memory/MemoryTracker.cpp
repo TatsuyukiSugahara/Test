@@ -25,6 +25,11 @@ namespace aq
 		// フラグが立っている間の確保はヘッダは持つがリストには連結しない(tracked=false)。
 		thread_local bool g_inTracking = false;
 
+		// プロセス寿命の確保を示すネスト深さ。ScopedPersistentAlloc が increment / decrement する。
+		// 静的レジストリやシングルトンは終了時に生きているのが正常なので、リーク報告から外す
+		// (バイト数の集計には従来どおり含める。予算の観測では実在するメモリだから)。
+		thread_local int g_persistentDepth = 0;
+
 		// メモリ予算の観測用: 現在未解放のヒープ確保バイト数の総和と件数。
 		std::atomic<size_t> g_liveBytes{ 0 };
 		std::atomic<size_t> g_liveCount{ 0 };
@@ -65,6 +70,20 @@ namespace aq
 		}
 
 
+		void PushPersistentAlloc() noexcept
+		{
+			++g_persistentDepth;
+		}
+
+
+		void PopPersistentAlloc() noexcept
+		{
+			if (g_persistentDepth > 0) {
+				--g_persistentDepth;
+			}
+		}
+
+
 		void RegisterBlock(TrackHeader* header, size_t size) noexcept
 		{
 			// ソース情報を消費してリセット
@@ -76,9 +95,10 @@ namespace aq
 			header->file    = src.file;
 			header->func    = src.func;
 			header->line    = src.line;
-			header->tracked = false;
-			header->prev    = nullptr;
-			header->next    = nullptr;
+			header->tracked    = false;
+			header->persistent = (g_persistentDepth > 0);
+			header->prev       = nullptr;
+			header->next       = nullptr;
 
 			if (g_inTracking) {
 				return;   // 集計中の一時確保: 統計とリストには含めない
@@ -106,10 +126,11 @@ namespace aq
 				g_liveBytes.fetch_sub(header->size, std::memory_order_relaxed);
 				g_liveCount.fetch_sub(1,            std::memory_order_relaxed);
 			}
-			header->magic   = 0;   // 二重解放検出用
-			header->tracked = false;
-			header->prev    = nullptr;
-			header->next    = nullptr;
+			header->magic      = 0;   // 二重解放検出用
+			header->tracked    = false;
+			header->persistent = false;
+			header->prev       = nullptr;
+			header->next       = nullptr;
 		}
 
 
@@ -167,21 +188,43 @@ namespace aq
 			auto& data = GetData();
 			std::lock_guard<std::mutex> lock(data.mutex);
 
-			if (data.sentinel.next == &data.sentinel) {
-				aq::debug::OutputString("[MemoryTracker] No leaks detected.\n");
+			char buf[512];
+
+			// プロセス寿命の確保(ScopedPersistentAlloc で印を付けたもの)は数えるだけで並べない。
+			// 静的レジストリやシングルトンは終了時に生きているのが正常で、並べると
+			// 本当のリークがその中に埋もれてしまうため。
+			size_t persistentCount = 0;
+			size_t persistentBytes = 0;
+			size_t leakCount       = 0;
+			size_t leakBytes       = 0;
+			for (const TrackHeader* h = data.sentinel.next; h != &data.sentinel; h = h->next) {
+				if (h->persistent) {
+					persistentCount += 1;
+					persistentBytes += h->size;
+				} else {
+					leakCount += 1;
+					leakBytes += h->size;
+				}
+			}
+
+			if (leakCount == 0) {
+				snprintf(buf, sizeof(buf),
+					"[MemoryTracker] No leaks detected. (process-lifetime: %zu block(s) / %zu bytes)\n",
+					persistentCount, persistentBytes);
+				aq::debug::OutputString(buf);
 				return;
 			}
 
-			char buf[512];
 			snprintf(buf, sizeof(buf),
 				"[MemoryTracker] ========== %zu leak(s) detected ==========\n",
-				g_liveCount.load(std::memory_order_relaxed));
+				leakCount);
 			aq::debug::OutputString(buf);
 
-			size_t totalBytes = 0;
 			for (const TrackHeader* h = data.sentinel.next; h != &data.sentinel; h = h->next) {
+				if (h->persistent) {
+					continue;
+				}
 				const void* userPtr = reinterpret_cast<const uint8_t*>(h) + sizeof(TrackHeader);
-				totalBytes += h->size;
 				if (h->file) {
 					snprintf(buf, sizeof(buf),
 						"  %p  %6zu bytes  %s:%d  (%s)\n",
@@ -195,9 +238,10 @@ namespace aq
 			}
 
 			snprintf(buf, sizeof(buf),
-				"[MemoryTracker] Total leaked: %zu bytes\n"
+				"[MemoryTracker] Total leaked: %zu bytes"
+				" (process-lifetime excluded: %zu block(s) / %zu bytes)\n"
 				"[MemoryTracker] =============================================\n",
-				totalBytes);
+				leakBytes, persistentCount, persistentBytes);
 			aq::debug::OutputString(buf);
 		}
 	}

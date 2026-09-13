@@ -12,24 +12,30 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 	// Win32 プラットフォーム実装。ウィンドウ/メッセージループの寿命は WinMain が持つ。
 	// 道A(UWP) では PlatformUWP に差し替えるブートストラップになる。
-	aq::platform::PlatformWin32 platform(hInstance, nCmdShow);
+	// スコープで囲むのは、リーク報告(ShutdownMemory)を platform の破棄より後に出すため。
+	{
+		aq::platform::PlatformWin32 platform(hInstance, nCmdShow);
 
-	aq::StartupMark("WinMain");
-	aq::Engine::Create();
-	aq::Engine& engineInstance = aq::Engine::Get();
-	engineInstance.CreateApplication<app::Application>();
+		aq::StartupMark("WinMain");
+		aq::Engine::Create();
+		aq::Engine& engineInstance = aq::Engine::Get();
+		engineInstance.CreateApplication<app::Application>();
 
-	aq::InitializeParameter initializeParameter;
-	initializeParameter.platform = &platform;
-	initializeParameter.screenWidth = 1280;
-	initializeParameter.screenHeight = 720;
-	initializeParameter.renderWidth = 1280;
-	initializeParameter.renderHeight = 720;
-	if (engineInstance.Initialize(initializeParameter)) {
-		engineInstance.RunGame();
+		aq::InitializeParameter initializeParameter;
+		initializeParameter.platform = &platform;
+		initializeParameter.screenWidth = 1280;
+		initializeParameter.screenHeight = 720;
+		initializeParameter.renderWidth = 1280;
+		initializeParameter.renderHeight = 720;
+		if (engineInstance.Initialize(initializeParameter)) {
+			engineInstance.RunGame();
+		}
+		engineInstance.Finalize();
+		aq::Engine::Release();
 	}
-	engineInstance.Finalize();
 
+	// Engine もプラットフォームも壊れた後に畳む。ここで初めてリーク報告が意味を持つ。
+	aq::ShutdownMemory();
 	return 0;
 }
 #endif // AQ_PLATFORM_WIN32

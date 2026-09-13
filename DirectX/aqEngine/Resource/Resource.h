@@ -980,15 +980,14 @@ public:\
 
 			static void ClearBank()
 			{
-				if (bankMap_.size() == 0) {
-					return;
-				}
 				for (auto it : bankMap_) {
 					auto* ptr = it.second;
 					delete ptr;
 					ptr = nullptr;
 				}
-				bankMap_.clear();
+				// clear() ではバケット配列が残る(静的メンバなのでプロセス終了まで居座る)。
+				// 空マップと入れ替えて本当に手放す。
+				BankHashMap().swap(bankMap_);
 			}
 
 
@@ -1027,7 +1026,8 @@ public:\
 
 			static void ClearReflection()
 			{
-				loaderHashMap_.clear();
+				// ClearBank と同じ理由でバケット配列ごと手放す。
+				ReflectionHashMap().swap(loaderHashMap_);
 			}
 
 		private:

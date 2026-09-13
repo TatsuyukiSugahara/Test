@@ -82,6 +82,10 @@ namespace
 					aq::StartupLog("engine.Initialize() returned FALSE");
 				}
 				engine.Finalize();
+				aq::Engine::Release();
+				// プラットフォーム実装もリーク報告の前に畳む(Engine が握っていたものと同じ扱い)。
+				platform_.reset();
+				aq::ShutdownMemory();
 				aq::StartupLog("=== Run end ===");
 			}
 			catch (winrt::hresult_error const& e)

@@ -21,6 +21,31 @@ namespace aq
 			virtual void  Deallocate(void* ptr) noexcept = 0;
 		};
 
+		/**
+		 * このスコープ内の確保を「プロセス寿命」として印付けし、リーク報告から外す。
+		 *
+		 * 静的レジストリ・シングルトン・thread_local キャッシュのように、プロセス終了まで
+		 * 生きているのが正常なものに使う。終了時の生存を全部リークとして並べると、
+		 * 本当に解放し忘れたものがその中に埋もれるため。
+		 * バイト数の集計(GetTrackedBytes)には従来どおり含まれる — 実在するメモリだから。
+		 * Release ビルドでは何もしない。
+		 */
+		class ScopedPersistentAlloc
+		{
+		public:
+#ifdef _DEBUG
+			ScopedPersistentAlloc()  noexcept { PushPersistentAlloc(); }
+			~ScopedPersistentAlloc() noexcept { PopPersistentAlloc(); }
+#else
+			ScopedPersistentAlloc()  noexcept {}
+			~ScopedPersistentAlloc() noexcept {}
+#endif
+
+			ScopedPersistentAlloc(const ScopedPersistentAlloc&)            = delete;
+			ScopedPersistentAlloc& operator=(const ScopedPersistentAlloc&) = delete;
+		};
+
+
 		class StackAllocator;
 
 		// 定義は MemoryManager.cpp にある

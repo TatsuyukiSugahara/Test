@@ -388,6 +388,8 @@ namespace aq
 		aq::ecs::EntityContext::Finalize();
 		aq::res::ResourceManager::Finalize();
 		aq::hid::InputManager::Finalize();
+		// Initialize で new したきり解放していなかった。シングルトンだが寿命は Application に合わせる。
+		aq::CameraManager::Finalize();
 	}
 
 

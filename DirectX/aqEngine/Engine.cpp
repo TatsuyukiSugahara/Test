@@ -23,6 +23,12 @@ namespace aq
 	Engine* Engine::instance_ = nullptr;
 
 
+	void ShutdownMemory()
+	{
+		aq::memory::MemoryManager::Finalize();
+	}
+
+
 	Engine::Engine()
 		: platform_(nullptr)
 		, window_()
@@ -143,7 +149,10 @@ namespace aq
 			comInitialized_ = false;
 		}
 #endif // AQ_PLATFORM_WINDOWS_FAMILY
-		aq::memory::MemoryManager::Finalize();
+
+		// MemoryManager はここでは畳まない。Engine 本体とプラットフォームがまだ生きているうちに
+		// リーク報告を出すと、それらが全部「リーク」として並んでしまう。
+		// 破棄は Engine::Release() の後、エントリ側の ShutdownMemory() が行う。
 	}
 
 

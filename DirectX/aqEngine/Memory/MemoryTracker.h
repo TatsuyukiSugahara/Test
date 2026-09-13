@@ -25,6 +25,7 @@ namespace aq
 			const char*  func;
 			int          line;
 			bool         tracked;      // リストに連結したか(追跡中の再入時は連結しない)
+			bool         persistent;   // プロセス寿命の確保(静的レジストリ・シングルトン等)。リーク報告から外す
 			TrackHeader* prev;
 			TrackHeader* next;
 		};
@@ -60,6 +61,10 @@ namespace aq
 
 		// engineNewWith マクロから呼ばれる: 次の Allocate に紐付けるソース情報をスレッドローカルにセット
 		void SetNextAllocSource(const char* file, int line, const char* func) noexcept;
+
+		// ScopedPersistentAlloc (IAllocator.h) から呼ばれる: 以降の確保をプロセス寿命として印付けする
+		void PushPersistentAlloc() noexcept;
+		void PopPersistentAlloc() noexcept;
 	}
 }
 

@@ -62,6 +62,8 @@ namespace aq
 
 		void ComponentRegistry::Register(TypeInfo typeInfo, ComponentMeta meta)
 		{
+			// レジストリは関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
+			aq::memory::ScopedPersistentAlloc persistent;
 			for (const auto& entry : entries_) {
 				if (entry.first == typeInfo) return;
 			}
@@ -98,6 +100,9 @@ namespace aq
 
 		void ComponentRegistry::RegisterCoreComponents()
 		{
+			// ここで組み立てる ComponentMeta (requiredWith の vector を含む) はレジストリが
+			// そのまま抱え、プロセス終了まで残る。Register の中だけでは覆えないのでここでも囲む。
+			aq::memory::ScopedPersistentAlloc persistent;
 			ComponentRegistry& registry = Get();
 			if (registry.coreRegistered_) return;
 			registry.coreRegistered_ = true;

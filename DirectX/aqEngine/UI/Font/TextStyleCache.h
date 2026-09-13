@@ -21,6 +21,8 @@ namespace aq
 			// path をロードして const 参照を返す。失敗時はデフォルトスタイルを返す。
 			const TextStyle& Load(const std::string& path)
 			{
+				// キャッシュ本体は関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
+				aq::memory::ScopedPersistentAlloc persistent;
 				auto it = cache_.find(path);
 				if (it != cache_.end()) return it->second;
 

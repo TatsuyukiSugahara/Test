@@ -23,6 +23,8 @@ namespace aq
 
 			std::shared_ptr<FontResource> Load(const std::string& path)
 			{
+				// キャッシュ本体は関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
+				aq::memory::ScopedPersistentAlloc persistent;
 				auto it = cache_.find(path);
 				if (it != cache_.end()) return it->second;
 

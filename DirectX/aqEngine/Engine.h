@@ -16,6 +16,16 @@
 namespace aq
 {
 	class IApplication;
+
+	/**
+	 * メモリ管理を畳む(Debug ではリーク報告もここで出る)。
+	 *
+	 * Engine::Finalize() → Engine::Release() と、プラットフォーム実装の破棄が
+	 * すべて済んだ後に、エントリポイントが最後に 1 回だけ呼ぶ。
+	 * Engine やプラットフォームが生きているうちに呼ぶと、それらが抱えている確保が
+	 * まとめて「リーク」として報告されてしまう。
+	 */
+	void ShutdownMemory();
 	namespace platform { class IPlatform; }
 
 	struct InitializeParameter

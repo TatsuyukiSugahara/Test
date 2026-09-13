@@ -6,8 +6,8 @@
 //    UWP(Xbox / PC-UWP)  : 入力なし(Null)。実入力は Phase 4 の GameInput で対応
 //    Mac                   : 入力なし(Null)。Cocoa 実装(CocoaKeyboardBackend /
 //                            CocoaMouseBackend)は P4 で追加する
-//    Android               : 入力なし(Null)。物理キーボード/マウスは対象外で、
-//                            操作はタッチとパッドが担う(設計書/Android移植設計.md)
+//    Android               : キーボードは Null。マウスは TouchMouseBackend(タッチをポインタとして
+//                            供給する。物理マウスを想定するという意味ではない)
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -53,19 +53,53 @@ namespace aq
 }
 #elif defined(AQ_PLATFORM_ANDROID)
 #include "HID/NullKeyboardBackend.h"
-#include "HID/NullMouseBackend.h"
+#include "HID/TouchMouseBackend.h"
 
 namespace aq
 {
 	namespace hid
 	{
-		// Android: 物理キーボード / マウスは想定しない。UI のタップは ITouchBackend、
-		// ゲーム操作は DefaultPadBackend(仮想パッド or 物理コントローラ)が担う。
-		// Null のままで Input 側は無改修で成立する。
+		// Android: 物理キーボードは想定しないので Null。
+		//
+		// マウスは TouchMouseBackend を入れる。**物理マウスを想定するという意味ではなく**、
+		// タッチを既存のポインタ経路(UIInputSystem / ImGui)へ載せるための合成である。
+		// こうしておくと UI 側は無改修で、ImGui の抑制(SuppressMouse)もそのまま効く
+		// (設計書/Android移植設計.md §P7)。ゲーム操作は DefaultPadBackend(仮想パッド or
+		// 物理コントローラ)が引き続き担う。
 		using DefaultKeyboardBackend = NullKeyboardBackend;
-		using DefaultMouseBackend    = NullMouseBackend;
+		using DefaultMouseBackend    = TouchMouseBackend;
 	}
 }
 #else
 #error "DefaultKeyboardBackend / DefaultMouseBackend: 未対応のプラットフォームです"
 #endif
+
+
+// ============================================================
+//  マウスバックエンドの生成(PadBackend.h の CreateDefaultPadBackend と同じ流儀)。
+//  Android だけはタッチから合成するため取り込み済みの TouchState を要る。
+//  呼び出し側(InputManager)に #if を持ち込まないため、組み立てをここへ寄せる。
+// ============================================================
+#include <memory>
+#include "HID/ITouchBackend.h"
+
+namespace aq
+{
+	namespace hid
+	{
+#if defined(AQ_PLATFORM_ANDROID)
+		inline std::unique_ptr<IMouseBackend> CreateDefaultMouseBackend(const TouchState* pointerTouch)
+		{
+			// 渡すのは「パッドが使っていない指」だけの集合。仮想パッドのスティックを
+			// 倒しながら裏の UI を誤クリックしないよう、InputManager が選り分けている。
+			return std::make_unique<TouchMouseBackend>(pointerTouch);
+		}
+#else
+		inline std::unique_ptr<IMouseBackend> CreateDefaultMouseBackend(const TouchState* /*pointerTouch*/)
+		{
+			// タッチを持たないプラットフォームは実デバイスをそのまま使う。
+			return std::make_unique<DefaultMouseBackend>();
+		}
+#endif
+	}
+}

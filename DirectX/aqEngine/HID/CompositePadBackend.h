@@ -38,6 +38,9 @@ namespace aq
 			void Poll                (uint32_t index, PadState& out) override;
 			void SetVibration        (uint32_t index, float left, float right) override;
 			void SetTriggerResistance(uint32_t index, PadAxis trigger, float startPos, float strength) override;
+
+			/** 束ねたどれか 1 つでも使っていれば使用中とみなす */
+			bool IsTouchConsumed(int32_t touchId) const override;
 		};
 	}
 }

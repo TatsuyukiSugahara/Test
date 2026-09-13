@@ -53,6 +53,15 @@ namespace aq
 			// startPos: 抵抗が効き始めるトリガー位置 [0, 1]。strength: 抵抗の強さ [0, 1]。
 			// strength = 0 は「解除」(抵抗なし)を意味する。
 			// 既定は no-op。ハードが対応しないバックエンド(XInput / WinRT)は実装しない。
+			/**
+			 * その指をパッド操作に使っているか(仮想パッドのスティック/ボタンを触っている指か)。
+			 *
+			 * true を返した指は UI のポインタへ回さない。スティックを倒しながら裏の UI を
+			 * 誤クリックするのを防ぐためで、判定を持つのは仮想パッドだけなので既定は false。
+			 * Poll の後に問われる(同じフレームの掴み状態が見えている必要があるため)。
+			 */
+			virtual bool IsTouchConsumed(int32_t /*touchId*/) const { return false; }
+
 			virtual void SetTriggerResistance(uint32_t /*index*/, PadAxis /*trigger*/,
 			                                  float /*startPos*/, float /*strength*/) {}
 		};

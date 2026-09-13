@@ -346,7 +346,9 @@ namespace aq
 			keyBoard_->SetBackend(keyboardBackend_.get());
 			if (!keyboardBackend_->Initialize(window)) return false;
 
-			mouseBackend_ = std::make_unique<DefaultMouseBackend>();
+			// 生成のしかたがプラットフォームで違う(タッチから合成する環境がある)ので、
+			// 組み立ては KeyboardMouseBackend.h のファクトリへ寄せる。
+			mouseBackend_ = CreateDefaultMouseBackend(&pointerTouch_);
 			mouse_        = std::make_unique<Mouse>();
 			mouse_->SetBackend(mouseBackend_.get());
 			if (!mouseBackend_->Initialize(window)) return false;
@@ -366,8 +368,31 @@ namespace aq
 			if (touchBackend_) touchBackend_->Poll(touch_);
 
 			if (keyBoard_) keyBoard_->Update(dt);
-			if (mouse_)    mouse_->Update(dt);
+
+			// パッドはマウスより先に更新する。タッチをポインタとして扱うプラットフォームでは、
+			// 仮想パッドが掴んだ指を除いてからでないとマウス側が拾ってしまう
+			// (スティックを倒した指で裏の UI をクリックしてしまう)。
 			for (auto& pad : pads_) pad.Update(dt);
+			BuildPointerTouchState();
+
+			if (mouse_) mouse_->Update(dt);
+		}
+
+
+		void InputManager::BuildPointerTouchState()
+		{
+			pointerTouch_.count = 0u;
+
+			const uint32_t count = (touch_.count < TouchState::MAX_POINT_COUNT)
+				                     ? touch_.count : TouchState::MAX_POINT_COUNT;
+			for (uint32_t i = 0; i < count; ++i) {
+				const TouchPoint& point = touch_.points[i];
+				if (padBackend_ && padBackend_->IsTouchConsumed(point.id)) {
+					continue;
+				}
+				pointerTouch_.points[pointerTouch_.count] = point;
+				++pointerTouch_.count;
+			}
 		}
 
 

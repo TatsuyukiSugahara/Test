@@ -24,6 +24,8 @@
 #include <imgui/imgui_impl_win32.h>
 #elif defined(AQ_PLATFORM_MAC)
 #include "Platform/Mac/MacImGui.h"
+#elif defined(AQ_PLATFORM_ANDROID)
+#include "Platform/Common/ImGuiPointerInput.h"
 #endif
 #include "Rendering/ImGuiRenderCommand.h"
 #ifdef ENGINE_GRAPHICS_D3D11
@@ -153,10 +155,25 @@ namespace aq
 						io.Fonts->AddFontDefault();
 				}
 
+#if defined(AQ_PLATFORM_ANDROID)
+				// 指で触れる大きさにする。2400x1080 の端末ではメニューバーの高さが 10px 程度しかなく、
+				// 入力を繋いでも指では押せない。ScaleAllSizes が余白と当たり領域を、
+				// FontGlobalScale が文字を拡大する(設計書/Android移植設計.md §P7)。
+				{
+					constexpr float MOBILE_UI_SCALE = 2.0f;
+					ImGui::GetStyle().ScaleAllSizes(MOBILE_UI_SCALE);
+					ImGui::GetIO().FontGlobalScale = MOBILE_UI_SCALE;
+				}
+#endif
+
 #if defined(AQ_PLATFORM_WIN32)
 			const bool winOk = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
 #elif defined(AQ_PLATFORM_MAC)
 			const bool winOk = aq::platform::MacImGui::Init();
+#elif defined(AQ_PLATFORM_ANDROID)
+			// タッチはマウス抽象へ合成済みなので、それを ImGui へ流すだけのシムで足りる
+			// (imgui_impl_android は使わない。設計書/Android移植設計.md §P7)。
+			const bool winOk = aq::platform::ImGuiPointerInput::Init();
 #else
 			// UWP はプラットフォームバックエンドを持たない(ImGui へ入力が届かない)。
 			const bool winOk = true;
@@ -184,6 +201,8 @@ namespace aq
 				if (winOk) ImGui_ImplWin32_Shutdown();
 #elif defined(AQ_PLATFORM_MAC)
 				if (winOk) aq::platform::MacImGui::Shutdown();
+#elif defined(AQ_PLATFORM_ANDROID)
+				if (winOk) aq::platform::ImGuiPointerInput::Shutdown();
 #endif
 				ImGui::DestroyContext();
 				EngineAssertMsg(false, "ImGui backend initialization failed");
@@ -369,6 +388,8 @@ namespace aq
 			ImGui_ImplWin32_Shutdown();
 #elif defined(AQ_PLATFORM_MAC)
 			aq::platform::MacImGui::Shutdown();
+#elif defined(AQ_PLATFORM_ANDROID)
+			aq::platform::ImGuiPointerInput::Shutdown();
 #endif
 			ImGui::DestroyContext();
 			imguiReady_ = false;
@@ -509,6 +530,8 @@ namespace aq
 			ImGui_ImplWin32_NewFrame();
 #elif defined(AQ_PLATFORM_MAC)
 			aq::platform::MacImGui::NewFrame();
+#elif defined(AQ_PLATFORM_ANDROID)
+			aq::platform::ImGuiPointerInput::NewFrame();
 #else
 			// UWP はプラットフォームバックエンドが無いので、それが埋めるべき最低限の 2 つを自前で入れる。
 			//  - DisplaySize: 0 のままだと ImGui::NewFrame のサニティチェックで停止する

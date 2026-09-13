@@ -185,6 +185,12 @@ namespace aq
 			 */
 			const TouchState& GetTouchState() const { return touch_; }
 
+			/**
+			 * パッドが使っていない指だけの集合(UI / ImGui のポインタ用)。
+			 * 仮想パッドの Poll が済んだ後に作られるので、読むのは Update 以降。
+			 */
+			const TouchState& GetPointerTouchState() const { return pointerTouch_; }
+
 			/** ImGui がキーボード入力を使用中は true に設定する。wrapper 関数が false/0 を返す。 */
 			void SuppressKeyboard(bool suppress) { suppressKeyboard_ = suppress; }
 			/** ImGui がマウス入力を使用中は true に設定する。wrapper 関数が false/0 を返す。 */
@@ -195,6 +201,10 @@ namespace aq
 			static void          Initialize() { if (!sInstance_) sInstance_ = new InputManager(); }
 			static InputManager& Get()        { return *sInstance_; }
 			static void          Finalize()   { if (sInstance_) { delete sInstance_; sInstance_ = nullptr; } }
+
+		private:
+			/** touch_ からパッドが使っている指を除いて pointerTouch_ を作る(パッド更新の直後に呼ぶ) */
+			void BuildPointerTouchState();
 
 		private:
 			// バックエンドは KeyBoard / Mouse / Pad より先に宣言する。
@@ -214,6 +224,13 @@ namespace aq
 
 			/** 毎フレーム touchBackend_ から取り込んだタッチ点 */
 			TouchState                        touch_{};
+
+			/**
+			 * touch_ から「パッド操作に使われている指」を除いた集合。
+			 * UI / ImGui のポインタ(TouchMouseBackend)はこちらを読む。仮想パッドの
+			 * スティックを倒しながら裏の UI を誤クリックしないための分離。
+			 */
+			TouchState                        pointerTouch_{};
 
 			using Clock = std::chrono::high_resolution_clock;
 			Clock::time_point lastTime_;

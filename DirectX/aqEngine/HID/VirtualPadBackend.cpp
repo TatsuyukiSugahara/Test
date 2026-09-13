@@ -21,6 +21,8 @@ namespace aq
 			: touch_(touch)
 			, layout_()
 			, stickTouchId_(INVALID_TOUCH_ID)
+			, consumedTouchIds_{}
+			, consumedTouchCount_(0u)
 		{
 		}
 
@@ -38,7 +40,8 @@ namespace aq
 
 			// 入力元が無いときは触れていない扱い。掴みも解く。
 			if (touch_ == nullptr) {
-				stickTouchId_ = INVALID_TOUCH_ID;
+				stickTouchId_       = INVALID_TOUCH_ID;
+				consumedTouchCount_ = 0u;
 				return;
 			}
 
@@ -51,6 +54,10 @@ namespace aq
 				stickTouchId_ = INVALID_TOUCH_ID;
 				return;
 			}
+
+			// 占有中の指はこの Poll のぶんだけを持つ。前フレームの指を持ち越すと、
+			// 離した後も UI のポインタが復活しない。
+			consumedTouchCount_ = 0u;
 
 			UpdateStick  (*touch_, screenWidth, screenHeight, out);
 			UpdateButtons(*touch_, screenWidth, screenHeight, out);
@@ -88,6 +95,10 @@ namespace aq
 			// 掴んでいない間は中心(軸はゼロのまま)
 			if (point == nullptr) { return; }
 
+			// 掴んでいる指は UI のポインタへ回さない。円の外へ追従するので、
+			// 座標だけで判定すると裏の UI を撫でてしまう。
+			MarkTouchConsumed(stickTouchId_);
+
 			float x = (point->x - area.centerX * screenWidth)  / radius;
 			float y = (point->y - area.centerY * screenHeight) / radius;
 
@@ -106,7 +117,7 @@ namespace aq
 		}
 
 
-		void VirtualPadBackend::UpdateButtons(const TouchState& touches, const float screenWidth, const float screenHeight, PadState& out) const
+		void VirtualPadBackend::UpdateButtons(const TouchState& touches, const float screenWidth, const float screenHeight, PadState& out)
 		{
 			const uint32_t count = ClampTouchCount(touches.count);
 			for (uint32_t i = 0; i < count; ++i) {
@@ -119,14 +130,41 @@ namespace aq
 
 				if (IsInside(layout_.buttonA, point, screenWidth, screenHeight)) {
 					out.buttons[static_cast<uint32_t>(PadButton::A)] = true;
+					MarkTouchConsumed(point.id);
 				}
 				if (IsInside(layout_.buttonB, point, screenWidth, screenHeight)) {
 					out.buttons[static_cast<uint32_t>(PadButton::B)] = true;
+					MarkTouchConsumed(point.id);
 				}
 				if (IsInside(layout_.buttonStart, point, screenWidth, screenHeight)) {
 					out.buttons[static_cast<uint32_t>(PadButton::Start)] = true;
+					MarkTouchConsumed(point.id);
 				}
 			}
+		}
+
+
+		void VirtualPadBackend::MarkTouchConsumed(const int32_t touchId)
+		{
+			if (touchId == INVALID_TOUCH_ID) { return; }
+			if (consumedTouchCount_ >= TouchState::MAX_POINT_COUNT) { return; }
+
+			for (uint32_t i = 0; i < consumedTouchCount_; ++i) {
+				if (consumedTouchIds_[i] == touchId) { return; }
+			}
+			consumedTouchIds_[consumedTouchCount_] = touchId;
+			++consumedTouchCount_;
+		}
+
+
+		bool VirtualPadBackend::IsTouchConsumed(int32_t touchId) const
+		{
+			if (touchId == INVALID_TOUCH_ID) { return false; }
+
+			for (uint32_t i = 0; i < consumedTouchCount_; ++i) {
+				if (consumedTouchIds_[i] == touchId) { return true; }
+			}
+			return false;
 		}
 
 

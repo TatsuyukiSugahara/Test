@@ -311,6 +311,9 @@
     <ClCompile Include="Platform\Common\DebugOutputWin32.cpp">
       <Filter>Platform\Common</Filter>
     </ClCompile>
+    <ClCompile Include="Platform\Common\ImGuiPointerInput.cpp">
+      <Filter>Platform\Common</Filter>
+    </ClCompile>
     <ClCompile Include="Memory\MemoryManager.cpp">
       <Filter>Memory</Filter>
     </ClCompile>
@@ -381,6 +384,9 @@
       <Filter>HID</Filter>
     </ClCompile>
     <ClCompile Include="HID\VirtualPadBackend.cpp">
+      <Filter>HID</Filter>
+    </ClCompile>
+    <ClCompile Include="HID\TouchMouseBackend.cpp">
       <Filter>HID</Filter>
     </ClCompile>
     <ClCompile Include="HID\CompositePadBackend.cpp">
@@ -941,6 +947,9 @@
     <ClInclude Include="Platform\Common\DebugOutput.h">
       <Filter>Platform\Common</Filter>
     </ClInclude>
+    <ClInclude Include="Platform\Common\ImGuiPointerInput.h">
+      <Filter>Platform\Common</Filter>
+    </ClInclude>
     <ClInclude Include="Platform\Common\AlignedAlloc.h">
       <Filter>Platform\Common</Filter>
     </ClInclude>
@@ -1112,6 +1121,9 @@
       <Filter>HID\Win32</Filter>
     </ClInclude>
     <ClInclude Include="HID\NullMouseBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\TouchMouseBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\NullPadBackend.h">

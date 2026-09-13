@@ -73,5 +73,14 @@ namespace aq
 				backend->SetTriggerResistance(index, trigger, startPos, strength);
 			}
 		}
+
+
+		bool CompositePadBackend::IsTouchConsumed(int32_t touchId) const
+		{
+			for (const auto& backend : backends_) {
+				if (backend->IsTouchConsumed(touchId)) { return true; }
+			}
+			return false;
+		}
 	}
 }

@@ -64,6 +64,13 @@ namespace aq
 			/** 左スティックを掴んでいる指の id(INVALID_TOUCH_ID なら未掴み) */
 			int32_t stickTouchId_;
 
+			/**
+			 * この Poll で操作に使った指の id(スティック + ボタン)。
+			 * IsTouchConsumed が参照する。UI のポインタへ回さない指を上位へ伝えるためだけに持つ。
+			 */
+			int32_t  consumedTouchIds_[TouchState::MAX_POINT_COUNT];
+			uint32_t consumedTouchCount_;
+
 
 		public:
 			explicit VirtualPadBackend(const TouchState* touch);
@@ -77,6 +84,8 @@ namespace aq
 			void SetTriggerResistance(uint32_t /*index*/, PadAxis /*trigger*/,
 			                          float /*startPos*/, float /*strength*/) override {}
 
+			bool IsTouchConsumed(int32_t touchId) const override;
+
 
 			/**
 			 * レイアウト
@@ -89,7 +98,10 @@ namespace aq
 
 		private:
 			void UpdateStick  (const TouchState& touches, const float screenWidth, const float screenHeight, PadState& out);
-			void UpdateButtons(const TouchState& touches, const float screenWidth, const float screenHeight, PadState& out) const;
+			void UpdateButtons(const TouchState& touches, const float screenWidth, const float screenHeight, PadState& out);
+
+			/** 占有中の指として記録する(既に入っていれば何もしない) */
+			void MarkTouchConsumed(const int32_t touchId);
 
 
 		private:

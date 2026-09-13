@@ -25,7 +25,7 @@ Pixel 7a / Android 16 で **AquaDash のタイトル画面がフル表示**さ�
 | ステージ描画 | **実機確認済**(P2 から保留の項目)。路面・キャラ・地形・草 180 万本・影・HUD・ミニマップすべて表示 |
 | ステージ性能 | **26〜27 FPS(約 37 ms)**。タイトルは 60 FPS。タイラー GPU 向けの最適化は P6 の課題 |
 | 終了時リーク | **解消済**。リークではなく報告位置の問題だった(別コミットで修正。現在は `No leaks detected`) |
-| サウンド(P5a) | **実機確認済**。AAudio で BGM / SE が鳴る。48kHz / float32 / 2ch、アンダーラン 0 |
+| サウンド(P5) | **実機確認済**。AAudio で BGM / SE が鳴り、背面では `state:paused` になる。48kHz / float32 / 2ch |
 | Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。P2 時点では実行もタイトル表示〜終了コード 0 |
 | Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` 一本化と `ImageLoader` の変更が Mac に及ぶので次に Mac を触るとき要確認 |
 | validation | **未確認**。検証レイヤの `.so` がどこにも無く同梱できない(§4.6) |
@@ -44,7 +44,8 @@ AquaDash が起動〜プレイできる状態までを設計する。
 - [Xbox移植設計.md](Xbox移植設計.md) — `IPlatform` 抽象の導入元。
 - [Sound設計.md](Sound設計.md) §8 — Oboe バックエンドの一次資料(本書では重複させない)。
 
-**本書のステータス: P3 / P4 / P5a まで実機確認完了(2026-09-13)。次は P5b(サウンドの挙動)。**
+**本書のステータス: P3 / P4 / P5 まで完了(2026-09-13)。次は P6(性能とパッケージング)。**
+P5b は実装完了だが、**イヤホン抜き差しの確認だけ手が要るため未消化**(§P5b)。
 §0.4 の判断は 2026-09-12 に確定した。`preTransform` 対応は P2 で先に入った(§4.3)。
 実機で**ステージのプレイまで到達**した。残る既知の不具合は終了時のリーク 70 件(P3 とは無関係の既存不具合)。
 
@@ -915,19 +916,42 @@ OpenSL ES フォールバックが不要」「AAudio は NDK 同梱で追加依�
 5. **`GetOutputClock` の遅延は簡易見積り**（`bufferSizeInFrames + framesPerBurst` ÷ 出力レート）。
    `AAudioStream_getTimestamp()` による厳密化は P5b。A/V 同期（動画再生）を使うときに効く。
 
-#### P5b: 挙動を整える
+#### P5b: 挙動を整える — 実装完了(2026-09-13)
 
 | 作業 | 対象 |
 |---|---|
-| サスペンド/復帰 | `ISoundBackend` に `OnSuspend()` / `OnResume()`（既定 no-op）を追加し、`Engine::RunGame` が `IsRenderable()` の変化で叩く |
-| デバイス切替 | `AAudioStreamBuilder_setErrorCallback` の `onError` を受けてサウンドスレッドで stream を再構築 |
+| サスペンド/復帰 | `ISoundBackend` に `OnSuspend()` / `OnResume()`(既定 no-op)を追加。`Engine::SyncSoundActivity` が `IPlatform::IsRenderable()` の変化点だけで叩く |
+| デバイス切替 | `AAudioStreamBuilder_setErrorCallback` で切断を受け、`Update()`(サウンドスレッド)でストリームを作り直す |
+| 遅延の実測化 | `AAudioStream_getTimestamp` が取れるときは「書いた総数 − 実際に鳴った位置」から算出。取れなければ初期化時の見積りへフォールバック |
+| アンダーラン | ミキサ側の枯渇 + `AAudioStream_getXRunCount()` を合算して報告 |
 
-**評価チェックリスト（P5b）**
-- [ ] BGM / SE が実機で鳴る（P5a から継続）
-- [ ] 3D 音響の定位が Windows と一致する
-- [ ] サスペンド→復帰で音が壊れない・二重再生しない
-- [ ] バックグラウンド中に音が鳴り続けない
-- [ ] イヤホンの抜き差しで落ちず、出力先が切り替わる
+**評価チェックリスト(P5b)** — 実機確認 2026-09-13 / Pixel 7a・Android 16
+- [x] Android ビルドがエラー 0・新規警告なし / Windows 3 構成が従来と同数
+- [x] BGM / SE が実機で鳴る(P5a から継続。退行なし)
+- [x] **バックグラウンド中に音が鳴り続けない** — `dumpsys audio` が
+      前面 `state:started` → ホームで `state:paused` → 復帰で `started`。背面の CPU は 5 秒で 0 tick。
+      10 往復して状態遷移は毎回正しく、PID 不変・サウンドのエラーログなし
+- [~] サスペンド→復帰で音が壊れない・二重再生しない — **状態遷移は確認済みだが、聞こえ方は未確認**
+- [ ] イヤホンの抜き差しで落ちず、出力先が切り替わる — **未確認**。
+      `cmd audio` にデバイス接続を擬似する機能が無く adb から起こせないため、実際に抜き差しして
+      logcat に `[sound] 出力ストリームが切れたので作り直す` が出るかを見る必要がある
+- [—] 3D 音響の定位が Windows と一致する — **対象なし**。AquaDash は `SoundEngine::Play`(2D)と
+      BGM ストリームしか使っておらず、`CreateSource` による 3D 音源も `AudioSourceComponent` を
+      持つアセットも無い。3D の計算は `Mixer3D` → 出力行列 → `SoftwareMixer` という
+      プラットフォーム非依存の経路で macOS と共通なので、Android 固有のリスクは低い。
+      **ゲームが 3D 音源を使い始めたときに見直す。**
+
+**P5b で分かったこと**
+
+1. **一時停止では積んだ音を捨てる必要がある。** `requestPause` だけだと、復帰の瞬間に
+   背面へ回る直前の音が鳴り直して二重に聞こえる。`requestFlush` は `PAUSED` 状態でしか
+   通らないので、`waitForStateChange` で遷移の完了を待ってから呼ぶ。
+2. **エラーコールバックのスレッドから `close` してはいけない**(AAudio の決まり)。
+   フラグだけ立てて、サウンドスレッドの `Update()` で作り直す。ミキサには触らないので
+   再生中のボイスはそのまま続きから鳴る。
+3. **画面が消えると `TERM_WINDOW` が来る = 背面扱いになる。** 実機確認中に前面のはずが
+   `state:paused` になって退行を疑ったが、端末の画面が落ちていただけだった。
+   **サウンドやライフサイクルを adb で測るときは `svc power stayon true` で画面を点けておく。**
 
 ### P6: 性能とパッケージング
 

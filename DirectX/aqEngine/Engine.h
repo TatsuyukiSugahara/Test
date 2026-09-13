@@ -66,6 +66,9 @@ namespace aq
 		/** 描画対象が差し替わり、サーフェスの作り直しが済んでいない。成功するまでフレームを飛ばす */
 		bool              surfaceDirty_     = false;
 
+		/** サウンドを鳴らしてよい状態か(= 前面にいるか)。前回の判定を持って変化点だけ叩く */
+		bool              soundActive_      = true;
+
 
 	private:
 		Engine();
@@ -97,6 +100,12 @@ namespace aq
 
 		/** 実際に提示している面の寸法をスクリーンサイズへ反映する(回転・リサイズ追従) */
 		void SyncScreenSize();
+
+		/**
+		 * 前面/背面の変化をサウンドへ伝える。
+		 * 背面では描画と同じくフレームを回さないので、出力ストリームも止めないと鳴り続ける。
+		 */
+		void SyncSoundActivity();
 
 		void Update();
 

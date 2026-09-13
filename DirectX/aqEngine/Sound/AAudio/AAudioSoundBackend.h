@@ -27,8 +27,12 @@ namespace aq
 		 *    `SoftwareMixer::Render` と本クラスの `std::atomic` メンバだけ。
 		 *  - それ以外(`CreateVoice` / `SetBusVolume` / `Update`)は**サウンドスレッド 1 本**から。
 		 *
-		 * バックグラウンド遷移時の pause/resume とエラーコールバックによるストリーム
-		 * 再構築(§8.3)は P5b で対応する。
+		 * ライフサイクル(§8.3):
+		 *  - 背面へ回ったら `OnSuspend` でストリームを止める。フレームを回さないだけでは
+		 *    AAudio 側が鳴らし続けてしまう。ミキサのボイス状態は保つので復帰後は続きから鳴る。
+		 *  - イヤホンの抜き差しなどでストリームが切れるとエラーコールバックが飛んでくる。
+		 *    そのスレッドから閉じてはいけない決まりなので、フラグだけ立てて `Update`
+		 *    (サウンドスレッド)で作り直す。
 		 */
 		class AAudioSoundBackend : public ISoundBackend
 		{
@@ -46,8 +50,15 @@ namespace aq
 			/** data callback が送出した累積フレーム数(出力レート基準) */
 			std::atomic<uint64_t> outputFrames_;
 
-			/** デバイスの推定出力遅延 [秒]。初期化時に一度だけ見積もる */
+			/** デバイスの推定出力遅延 [秒]。ストリームを開いたときの見積り。
+			 *  実測が取れるときは GetOutputClock がタイムスタンプから出し直す */
 			double latencySeconds_;
+
+			/** ストリームが切れた(デバイス切替など)。エラーコールバックが立て、Update が畳む */
+			std::atomic<bool> streamLost_;
+
+			/** 背面に回って止めている最中か。復帰時に作り直しても止めたままにするため持つ */
+			bool suspended_;
 
 			bool initialized_;
 
@@ -68,13 +79,30 @@ namespace aq
 
 			SoundClock GetOutputClock() const override;
 
-			/** サウンドスレッドから毎フレーム。ミキサの回収キューを掃く */
+			/** サウンドスレッドから毎フレーム。ミキサの回収キューを掃き、必要ならストリームを作り直す */
 			void Update() override;
+
+			void OnSuspend() override;
+			void OnResume()  override;
 
 
 		public:
 			/** data callback の実体(.cpp 内の C コールバックから呼ばれる) */
 			void RenderFrames(float* out, uint32_t frames);
+
+			/** エラーコールバックの実体。作り直しの要求を立てるだけ(このスレッドでは閉じない) */
+			void NotifyStreamLost();
+
+
+		private:
+			/**
+			 * 現在の outputFormat_ でストリームを開いて再生を始める。
+			 * 実際に開けたレート/チャンネル数が違えば、その値でミキサを作り直す。
+			 */
+			bool OpenAndStartStream();
+
+			/** ストリームだけを閉じる(ミキサとボイスは残す) */
+			void CloseStream();
 		};
 	}
 }

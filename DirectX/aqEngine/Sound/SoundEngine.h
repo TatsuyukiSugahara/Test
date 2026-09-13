@@ -72,6 +72,11 @@ namespace aq
 			// 毎フレーム: 終了ボイスの回収・バックエンドのポンプ（§2.1）。
 			void Update(float deltaTime);
 
+			// アプリの前面/背面遷移。バックエンドの出力ストリームを止める/再開する。
+			// 再生中のボイスの状態は保たれるので、復帰後は続きから鳴る。
+			void OnSuspend();
+			void OnResume();
+
 			// ワンショット再生（2D）。事前ロード済み clip を渡す（§5.2）。
 			// fadeInSeconds > 0 で音量 0 から立ち上げる。
 			SoundHandle Play(RefSoundClip clip, SoundBusId bus = SoundBusId::SE, float fadeInSeconds = 0.0f);

@@ -64,6 +64,18 @@ namespace aq
 		}
 
 
+		void SoundEngine::OnSuspend()
+		{
+			if (impl_) { impl_->OnSuspend(); }
+		}
+
+
+		void SoundEngine::OnResume()
+		{
+			if (impl_) { impl_->OnResume(); }
+		}
+
+
 		void SoundEngine::Update(float deltaTime)
 		{
 			// ワンショットのフェード更新 + 自然終了/フェード完了の回収（§2.1）。

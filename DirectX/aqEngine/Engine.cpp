@@ -185,6 +185,9 @@ namespace aq
 		// PumpEvents() が終了要求で false を返すまで Update を回す。
 		while (platform_->PumpEvents())
 		{
+			// 背面に回ったらサウンドも止める。描画と違ってフレームを飛ばすだけでは鳴り続ける。
+			SyncSoundActivity();
+
 			// 描画対象が差し替わったらサーフェスを作り直してから描く。
 			// Android ではバックグラウンド復帰・回転のたびにここへ来る。
 			if (!EnsureSurfaceUpToDate()) {
@@ -199,6 +202,27 @@ namespace aq
 
 			SyncScreenSize();
 			Update();
+		}
+	}
+
+
+	void Engine::SyncSoundActivity()
+	{
+		// Android では「描画対象を持っているか」がそのまま「前面にいるか」になる。
+		// 通知シェードを下ろしただけ(フォーカス喪失)では窓は生きているので止めない。
+		const bool active = platform_->IsRenderable();
+		if (active == soundActive_) {
+			return;
+		}
+		soundActive_ = active;
+
+		if (!aq::sound::SoundEngine::IsAvailable()) {
+			return;
+		}
+		if (active) {
+			aq::sound::SoundEngine::Get().OnResume();
+		} else {
+			aq::sound::SoundEngine::Get().OnSuspend();
 		}
 	}
 

@@ -29,8 +29,15 @@ namespace aq
 			// デバイス出力クロック（§3.4）。A/V 同期の latency anchor。
 			virtual SoundClock GetOutputClock() const = 0;
 
-			// バックエンドのポンプ（Oboe は基本コールバック駆動なので空実装でよい）。
+			// バックエンドのポンプ（コールバック駆動のバックエンドでも、
+			// 回収キューの掃除やストリーム再構築はここで行う）。
 			virtual void Update() {}
+
+			// アプリがバックグラウンドへ回った / 戻ってきた（§8.3）。
+			// 出力デバイスを持ち続けるプラットフォームでは何もしなくてよいので既定は no-op。
+			// Android は窓を失う＝背面なので、ここで出力ストリームを止める。
+			virtual void OnSuspend() {}
+			virtual void OnResume()  {}
 		};
 	}
 }

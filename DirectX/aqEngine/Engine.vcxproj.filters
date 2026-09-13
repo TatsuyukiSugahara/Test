@@ -710,6 +710,9 @@
     <ClCompile Include="Sound\Mixer\SoftwareMixer.cpp">
       <Filter>Sound\Mixer</Filter>
     </ClCompile>
+    <ClCompile Include="Sound\Mixer\MixerSoundVoice.cpp">
+      <Filter>Sound\Mixer</Filter>
+    </ClCompile>
     <ClCompile Include="Sound\Component\AudioSourceComponent.cpp">
       <Filter>Sound\Component</Filter>
     </ClCompile>
@@ -1575,6 +1578,9 @@
       <Filter>Sound</Filter>
     </ClInclude>
     <ClInclude Include="Sound\Mixer\SoftwareMixer.h">
+      <Filter>Sound\Mixer</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound\Mixer\MixerSoundVoice.h">
       <Filter>Sound\Mixer</Filter>
     </ClInclude>
     <ClInclude Include="Sound\VolumeEnvelope.h">

@@ -24,7 +24,8 @@ Pixel 7a / Android 16 で **AquaDash のタイトル画面がフル表示**さ�
 | ライフサイクル(P3) | **実機確認済**。サスペンド/復帰 20 回・4 方向回転・寸法変更すべて無事。バックグラウンド中の CPU は 0 tick |
 | ステージ描画 | **実機確認済**(P2 から保留の項目)。路面・キャラ・地形・草 180 万本・影・HUD・ミニマップすべて表示 |
 | ステージ性能 | **26〜27 FPS(約 37 ms)**。タイトルは 60 FPS。タイラー GPU 向けの最適化は P6 の課題 |
-| 終了時リーク | **70 件 / 21,872 バイト**。P3 の変更を外した HEAD ビルドでも同数のため既存不具合(切り分けは別途) |
+| 終了時リーク | **解消済**。リークではなく報告位置の問題だった(別コミットで修正。現在は `No leaks detected`) |
+| サウンド(P5a) | **実機確認済**。AAudio で BGM / SE が鳴る。48kHz / float32 / 2ch、アンダーラン 0 |
 | Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。P2 時点では実行もタイトル表示〜終了コード 0 |
 | Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` 一本化と `ImageLoader` の変更が Mac に及ぶので次に Mac を触るとき要確認 |
 | validation | **未確認**。検証レイヤの `.so` がどこにも無く同梱できない(§4.6) |
@@ -43,7 +44,7 @@ AquaDash が起動〜プレイできる状態までを設計する。
 - [Xbox移植設計.md](Xbox移植設計.md) — `IPlatform` 抽象の導入元。
 - [Sound設計.md](Sound設計.md) §8 — Oboe バックエンドの一次資料(本書では重複させない)。
 
-**本書のステータス: P3 / P4 とも実機確認まで完了(2026-09-13)。次は P5(サウンド)。**
+**本書のステータス: P3 / P4 / P5a まで実機確認完了(2026-09-13)。次は P5b(サウンドの挙動)。**
 §0.4 の判断は 2026-09-12 に確定した。`preTransform` 対応は P2 で先に入った(§4.3)。
 実機で**ステージのプレイまで到達**した。残る既知の不具合は終了時のリーク 70 件(P3 とは無関係の既存不具合)。
 
@@ -858,14 +859,75 @@ OS 通知の時点では `vkGetPhysicalDeviceSurfaceCapabilitiesKHR` がまだ�
 
 ### P5: サウンド
 
-- `OboeSoundBackend` 実装、Oboe の取り込み
-- `SoundBackend.h` の `#error` 除去
+**Oboe ではなく AAudio を直接使う（2026-09-13 に決定）。** 一次資料は
+[Sound設計.md](Sound設計.md) §8。理由は「`minSdkVersion=33` なので Oboe の主目的である
+OpenSL ES フォールバックが不要」「AAudio は NDK 同梱で追加依存ゼロ」「Gradle を使わない
+方針と噛み合う」の 3 点。
 
-**評価チェックリスト**
-- [ ] BGM / SE が実機で鳴る
+**新規の DSP 実装はゼロ。** Mac 移植 P4a で入った `SoftwareMixer`（プラットフォーム非依存）が
+固定 voice プール / SPSC コマンドキュー / リサンプル / 出力行列 / バスゲイン / 出力クロックを
+すべて持っているので、Android 側は「デバイスを 1 本開いて `Render` を呼ぶ殻」だけで済む。
+
+#### P5a: 音が出るまで — 完了(2026-09-13)
+
+| 作業 | 対象 |
+|---|---|
+| AAudio バックエンド | `Sound/AAudio/AAudioSoundBackend.{h,cpp}` を新設（`CoreAudioSoundBackend` と同型） |
+| ボイスアダプタの共用化 | `Sound/Mixer/MixerSoundVoice.{h,cpp}` を新設し、`CoreAudioSoundVoice` を置き換える |
+| バックエンド選択 | `SoundBackend.h` の Android 分岐を `SOUND_BACKEND_NULL` → `SOUND_BACKEND_AAUDIO` |
+| ビルド配線 | CMake の除外パターンに `/Sound/AAudio/` を足し、Android ターゲットにのみ `aaudio` をリンク |
+| **CWD 依存バグ（4 件目）** | `WavDecoder.cpp` / `WavStreamDecoder.cpp` がパスをそのまま `fopen` している。`aq::res::ResolveExistingResourcePath` を通す |
+
+**CWD 依存は P5a の必須項目。** Android の CWD は `/` なので、直さないと
+`[Sound] OpenStream: 開けませんでした: Assets/Sound/AquaDashBGM.wav` のまま何も鳴らない
+（P2 で直した JSON / PNG と同じ形の 4 件目。§8-8）。
+
+**評価チェックリスト（P5a）** — 実機確認 2026-09-13 / Pixel 7a・Android 16
+- [x] Android ビルドがエラー 0・新規警告なし（17 件はすべて既存）
+- [x] Windows 3 構成（D3D11 / D3D12 / Vulkan）が従来と同数（エラー 0・警告 54 件）
+- [x] BGM が実機で鳴る
+- [x] SE（コイン取得・ジャンプ等）が実機で鳴る
+- [x] オーディオスレッドで確保・ロックをしていない（data callback は `SoftwareMixer::Render` と
+      `std::atomic::fetch_add` しか呼ばない）
+
+**OS 側から取れた裏付け**
+
+| 見たもの | 結果 |
+|---|---|
+| `[sound] AAudio 出力を開始` | **48000Hz / float32 / 2ch** — 要求どおりのフォーマットで開けた（作り直し経路は通らず） |
+| `dumpsys audio` | `type:AAudio ... state:started`、出力先 `deviceIds:[3]`（内蔵スピーカー） |
+| `dumpsys media.audio_flinger` | `numTracks=1 writeErrors=0 underruns=0 overruns=0`、FIFO アンダーランなし |
+
+**P5a で分かったこと**
+
+1. **`SoftwareMixer` は本当に無改修で載った。** Mac 移植 P4a の成果がそのまま効き、
+   Android 側に書いたのは「ストリームを開く殻」だけ。新規 DSP コードはゼロ。
+2. **CWD 依存バグの 4 件目を踏んでいた。** `WavDecoder` / `WavStreamDecoder` が
+   パスをそのまま `fopen` しており、直すまで BGM は
+   `OpenStream: 開けませんでした` で一切鳴らなかった。**バックエンドを実装しても、
+   これを直さないと無音のまま**なので切り分けの順番に注意（§8-8 と同じ形）。
+3. **ボイスアダプタはプラットフォーム非依存だった。** `CoreAudioSoundVoice` は
+   `SoftwareMixer` への委譲しか持っていなかったので、`Sound/Mixer/MixerSoundVoice` へ
+   格上げして CoreAudio / AAudio で共用する形にした（iOS 移植もこれをそのまま使える）。
+4. **初期化の途中で失敗するとミキサが初期化されたまま残っていた**（CoreAudio から
+   引き継いだ不整合）。`Finalize()` の `if (initialized_)` を外して無条件に畳むようにした。
+   `SoftwareMixer::Finalize()` は冪等なので二重呼び出しも安全。
+5. **`GetOutputClock` の遅延は簡易見積り**（`bufferSizeInFrames + framesPerBurst` ÷ 出力レート）。
+   `AAudioStream_getTimestamp()` による厳密化は P5b。A/V 同期（動画再生）を使うときに効く。
+
+#### P5b: 挙動を整える
+
+| 作業 | 対象 |
+|---|---|
+| サスペンド/復帰 | `ISoundBackend` に `OnSuspend()` / `OnResume()`（既定 no-op）を追加し、`Engine::RunGame` が `IsRenderable()` の変化で叩く |
+| デバイス切替 | `AAudioStreamBuilder_setErrorCallback` の `onError` を受けてサウンドスレッドで stream を再構築 |
+
+**評価チェックリスト（P5b）**
+- [ ] BGM / SE が実機で鳴る（P5a から継続）
 - [ ] 3D 音響の定位が Windows と一致する
 - [ ] サスペンド→復帰で音が壊れない・二重再生しない
-- [ ] グリッチ(バッファアンダーラン)が発生していない
+- [ ] バックグラウンド中に音が鳴り続けない
+- [ ] イヤホンの抜き差しで落ちず、出力先が切り替わる
 
 ### P6: 性能とパッケージング
 

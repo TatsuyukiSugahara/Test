@@ -2,7 +2,7 @@
 // macOS 以外では空 TU。
 #if defined(AQ_PLATFORM_MAC)
 #include "Sound/CoreAudio/CoreAudioSoundBackend.h"
-#include "Sound/CoreAudio/CoreAudioSoundVoice.h"
+#include "Sound/Mixer/MixerSoundVoice.h"
 
 #include <AudioToolbox/AudioToolbox.h>
 #include <AudioUnit/AudioUnit.h>
@@ -249,11 +249,10 @@ namespace aq
 				outputUnit_ = nullptr;
 			}
 
-			if (initialized_)
-			{
-				mixer_.Finalize();
-				initialized_ = false;
-			}
+			// initialized_ は見ない。Initialize が AudioUnit を開く前に失敗しても、
+			// 先に初期化したミキサをここで畳む必要があるため(SoftwareMixer::Finalize は冪等)。
+			mixer_.Finalize();
+			initialized_ = false;
 		}
 
 
@@ -264,7 +263,7 @@ namespace aq
 			{
 				return nullptr;
 			}
-			return std::make_unique<CoreAudioSoundVoice>(&mixer_, voiceId);
+			return std::make_unique<MixerSoundVoice>(&mixer_, voiceId);
 		}
 
 

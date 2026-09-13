@@ -81,15 +81,14 @@ set(AQ_ENGINE_MAC_ONLY_PATTERNS
 	"\\.mm$"
 )
 
-#  Android 専用実装。現時点の実体は DebugOutputAndroid.cpp だけで、残りは
-#  後続フェーズで増える(Platform/Android・HID/Android・Sound/Oboe)。
+#  Android 専用実装(Platform/Android・HID/Android・Sound/AAudio)。
 #  先にパターンを置いておけば、ファイルを追加するだけで他プラットフォームの
 #  ビルドから自動的に外れる。
 set(AQ_ENGINE_ANDROID_ONLY_PATTERNS
 	"/Platform/Common/DebugOutputAndroid\\.cpp$"
 	"/Platform/Android/"
 	"/HID/Android/"
-	"/Sound/Oboe/"
+	"/Sound/AAudio/"
 )
 
 #  ANDROID を先に判定すること(Android は UNIX が真になるため、
@@ -217,10 +216,13 @@ if(ANDROID)
 	# NDK の sysroot が持つ共有ライブラリ。
 	#   log     : __android_log_write(DebugOutputAndroid.cpp)
 	#   android : ANativeWindow / AAssetManager / ALooper
+	#   aaudio  : AAudioSoundBackend(Sound設計 §8)。API 26+ で、本プロジェクトの
+	#             minSdk=33 なら常に使えるため Oboe の取り込みは不要
 	target_link_libraries(aqEngine PUBLIC
 		native_app_glue
 		log
 		android
+		aaudio
 	)
 elseif(WIN32)
 	# API 非依存

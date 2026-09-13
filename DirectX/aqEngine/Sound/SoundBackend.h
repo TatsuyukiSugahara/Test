@@ -6,7 +6,7 @@
 //    Windows デスクトップ : XAudio2
 //    Xbox(UWP / 道A)      : XAudio2（UWP でも XAudio2 2.9 が標準。ほぼ無改修）
 //    Mac                  : CoreAudio（AudioUnit + SoftwareMixer）
-//    Android              : 無音（Null）。Oboe は P5 で追加する
+//    Android              : AAudio（NDK 同梱 + SoftwareMixer）
 // ============================================================
 
 // AQ_PLATFORM_WINDOWS_FAMILY は AQ_PLATFORM_WIN32 / AQ_PLATFORM_UWP のときに
@@ -16,10 +16,7 @@
 #elif defined(AQ_PLATFORM_MAC)
 #  define SOUND_BACKEND_COREAUDIO
 #elif defined(AQ_PLATFORM_ANDROID)
-// Android は当面無音。Oboe(AAudio + SoftwareMixer)を実装したら
-// SOUND_BACKEND_OBOE へ差し替える。
-// TODO(P5): SOUND_BACKEND_OBOE に切り替える。
-#  define SOUND_BACKEND_NULL
+#  define SOUND_BACKEND_AAUDIO
 #endif
 
 
@@ -41,11 +38,13 @@ namespace aq { namespace sound { using DefaultSoundBackend = CoreAudioSoundBacke
 #include "NullSoundBackend.h"
 namespace aq { namespace sound { using DefaultSoundBackend = NullSoundBackend; } }
 
-#elif defined(SOUND_BACKEND_OBOE)
+#elif defined(SOUND_BACKEND_AAUDIO)
 
-// #include "Oboe/OboeSoundBackend.h"
-// namespace aq { namespace sound { using DefaultSoundBackend = OboeSoundBackend; } }
-#  error "Oboe バックエンドは未実装です（フェーズ5）。"
+// Android: AAudio の出力ストリームを 1 本開き、data callback で
+// SoftwareMixer::Render を回す（Sound設計 §8）。minSdk=33 なので Oboe の
+// OpenSL ES フォールバックは不要で、AAudio は NDK に同梱されている。
+#include "AAudio/AAudioSoundBackend.h"
+namespace aq { namespace sound { using DefaultSoundBackend = AAudioSoundBackend; } }
 
 #else
 #  error "サウンドバックエンドが未選択です。SoundBackend.h を確認してください。"

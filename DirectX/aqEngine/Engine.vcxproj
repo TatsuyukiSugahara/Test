@@ -384,6 +384,7 @@
     <ClCompile Include="Sound\SoundSource.cpp" />
     <ClCompile Include="Sound\Mixer3D.cpp" />
     <ClCompile Include="Sound\Mixer\SoftwareMixer.cpp" />
+    <ClCompile Include="Sound\Mixer\MixerSoundVoice.cpp" />
     <ClCompile Include="Sound\Component\AudioSourceComponent.cpp" />
     <ClCompile Include="Sound\Component\AudioEventEmitterComponent.cpp" />
     <ClCompile Include="Sound\Component\SoundSystem.cpp" />
@@ -697,6 +698,7 @@
     <ClInclude Include="Sound\SoundSource.h" />
     <ClInclude Include="Sound\Mixer3D.h" />
     <ClInclude Include="Sound\Mixer\SoftwareMixer.h" />
+    <ClInclude Include="Sound\Mixer\MixerSoundVoice.h" />
     <ClInclude Include="Sound\VolumeEnvelope.h" />
     <ClInclude Include="Sound\Component\AudioListenerComponent.h" />
     <ClInclude Include="Sound\Component\AudioSourceComponent.h" />

@@ -52,7 +52,11 @@ namespace aq
 			if (path == nullptr) {
 				return false;
 			}
-			file_ = std::fopen(path, "rb");
+			// パスは CWD 相対で来る。Android は CWD が "/"、UWP は読み取り専用ルートなので、
+			// そのまま fopen すると開けない。他のローダーと同じく解決を通してから渡す。
+			const std::string resolvedPath = aq::res::ResolveExistingResourcePath(path);
+
+			file_ = std::fopen(resolvedPath.c_str(), "rb");
 			if (file_ == nullptr) {
 				return false;
 			}

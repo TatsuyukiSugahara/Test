@@ -174,8 +174,8 @@ Vulkan 構成と**同じ見た目**(画素比較で平均差 1.8/255)。`.app` �
 | ファイル | 責務 |
 |---|---|
 | `aqEngine/Sound/Mixer/SoftwareMixer.{h,cpp}` **(新規・可搬)** | 論理ボイスの集合を出力フォーマット(48kHz float, 2ch 想定)へミックスするプラットフォーム非依存ミキサ。ボイスごとに: 投入バッファキュー(コピー)/`RefSoundClip` 参照(ゼロコピー)/ループ領域/線形リサンプル(`SetFrequencyRatio`)/出力行列(`SetOutputMatrix`)/ボリューム/消費フレーム数。バス音量とマスタ音量。`Render(float* out, uint32_t frames)` を出力スレッドから呼ぶ。ロックは投入側と Render 側で SPSC リング + `std::atomic`(architecture.md §5) |
-| `aqEngine/Sound/CoreAudio/CoreAudioSoundBackend.{h,mm}` **(新規)** | `ISoundBackend` 実装。`AudioUnit`(`kAudioUnitSubType_DefaultOutput`)を 1 つ開き、render callback で `SoftwareMixer::Render`。`GetOutputClock` は render callback の `AudioTimeStamp.mHostTime` + 累積フレームから算出。`CreateVoice` は `SoftwareMixer` に論理ボイスを追加して `CoreAudioSoundVoice` を返す |
-| `aqEngine/Sound/CoreAudio/CoreAudioSoundVoice.{h,cpp}` **(新規)** | `ISoundVoice` 実装。全メソッドを `SoftwareMixer` の論理ボイス操作に委譲する薄いアダプタ |
+| `aqEngine/Sound/CoreAudio/CoreAudioSoundBackend.{h,mm}` **(新規)** | `ISoundBackend` 実装。`AudioUnit`(`kAudioUnitSubType_DefaultOutput`)を 1 つ開き、render callback で `SoftwareMixer::Render`。`GetOutputClock` は render callback の `AudioTimeStamp.mHostTime` + 累積フレームから算出。`CreateVoice` は `SoftwareMixer` に論理ボイスを追加して `MixerSoundVoice` を返す |
+| ~~`aqEngine/Sound/CoreAudio/CoreAudioSoundVoice.{h,cpp}`~~ → `aqEngine/Sound/Mixer/MixerSoundVoice.{h,cpp}` | `ISoundVoice` 実装。全メソッドを `SoftwareMixer` の論理ボイス操作に委譲する薄いアダプタ。**プラットフォーム非依存なので Android(AAudio)と共用する形へ移した**(2026-09-13 / Sound設計 §8) |
 | `aqEngine/Sound/Decoder/ExtAudioFileDecoder.{h,mm}` **(新規)** | `ISoundDecoder` 実装(AudioToolbox `ExtAudioFile`)。mp3/aac/m4a を PCM へ。`MFDecoder` と同じ静的 `DecodeFileFully` も提供 |
 | `aqEngine/Sound/SoundBackend.h` | `#elif defined(AQ_PLATFORM_MAC)` → P2 では `SOUND_BACKEND_NULL`(`NullSoundBackend` = 無音)。P4 で `SOUND_BACKEND_COREAUDIO` へ差し替える。実体と名前が食い違わないよう段階を分ける |
 | `aqEngine/Sound/Decoder/CompressedDecoder.h` **(新規)** | 「wav 以外」用デコーダの選択ヘッダ。WIN32/UWP = `MFDecoder`、MAC = `ExtAudioFileDecoder`。`SoundClip.cpp:50`・`SoundEngine.cpp:33` の `MFDecoder` 直参照をこれ経由に |
@@ -623,7 +623,7 @@ Mac の入力は P2 時点で Null(`KeyboardMouseBackend.h` / `PadBackend.h` と
 問題が出たときの切り分けが楽なため)。こちらはサウンドだけ。
 
 実装:
-- §5 の `CoreAudioSoundBackend`/`CoreAudioSoundVoice`/`ExtAudioFileDecoder` を `SoftwareMixer` に接続。
+- §5 の `CoreAudioSoundBackend`/`MixerSoundVoice`/`ExtAudioFileDecoder` を `SoftwareMixer` に接続。
 - `SoundBackend.h` の MAC 分岐を `SOUND_BACKEND_NULL` → `SOUND_BACKEND_COREAUDIO` へ。
 - `CompressedDecoder.h` の MAC 分岐を `NullDecoder` → `ExtAudioFileDecoder` へ(§8-8 の解消)。
 

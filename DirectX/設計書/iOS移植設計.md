@@ -63,7 +63,7 @@ cmake -S DirectX -B <dir> -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DAQ_GRAPHICS_API=Met
 |---|---|
 | `Graphics/Metal/` の **12 本すべて** | Metal バックエンドは iOS 非対応 API を使っていない(下記の理由により、これは「通った」以上の意味を持つ) |
 | `HID/Mac/GameControllerPadBackend.mm` | GameController.framework は iOS でも同一 API |
-| `Sound/Decoder/ExtAudioFileDecoder.mm` / `Sound/CoreAudio/CoreAudioSoundVoice.cpp` | AudioToolbox 経路はそのまま使える |
+| `Sound/Decoder/ExtAudioFileDecoder.mm` / `Sound/Mixer/MixerSoundVoice.cpp` | AudioToolbox 経路はそのまま使える |
 
 > **なぜ「コンパイルが通った」で API 非互換が無いと言えるのか**: clang は
 > `API_UNAVAILABLE(ios)` が付いた識別子の使用を**警告ではなくエラー**にする。実際に
@@ -149,7 +149,7 @@ Android と違い**外部ビルドシステム(Gradle 相当)は不要**。CMake
 | プラットフォーム抽象 | [Platform/IPlatform.h](../aqEngine/Platform/IPlatform.h) | `PlatformiOS` を実装として追加。**ただし IF 拡張が 2 つ要る**(§3.3 / §3.6) |
 | 入力 sink と backend | [HID/Mac/CocoaInputSink.{h,cpp}](../aqEngine/HID/Mac/CocoaInputSink.h) / `CocoaKeyboardBackend` / `CocoaMouseBackend` | **ObjC 非依存の `.cpp` なので無改修で流用可**。投入側(タッチ → sink)だけ書く(§5.1) |
 | パッド | [HID/Mac/GameControllerPadBackend.mm](../aqEngine/HID/Mac/GameControllerPadBackend.mm) | GameController.framework は iOS でも同一 API。**無改修(実測でコンパイル通過)** |
-| サウンド | `SoftwareMixer` / `CoreAudioSoundVoice` / `ExtAudioFileDecoder` | **無改修(実測)**。出力ユニットだけ差し替え(§6) |
+| サウンド | `SoftwareMixer` / `MixerSoundVoice` / `ExtAudioFileDecoder` | **無改修(実測)**。出力ユニットだけ差し替え(§6) |
 | シェーダ生成 | [Tools/ShaderCompile/compile_msl.cmake](../Tools/ShaderCompile/compile_msl.cmake) | `--msl-ios` と出力先の追加のみ。`AQ_MSL_OUT_DIR` は既にパラメータ化済(§4.2) |
 | 数学 / 画像 / 物理 | ThirdParty 同梱の DirectXMath・DirectXTex(非 Windows 経路)・WinCompat・stb_image・Bullet | **実測で全 TU 通過**。ARM64 なので Mac と同条件 |
 | ログ出力 | [Platform/Common/DebugOutputMac.cpp](../aqEngine/Platform/Common/DebugOutputMac.cpp) | `fputs(stderr)` なので iOS でもそのまま動く。**Mac/iOS 共通として改名する**(§3.1) |
@@ -606,7 +606,7 @@ iOS 固有の差分:
 
 一次資料は [Sound設計.md](Sound設計.md) と [Mac移植設計.md §5](Mac移植設計.md)。本節は差分のみ。
 
-**実測で分かっていること**(§0.2): `SoftwareMixer` / `CoreAudioSoundVoice` /
+**実測で分かっていること**(§0.2): `SoftwareMixer` / `MixerSoundVoice` /
 `ExtAudioFileDecoder.mm` は**無改修で iOS SDK を通る**。落ちるのは
 [CoreAudioSoundBackend.mm](../aqEngine/Sound/CoreAudio/CoreAudioSoundBackend.mm) 1 本だけ。
 

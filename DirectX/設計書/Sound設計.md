@@ -394,18 +394,61 @@ bgm->Play(LoopRegion{ /*全体ループ*/ });   // ループは再生開始時�
 
 ---
 
-## 8. Oboe バックエンド（Android）
+## 8. AAudio バックエンド（Android）
 
-- `OboeSoundBackend::Initialize`: `oboe::AudioStreamBuilder` で出力ストリーム1本（PerformanceMode::LowLatency、Float、デバイス推奨サンプルレート/バッファ）。AAudio 優先、フォールバック OpenSL ES（Oboe が吸収）。
-- 出力は1本なので **`SoftwareMixer` を自前実装**：
-  - **固定サイズ voice プール** + **SPSC コマンドキュー**でサウンド/オーディオスレッド間の寿命を管理（§3.3d/e）。`dataCallback` 冒頭でコマンドを drain してから合算する。コマンド投入はサウンドスレッド単一（§3.3e）。
-  - `dataCallback` 内で `Playing` な `OboeSoundVoice` を走査し、各ボイスの PCM を **リサンプル**（クリップのサンプルレート → デバイスレート）して出力行列・バスゲインを掛けて加算。
-  - `SetFrequencyRatio` はリサンプル比に反映（ドップラー/ピッチ）。`SetOutputMatrix` は合算時の係数。
-  - 投入バッファはロックフリーのリング（サウンドスレッド → オーディオスレッド, SPSC）で扱う。満杯時 `SubmitBuffer` は `WouldBlock`。回収はオーディオスレッド側で `Draining→Free`（§3.3d）。
-  - `OboeSoundVoice::GetConsumedFrames` はミキサのボイス別消費フレームカウンタ（§3.5 anchor）。
-  - `OboeSoundBackend::GetOutputClock`（§3.4）はミキサの出力フレームカウンタ + `AudioStream::getTimestamp()`／`getXRunCount()`。
-- ライフサイクル（`onErrorAfterClose` での再構築、アプリのバックグラウンド遷移での pause）を考慮。
-- ビルド: Android 側は別ターゲット（NDK）。Oboe は AAR/ソース取り込み。**Windows ビルドには一切リンクしない**（`SoundBackend.h` の `#define` で分岐）。
+> **2026-09-13 に方式を変更した。** 当初は Oboe + 自前ミキサ新規実装の計画だったが、
+> Mac 移植 P4a で **`SoftwareMixer` が実装済み**になり（プラットフォーム非依存。固定 voice プール /
+> SPSC コマンドキュー / リサンプル / 出力行列 / バスゲイン / 出力フレームカウンタを内包）、
+> Android 側に残る仕事は「デバイスを 1 本開いて `SoftwareMixer::Render` を呼ぶ殻」だけになった。
+> **本節の DSP 要件はすべて `SoftwareMixer` が満たしている**（一次資料は Mac移植設計.md §5）。
+
+### 8.1 Oboe ではなく AAudio を直接使う
+
+| | AAudio 直接 | Oboe |
+|---|---|---|
+| 取得 | **NDK 同梱**（`aaudio/AAudio.h` + `libaaudio.so`） | 未取り込み。ネットワーク取得 + CMake 統合が要る |
+| 下限 API | 26 | 16（OpenSL ES フォールバック） |
+| 端末固有の回避策 | 無し（自分で背負う） | あり |
+
+本プロジェクトは **`minSdkVersion=33`** なので、Oboe の主目的である
+「API 21〜25 で OpenSL ES へ落ちる」が丸ごと不要になる。Gradle を使わない方針
+（Android移植設計 §2.3）とも噛み合うため、**追加依存ゼロの AAudio 直接**を採る。
+
+端末固有の不具合に当たったら Oboe へ差し替える。`ISoundBackend` の内側に閉じているので
+**上位コードは 1 行も変わらない**。
+
+### 8.2 構成
+
+| ファイル | 役割 |
+|---|---|
+| `Sound/AAudio/AAudioSoundBackend.{h,cpp}` | `AAudioStream` を 1 本開き、data callback で `SoftwareMixer::Render` を呼ぶ。CoreAudio 版と同型 |
+| `Sound/Mixer/MixerSoundVoice.{h,cpp}` | `SoftwareMixer` の論理ボイスを `ISoundVoice` として見せる委譲アダプタ。**CoreAudio と共用**（`CoreAudioSoundVoice` を置き換える） |
+| `Sound/SoundBackend.h` | Android を `SOUND_BACKEND_AAUDIO` へ |
+
+出力フォーマットは CoreAudio と揃えて **48kHz / float32 / 2ch インターリーブ**。
+`SoftwareMixer::Render(float*, frames)` をコールバックのバッファへ直接書くので、
+オーディオスレッド内での確保もコピーも無い（§3.3 の実時間契約）。
+
+### 8.3 スレッドとライフサイクル
+
+- data callback は AAudio の**オーディオスレッド**。ここから触ってよいのは
+  `SoftwareMixer::Render` と `std::atomic` メンバだけ。
+- それ以外（`CreateVoice` / `SetBusVolume` / `Update`）は**サウンドスレッド 1 本**から（§3.3(e)）。
+- `GetOutputClock`（§3.4）は出力フレームカウンタ + `AAudioStream_getTimestamp()` /
+  `AAudioStream_getXRunCount()`。
+- **バックグラウンド遷移では stream を pause する。** `ISoundBackend` に
+  `OnSuspend()` / `OnResume()`（既定 no-op）を足し、`Engine::RunGame` が
+  `IPlatform::IsRenderable()` の立ち下がり / 立ち上がりで叩く
+  （Android では窓を失う = 背面。P3 で入れた判定をそのまま使う）。
+- **デバイス切替**（イヤホン抜き差し等）は `AAudioStreamBuilder_setErrorCallback` の
+  `onError` で検知し、サウンドスレッド側で stream を作り直す。ボイスの状態は
+  `SoftwareMixer` が持っているので、再構築してもゲーム側の再生は途切れない。
+
+### 8.4 ビルド
+
+- ソースは `AQ_PLATFORM_ANDROID` でガードし、CMake の除外パターンで
+  Windows / Mac のビルドからは落とす（`Sound/CoreAudio/` と同じ扱い）。
+- Android ターゲットにのみ `aaudio` をリンクする。**Windows / Mac には一切リンクしない。**
 
 ---
 

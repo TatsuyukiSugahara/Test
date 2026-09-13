@@ -29,7 +29,8 @@ namespace aq
 		 *  - プロデューサはサウンドスレッド 1 本に限る(SPSC 前提。Sound設計 §3.3(e))。
 		 *
 		 * 本クラスは ISoundVoice / ISoundBackend を実装しない純粋な部品。
-		 * P4 の CoreAudioSoundVoice / CoreAudioSoundBackend が薄いアダプタとして委譲する。
+		 * MixerSoundVoice(共通)と各バックエンド(CoreAudioSoundBackend / AAudioSoundBackend)が
+		 * 薄いアダプタとして委譲する。
 		 */
 		class SoftwareMixer
 		{

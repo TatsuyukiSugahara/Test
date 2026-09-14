@@ -1,6 +1,6 @@
 # Android 移植 設計
 
-> 対象コミット: 2f1af88 / 最終更新: 2026-09-14
+> 対象コミット: 2c14fac / 最終更新: 2026-09-14
 
 ## 現在の到達点
 
@@ -590,7 +590,33 @@ Mac の Vulkan 構成が動いていたのは `.app` が CWD を `Game/` に移�
    Xbox(UWP)で既知だった「JSON 全滅で画面がグレー」と同じ原因。Xbox 実機での
    確認は [Xbox移植設計.md](Xbox移植設計.md) 側の作業として残っている。
 
-10. **Mac の終了時リーク 7117 件 / 822KB**(2026-09-14 実測)。`ShutdownMemory()` の
+10. **★ キャラクタのテクスチャが出ていない可能性が高い(未確認)。**
+    iOS 移植 P2 で判明した不具合が **Android にもそのまま当てはまる**。
+    tkm のマテリアルは参照テクスチャの拡張子を**小文字 `.dds`** へ機械的に置換するが
+    (`ReplaceExtension(ResolveSiblingPath(...), ".dds")`)、同梱アセットの実体は
+    **`utc_all2.DDS` と大文字**。Windows / macOS のボリュームは大文字小文字を区別しないため
+    表面化しなかったが、**Android の内部ストレージ(ext4)は区別する**ので、
+    展開先から開けずに**モデルだけ出てキャラクタが灰色**になっているはず。
+    - P4 の実機確認では走行と加速を見ており、**キャラクタの色までは確認していない**。
+    - **対処は入っている**: iOS 移植 P2 で `BuildResourcePathCandidates` に
+      拡張子の大小を入れ替えた候補を(完全一致の後に)足した(`PushExtensionCaseVariants`)。
+      **次に Android を実機で動かすときに、キャラクタに色が付いているか確認すること。**
+    - 切り分けが難しいのは `LoadFromDDSFile` / `LoadFromTGAFile` が
+      **失敗しても無言**だから(WIC / stb_image 経路は失敗ログを出す)。
+      詳細は [iOS移植設計.md](iOS移植設計.md) の P2「分かったこと」2。
+
+11. **デバッグ UI の表示切替に 4 本指ダブルタップが追加された(2026-09-14)。**
+    iOS 移植 P3 で入れたものだが、判定は `HID/TouchGesture.h` の
+    `MultiTouchDoubleTapDetector`(ヘッダのみ・プラットフォーム非依存)で、
+    `Core/Application.cpp` の分岐も `AQ_PLATFORM_ANDROID || AQ_PLATFORM_IOS` なので
+    **Android でも同時に有効**。オーバーレイの案内文も
+    「4-finger double tap: hide Debug UI」に変わっている。
+    **Android 実機での動作は未確認**(シミュレータでは 4 本指を合成できず、
+    iOS 側もロジックの単体テストのみ)。次に Android を触るときに確認すること。
+    ※ Android の ImGui 倍率は **2.0 のまま**変えていない(iOS だけ 1.25 にした。
+      iOS は論理ポイントが ImGui の座標になるため)。
+
+12. **Mac の終了時リーク 7117 件 / 822KB**(2026-09-14 実測)。`ShutdownMemory()` の
     導入で報告位置は正しくなったが、**Mac では大量に残る**。Android が
     `No leaks detected` になるのと対照的で、**プラットフォーム差ではなく
     バックエンド差(Metal 側の解放漏れ)の可能性が高い**。

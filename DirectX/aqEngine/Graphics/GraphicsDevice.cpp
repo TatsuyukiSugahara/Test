@@ -20,6 +20,17 @@ namespace aq
 		bool IsComputeSupported()               { return g_computeSupported; }
 
 
+		// BC (ブロック圧縮) テクスチャをそのまま GPU へ渡せるか。既定は対応。
+		// D3D11 / D3D12 / Vulkan / macOS の Metal はいずれも BC が使えるため、
+		// 誰も設定しなければ従来どおりに振る舞う。
+		// Metal バックエンドだけが Initialize で supportsBCTextureCompression の実測値を
+		// 設定する (iOS シミュレータは NO)。false のときは DDS ロード時に RGBA8 へ
+		// 展開する (設計書/iOS移植設計.md §4.3 案 a)。
+		namespace { bool g_blockCompressionSupported = true; }
+		void SetBlockCompressionSupported(bool supported) { g_blockCompressionSupported = supported; }
+		bool IsBlockCompressionSupported()               { return g_blockCompressionSupported; }
+
+
 		GraphicsDevice::GraphicsDevice(std::unique_ptr<IGraphicsDeviceImpl> impl)
 			: impl_(std::move(impl))
 		{

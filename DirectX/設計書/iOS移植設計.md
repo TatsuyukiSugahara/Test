@@ -10,14 +10,14 @@
 していたものの過半が既にリポジトリへ入った**。差分の棚卸しは §0.6。
 本書はその再評価を反映した第 2 版である。
 
-**P1(シミュレータでクリア画面)完了 — 2026-09-14。**
-iPhone 17 シミュレータ(iOS 26.5)でアプリが起動し、**Metal のクリア色が横向き全面に出て、
-`CADisplayLink` が 60 FPS でフレームを回す**ところまで到達した。Engine の起動は P2。
+**P2(シミュレータで実シーン)完了 — 2026-09-14。**
+iPhone 17 シミュレータ(iOS 26.5)で **AquaDash のタイトル画面とステージが 60 FPS で描画**され、
+BC 圧縮テクスチャの実行時展開まで通った。残るは入力(P3)。
 
 | | 状態 |
 |---|---|
 | 設計 | 第 2 版。§0.5 の 6 論点すべて決着(2026-09-14) |
-| 実装 | **P0 / P1 完了。次は P2(シミュレータで実シーン)** |
+| 実装 | **P0 / P1 / P2 完了。次は P3(入力)** |
 | 環境 | Xcode 26.6 / iOS SDK 26.5 / iOS Simulator SDK 26.5。**iOS 実機は接続なし**(シミュレータ 11 種) |
 | 検証方針 | シミュレータ先行。実機は P5 |
 | シミュレータ | `ios-simulator-xcode` が configure / build 成功。`Game.app/Game` = Mach-O arm64 / `platform IOSSIMULATOR` / `minos 16.4` / `sdk 26.5` |
@@ -25,6 +25,12 @@ iPhone 17 シミュレータ(iOS 26.5)でアプリが起動し、**Metal のク�
 | Ninja | `ios-ninja` も configure 成功(コンパイルエラーの潰し込み用) |
 | バンドル | **`Contents/` の無いフラット構造**を確認(`Game.app/Game`)。§7.3 の前提どおり |
 | 起動(P1) | `iOSMain` → ウィンドウ **874x402(横向き)** 48ms → Metal デバイス 49ms → **クリア提示 82ms** |
+| 画面(P2) | **タイトル画面が正しく描画**(ロゴ / 背景 / ステージサムネ / フォント / ImGui)。**ステージも描画**(路面・キャラ・地形・草・空・HUD・ミニマップ) |
+| 性能(P2) | タイトル・ステージとも **60.0 FPS(16.67 ms)** — VSync 上限に張り付き |
+| BC 展開 | **実測で動作。** `utc_all2 / utc_nomal / utc_spec` の 3 枚(DXT5 / DX10)を計 34 image へ展開(11+11+12)。所要 67 / 28 / 187 ms |
+| メモリ | **RSS 322 MB**(Debug / BC を RGBA8 へ展開した状態) |
+| 書き込み先 | `startup_timing.log` と `imgui.ini` がアプリコンテナの `Documents/` に出る |
+| Validation | **Metal API Validation を有効(`SIMCTL_CHILD_METAL_DEVICE_WRAPPER_TYPE=1`)にしてエラー 0** |
 | フレーム駆動 | `CADisplayLink` で **16.2〜16.5 ms 間隔 = 60 FPS**。`UIApplicationMain` が戻らない構造で `RunFrameLoop` の委譲が効いている |
 | シミュレータ実測 | `Apple iOS simulator GPU` / **BC 圧縮: no** / GPU family `Apple2` / unified memory: no(§0.2-3 の事前実測と一致) |
 | Mac 実測(対照) | `Apple M5` / **BC 圧縮: yes** / GPU family `Apple9` / unified memory: yes |
@@ -731,6 +737,25 @@ spirv-cross --msl --msl-version 20000 --msl-decoration-binding --output <out.met
 `.metallib` の事前ビルドが可能になる。起動時間に効くので P6 の候補に置く。
 **P1〜P5 では現行方式を維持**する(変更点を増やさない)。
 
+### 4.7 デバイス機能の実測ゲート ★P2 で追加
+
+**コンパイルが通ることと、そのデバイスで動くことは別**だった。§0.2 の事前調査は
+`API_UNAVAILABLE(ios)` の有無しか見られないので、**実行時のデバイス能力差は検出できない**。
+P2 でシミュレータ(GPU family Apple2)を動かして 2 件のアサート即死を踏んだ。
+
+| 機能 | 要件 | シミュレータ | 非対応時の挙動 | 対処 |
+|---|---|---|---|---|
+| サンプラのボーダーカラー(`MTLSamplerBorderColor*` / `ClampToBorderColor`) | **Apple7 / Mac2 以上** | Apple2 → **不可** | `MTLSamplerBorderColorOpaqueWhite is not supported on this device` で **Validation がアサート** | `metal::IsSamplerBorderColorSupported()` で判定し `ClampToEdge` へ落とす |
+| read-write テクスチャ(compute のポストプロセス) | **`MTLReadWriteTextureTier2`**(HDR RGBA16Float を読み書きするため) | **Tier 0** | `hardware does not support read-write texture of this pixel format` で **アサート** | tier を実測し、足りなければ `SetComputeSupported(false)`(ポストプロセス無し) |
+| BC 圧縮テクスチャ | `supportsBCTextureCompression` | **不可** | テクスチャ生成が nil を返して**静かに全滅** | `IsBlockCompressionSupported()` → `ImageLoader` が RGBA8 へ展開(§4.3) |
+
+いずれも **`MetalGraphicsDeviceImpl::Initialize` で実測して起動ログに残し、
+フラグへ流す**形に統一した。**Mac(Apple9 / Tier2)ではすべて対応ありなので挙動は変わらない。**
+
+> **実機では 3 つとも対応している見込み**(A14 以降が Apple7、BC は iOS 16.4 以降)。
+> つまり**シミュレータでだけ通る劣化経路**であり、実機で本来の経路を通ることの確認は
+> P5 の項目になる。ここを取り違えると「シミュレータで動いたから大丈夫」と誤認する。
+
 ---
 
 ## 5. 入力
@@ -921,8 +946,14 @@ if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) { return conte
 
 ```
 macOS:  Game.app/Contents/Resources/Game/Assets/...
-iOS:    Game.app/Game/Assets/...
+iOS:    Game.app/Content/Game/Assets/...
 ```
+
+> **`Game.app/Game/Assets/...` にはできない(P2 で実測)。** フラットバンドルでは
+> **実行ファイル自身が `<Bundle>/Game`** なので、アセット側が要求する `Game/` と名前が衝突する。
+> バンドル直下は `Info.plist` / `PkgInfo` / `_CodeSignature` も置かれる **OS 側の名前空間**でもある。
+> よってこちらの持ち物は **`Content/` 1 段に隔離**し、`GetContentRoot()` は
+> `<Bundle>/Content` を返す。
 
 [package_app.cmake](../Tools/PackageApp/package_app.cmake) に iOS 分岐を足す:
 
@@ -973,6 +1004,17 @@ iOS:    Game.app/Game/Assets/...
    デバッグ UI と同じ層に置くかは、Android / iOS のどちらか先に着手した側で決める。
 9. **Metal の `.metallib` 事前ビルド**(§4.6)。iOS では Xcode に Metal Toolchain が
    同梱されるので可能になる。P6 の候補。
+10. **シミュレータでだけ通っている劣化経路の実機確認**(§4.7)。ボーダーカラー・
+    read-write テクスチャ(compute / ポストプロセス)・BC 圧縮の 3 つは、
+    実機(Apple7 以降 / iOS 16.4 以降)では本来の経路を通るはず。**P5 で必ず確認する。**
+    とくに **compute が有効になるとポストプロセス一式が初めて iOS で走る**ので、
+    そこで新たな問題が出る可能性がある。
+11. **`LoadFromDDSFile` / `LoadFromTGAFile` の失敗が無言**。WIC / stb_image 経路は
+    失敗ログを出すのに DDS / TGA だけ出さない。P2 の「キャラクタが灰色」の切り分けに
+    時間を要した直接の原因。`<Engine>` の小改善として切る。
+12. **アセットの拡張子の大小が揃っていない**(`utc_all2.DDS` と `Terrain/grass.DDS` は大文字、
+    tkm が要求するのは小文字)。P2 で解決経路を大小両対応にしたので実害は無くなったが、
+    **アセット側を小文字へ揃えるのが本来**。移植とは別の片付けとして残す。
 
 ---
 
@@ -1134,16 +1176,66 @@ UIKit エントリ + `CAMetalLayer` + フレーム駆動の委譲。
 - **BC 非対応時の `DirectX::Decompress` 経路**(§4.3 案 a)
 - エディタ保存 UI の無効化
 
-**評価チェックリスト**
-- [ ] タイトル画面が表示される
-- [ ] ステージが描画される(路面・キャラ・地形・影・UI)
-- [ ] **BC テクスチャ(DDS 7 枚)が正しく表示される**(展開経路が効いている)
-- [ ] `startup_timing.log` が書き込み可能領域に出る
-- [ ] Metal の Validation を有効にしてエラー 0(既定オフなので明示的に有効化。
-      `METAL_DEVICE_WRAPPER_TYPE=1`)
-- [ ] メモリ使用量を計測して §4.4 の見積りと突き合わせた
-- [ ] **Mac の回帰**(`FindProjectRoot` と `GetSurfaceSize` は Metal 共通コード)。
-      **`aqBundleApp` 済みの `.app` と生バイナリの両方**で確認する
+**評価チェックリスト** — 2026-09-14 実施
+
+- [x] タイトル画面が表示される(ロゴ / 背景 / サムネ / フォント / ImGui すべて)
+- [x] ステージが描画される(路面・キャラ・地形・草・空・HUD・ミニマップ)。
+      **入力がまだ無いため、タイトルからの遷移は一時パッチで自動化して確認した**
+      (パッチはコミットしていない。通常の遷移確認は P3)
+- [x] **BC テクスチャが正しく表示される**(展開経路が効いている)。
+      キャラクタが Mac と同じテクスチャ付きで出る
+- [x] `startup_timing.log` が書き込み可能領域(`Documents/`)に出る。`imgui.ini` も同様
+- [x] Metal の Validation を有効にしてエラー 0
+- [x] メモリ使用量を計測(**RSS 322 MB / Debug**)
+- [x] **Mac の回帰**: Metal / Vulkan とも Release がビルドでき(警告 14 / 17 件で従来と同数)、
+      **生バイナリでタイトル〜ステージ走行(59.1 FPS / コイン取得)**、
+      **`aqBundleApp` 済みの `.app` を CWD 外から起動して 60.0 FPS** の両方を確認
+- [x] iOS 実機構成(`ios-xcode`)のコンパイルが通る
+- [ ] **Windows 3 構成の回帰 — 未確認**(この環境ではビルドできない)。
+      共通コードへの変更は `Resource.cpp` の拡張子ケース候補追加(既存候補の**後**に足すだけ)、
+      `GraphicsDevice` の BC フラグ(既定 `true` で従来と同値)、`ImageLoader` の展開
+      (BC 対応環境では素通り)、`aq.cpp` / `Application.cpp` の iOS 専用分岐
+
+**P2 で分かったこと / 設計からの差分** — **実行するまで分からなかったものが 4 件**
+
+1. **★ フラットバンドルでは実行ファイル自身が `<Bundle>/Game` で、アセットの `Game/` と衝突する。**
+   §7.3 は「`iOS: Game.app/Game/Assets/...`」と書いていたが、**この配置は成立しない**
+   (`file(MAKE_DIRECTORY)` が `File exists` で落ちる)。バンドル直下は
+   `Info.plist` / `PkgInfo` / `_CodeSignature` / 実行ファイルという **OS 側の名前空間**でもある。
+   → **コンテンツを `Content/` 1 段に隔離**した。`GetContentRoot()` は
+   `<Bundle>/Content` を返し、アセットは `<Bundle>/Content/Game/Assets/...` に入る。
+2. **★ 大文字小文字を区別するファイルシステムでテクスチャが開けない。**
+   tkm のマテリアルは参照テクスチャの拡張子を小文字 `.dds` へ機械的に置換する
+   (`ReplaceExtension(..., ".dds")`)が、同梱アセットの実体は `utc_all2.DDS` と大文字。
+   **Windows / macOS のボリュームは既定で区別しないため今まで表面化しなかった**が、
+   **iOS(シミュレータ・実機とも)は区別する**ので、モデルだけ出てキャラクタが灰色になった。
+   → `BuildResourcePathCandidates` に**拡張子の大小を入れ替えた候補を(完全一致の後に)足す**
+   `PushExtensionCaseVariants` を入れた。絶対パスの早期 return 経路にも適用している
+   (tkm のマテリアルは解決済み絶対パスを基点に組み立てられるため)。
+   **Android の内部ストレージ(ext4)も区別するので、同じ不具合が潜在していたはず**。
+3. **★ シミュレータ GPU はサンプラのボーダーカラーに非対応。**
+   `MTLSamplerBorderColorOpaqueWhite is not supported on this device` で
+   **Validation がアサートして即死**する。ボーダーカラーと `ClampToBorderColor` は
+   **GPU family Apple7 / Mac2 以上**が要る(シミュレータは Apple2)。
+   → `metal::IsSamplerBorderColorSupported()` を新設し、非対応なら
+   `ClampToEdge` へ落とす(シャドウマップの外側の 1 テクセルが伸びるだけ)。
+4. **★ シミュレータは read-write テクスチャに非対応で compute が通らない。**
+   `Shader uses texture(...) as read-write, but hardware does not support
+   read-write texture of this pixel format.` でアサート。ポストプロセスの compute は
+   HDR(RGBA16Float)の RT を読み書きするので **`MTLReadWriteTextureTier2`** が要るが、
+   シミュレータは **Tier 0(非対応)**。
+   → tier を実測して足りなければ `SetComputeSupported(false)` にし、
+   **ポストプロセス無しの経路へ落とす**(トーンマップが掛からない)。
+   **実機(Apple7 以降)では Tier2 のはずなので、この分岐は P5 で実機確認する。**
+
+その他:
+
+- **BC 圧縮なのは `utc_*.DDS` の 3 枚だけだった。** §4.3 は「DDS アセットは 7 枚」と
+  書いていたが、`Sky/SkyCube.dds` と `Terrain/*.DDS` は**非圧縮**(`B8G8R8A8` / `R8G8B8A8`)。
+  BC 展開が効くのはキャラクタの 3 枚。
+- **`LoadFromDDSFile` / `LoadFromTGAFile` は失敗してもログを出さない**(WIC / stb_image 経路と
+  違う)。上記 2 の切り分けに時間が掛かった原因。**改善候補**として残す。
+- Info.plist テンプレートのコメントに `${...}` の形を書くと `configure_file` が落ちる(P1 で既出)。
 
 ### P3: 入力
 

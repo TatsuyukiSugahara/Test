@@ -292,6 +292,49 @@ namespace aq
 				return cachedRoot;
 			}
 
+			/**
+			 * 既存の候補それぞれについて、拡張子だけを小文字化/大文字化した候補を末尾へ足す。
+			 *
+			 * **大文字小文字を区別するファイルシステム対策。** tkm のマテリアルは
+			 * 参照テクスチャの拡張子を小文字 ".dds" へ machine 的に置換する
+			 * (ReplaceExtension(..., ".dds"))が、同梱アセットの実体は "utc_all2.DDS" の
+			 * ように大文字のことがある。Windows / macOS のボリュームは既定で
+			 * 大文字小文字を区別しないため今まで表面化しなかったが、
+			 * **iOS(シミュレータ・実機とも)と Android の内部ストレージは区別する**ので、
+			 * そのままではテクスチャが開けず「モデルだけ出て真っ白/灰色」になる
+			 * (iOS 移植 P2 で実際に踏んだ。設計書/iOS移植設計.md §7.4)。
+			 *
+			 * 完全一致を必ず優先するため、**元の候補をすべて並べた後**に足す。
+			 * 探索は「存在するものを 1 つ見つけるまで」なので、当たっている環境では
+			 * ここまで到達せず追加コストは無い。
+			 */
+			void PushExtensionCaseVariants(std::vector<std::string>& paths)
+			{
+				const size_t originalCount = paths.size();
+				for (size_t i = 0; i < originalCount; ++i) {
+					const std::string& original = paths[i];
+
+					const size_t dot = original.find_last_of('.');
+					if (dot == std::string::npos) {
+						continue;
+					}
+					// セパレータより後に '.' が無いものは拡張子ではない("../foo" など)。
+					const size_t separator = original.find_last_of('/');
+					if (separator != std::string::npos && dot < separator) {
+						continue;
+					}
+
+					std::string lower = original;
+					std::string upper = original;
+					for (size_t c = dot + 1; c < original.size(); ++c) {
+						lower[c] = static_cast<char>(std::tolower(static_cast<unsigned char>(original[c])));
+						upper[c] = static_cast<char>(std::toupper(static_cast<unsigned char>(original[c])));
+					}
+					PushUniquePath(paths, lower);
+					PushUniquePath(paths, upper);
+				}
+			}
+
 			std::vector<std::string> BuildResourcePathCandidates(std::string path)
 			{
 				std::replace(path.begin(), path.end(), '\\', '/');
@@ -301,6 +344,10 @@ namespace aq
 
 				std::filesystem::path fsPath(path);
 				if (fsPath.is_absolute()) {
+					// 絶対パスでも拡張子の大小だけは面倒を見る。tkm のマテリアルは
+					// 解決済みの絶対パスを基点に組み立てられるため、ここを素通りすると
+					// 大文字小文字を区別する環境でテクスチャが 1 枚も開けない。
+					PushExtensionCaseVariants(paths);
 					return paths;
 				}
 
@@ -315,6 +362,7 @@ namespace aq
 				else {
 					PushUniquePath(paths, (root / path).generic_string());
 				}
+				PushExtensionCaseVariants(paths);
 				return paths;
 			}
 

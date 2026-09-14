@@ -24,6 +24,24 @@ namespace aq
 {
 	namespace graphics
 	{
+		namespace metal
+		{
+			namespace
+			{
+				/**
+				 * サンプラのボーダーカラーが使えるか(宣言は MetalCommon.h)。
+				 *
+				 * デバイス初期化前に参照されうるので、既定は **false**(保守的な側)。
+				 * true にしてよいのは実測できたときだけ。
+				 */
+				bool g_samplerBorderColorSupported = false;
+			}
+
+			bool IsSamplerBorderColorSupported()              { return g_samplerBorderColorSupported; }
+			void SetSamplerBorderColorSupported(bool supported) { g_samplerBorderColorSupported = supported; }
+		}
+
+
 		/**
 		 * Metal オブジェクト群。
 		 * 素の C++ ヘッダへ Objective-C 型を出さないため、定義をこの TU に閉じ込める
@@ -419,16 +437,34 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 				// BC 圧縮の可否は環境依存で、非対応だと DDS のテクスチャ生成が nil を返して
 				// 静かに全滅する。検出せずに失敗しないよう、起動ログへ必ず残しておく。
 				// (iOS シミュレータは NO を返すことを実測済み)
+				//
+				// 実測値はそのまま機能フラグへ流す。false のとき ImageLoader が DDS を
+				// RGBA8 へ展開する(設計書 §4.3 案 a)。
 				if (@available(iOS 16.4, macOS 11.0, *)) {
-					aq::StartupMarkf("  [metal] BC texture compression: %s",
-					                 [objects_->device supportsBCTextureCompression] ? "yes" : "no");
+					const bool bcSupported = [objects_->device supportsBCTextureCompression];
+					aq::StartupMarkf("  [metal] BC texture compression: %s", bcSupported ? "yes" : "no");
+					aq::graphics::SetBlockCompressionSupported(bcSupported);
 				} else {
 					// それ未満のバージョンではプロパティ自体が存在せず、問い合わせられない。
-					aq::StartupMark("  [metal] BC texture compression: unknown (needs iOS 16.4 / macOS 11.0)");
+					// 判定できない = 使えない側に倒す(BC を渡して nil が返ると
+					// テクスチャが静かに全滅するため、展開する側へ倒す方が安全)。
+					aq::StartupMark("  [metal] BC texture compression: unknown (needs iOS 16.4 / macOS 11.0) -> off");
+					aq::graphics::SetBlockCompressionSupported(false);
 				}
 				aq::StartupMarkf("  [metal] GPU family: %s / unified memory: %s",
 				                 DescribeGpuFamily(objects_->device),
 				                 [objects_->device hasUnifiedMemory] ? "yes" : "no");
+
+				// サンプラのボーダーカラー(と ClampToBorderColor)は family Apple7 / Mac2 以上。
+				// 非対応デバイスへ渡すと Validation がアサートで即死するので、実測して落とす。
+				// Apple GPU の family は累積なので Apple7 が真なら Apple8/9 も含む。
+				// (iOS シミュレータは Apple2 で false。実機 A14 以降は true になる見込み)
+				{
+					const bool borderSupported = [objects_->device supportsFamily:MTLGPUFamilyApple7]
+					                          || [objects_->device supportsFamily:MTLGPUFamilyMac2];
+					aq::StartupMarkf("  [metal] sampler border color: %s", borderSupported ? "yes" : "no");
+					metal::SetSamplerBorderColorSupported(borderSupported);
+				}
 
 				objects_->commandQueue = [objects_->device newCommandQueue];  // MRR: +1
 				if (objects_->commandQueue == nil) {
@@ -447,7 +483,23 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 			// 照明面が暗く・空が飽和したままになる(設計書 §12 の P4 / §13-9)。
 			//
 			// あわせてメイン RT も HDR(R16G16B16A16_Float)へ変えている(下の主 RT 生成を参照)。
-			aq::graphics::SetComputeSupported(true);
+			//
+			// **ただしハードウェアが read-write テクスチャに対応していないと使えない。**
+			// ポストプロセスの compute は HDR(RGBA16Float)の RT を読み書きするので
+			// **MTLReadWriteTextureTier2** が要る。Tier1 は R32 系のみ、None は不可。
+			// 足りないまま dispatch すると Validation がアサートで即死する:
+			//   `Shader uses texture(...) as read-write, but hardware does not support
+			//    read-write texture of this pixel format.`
+			// iOS シミュレータ(family Apple2)で実際に踏んだ(設計書/iOS移植設計.md §4.7)。
+			// 非対応環境では compute を切り、ポストプロセス無しの経路へ落とす
+			// (トーンマップが掛からないぶん眠い絵になるが、描画は通る)。
+			{
+				const MTLReadWriteTextureTier tier = [objects_->device readWriteTextureSupport];
+				const bool computeOk = (tier >= MTLReadWriteTextureTier2);
+				aq::StartupMarkf("  [metal] read-write texture tier: %d -> compute %s",
+				                 static_cast<int>(tier), computeOk ? "on" : "off (no post-process)");
+				aq::graphics::SetComputeSupported(computeOk);
+			}
 
 			// スワップチェーン(CAMetalLayer)。PlatformMac が生成済みのものを設定するだけ(設計書 §7)。
 			@autoreleasepool
@@ -582,6 +634,27 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 
 			delete objects_;
 			objects_ = nullptr;
+		}
+
+
+		bool MetalGraphicsDeviceImpl::GetSurfaceSize(uint32_t& outWidth, uint32_t& outHeight) const
+		{
+			// レイヤが無い(未初期化 / Finalize 済み)なら false。呼び出し側は従来値を使い続ける。
+			if (objects_ == nullptr || objects_->layer == nil) {
+				return false;
+			}
+
+			// width_/height_ ではなく drawableSize を正とする。ウィンドウのリサイズや
+			// Safe Area の変化で実際の面はこちらだけが動くため(設計書 §4.5)。
+			// contentsScale = 1 固定なので、この値はポイント値とも一致する。
+			const CGSize size = [objects_->layer drawableSize];
+			if (size.width <= 0.0 || size.height <= 0.0) {
+				return false;
+			}
+
+			outWidth  = static_cast<uint32_t>(size.width);
+			outHeight = static_cast<uint32_t>(size.height);
+			return true;
 		}
 
 

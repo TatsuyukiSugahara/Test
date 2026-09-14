@@ -90,6 +90,37 @@ namespace aq
 		{
 			ImGui::CreateContext();
 
+#if defined(AQ_PLATFORM_IOS)
+			// iOS はアプリバンドルが read-only で、カレントディレクトリも当てにできない
+			// (設計書/iOS移植設計.md §3.6 / §7.2)。ImGui 既定の "imgui.ini" は CWD 相対なので
+			// 黙って保存に失敗し、デバッグ UI の配置が毎回リセットされる形で表面化する。
+			// 書き込める GetUserDataDirectory() 配下へ向ける。
+			//
+			// io.IniFilename は **const char* を保持するだけでコピーしない**。文字列の実体は
+			// プロセス寿命で生かす必要があるため関数ローカルの static に置く
+			// (ローカルの std::string にすると即ダングリングポインタになる)。
+			// std::string ではなく素の配列にしてあるのは、ShutdownMemory(MemoryManager の
+			// リーク報告)より後まで生き残るぶんを未解放として数えさせないため。
+			{
+				static constexpr size_t IMGUI_INI_PATH_BUFFER_COUNT = 512;
+				static char s_imguiIniPath[IMGUI_INI_PATH_BUFFER_COUNT] = {};
+
+				// 書き込める場所が分からない/長すぎて収まらないなら、毎回保存に失敗し
+				// 続けるより保存を切る(nullptr = ini を読み書きしない)。
+				const char* iniFilename   = nullptr;
+				const char* userDirectory = Engine::Get().GetUserDataDirectory();
+				if (userDirectory != nullptr)
+				{
+					// GetUserDataDirectory は末尾セパレータ付きの契約(IPlatform.h)。
+					const int written = snprintf(s_imguiIniPath, sizeof(s_imguiIniPath), "%simgui.ini", userDirectory);
+					if (written > 0 && static_cast<size_t>(written) < sizeof(s_imguiIniPath)) {
+						iniFilename = s_imguiIniPath;
+					}
+				}
+				ImGui::GetIO().IniFilename = iniFilename;
+			}
+#endif // AQ_PLATFORM_IOS
+
 				// ImGui 用フォントをシステムのフォントフォルダから読み込む。
 				// 日本語グリフ(かな/CJK 統合漢字 約 21,000 字)は起動時のアトラス生成に約 0.26 秒かかる一方、
 				// 使用箇所は Debug パネルの一部ラベルのみだったため ASCII(+矢印/図形記号)に制限した。

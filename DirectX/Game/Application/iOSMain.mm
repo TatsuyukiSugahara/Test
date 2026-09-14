@@ -8,8 +8,8 @@
 // どちらが実体を持つかはガードマクロが決める(CMake 側の振り分けは不要)。
 #if defined(AQ_PLATFORM_IOS)
 #import <UIKit/UIKit.h>
+#include "Application.h"
 #include "Platform/iOS/PlatformiOS.h"
-#include "Graphics/Metal/MetalGraphicsDeviceImpl.h"
 
 // 本 TU は手動参照カウント(MRR)前提で書いている。CMake は -fobjc-arc を渡していない。
 // ARC を有効にすると release 呼び出しがコンパイルエラーになるため、早期に落とす。
@@ -25,17 +25,9 @@
 // application:didFinishLaunchingWithOptions: へ、後始末を
 // applicationWillTerminate: へ分けて持つ(設計書/iOS移植設計.md §3.2)。
 // プラットフォーム実装の寿命もここが持つ(Mac はスタックに置いていた)。
-//
-// TODO(P2): この足場を Engine::Create → CreateApplication → Engine::Initialize →
-//   Engine::RunGame → Engine::Finalize → Engine::Release のブートへ置き換える。
-//   アセットをバンドルへ入れる(package_app.cmake の iOS 分岐)のが P2 なので、
-//   それまでゲーム本体は起動できない(Android P1 と同じ段取り)。
 @interface AqAppDelegate : UIResponder <UIApplicationDelegate>
 {
 	aq::platform::PlatformiOS* platform_;
-	aq::graphics::RenderContext renderContext_;
-	uint32_t                    presentedFrames_;
-	bool                        graphicsReady_;
 }
 @end
 
@@ -49,90 +41,46 @@
 
 	aq::StartupMark("iOSMain");
 
-	platform_        = nullptr;
-	presentedFrames_ = 0;
-	graphicsReady_   = false;
-
-	// ウィンドウ・グラフィクス初期化中の new/delete もエンジンアロケータ管理下に置く。
-	// 通常は Engine::Initialize が先頭で行うが、P1 では Engine を起動しないので
-	// 誰も初期化してくれない(AndroidMain.cpp の P1 版と同じ理由)。
-	aq::memory::MemoryConfig memoryConfig;
-	aq::memory::MemoryManager::Initialize(memoryConfig);
-
 	// UIApplicationMain が戻らないので、プラットフォーム実装はスタックに置けない。
 	// 寿命はこのデリゲートが持ち、applicationWillTerminate: で壊す。
 	platform_ = new aq::platform::PlatformiOS();
 
+	// Win32 / Mac と違い、解像度をこちらから決められない。Engine へ渡す値が要るので、
+	// 先にウィンドウの到着を待ってサイズを取る。CreateMainWindow は冪等なので、
+	// この後 Engine::Initialize が内部で呼んでも同じウィンドウが返る。
+	// (AndroidMain.cpp とまったく同じ理由・同じ順序。設計書 §3.5)
 	aq::graphics::NativeWindowHandle window;
 	aq::platform::WindowDesc         desc;
 	if (!platform_->CreateMainWindow(desc, window))
 	{
-		aq::StartupMark("[ios] CreateMainWindow FAILED");
+		aq::StartupMark("iOSMain exit (no window)");
 		return YES;
 	}
 
 	// 画面サイズは OS が決めるので、desc ではなく実際に確保できた寸法を使う(§3.5)。
-	const uint32_t width  = static_cast<uint32_t>(platform_->GetDrawableWidth());
-	const uint32_t height = static_cast<uint32_t>(platform_->GetDrawableHeight());
+	const int32_t width  = platform_->GetDrawableWidth();
+	const int32_t height = platform_->GetDrawableHeight();
 
-	aq::graphics::GraphicsDevice::Create<aq::graphics::MetalGraphicsDeviceImpl>();
-	if (!aq::graphics::GraphicsDevice::Get().Initialize(window, width, height))
-	{
-		aq::StartupMark("[ios] GraphicsDevice::Initialize FAILED");
-		aq::graphics::GraphicsDevice::Release();
-		return YES;
+	aq::Engine::Create();
+	aq::Engine& engineInstance = aq::Engine::Get();
+	engineInstance.CreateApplication<app::Application>();
+
+	aq::InitializeParameter initializeParameter;
+	initializeParameter.platform     = platform_;
+	initializeParameter.screenWidth  = width;
+	initializeParameter.screenHeight = height;
+	initializeParameter.renderWidth  = width;
+	initializeParameter.renderHeight = height;
+	if (engineInstance.Initialize(initializeParameter)) {
+		// **ここで Finalize を続けて呼んではいけない。**
+		// RunGame は iOS では RunFrameLoop 経由で CADisplayLink を張って**即 return する**
+		// (while (PumpEvents()) が成立しないため。設計書 §3.3)。MacMain.mm / AndroidMain.cpp の
+		// 「RunGame の直後に Finalize」をそのまま写すと 1 フレームも回らずに終了する(§3.2)。
+		// 後始末は applicationWillTerminate: が持つ。
+		engineInstance.RunGame();
 	}
-	aq::StartupMark("[ios] graphics device ok");
-
-	aq::graphics::GraphicsDevice::Get().SetupRenderContext(renderContext_);
-	aq::graphics::GraphicsDevice::Get().SetupDefaultRenderState(renderContext_);
-	graphicsReady_ = true;
-
-	// フレーム駆動をプラットフォームへ委譲する。P1 の足場も Engine と同じ経路を通し、
-	// P2 で本物(Engine::RunGame)へ差し替わる機構をそのまま検証する。
-	// RunFrameLoop は CADisplayLink を張って即 return するので、この後 return YES まで進む。
-	aq::platform::PlatformiOS* platform = platform_;
-	AqAppDelegate* delegate = self;
-	platform->RunFrameLoop([delegate, width, height]
-		{
-			[delegate presentClearFrame:width height:height];
-		});
 
 	return YES;
-}
-
-
-// グラフィクスデバイスだけを立てた状態で、クリア色を 1 フレーム提示する。
-//
-// 検証対象は「UIKit → CAMetalLayer → Metal のドローアブル/提示」と
-// 「CADisplayLink によるフレーム駆動」の 2 点だけ(設計書 §9 の P1)。
-- (void)presentClearFrame:(uint32_t)width height:(uint32_t)height
-{
-	if (!graphicsReady_)
-	{
-		return;
-	}
-
-	// 見て分かる色にする(黒だと「何も出ていない」と区別が付かない)。
-	// AndroidMain.cpp の P1 版と同じ色にして、見比べられるようにしてある。
-	float clearColor[4] = { 0.10f, 0.35f, 0.60f, 1.0f };
-
-	aq::graphics::IRenderTarget& mainRT =
-		aq::graphics::GraphicsDevice::Get().GetMainRenderTarget(0);
-
-	renderContext_.OMSetRenderTargets(1, &mainRT);
-	renderContext_.RSSetViewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
-	renderContext_.ClearRenderTargetView(0, clearColor);
-
-	aq::graphics::GraphicsDevice::Get().CopyToBackBuffer(mainRT);
-	aq::graphics::GraphicsDevice::Get().Present();
-
-	// 提示が回り始めたことがログで分かるように、最初の数フレームだけ印を出す。
-	if (presentedFrames_ < 3)
-	{
-		++presentedFrames_;
-		aq::StartupMarkf("[ios] presented frame %u", presentedFrames_);
-	}
 }
 
 
@@ -140,19 +88,26 @@
 {
 	(void)application;
 
-	// まずフレーム駆動を止める。CADisplayLink が生きたままデバイスを壊すと、
+	// **このメソッドが走る保証は無い(P1 で確認済み)。**
+	// `xcrun simctl terminate` では呼ばれず、iOS の通常の終了は
+	// 「サスペンド → 予告なく kill」なのでどのみち通らない。
+	// それでも構造上ほかに置き場所が無い(UIApplicationMain が戻らないので
+	// main の末尾に相当する場所がこのコールバックしかない)ため、置き場所は変えない。
+	// つまり「行儀よく畳めたときだけ通る経路」であり、ここでのリーク報告や
+	// Finalize の実行を前提にした設計はしないこと。
+
+	// まずフレーム駆動を止める。CADisplayLink が生きたまま Engine を壊すと、
 	// 次の表示更新で解放済みのデバイスへ描きに行く。
 	if (platform_ != nullptr)
 	{
 		platform_->StopFrameLoop();
 	}
 
-	if (graphicsReady_)
+	// ウィンドウが取れずに Engine を作らないまま抜けた経路があるので、生成済みだけ畳む。
+	if (aq::Engine::IsCreated())
 	{
-		aq::graphics::GraphicsDevice::Get().WaitIdle();
-		aq::graphics::GraphicsDevice::Get().Finalize();
-		aq::graphics::GraphicsDevice::Release();
-		graphicsReady_ = false;
+		aq::Engine::Get().Finalize();
+		aq::Engine::Release();
 	}
 
 	delete platform_;
@@ -160,11 +115,6 @@
 
 	// Engine もプラットフォームも壊れた後に畳む。ここで初めてリーク報告が意味を持つ
 	// (4 つのエントリ共通の順序)。
-	//
-	// **なぜ Engine::Finalize() の直後ではなくここなのか**: UIApplicationMain が
-	// 戻ってこないため、main の末尾に相当する場所がこのコールバックしかない。
-	// P2 で Engine を起動するようになっても、Engine::Finalize / Engine::Release は
-	// このメソッドの中(ShutdownMemory より前)へ置くこと。
 	aq::ShutdownMemory();
 	aq::StartupMark("iOSMain exit");
 }

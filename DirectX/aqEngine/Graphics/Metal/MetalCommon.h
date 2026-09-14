@@ -12,6 +12,7 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#include "Platform/Common/PlatformDefs.h"   // AQ_PLATFORM_IOS (MSL_DIR_NAME の分岐)
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/IRenderContextImpl.h"   // DepthMode / BlendMode
 
@@ -28,6 +29,34 @@ namespace aq
 
 			/** frames-in-flight 数。Vulkan バックエンドと揃える(設計書 §2.1) */
 			static constexpr uint32_t FRAME_COUNT = 2;
+
+
+			// ----------------------------------------------------------------
+			//  シェーダの配置 (設計書/iOS移植設計.md §4.2)
+			// ----------------------------------------------------------------
+
+			/**
+			 * ビルド時に生成した MSL(.metal)と、その中間生成物 .spv を置くディレクトリ名。
+			 *
+			 * **macOS 版 MSL と iOS 版 MSL は別物**。spirv-cross は既定で macOS 版を吐き、
+			 * iOS 版は --msl-ios を付けて別に生成する。テクスチャ/サンプラの扱いなどが
+			 * 異なるため、macOS 版をそのまま iOS へ持っていっても
+			 * newLibraryWithSource: が通らない。同名で中身が別物のファイルが混ざると
+			 * 壊れるので、Vulkan の spv/ と Metal の msl/ を分けているのと同じ理由で
+			 * ディレクトリごと分ける。
+			 *
+			 * Tools/ShaderCompile/compile_msl.cmake の出力先(AQ_MSL_OUT_DIR)と
+			 * **一対一で対応**させること。片方だけ変えないこと。
+			 *
+			 * 読み出し側は MetalShader.mm の BuildMslPath() / BuildSpirvPath() と
+			 * MetalRenderContextImpl.mm の BuildComputeSpirvPath() の 3 箇所。
+			 * その 3 箇所がずれないよう、名前はここ 1 箇所だけで持つ。
+			 */
+#if defined(AQ_PLATFORM_IOS)
+			static constexpr char MSL_DIR_NAME[] = "msl-ios";
+#else
+			static constexpr char MSL_DIR_NAME[] = "msl";
+#endif
 
 
 			// ----------------------------------------------------------------
@@ -201,14 +230,37 @@ namespace aq
 			}
 
 
-			/** AddressMode -> MTLSamplerAddressMode */
+			/**
+			 * サンプラのボーダーカラーが使えるデバイスか。
+			 *
+			 * ボーダーカラー(と ClampToBorderColor)は **GPU family Apple7 以上 / Mac2** が要る。
+			 * それ未満で `borderColor` を設定するか ClampToBorderColor を渡すと、
+			 * Metal の **Validation がアサートで即死**する:
+			 *   `MTLSamplerBorderColorOpaqueWhite is not supported on this device`
+			 * (iOS シミュレータは family Apple2 なので実際に踏んだ。設計書/iOS移植設計.md §4.7)
+			 *
+			 * 値は MetalGraphicsDeviceImpl::Initialize が実測して設定する。
+			 * 呼べるのはデバイス初期化後だけ(それ以前は保守的に false)。
+			 */
+			bool IsSamplerBorderColorSupported();
+			void SetSamplerBorderColorSupported(bool supported);
+
+
+			/**
+			 * AddressMode -> MTLSamplerAddressMode
+			 *
+			 * Border は非対応デバイスでは ClampToEdge へ落とす(上記参照)。
+			 * 端の 1 テクセルが引き伸ばされるだけで、描画が止まるよりはるかにましという判断。
+			 */
 			inline MTLSamplerAddressMode ToMTLAddressMode(const AddressMode mode)
 			{
 				switch (mode)
 				{
 				case AddressMode::Wrap:   return MTLSamplerAddressModeRepeat;
 				case AddressMode::Mirror: return MTLSamplerAddressModeMirrorRepeat;
-				case AddressMode::Border: return MTLSamplerAddressModeClampToBorderColor;
+				case AddressMode::Border: return IsSamplerBorderColorSupported()
+				                               ? MTLSamplerAddressModeClampToBorderColor
+				                               : MTLSamplerAddressModeClampToEdge;
 				case AddressMode::Clamp:
 				default:                  return MTLSamplerAddressModeClampToEdge;
 				}

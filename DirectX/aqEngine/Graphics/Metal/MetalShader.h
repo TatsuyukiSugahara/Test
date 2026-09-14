@@ -20,8 +20,9 @@ namespace aq
 		 * MTLFunction を取り出す(設計書 §9.2)。
 		 * xcrun metal が使えないため .metallib の事前ビルドは採らない(同書 §0.2)。
 		 *
-		 * 探索パスは <.fx の親>/msl/<stem>.<entry>.<vs|ps|cs>.metal で、
+		 * 探索パスは <.fx の親>/<metal::MSL_DIR_NAME>/<stem>.<entry>.<vs|ps|cs>.metal で、
 		 * compile_msl.cmake の出力名と**一対一で対応している**(片方だけ変えないこと)。
+		 * ディレクトリ名は macOS が "msl"、iOS は "msl-ios"(設計書/iOS移植設計.md §4.2)。
 		 *
 		 * 参照カウントは MRR(ARC ではない)。library_ / function_ は newXxx 系で
 		 * +1 されたものを持つので、Release() で対に release する。

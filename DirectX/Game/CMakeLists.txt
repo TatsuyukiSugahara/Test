@@ -161,29 +161,49 @@ endif()
 
 
 # ----------------------------------------------------------------------------
-#  .app バンドルへの同梱(Mac のみ。設計書 Mac移植設計.md §9 P5)
+#  .app バンドルへの同梱(Mac / iOS。設計書 Mac移植設計.md §9 P5 /
+#  iOS移植設計.md §7.3 の P2)
 #
-#  **ALL には入れない。**Assets が 92MB あるため毎ビルドでコピーすると
-#  イテレーションが目に見えて遅くなる。配布形態を作りたいときだけ
+#  **ALL には入れない。**Assets が 92MB(iOS 時点で 98MB)あるため毎ビルドで
+#  コピーするとイテレーションが目に見えて遅くなる。配布形態を作りたいときだけ
 #  明示的に aqBundleApp を叩く。通常の cmake --build の挙動は従来どおり。
+#  **この方針は iOS でも維持する**(設計書 iOS移植設計.md §7.3)。
 #
 #      cmake --build --preset macos-ninja-debug --target aqBundleApp
 #
-#  シェーダ生成物(Assets/Shader/msl・spv)はビルド生成物なので、
+#  シェーダ生成物(Assets/Shader/msl・msl-ios・spv)はビルド生成物なので、
 #  「生成してから同梱」する必要がある。aqCompileMsl / aqCompileSpv は
 #  ルート CMakeLists.txt で add_dependencies(Game ...) されているので、
 #  aqBundleApp -> Game -> aqCompileXxx と**推移的に**順序が付く
 #  (この時点では aqCompileXxx がまだ定義されていないため直接は書けない)。
 #
-#  投入の中身は Tools/PackageApp/package_app.cmake 側。
+#  投入の中身は Tools/PackageApp/package_app.cmake 側。バンドルの構造
+#  (macOS は Contents/Resources、iOS はバンドル直下)と、Metal のシェーダを
+#  msl / msl-ios のどちらから取るかを AQ_PKG_PLATFORM で切り替える。
+#
+#  ------------------------------------------------------------------------
+#  **iOS 実機では aqBundleApp -> 署名 の順序が要る(P5 の課題)**
+#
+#  署名済みのバンドルに後からファイルを足すと**署名が壊れて実機で起動できない**。
+#  したがって実機向けには aqBundleApp をコード署名より **前** に走らせる必要がある
+#  (Xcode ジェネレータではビルドフェーズの順序に注意)。
+#  P2 の対象であるシミュレータは CODE_SIGNING_ALLOWED=NO で署名自体が走らないため、
+#  ここでは問題にならない。実機対応は P5 で扱う。
 # ----------------------------------------------------------------------------
 if(APPLE)
+	if(IOS)
+		set(AQ_PKG_PLATFORM "iOS")
+	else()
+		set(AQ_PKG_PLATFORM "macOS")
+	endif()
+
 	add_custom_target(aqBundleApp
 		COMMAND "${CMAKE_COMMAND}"
 			"-DAQ_PKG_BUNDLE_DIR=$<TARGET_BUNDLE_DIR:Game>"
 			"-DAQ_PKG_EXECUTABLE=$<TARGET_FILE:Game>"
 			"-DAQ_PKG_ASSETS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/Assets"
 			"-DAQ_PKG_GRAPHICS_API=${AQ_GRAPHICS_API}"
+			"-DAQ_PKG_PLATFORM=${AQ_PKG_PLATFORM}"
 			"-DAQ_PKG_VULKAN_SDK=${AQ_VULKAN_SDK}"
 			-P "${CMAKE_SOURCE_DIR}/Tools/PackageApp/package_app.cmake"
 		VERBATIM

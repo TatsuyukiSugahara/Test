@@ -188,6 +188,12 @@ namespace aq
 			instance_ = new Engine();
 		}
 		static Engine& Get()  { return *instance_; }
+
+		// Get() は生ポインタを参照外しするだけなので、Create() 前に呼ぶと落ちる。
+		// エントリ最初期(iOSMain の最初の StartupMark など)のように「Engine がまだ
+		// 居ないかもしれない」文脈から触る側が、事前に確認するためのもの。
+		static bool IsCreated() { return instance_ != nullptr; }
+
 		static void Release()
 		{
 			if (instance_) {

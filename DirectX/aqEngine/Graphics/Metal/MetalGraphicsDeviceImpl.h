@@ -108,6 +108,18 @@ namespace aq
 			bool Initialize(NativeWindowHandle window, uint32_t width, uint32_t height) override;
 			void Finalize() override;
 			void WaitIdle() override;
+
+			/**
+			 * 提示している面の寸法 (CAMetalLayer の drawableSize) を返す。
+			 *
+			 * Engine::SyncScreenSize() がこれを見て screenWidth_/screenHeight_ を追従させる
+			 * (設計書/iOS移植設計.md §4.5)。contentsScale は Mac / iOS とも 1 固定なので、
+			 * ポイントとピクセルは 1:1 で倍率補正は要らない。
+			 *
+			 * **RecreateSurface() は実装しない。** iOS では CAMetalLayer が破棄されず
+			 * 呼ばれる契機が無いため、既定の no-op のままにしてある(設計書 §3.4 / §4.5)。
+			 */
+			bool GetSurfaceSize(uint32_t& outWidth, uint32_t& outHeight) const override;
 			void SetupRenderContext(RenderContext& outContext) override;
 			void SetupDefaultRenderState(RenderContext& context) override;
 

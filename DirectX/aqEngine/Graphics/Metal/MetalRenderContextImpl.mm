@@ -48,25 +48,42 @@ namespace aq
 			//  BuildSpirvPath の**写し**。片方だけ変えないこと。
 			// ────────────────────────────────────────────────────────────
 
+			/**
+			 * プロジェクトルート(この下に Game/Assets がある)を 1 度だけ求める。
+			 *
+			 * ワーカースレッドから並列に呼ばれるため、C++11 のスレッドセーフな
+			 * static 初期化で算出する(VulkanShader.cpp / Resource.cpp と同じ形)。
+			 */
 			std::string FindProjectRoot()
 			{
-				static std::string cached;
-				if (!cached.empty()) { return cached; }
+				// 関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
+				aq::memory::ScopedPersistentAlloc persistent;
+				static const std::string cached = []() -> std::string
+					{
+						// プラットフォームがコンテンツ基点を返す場合(iOS のバンドル直下、
+						// macOS の Contents/Resources、UWP のパッケージ install フォルダ、
+						// Android の展開先)はそれを採用し、ソースツリーの上方探索は行わない。
+						// **iOS ではバンドルが read-only で CWD が "/" なので、上方探索では
+						// シェーダが 1 本も見つからない**(設計書/iOS移植設計.md §7.1)。
+						// Win32 は nullptr を返すので従来どおり下の探索へ落ちる。
+						if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
+							return contentRoot;
+						}
 
-				std::error_code ec;
-				std::filesystem::path dir = std::filesystem::current_path(ec);
-				if (ec) { return std::string(); }
+						std::error_code ec;
+						std::filesystem::path dir = std::filesystem::current_path(ec);
+						if (ec) { return std::string(); }
 
-				while (!dir.empty()) {
-					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
-						cached = dir.generic_string();
-						return cached;
-					}
-					if (dir == dir.root_path()) { break; }
-					dir = dir.parent_path();
-				}
+						while (!dir.empty()) {
+							if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
+								return dir.generic_string();
+							}
+							if (dir == dir.root_path()) { break; }
+							dir = dir.parent_path();
+						}
 
-				cached = std::filesystem::current_path(ec).generic_string();
+						return std::filesystem::current_path(ec).generic_string();
+					}();
 				return cached;
 			}
 
@@ -89,7 +106,15 @@ namespace aq
 			}
 
 
-			/** CS の中間生成物 .spv の探索パス: <shaderDir>/msl/<stem>.<entry>.cs.spv */
+			/**
+			 * CS の中間生成物 .spv の探索パス:
+			 *   <shaderDir>/<metal::MSL_DIR_NAME>/<stem>.<entry>.cs.spv
+			 *
+			 * ディレクトリ名は macOS が "msl"、**iOS は "msl-ios"**(MetalCommon.h の
+			 * MSL_DIR_NAME で分岐。設計書/iOS移植設計.md §4.2)。
+			 * MetalShader.mm の BuildMslPath() / BuildSpirvPath() と同じ定数を見る。
+			 * **片方だけ変えないこと。**
+			 */
 			std::string BuildComputeSpirvPath(const char* resolvedPath, const char* entry)
 			{
 				const std::filesystem::path src(resolvedPath ? resolvedPath : "");
@@ -97,7 +122,7 @@ namespace aq
 
 				const std::string name = src.stem().string() + "."
 				                       + ((entry && entry[0]) ? entry : "main") + ".cs.spv";
-				return (src.parent_path() / "msl" / name).generic_string();
+				return (src.parent_path() / metal::MSL_DIR_NAME / name).generic_string();
 			}
 
 

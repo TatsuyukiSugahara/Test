@@ -247,7 +247,10 @@ namespace aq
 				samplerDesc.sAddressMode = metal::ToMTLAddressMode(desc.addressU);
 				samplerDesc.tAddressMode = metal::ToMTLAddressMode(desc.addressV);
 				samplerDesc.rAddressMode = metal::ToMTLAddressMode(desc.addressW);
-				samplerDesc.borderColor  = MTLSamplerBorderColorOpaqueBlack;
+				// 非対応デバイスでは設定しない(MetalCommon.h の IsSamplerBorderColorSupported を参照)。
+				if (metal::IsSamplerBorderColorSupported()) {
+					samplerDesc.borderColor = MTLSamplerBorderColorOpaqueBlack;
+				}
 				samplerDesc.lodMinClamp  = desc.minLOD;
 				samplerDesc.lodMaxClamp  = desc.maxLOD;
 				samplerDesc.maxAnisotropy = anisotropic ? ((desc.maxAniso > 1) ? desc.maxAniso : 1) : 1;

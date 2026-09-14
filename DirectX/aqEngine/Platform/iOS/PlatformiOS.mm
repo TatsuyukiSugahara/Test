@@ -358,12 +358,23 @@ namespace aq
 				@autoreleasepool
 				{
 					// iOS のアプリバンドルは Contents/ 階層を持たず、リソースがバンドル直下に
-					// 並ぶ(設計書 §2.3 / §7.3)。よって Mac のように Resources を足さず、
-					// bundlePath をそのまま基点にする。
+					// 並ぶ(設計書 §2.3 / §7.3)。ただし**バンドル直下をそのまま基点にはできない**。
+					//
+					// 基点の下には Game/Assets/... が並ぶ(BuildResourcePathCandidates が
+					// "Assets/..." を <root>/Game/Assets/... へ組むため)が、フラットバンドルでは
+					// **実行ファイル自体が <Bundle>/Game** なので、その "Game" と衝突する。
+					// バンドル直下は Info.plist / PkgInfo / _CodeSignature / 実行ファイルという
+					// OS 側の名前空間でもあるので、こちらの持ち物は Content/ 1 段に隔離する。
+					//
+					//     <Bundle>/Game                  … 実行ファイル(OS のもの)
+					//     <Bundle>/Content/Game/Assets   … アセット(基点は <Bundle>/Content)
+					//
+					// 投入側は Tools/PackageApp/package_app.cmake。**片方だけ変えないこと。**
 					NSString* bundlePath = [[NSBundle mainBundle] bundlePath];
 					if (bundlePath != nil)
 					{
 						contentRoot_ = [bundlePath UTF8String];
+						contentRoot_ += "/Content";
 					}
 				}
 			}

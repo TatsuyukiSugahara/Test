@@ -18,6 +18,17 @@ namespace aq
 		bool IsComputeSupported();
 
 		/**
+		 * BC (ブロック圧縮) テクスチャをそのまま GPU へ渡せるか。
+		 *
+		 * 既定は true (D3D11 / D3D12 / Vulkan / macOS の Metal はいずれも BC が使える)。
+		 * **iOS シミュレータは実測で supportsBCTextureCompression == NO**。
+		 * 非対応環境では DDS ロード時に RGBA8 へ展開する
+		 * (設計書/iOS移植設計.md §4.3 案 a)。展開は Resource/ImageLoader 側の担当。
+		 */
+		void SetBlockCompressionSupported(bool supported);
+		bool IsBlockCompressionSupported();
+
+		/**
 		 * Graphics Device Abstraction (Bridge Pattern)
 		 *
 		 * Engine やその他のコードはこのクラスを通じてグラフィクス API を使う。

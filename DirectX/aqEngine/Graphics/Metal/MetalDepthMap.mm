@@ -70,7 +70,11 @@ namespace aq
 				samplerDesc.lodMinClamp   = desc.minLOD;
 				samplerDesc.lodMaxClamp   = desc.maxLOD;
 				// シャドウマップの外側は「最遠 = 影なし」に落とすため白で埋める。
-				samplerDesc.borderColor = MTLSamplerBorderColorOpaqueWhite;
+				// 非対応デバイス(family Apple7 未満。iOS シミュレータ等)では設定してはいけない。
+				// 設定すると Validation がアサートで即死する(MetalCommon.h の説明を参照)。
+				if (metal::IsSamplerBorderColorSupported()) {
+					samplerDesc.borderColor = MTLSamplerBorderColorOpaqueWhite;
+				}
 				// MSL の sample_compare が要求する比較サンプラ。D3D11 / Vulkan 版と同じ LessEqual。
 				samplerDesc.compareFunction = desc.isComparison ? MTLCompareFunctionLessEqual
 				                                                : MTLCompareFunctionNever;

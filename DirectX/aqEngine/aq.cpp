@@ -53,11 +53,63 @@ namespace aq
 		aq::debug::OutputString(line);
 #elif defined(AQ_PLATFORM_IOS)
 		// iOS も Android と同じくカレントディレクトリ("/")へは書けない。fopen が黙って
-		// 失敗して起動の到達点が一切見えなくなるので、DebugOutput(stderr)へ流す
+		// 失敗して起動の到達点が一切見えなくなるので、まず DebugOutput(stderr)へ流す
 		// (`xcrun simctl launch --console-pty` や Xcode のコンソールで見える)。
-		// TODO(P2): GetUserDataDirectory() 配下へファイルとしても残す(設計書 §7.2)。
 		aq::debug::OutputString(line);
 		aq::debug::OutputString("\n");
+
+		// 加えて GetUserDataDirectory() 配下へファイルとしても残す(設計書 §7.2)。
+		// stderr は実行のさせ方によっては拾えない(ホーム画面から起動した、
+		// --console-pty を付け忘れた、実機で Xcode を繋いでいない)ので、
+		// 後から simctl / Files で取り出せる実体を必ず作る。
+		//
+		// **Engine がまだ生きていない時点でも StartupMark は呼ばれる**
+		// (iOSMain の最初のマークは Engine::Create より前)。その間は開けないので
+		// stderr だけで済ませ、開けるようになってから開く。ここは診断のための処理なので、
+		// どの時点で呼ばれても落ちない・アサートしないことを最優先にする。
+		{
+			// ファイルを開けるようになるまでのマークを溜めておく置き場。開けないまま
+			// 走り続けた場合に膨らませないよう上限を切る(診断のためのログなので、
+			// 溢れたら捨てて構わない)。
+			static constexpr size_t PENDING_MAX_SIZE_BYTES = 64 * 1024;
+			static std::string      pending;
+			static FILE*            fp = nullptr;
+
+			if (fp == nullptr && aq::Engine::IsCreated())
+			{
+				const char* userDirectory = aq::Engine::Get().GetUserDataDirectory();
+				if (userDirectory != nullptr)
+				{
+					// GetUserDataDirectory は末尾セパレータ付きの契約(IPlatform.h)。
+					std::string logPath = userDirectory;
+					logPath += "startup_timing.log";
+
+					// 起動ごとに上書き(Win32 側の既定と同じ)。開けなければ以降は
+					// stderr だけで進む(次のマークでまた開こうとするが実害は無い)。
+					fp = fopen(logPath.c_str(), "w");
+					if (fp != nullptr)
+					{
+						// Engine 生成前のマーク(起動の一番おいしいところ)を先に流す。
+						fputs(pending.c_str(), fp);
+					}
+					// 開けても開けなくても、溜めた分はもう使わない。
+					pending.clear();
+					pending.shrink_to_fit();
+				}
+			}
+
+			if (fp != nullptr)
+			{
+				fputs(line, fp);
+				fputc('\n', fp);
+				fflush(fp);
+			}
+			else if (pending.size() < PENDING_MAX_SIZE_BYTES)
+			{
+				pending += line;
+				pending += '\n';
+			}
+		}
 #else
 		static FILE* fp = nullptr;
 		static bool  opened = false;

@@ -2,13 +2,14 @@
 #  ビルド時 MSL 生成 (MetalBackend設計.md §9.1)
 #
 #  Game/Assets/Shader/shader_entries.txt に並んだ <file> <entry> <stage> を
-#  2 段構成でコンパイルし、Game/Assets/Shader/msl/ へ
+#  2 段構成でコンパイルし、Game/Assets/Shader/msl/ (macOS 版) または
+#  Game/Assets/Shader/msl-ios/ (iOS 版。AQ_MSL_IOS=ON) へ
 #      <stem>.<entry>.<stage>.spv    (中間。P2 の頂点入力リフレクション用に残す)
 #      <stem>.<entry>.<stage>.metal  (実行時 newLibraryWithSource: へ渡す MSL)
 #  という名前で出力する。
 #
 #      dxc          -spirv ... -E <entry> -T <stage>_6_0 -I <shaderDir> -Fo <out.spv> <src.fx>
-#      spirv-cross  --msl --msl-version 20000 --msl-decoration-binding --output <out.metal> <out.spv>
+#      spirv-cross  --msl --msl-version 20000 --msl-decoration-binding [--msl-ios] --output <out.metal> <out.spv>
 #
 #  出力名は aqEngine/Graphics/Metal/MetalShader.mm の BuildMslPath() が探すパスと
 #  一対一で対応している。**片方だけ変えないこと** (compile_spv.cmake と
@@ -21,6 +22,16 @@
 #  register -> binding のシフトが違う (Vulkan: b:0/t:16/s:32/u:48、
 #  Metal: b:0/t:0/s:0/u:16) ので、同名でも中身がまったくの別物になる。
 #  混ざると Vulkan 構成が壊れる。
+#
+#  **iOS 版 MSL (AQ_MSL_IOS=ON) も macOS 版とは別ディレクトリ (msl-ios/) に出す。**
+#  spirv-cross は --msl-ios の有無で生成する MSL の方言を変える (使う機能セット、
+#  テクスチャ / サンプラの扱い、利用できる組み込み関数などが macOS 版と異なる)。
+#  つまり **同じファイル名で中身がまったくの別物**になり、混ざると
+#  「macOS では動くのに iOS では newLibraryWithSource: が落ちる」といった
+#  分かりにくい壊れ方をする。spv/ と msl/ を分けているのとまったく同じ理由。
+#  ディレクトリ名 msl-ios は読み出し側 (MetalShader.mm / MetalRenderContextImpl.mm の
+#  BuildMslPath()) と一対一で対応している。**片方だけ変えないこと** (設計書
+#  iOS移植設計.md §4.2)。
 #
 #  dxc へ渡す固定引数は Tools/ShaderCompile/dxc_args_metal.txt を単一ソースとする。
 #  Metal には実行時 DXC 経路が無い (実行時にコンパイルするのは MSL であって HLSL では
@@ -49,9 +60,12 @@
 #    AQ_MSL_SPIRV_CROSS  spirv-cross の実行ファイル。既定は同上 (Vulkan SDK 同梱)
 #    AQ_MSL_SHADER_DIR   .fx の置き場。既定 <repo>/DirectX/Game/Assets/Shader
 #    AQ_MSL_ENTRIES      エントリ一覧。既定 ${AQ_MSL_SHADER_DIR}/shader_entries.txt
-#    AQ_MSL_OUT_DIR      .spv / .metal の出力先。既定 ${AQ_MSL_SHADER_DIR}/msl
+#    AQ_MSL_OUT_DIR      .spv / .metal の出力先。既定は AQ_MSL_IOS 次第
+#                        (OFF: ${AQ_MSL_SHADER_DIR}/msl、ON: ${AQ_MSL_SHADER_DIR}/msl-ios)
 #    AQ_MSL_ARGS_FILE    dxc 固定引数。既定 <このファイルの隣>/dxc_args_metal.txt
 #    AQ_MSL_DEBUG_INFO   ON で AQ_DXC_ARG_DEBUG(...) の引数も渡す。既定 OFF
+#    AQ_MSL_IOS          ON で iOS 向け MSL を生成する (spirv-cross へ --msl-ios を渡し、
+#                        既定の出力先を msl-ios/ にする)。既定 OFF (= macOS 向け)
 # ============================================================================
 
 # include されたときに呼び出し元のポリシースコープを書き換えないよう、
@@ -236,9 +250,19 @@ macro(aq_msl_resolve_defaults)
 		# Vulkan 用と同じファイルを再利用する (新規に作らない)。
 		set(AQ_MSL_ENTRIES "${AQ_MSL_SHADER_DIR}/shader_entries.txt")
 	endif()
+	if(NOT DEFINED AQ_MSL_IOS)
+		set(AQ_MSL_IOS OFF)
+	endif()
 	if(NOT AQ_MSL_OUT_DIR)
 		# Vulkan の spv/ とは分ける (シフトが違うので中身が別物)。
-		set(AQ_MSL_OUT_DIR "${AQ_MSL_SHADER_DIR}/msl")
+		# 同じ理由で **iOS 版 MSL は macOS 版とも分ける**。--msl-ios の有無で
+		# spirv-cross が出す MSL の方言が変わるため、同名でも中身は別物になる。
+		# 混ざると片方のプラットフォームで実行時のシェーダ作成が落ちる。
+		if(AQ_MSL_IOS)
+			set(AQ_MSL_OUT_DIR "${AQ_MSL_SHADER_DIR}/msl-ios")
+		else()
+			set(AQ_MSL_OUT_DIR "${AQ_MSL_SHADER_DIR}/msl")
+		endif()
 	endif()
 	if(NOT AQ_MSL_ARGS_FILE)
 		set(AQ_MSL_ARGS_FILE "${AQ_MSL_LIST_DIR}/dxc_args_metal.txt")
@@ -291,12 +315,20 @@ function(aq_msl_compile_one dxc spirvCross commonArgs shaderModel fx entry stage
 	# 2 段目: SPIR-V -> MSL
 	#   --msl-decoration-binding … SPIR-V の binding をそのまま Metal の index にする
 	#                              (実行時のリフレクション / 写像テーブルが要らなくなる。設計書 §5.1)
+	#   --msl-ios                 … iOS 向けの MSL を出す (無指定だと macOS 向け)。
+	#                              出力先も msl-ios/ へ分かれる (先頭コメント参照)
 	#   --output                  … stdout リダイレクトを使わずファイルへ直接書く
+	set(platformArgs "")
+	if(AQ_MSL_IOS)
+		list(APPEND platformArgs --msl-ios)
+	endif()
+
 	execute_process(
 		COMMAND "${spirvCross}"
 		        --msl
 		        --msl-version 20000
 		        --msl-decoration-binding
+		        ${platformArgs}
 		        --output "${mslOut}"
 		        "${spvOut}"
 		RESULT_VARIABLE rc
@@ -331,6 +363,11 @@ function(aq_msl_compile_all)
 	message(STATUS "[compile_msl] spirv-cross  = ${spirvCross}")
 	message(STATUS "[compile_msl] shaders      = ${AQ_MSL_SHADER_DIR}")
 	message(STATUS "[compile_msl] out          = ${AQ_MSL_OUT_DIR}")
+	if(AQ_MSL_IOS)
+		message(STATUS "[compile_msl] platform     = iOS (--msl-ios)")
+	else()
+		message(STATUS "[compile_msl] platform     = macOS")
+	endif()
 	message(STATUS "[compile_msl] entries      = ${entryCount}")
 
 	set(failed 0)
@@ -380,6 +417,7 @@ function(aq_add_compile_msl_target targetName)
 		-D "AQ_MSL_OUT_DIR=${AQ_MSL_OUT_DIR}"
 		-D "AQ_MSL_ARGS_FILE=${AQ_MSL_ARGS_FILE}"
 		-D "AQ_MSL_DEBUG_INFO=${AQ_MSL_DEBUG_INFO}"
+		-D "AQ_MSL_IOS=${AQ_MSL_IOS}"
 	)
 	list(APPEND scriptArgs -D "AQ_MSL_DXC=${AQ_MSL_DXC}")
 	list(APPEND scriptArgs -D "AQ_MSL_SPIRV_CROSS=${AQ_MSL_SPIRV_CROSS}")

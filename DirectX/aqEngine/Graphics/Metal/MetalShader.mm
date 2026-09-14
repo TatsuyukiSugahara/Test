@@ -32,25 +32,43 @@ namespace aq
 
 
 			// ── パス解決 (VulkanShader.cpp / D3D12Shader.cpp と同じ規則) ──
+
+			/**
+			 * プロジェクトルート(この下に Game/Assets がある)を 1 度だけ求める。
+			 *
+			 * ワーカースレッドから並列に呼ばれるため、C++11 のスレッドセーフな
+			 * static 初期化で算出する(VulkanShader.cpp / Resource.cpp と同じ形)。
+			 */
 			std::string FindProjectRoot()
 			{
-				static std::string cached;
-				if (!cached.empty()) { return cached; }
+				// 関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
+				aq::memory::ScopedPersistentAlloc persistent;
+				static const std::string cached = []() -> std::string
+					{
+						// プラットフォームがコンテンツ基点を返す場合(iOS のバンドル直下、
+						// macOS の Contents/Resources、UWP のパッケージ install フォルダ、
+						// Android の展開先)はそれを採用し、ソースツリーの上方探索は行わない。
+						// **iOS ではバンドルが read-only で CWD が "/" なので、上方探索では
+						// シェーダが 1 本も見つからない**(設計書/iOS移植設計.md §7.1)。
+						// Win32 は nullptr を返すので従来どおり下の探索へ落ちる。
+						if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
+							return contentRoot;
+						}
 
-				std::error_code ec;
-				std::filesystem::path dir = std::filesystem::current_path(ec);
-				if (ec) { return std::string(); }
+						std::error_code ec;
+						std::filesystem::path dir = std::filesystem::current_path(ec);
+						if (ec) { return std::string(); }
 
-				while (!dir.empty()) {
-					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
-						cached = dir.generic_string();
-						return cached;
-					}
-					if (dir == dir.root_path()) { break; }
-					dir = dir.parent_path();
-				}
+						while (!dir.empty()) {
+							if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
+								return dir.generic_string();
+							}
+							if (dir == dir.root_path()) { break; }
+							dir = dir.parent_path();
+						}
 
-				cached = std::filesystem::current_path(ec).generic_string();
+						return std::filesystem::current_path(ec).generic_string();
+					}();
 				return cached;
 			}
 
@@ -87,7 +105,13 @@ namespace aq
 
 
 			/**
-			 * ビルド時に生成した MSL の探索パス: <shaderDir>/msl/<stem>.<entry>.<stage>.metal
+			 * ビルド時に生成した MSL の探索パス:
+			 *   <shaderDir>/<metal::MSL_DIR_NAME>/<stem>.<entry>.<stage>.metal
+			 *
+			 * ディレクトリ名は macOS が "msl"、**iOS は "msl-ios"**(MetalCommon.h の
+			 * MSL_DIR_NAME で分岐。macOS 版 MSL と iOS 版 MSL は別物なので混ぜられない。
+			 * 設計書/iOS移植設計.md §4.2)。MetalRenderContextImpl.mm の
+			 * BuildComputeSpirvPath() も同じ定数を見る。**片方だけ変えないこと。**
 			 *
 			 * Tools/ShaderCompile/compile_msl.cmake の出力名と**一対一で対応**させること
 			 * (どちらか一方だけを変えない。compile_spv.cmake と VulkanShader.cpp の
@@ -109,15 +133,17 @@ namespace aq
 				const std::string name = src.stem().string() + "."
 				                       + ((entry && entry[0]) ? entry : "main") + "."
 				                       + StageSuffix(type) + ".metal";
-				return (src.parent_path() / "msl" / name).generic_string();
+				return (src.parent_path() / metal::MSL_DIR_NAME / name).generic_string();
 			}
 
 
 			/**
-			 * 頂点入力のリフレクション用 SPIR-V の探索パス: <shaderDir>/msl/<stem>.<entry>.<stage>.spv
+			 * 頂点入力のリフレクション用 SPIR-V の探索パス:
+			 *   <shaderDir>/<metal::MSL_DIR_NAME>/<stem>.<entry>.<stage>.spv
 			 *
 			 * compile_msl.cmake は dxc の中間生成物である .spv を **.metal と同じディレクトリに
-			 * 同名で残している**ので、BuildMslPath() と拡張子だけが違う。
+			 * 同名で残している**ので、BuildMslPath() と拡張子だけが違う(iOS では
+			 * どちらも msl-ios/ の下になる)。
 			 * Vulkan 用の spv/ とは register -> binding のシフトが違う別物なので混ぜないこと
 			 * (ただし頂点入力の location はシフトの影響を受けないため、どちらで読んでも同じ)。
 			 */
@@ -129,7 +155,7 @@ namespace aq
 				const std::string name = src.stem().string() + "."
 				                       + ((entry && entry[0]) ? entry : "main") + "."
 				                       + StageSuffix(type) + ".spv";
-				return (src.parent_path() / "msl" / name).generic_string();
+				return (src.parent_path() / metal::MSL_DIR_NAME / name).generic_string();
 			}
 
 

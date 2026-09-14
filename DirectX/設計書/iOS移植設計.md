@@ -10,14 +10,15 @@
 していたものの過半が既にリポジトリへ入った**。差分の棚卸しは §0.6。
 本書はその再評価を反映した第 2 版である。
 
-**P2(シミュレータで実シーン)完了 — 2026-09-14。**
-iPhone 17 シミュレータ(iOS 26.5)で **AquaDash のタイトル画面とステージが 60 FPS で描画**され、
-BC 圧縮テクスチャの実行時展開まで通った。残るは入力(P3)。
+**P3(入力)完了 — 2026-09-14。**
+iPhone 17 シミュレータ(iOS 26.5)で **タッチだけでタイトル → ステージへ進み、仮想パッドで
+298 km/h まで走行**できる。ImGui も指で操作でき、表示切替は **4 本指ダブルタップ**に割り当てた。
+残るはサウンド(P4)。
 
 | | 状態 |
 |---|---|
 | 設計 | 第 2 版。§0.5 の 6 論点すべて決着(2026-09-14) |
-| 実装 | **P0 / P1 / P2 完了。次は P3(入力)** |
+| 実装 | **P0 / P1 / P2 / P3 完了。次は P4(サウンド)** |
 | 環境 | Xcode 26.6 / iOS SDK 26.5 / iOS Simulator SDK 26.5。**iOS 実機は接続なし**(シミュレータ 11 種) |
 | 検証方針 | シミュレータ先行。実機は P5 |
 | シミュレータ | `ios-simulator-xcode` が configure / build 成功。`Game.app/Game` = Mach-O arm64 / `platform IOSSIMULATOR` / `minos 16.4` / `sdk 26.5` |
@@ -31,6 +32,8 @@ BC 圧縮テクスチャの実行時展開まで通った。残るは入力(P3)�
 | メモリ | **RSS 322 MB**(Debug / BC を RGBA8 へ展開した状態) |
 | 書き込み先 | `startup_timing.log` と `imgui.ini` がアプリコンテナの `Documents/` に出る |
 | Validation | **Metal API Validation を有効(`SIMCTL_CHILD_METAL_DEVICE_WRAPPER_TYPE=1`)にしてエラー 0** |
+| 入力(P3) | タッチでタイトル→ステージ、仮想パッドで **298 km/h** まで走行。ImGui はドラッグで操作可。1 フレーム(0.02 秒)のタップも取りこぼさない |
+| デバッグ UI | ImGui の倍率は **iOS だけ 1.25**(Android は 2.0 のまま)。表示切替は **4 本指ダブルタップ** |
 | フレーム駆動 | `CADisplayLink` で **16.2〜16.5 ms 間隔 = 60 FPS**。`UIApplicationMain` が戻らない構造で `RunFrameLoop` の委譲が効いている |
 | シミュレータ実測 | `Apple iOS simulator GPU` / **BC 圧縮: no** / GPU family `Apple2` / unified memory: no(§0.2-3 の事前実測と一致) |
 | Mac 実測(対照) | `Apple M5` / **BC 圧縮: yes** / GPU family `Apple9` / unified memory: yes |
@@ -770,10 +773,23 @@ P2 でシミュレータ(GPU family Apple2)を動かして 2 件のアサート�
 | [KeyboardMouseBackend.h](../aqEngine/HID/KeyboardMouseBackend.h) / [PadBackend.h](../aqEngine/HID/PadBackend.h) | コンパイル時 typedef で選ぶ方式。**`AQ_PLATFORM_IOS` 分岐を 1 つ足すだけ** |
 | `NullKeyboardBackend` / `NullMouseBackend` | 段階的立ち上げの足場として再利用(P1〜P2 で差しておく) |
 
-**命名の整理**: これらは `HID/Mac/` にあるが iOS でも使うため、**`HID/Apple/` へ移して
-`AppleInputSink` / `AppleKeyboardBackend` / `AppleMouseBackend` に改名する**。いずれも
-vcxproj には未登録(Mac 専用として除外されている)なので CMake だけの変更で済む。
-実施は P3(入力フェーズ)で、それまでは現名のまま `Platform/iOS/` から参照する。
+**命名の整理(P3 で実施。当初案から縮小した)**:
+当初は「`HID/Mac/` を丸ごと `HID/Apple/` へ移して `AppleInputSink` /
+`AppleKeyboardBackend` / `AppleMouseBackend` に改名する」としていたが、**実際に共有するのは
+`GameControllerPadBackend` だけ**だった。`CocoaInputSink` / `CocoaKeyboardBackend` /
+`CocoaMouseBackend` はキーボードとマウスの実装で、**iOS では使わない**
+(キーボードは Null、マウスは `TouchMouseBackend`、タッチの取りこぼし対策は
+`iOSInputSink` が自前で持つ)。
+
+したがって:
+
+| ディレクトリ | 中身 | ガード |
+|---|---|---|
+| `HID/Mac/` | AppKit 固有(Cocoa の入力シンク・キーボード・マウス) | `AQ_PLATFORM_MAC` |
+| **`HID/Apple/`** | **Apple 共通(`GameControllerPadBackend`)** | **`AQ_PLATFORM_APPLE`** |
+| `HID/iOS/` | iOS 固有(`iOSInputSink` / `iOSTouchBackend`) | `AQ_PLATFORM_IOS` |
+
+クラス名は据え置いた(`GameController` は macOS 固有の名前ではないため)。
 
 ### 5.2 タッチ ★実装は `iOSTouchBackend` 1 本だけ
 
@@ -1248,14 +1264,56 @@ UIKit エントリ + `CAMetalLayer` + フレーム駆動の委譲。
 - `HID/Mac/` → `HID/Apple/` への移動と改名(§5.1)
 - `touchesCancelled` での全解放
 
-**評価チェックリスト**
-- [ ] タッチでタイトルからステージへ進める
-- [ ] 仮想パッドでキャラが操作できる
-- [ ] ホームに戻る等で指が張り付かない(`touchesCancelled`)
-- [ ] 1 フレーム内の「押して離し」を取りこぼさない
-- [ ] デバッグ UI が指で操作できる(×2.0 拡大が効いている)
-- [ ] 仮想パッドを操作中に裏の UI を誤タップしない(`IsTouchConsumed` の調停)
-- [ ] **Mac の回帰**(`HID/Mac/` の改名と ImGui 分岐の書き換え)
+**評価チェックリスト** — 2026-09-14 実施
+
+シミュレータへの合成タッチは **Simulator.app を横向きにしてホストのマウスイベントを送る**方法で行った
+(`simctl` にタップを送る機能は無い)。ドラッグ保持用の小さなツールを別途書いた。
+
+- [x] タッチでタイトルからステージへ進める(A ボタンのタップ → Now Loading → ステージ)
+- [x] 仮想パッドでキャラが操作できる(左スティックを倒し続けて **298 km/h**、コイン取得も確認)
+- [x] ホームに戻る等で指が張り付かない(`touchesCancelled`)。
+      走行中にスティックを倒したままホームへ送り、復帰後 **0 km/h**・ノブも中央に戻っている
+- [x] 1 フレーム内の「押して離し」を取りこぼさない(**0.02 秒**のタップでタイトルを抜けられる)
+- [x] デバッグ UI が指で操作できる(ウィンドウをドラッグで移動できることを確認)
+- [x] 仮想パッドを操作中に裏の UI を誤タップしない。
+      **スティックを倒し続けても ImGui のウィンドウは動かず**、ImGui のウィンドウは
+      その上を直接触ったときだけドラッグできた(`IsTouchConsumed` の調停が効いている)。
+      ※ 指を複数本使った同時操作(スティック + 別の指で UI)は
+      シミュレータでは合成できないため未確認。P5 の実機で見る
+- [x] **Mac の回帰**: Metal / Vulkan とも Release がビルドでき(警告は従来と同数)、
+      Metal 構成でタイトル〜ステージ走行(60.1 FPS / 417 km/h)。
+      `GameControllerPadBackend` の移動と ImGui 分岐の変更による影響なし
+- [ ] **4 本指ダブルタップの実機確認 — 未確認。**
+      **シミュレータは 4 本指のタッチを合成できない**(ホストのマウスは 1 本指相当、
+      Option キーでも 2 本まで)。判定ロジックは**ホスト側の単体テスト 10 項目で検証**した
+      (成立/1 回だけ/間隔超過/1・2 本指/5 本指/長押し/間に別操作/連続成立/無操作)。
+      **指で実際に成立するかは P5(実機)で確認する。**
+- [ ] **Windows 3 構成の回帰 — 未確認**(この環境ではビルドできない)。
+      共通コードへの変更は `Application.cpp` の iOS 分岐追加と、
+      新規ヘッダ `HID/TouchGesture.h`(タッチが無い環境では常に false)のみ
+
+**P3 で分かったこと / 設計からの差分**
+
+1. **`HID/Mac/` を丸ごと `HID/Apple/` へ移すのはやめた**(§5.1 の記述を変更)。
+   iOS が実際に共有するのは **`GameControllerPadBackend` だけ**で、
+   `CocoaInputSink` / `CocoaKeyboardBackend` / `CocoaMouseBackend` は
+   **キーボードとマウスの実装なので iOS では使わない**(iOS はキーボード Null、
+   マウスは `TouchMouseBackend`)。`HID/Mac/` = AppKit 固有、`HID/Apple/` = Apple 共通、
+   という分け方にした。クラス名も `AppleInputSink` 等へは改名していない。
+2. **`UIView` の `multipleTouchEnabled` は既定で NO。**
+   立てないと **2 本目以降の `touches*` が一切来ない**ため、スティックとボタンの
+   同時押しができない。`AqMetalView` の生成時に `YES` にしている。
+3. **★ ImGui の倍率は Android と同じ 2.0 にできない。**
+   Android は `ANativeWindow` の**ピクセル**(2282x1080)が ImGui の座標だが、
+   iOS は `contentsScale = 1.0` なので**論理ポイント**(874x402)が来る。
+   2.0 倍にするとメニューバーだけで画面高さの 1 割を占め、パネルが画面からはみ出す。
+   **iOS は 1.25 倍**にした(Android は 2.0 のまま)。
+   ※ 解像度スケールを上げる(§0.5-4 / P6)ときはこの値も見直すこと。
+4. **デバッグ UI の表示切替に 4 本指ダブルタップを追加した(新規要件)。**
+   スマホにはキーボードも中クリックも無く、従来の `F1` / 中クリックが使えない。
+   判定は `HID/TouchGesture.h` の `MultiTouchDoubleTapDetector`(ヘッダのみ・
+   プラットフォーム非依存)。タッチを持たない環境では `TouchState` が常に空なので
+   常に false になり、Windows / Mac の挙動は変わらない。**Android にも同時に効く。**
 
 ### P4: サウンド
 

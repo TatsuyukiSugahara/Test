@@ -6,8 +6,8 @@ namespace aq
 	namespace hid
 	{
 		// 入力の無いパッドバックエンド(常に未接続)。
-		// GameController.framework 実装が入るまでの Mac(P2〜P3)で使う。
-		// TODO(P4): HID/Mac/GameControllerPadBackend へ差し替える。
+		// 各プラットフォームの実装が揃うまでの足場として使う
+		// (Mac / iOS はいずれも HID/Apple/GameControllerPadBackend へ移行済み)。
 		class NullPadBackend : public IPadBackend
 		{
 		public:

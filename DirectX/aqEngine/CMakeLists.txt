@@ -84,19 +84,23 @@ set(AQ_ENGINE_WINDOWS_ONLY_PATTERNS
 )
 
 #  Apple 共通(macOS / iOS)の実装。Windows / Android から落とす。
+#  HID/Apple/ は macOS と iOS の両方で使う(GameController.framework は同一 API)ため、
+#  下の MAC_ONLY / IOS_ONLY のどちらにも入れないこと。
 set(AQ_ENGINE_APPLE_ONLY_PATTERNS
 	"/Platform/Common/DebugOutputApple\\.cpp$"
 	"/Platform/Mac/"
 	"/Platform/iOS/"
 	"/HID/Mac/"
+	"/HID/Apple/"
+	"/HID/iOS/"
 	"/Sound/CoreAudio/"
 	"/Graphics/Metal/"
 	"\\.mm$"
 )
 
 #  macOS 専用(AppKit / デスクトップ前提)。iOS から落とす。
-#  HID/Mac/ の再利用(GameController は iOS でも使える)は P3 の作業なので、
-#  P0 の時点では iOS からまとめて外しておく。
+#  HID/Mac/ は Cocoa 依存のキーボード / マウス実装なので Mac 専用のまま残す
+#  (iOS はキーボードが Null、マウスが TouchMouseBackend。設計書/iOS移植設計.md §5.2)。
 set(AQ_ENGINE_MAC_ONLY_PATTERNS
 	"/Platform/Mac/"
 	"/HID/Mac/"
@@ -106,6 +110,7 @@ set(AQ_ENGINE_MAC_ONLY_PATTERNS
 #  iOS 専用(UIKit 前提)。macOS から落とす。
 set(AQ_ENGINE_IOS_ONLY_PATTERNS
 	"/Platform/iOS/"
+	"/HID/iOS/"
 )
 
 #  Android 専用実装(Platform/Android・HID/Android・Sound/AAudio)。

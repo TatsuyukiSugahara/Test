@@ -4,12 +4,11 @@
 //  パッドバックエンドの選択(SoundBackend.h と同じ流儀)。
 //    Win32(デスクトップ)  : XInput + DualSense(HID 直読み)の合成
 //    UWP(Xbox / PC-UWP)  : Windows.Gaming.Input(WinRTGamepadBackend)
-//    Mac                   : 入力なし(Null)。GameController.framework 実装
-//                            (GameControllerPadBackend)は P4 で追加する
-//    Android               : 入力なし(Null)。仮想パッド(タッチ)と物理コントローラを
-//                            同一視する実装は P4 で追加する
+//    Mac                   : GameController.framework(GameControllerPadBackend)
+//    Android               : 物理(AndroidPadBackend)と仮想パッド(タッチ)の合成
 //                            (設計書/Android移植設計.md)
-//    iOS                   : 入力なし(Null)。P0 の骨格
+//    iOS                   : 物理(GameControllerPadBackend)と仮想パッド(タッチ)の合成
+//                            (設計書/iOS移植設計.md §5.2)
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -36,7 +35,7 @@ namespace aq
 	}
 }
 #elif defined(AQ_PLATFORM_MAC)
-#include "HID/Mac/GameControllerPadBackend.h"
+#include "HID/Apple/GameControllerPadBackend.h"
 
 namespace aq
 {
@@ -63,18 +62,19 @@ namespace aq
 	}
 }
 #elif defined(AQ_PLATFORM_IOS)
-#include "HID/NullPadBackend.h"
+#include "HID/Apple/GameControllerPadBackend.h"
+#include "HID/CompositePadBackend.h"
+#include "HID/VirtualPadBackend.h"
 
 namespace aq
 {
 	namespace hid
 	{
-		// iOS: 仮想パッドもタッチ経路もまだ無い P0 の骨格なので Null で通す。
-		// TODO(P3): CompositePadBackend にする(GameControllerPadBackend +
-		// VirtualPadBackend。GameController.framework は iOS でも同じ API なので
-		// HID/Mac/ の実装をそのまま再利用でき、合成の形も Android と同じ。
-		// 下の CreateDefaultPadBackend の #if も iOS を含める)。
-		using DefaultPadBackend = NullPadBackend;
+		// iOS: 物理コントローラ(GameController.framework は macOS と同一 API なので
+		// HID/Apple/ の実装をそのまま使う)と仮想パッド(タッチ)を束ねて 1 つのパッドに
+		// 見せる。上位(ActionMap / ゲーム側)は入力ソースを区別しない。
+		// 組み立てには TouchState が要るので、生成は下の CreateDefaultPadBackend で行う。
+		using DefaultPadBackend = CompositePadBackend;
 	}
 }
 #else
@@ -85,9 +85,11 @@ namespace aq
 // ============================================================
 //  既定パッドの生成
 //
-//  Android だけは「物理 + 仮想パッド」の組み立てが必要で、仮想パッドは
+//  Android / iOS だけは「物理 + 仮想パッド」の組み立てが必要で、仮想パッドは
 //  取り込み済みの TouchState を要求する。呼び出し側(InputManager)に
 //  プラットフォーム分岐を持ち込まないため、生成をここへ寄せる。
+//  物理側の実装が Android と iOS で違う(AndroidPadBackend /
+//  GameControllerPadBackend)ので、#if は 1 本にまとめず素直に並べる。
 // ============================================================
 #include <memory>
 #include "HID/ITouchBackend.h"
@@ -103,6 +105,16 @@ namespace aq
 			// 物理コントローラを繋いでいる間もタッチが邪魔をしない。
 			auto composite = std::make_unique<CompositePadBackend>();
 			composite->Add(std::make_unique<AndroidPadBackend>());
+			composite->Add(std::make_unique<VirtualPadBackend>(touch));
+			return composite;
+		}
+#elif defined(AQ_PLATFORM_IOS)
+		inline std::unique_ptr<IPadBackend> CreateDefaultPadBackend(const TouchState* touch)
+		{
+			// 物理 → 仮想の順は Android と揃える(合成の規則は順序に依らないが、
+			// 両プラットフォームで同じ並びにしておくと挙動差の切り分けが楽になる)。
+			auto composite = std::make_unique<CompositePadBackend>();
+			composite->Add(std::make_unique<GameControllerPadBackend>());
 			composite->Add(std::make_unique<VirtualPadBackend>(touch));
 			return composite;
 		}

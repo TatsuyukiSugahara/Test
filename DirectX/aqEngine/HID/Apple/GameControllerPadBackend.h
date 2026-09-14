@@ -1,6 +1,6 @@
 #pragma once
-// macOS 専用。他構成では中身を空にして、既存ビルドに一切影響させない。
-#if defined(AQ_PLATFORM_MAC)
+// Apple 共通(macOS / iOS)。他構成では中身を空にして、既存ビルドに一切影響させない。
+#if defined(AQ_PLATFORM_APPLE)
 #include "HID/IPadBackend.h"
 
 namespace aq
@@ -9,6 +9,10 @@ namespace aq
 	{
 		/**
 		 * GameController.framework によるパッド入力(設計書/Mac移植設計.md §3.2)。
+		 *
+		 * GameController.framework は macOS と iOS で同一 API なので、本実装は
+		 * **Apple 共通**として `HID/Apple/` に置く(設計書/iOS移植設計.md §5.1)。
+		 * iOS では `CompositePadBackend` の「物理側」として使い、仮想パッドと合成する。
 		 *
 		 * `GCController.controllers` の並び順を index に対応させ、`extendedGamepad` の値を
 		 * `PadState` へ正規化する。Xbox / DualShock / DualSense / Joy-Con はいずれも
@@ -35,4 +39,4 @@ namespace aq
 		};
 	}
 }
-#endif // AQ_PLATFORM_MAC
+#endif // AQ_PLATFORM_APPLE

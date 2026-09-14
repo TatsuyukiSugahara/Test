@@ -3,6 +3,7 @@
 // (Win32 は PlatformWin32.cpp、UWP は PlatformUWP.cpp、macOS は PlatformMac.mm が代替)。
 #if defined(AQ_PLATFORM_IOS)
 #include "Platform/iOS/PlatformiOS.h"
+#include "HID/iOS/iOSInputSink.h"
 #import <UIKit/UIKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 
@@ -19,6 +20,9 @@
 // UIKit のビューは必ずレイヤに裏打ちされていて差し替えられない。代わりに
 // **+layerClass を override して、ビューが自分のレイヤとして CAMetalLayer を作る**
 // のが iOS の作法(設計書/iOS移植設計.md §4.1 の表)。
+//
+// タッチの入口も兼ねる。touches*:withEvent: を iOSInputSink へ流し、
+// iOSTouchBackend がそれを読む(設計書/iOS移植設計.md §5.2)。
 @interface AqMetalView : UIView
 @end
 
@@ -95,6 +99,69 @@ namespace
 - (BOOL)isOpaque
 {
 	return YES;
+}
+
+
+// ── タッチ ──────────────────────────────────────────────
+//
+// 座標は [touch locationInView:self] で取る。**UIKit のビュー座標は左上原点**なので、
+// TouchPoint の契約(クライアント領域の左上原点・ピクセル)にそのまま合う。
+// Mac(PlatformMac.mm)は NSView が左下原点で Y を反転していたが、iOS では反転しない。
+//
+// 単位はポイントだが、UpdateLayerBacking が contentsScale = 1.0 に固定していて
+// ドロウアブルもビューの論理サイズと同寸(設計書 §3.5)なので、
+// **1 ポイント = 1 ピクセル**。スケール補正も要らない。
+//
+// UITouch* は retain せず、アドレスを同一性の鍵として渡すだけ
+// (Apple が retain を明示的に禁止している。iOSInputSink.h の touchKey の説明を参照)。
+
+- (void)touchesBegan:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event
+{
+	(void)event;
+	for (UITouch* touch in touches)
+	{
+		const CGPoint pos = [touch locationInView:self];
+		aq::hid::iOSInputSink::Get().OnTouchBegan(static_cast<const void*>(touch),
+		                                          static_cast<float>(pos.x),
+		                                          static_cast<float>(pos.y));
+	}
+}
+
+
+- (void)touchesMoved:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event
+{
+	(void)event;
+	for (UITouch* touch in touches)
+	{
+		const CGPoint pos = [touch locationInView:self];
+		aq::hid::iOSInputSink::Get().OnTouchMoved(static_cast<const void*>(touch),
+		                                          static_cast<float>(pos.x),
+		                                          static_cast<float>(pos.y));
+	}
+}
+
+
+- (void)touchesEnded:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event
+{
+	(void)event;
+	for (UITouch* touch in touches)
+	{
+		const CGPoint pos = [touch locationInView:self];
+		aq::hid::iOSInputSink::Get().OnTouchEnded(static_cast<const void*>(touch),
+		                                          static_cast<float>(pos.x),
+		                                          static_cast<float>(pos.y));
+	}
+}
+
+
+// ジェスチャが OS 側に奪われた(ホームへ戻る・通知センターを引き下ろす等)。
+// **これを実装しないと ended が来ないまま指が張り付く**(Android の ACTION_CANCEL と同じ)。
+// どの指が取り消されたかに関わらず全点を解放する。
+- (void)touchesCancelled:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event
+{
+	(void)touches;
+	(void)event;
+	aq::hid::iOSInputSink::Get().OnTouchCancelled();
 }
 
 @end
@@ -210,6 +277,11 @@ namespace aq
 					return false;
 				}
 				[view setAutoresizingMask:(UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight)];
+
+				// UIView の既定は「同時に 1 本の指しか配送しない」。仮想パッドは
+				// スティックとボタンを同時に押すので、複数タッチを明示的に有効にする
+				// (これを忘れると 2 本目以降の touches* が一切来ない)。
+				[view setMultipleTouchEnabled:YES];
 
 				// UIWindow には必ずルート View Controller が要る(無いと実行時に警告が出て
 				// 画面が出ない)。ゲームは UIKit のビュー階層を使わないので、素の

@@ -1,7 +1,7 @@
 #include "aq.h"
-// macOS 以外では空 TU。
-#if defined(AQ_PLATFORM_MAC)
-#include "HID/Mac/GameControllerPadBackend.h"
+// Apple(macOS / iOS)以外では空 TU。
+#if defined(AQ_PLATFORM_APPLE)
+#include "HID/Apple/GameControllerPadBackend.h"
 #import <GameController/GameController.h>
 
 
@@ -154,4 +154,4 @@ namespace aq
 		}
 	}
 }
-#endif // AQ_PLATFORM_MAC
+#endif // AQ_PLATFORM_APPLE

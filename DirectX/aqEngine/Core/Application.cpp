@@ -2,7 +2,8 @@
 #include "Application.h"
 #include "ECS/EntityContext.h"
 #include "HID/Input.h"
-#if defined(AQ_PLATFORM_ANDROID)
+#include "HID/TouchGesture.h"
+#if defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 #include "HID/VirtualPadBackend.h"   // 仮想パッドの当たり判定レイアウト(暫定の可視化用)
 #endif
 #include "UI/Input/UIInputSystem.h"
@@ -24,7 +25,7 @@
 #include <imgui/imgui_impl_win32.h>
 #elif defined(AQ_PLATFORM_MAC)
 #include "Platform/Mac/MacImGui.h"
-#elif defined(AQ_PLATFORM_ANDROID)
+#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 #include "Platform/Common/ImGuiPointerInput.h"
 #endif
 #include "Rendering/ImGuiRenderCommand.h"
@@ -186,12 +187,24 @@ namespace aq
 						io.Fonts->AddFontDefault();
 				}
 
-#if defined(AQ_PLATFORM_ANDROID)
+#if defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 				// 指で触れる大きさにする。2400x1080 の端末ではメニューバーの高さが 10px 程度しかなく、
 				// 入力を繋いでも指では押せない。ScaleAllSizes が余白と当たり領域を、
 				// FontGlobalScale が文字を拡大する(設計書/Android移植設計.md §P7)。
+				// iOS も指で操作するので理由は同一(設計書/iOS移植設計.md §5.3)。
+				// **倍率が Android と iOS で違うのは、ImGui が扱う座標の意味が違うから。**
+				//  - Android: ANativeWindow の**ピクセル**がそのまま来る(2282x1080)。
+				//             既定のメニューバーは高さ 20px 程度しかなく指では押せないので 2.0 倍。
+				//  - iOS:     contentsScale = 1.0 で動かしているので**論理ポイント**が来る(874x402)。
+				//             同じ 2.0 倍にすると画面高さの 1 割をメニューバーが占め、
+				//             パネルが画面からはみ出して操作できない(シミュレータで確認)。
+				// 画面が狭いほど倍率を抑える必要があるので、共通の定数にはしない。
 				{
+#if defined(AQ_PLATFORM_IOS)
+					constexpr float MOBILE_UI_SCALE = 1.25f;
+#else
 					constexpr float MOBILE_UI_SCALE = 2.0f;
+#endif
 					ImGui::GetStyle().ScaleAllSizes(MOBILE_UI_SCALE);
 					ImGui::GetIO().FontGlobalScale = MOBILE_UI_SCALE;
 				}
@@ -201,9 +214,10 @@ namespace aq
 			const bool winOk = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
 #elif defined(AQ_PLATFORM_MAC)
 			const bool winOk = aq::platform::MacImGui::Init();
-#elif defined(AQ_PLATFORM_ANDROID)
+#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 			// タッチはマウス抽象へ合成済みなので、それを ImGui へ流すだけのシムで足りる
-			// (imgui_impl_android は使わない。設計書/Android移植設計.md §P7)。
+			// (imgui_impl_android / imgui_impl_osx は使わない。
+			//  設計書/Android移植設計.md §P7 / 設計書/iOS移植設計.md §5.3)。
 			const bool winOk = aq::platform::ImGuiPointerInput::Init();
 #else
 			// UWP はプラットフォームバックエンドを持たない(ImGui へ入力が届かない)。
@@ -232,7 +246,7 @@ namespace aq
 				if (winOk) ImGui_ImplWin32_Shutdown();
 #elif defined(AQ_PLATFORM_MAC)
 				if (winOk) aq::platform::MacImGui::Shutdown();
-#elif defined(AQ_PLATFORM_ANDROID)
+#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 				if (winOk) aq::platform::ImGuiPointerInput::Shutdown();
 #endif
 				ImGui::DestroyContext();
@@ -419,7 +433,7 @@ namespace aq
 			ImGui_ImplWin32_Shutdown();
 #elif defined(AQ_PLATFORM_MAC)
 			aq::platform::MacImGui::Shutdown();
-#elif defined(AQ_PLATFORM_ANDROID)
+#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 			aq::platform::ImGuiPointerInput::Shutdown();
 #endif
 			ImGui::DestroyContext();
@@ -561,7 +575,7 @@ namespace aq
 			ImGui_ImplWin32_NewFrame();
 #elif defined(AQ_PLATFORM_MAC)
 			aq::platform::MacImGui::NewFrame();
-#elif defined(AQ_PLATFORM_ANDROID)
+#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 			aq::platform::ImGuiPointerInput::NewFrame();
 #else
 			// UWP はプラットフォームバックエンドが無いので、それが埋めるべき最低限の 2 つを自前で入れる。
@@ -586,7 +600,7 @@ namespace aq
 #endif
 			ImGui::NewFrame();
 
-#if defined(AQ_PLATFORM_ANDROID)
+#if defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 			// 仮想パッドの位置を画面に出す。
 			// **暫定の可視化**で、当たり判定と同じレイアウト値を円で描くだけ。
 			// これが無いと指をどこへ置けばよいか分からず操作できない。
@@ -632,7 +646,7 @@ namespace aq
 					                          24.0f, IM_COL32(255, 80, 80, 150), 24);
 				}
 			}
-#endif // AQ_PLATFORM_ANDROID
+#endif // AQ_PLATFORM_ANDROID || AQ_PLATFORM_IOS
 
 			// FPS オーバーレイ (常時表示・左上)
 			{
@@ -660,7 +674,12 @@ namespace aq
 					ImGui::Text("%s  %.1f FPS (%.2f ms)", backend, fps, ms);
 #ifdef AQ_DEBUG_IMGUI
 					// トグル操作のヒント（非表示中は重いデバッグ描画がスキップされる）。
+#if defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
+					// タッチ環境にはキーボードも中クリックも無いので、指の操作だけを案内する。
+					ImGui::TextDisabled(showDebugUI_ ? "4-finger double tap: hide Debug UI" : "4-finger double tap: show Debug UI");
+#else
 					ImGui::TextDisabled(showDebugUI_ ? "F1 / Middle click: hide Debug UI" : "F1 / Middle click: show Debug UI");
+#endif
 #endif
 
 #if defined(ENGINE_GRAPHICS_D3D12)
@@ -683,7 +702,16 @@ namespace aq
 			// デバッグ UI 表示トグル: 中クリック or F1。非表示中は下の重い ECS::DebugRender / 各パネル描画を
 			// 完全にスキップする（毎フレーム 100+ エンティティを ImGui 描画する処理が止まり大幅に軽くなる）。
 			// F1 は ImGui のキー状態で判定し、ゲーム入力抑制（WantCaptureKeyboard）の影響を受けない。
-			if (ImGui::GetIO().MouseClicked[2] || ImGui::IsKeyPressed(ImGuiKey_F1, false))
+			//
+			// スマホにはキーボードも中クリックも無いので、**指を 4 本そろえたダブルタップ**を
+			// 割り当てる。通常操作(仮想スティック 1 本 + ボタン 1 本)と本数が被らないので
+			// 誤爆しにくい。タッチを持たないプラットフォームでは TouchState が常に空なので
+			// この項は必ず false になり、挙動は変わらない。
+			static aq::hid::MultiTouchDoubleTapDetector s_debugUiToggleGesture;
+			const bool toggleByTouch = s_debugUiToggleGesture.Update(
+				aq::hid::InputManager::Get().GetTouchState(), Engine::GetDeltaTime());
+
+			if (ImGui::GetIO().MouseClicked[2] || ImGui::IsKeyPressed(ImGuiKey_F1, false) || toggleByTouch)
 				showDebugUI_ = !showDebugUI_;
 
 			if (showDebugUI_)

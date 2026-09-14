@@ -547,6 +547,7 @@
     <ClInclude Include="HID\ITouchBackend.h" />
     <ClInclude Include="HID\NullTouchBackend.h" />
     <ClInclude Include="HID\TouchBackend.h" />
+    <ClInclude Include="HID\TouchGesture.h" />
     <ClInclude Include="HID\VirtualPadBackend.h" />
     <ClInclude Include="HID\CompositePadBackend.h" />
     <ClInclude Include="HID\Win32\DirectInputKeyboardBackend.h" />

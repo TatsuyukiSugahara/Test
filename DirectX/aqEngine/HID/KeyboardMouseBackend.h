@@ -4,11 +4,10 @@
 //  キーボード / マウスバックエンドの選択(PadBackend.h と同じ流儀)。
 //    Win32(デスクトップ)  : DirectInput(DirectInputKeyboardBackend / DirectInputMouseBackend)
 //    UWP(Xbox / PC-UWP)  : 入力なし(Null)。実入力は Phase 4 の GameInput で対応
-//    Mac                   : 入力なし(Null)。Cocoa 実装(CocoaKeyboardBackend /
-//                            CocoaMouseBackend)は P4 で追加する
+//    Mac                   : Cocoa 実装(CocoaKeyboardBackend / CocoaMouseBackend)
 //    Android               : キーボードは Null。マウスは TouchMouseBackend(タッチをポインタとして
 //                            供給する。物理マウスを想定するという意味ではない)
-//    iOS                   : どちらも入力なし(Null)。P0 の骨格
+//    iOS                   : Android と同じ(キーボードは Null / マウスは TouchMouseBackend)
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -73,19 +72,20 @@ namespace aq
 }
 #elif defined(AQ_PLATFORM_IOS)
 #include "HID/NullKeyboardBackend.h"
-#include "HID/NullMouseBackend.h"
+#include "HID/TouchMouseBackend.h"
 
 namespace aq
 {
 	namespace hid
 	{
-		// iOS: タッチ経路がまだ無い P0 の骨格なので、どちらも Null で通す。
-		// 物理キーボードは Android と同じく想定しないため、こちらは最終形も Null。
-		// TODO(P3): マウスを TouchMouseBackend にする(iOSTouchBackend が取り込んだ
-		// タッチを既存のポインタ経路(UIInputSystem / ImGui)へ載せるための合成。
-		// Android と同じ形で、下の CreateDefaultMouseBackend の #if も iOS を含める)。
+		// iOS: ハードウェアキーボードは想定しないので Null(設計書/iOS移植設計.md §5.4)。
+		//
+		// マウスは Android と同じく TouchMouseBackend を入れる。**物理マウスを想定する
+		// という意味ではなく**、iOSTouchBackend が取り込んだタッチを既存のポインタ経路
+		// (UIInputSystem / ImGui)へ載せるための合成である。ゲーム操作は
+		// DefaultPadBackend(仮想パッド or 物理コントローラ)が引き続き担う。
 		using DefaultKeyboardBackend = NullKeyboardBackend;
-		using DefaultMouseBackend    = NullMouseBackend;
+		using DefaultMouseBackend    = TouchMouseBackend;
 	}
 }
 #else
@@ -95,7 +95,7 @@ namespace aq
 
 // ============================================================
 //  マウスバックエンドの生成(PadBackend.h の CreateDefaultPadBackend と同じ流儀)。
-//  Android だけはタッチから合成するため取り込み済みの TouchState を要る。
+//  Android / iOS だけはタッチから合成するため取り込み済みの TouchState を要る。
 //  呼び出し側(InputManager)に #if を持ち込まないため、組み立てをここへ寄せる。
 // ============================================================
 #include <memory>
@@ -105,7 +105,7 @@ namespace aq
 {
 	namespace hid
 	{
-#if defined(AQ_PLATFORM_ANDROID)
+#if defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
 		inline std::unique_ptr<IMouseBackend> CreateDefaultMouseBackend(const TouchState* pointerTouch)
 		{
 			// 渡すのは「パッドが使っていない指」だけの集合。仮想パッドのスティックを

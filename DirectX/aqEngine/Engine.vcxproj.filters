@@ -1102,6 +1102,9 @@
     <ClInclude Include="HID\ITouchBackend.h">
       <Filter>HID</Filter>
     </ClInclude>
+    <ClInclude Include="HID\TouchGesture.h">
+      <Filter>HID</Filter>
+    </ClInclude>
     <ClInclude Include="HID\NullTouchBackend.h">
       <Filter>HID</Filter>
     </ClInclude>

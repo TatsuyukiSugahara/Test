@@ -1,6 +1,6 @@
 # Android 移植 設計
 
-> 対象コミット: d1e7f6a / 最終更新: 2026-09-12
+> 対象コミット: 2f1af88 / 最終更新: 2026-09-14
 
 ## 現在の到達点
 
@@ -28,7 +28,7 @@ Pixel 7a / Android 16 で **AquaDash のタイトル画面がフル表示**さ�
 | サウンド(P5) | **実機確認済**。AAudio で BGM / SE が鳴り、背面では `state:paused` になる。48kHz / float32 / 2ch |
 | タッチ操作(P7) | **実機確認済**。ImGui をタップ・ドラッグで操作できる(×2.0 拡大)。仮想パッドとの取り合いも調停済み |
 | Windows 回帰 | D3D11 / D3D12 / Vulkan の Debug すべてエラー 0・警告 54 件(従来と同数)。P2 時点では実行もタイトル表示〜終了コード 0 |
-| Mac 回帰 | **未確認**(この環境では Mac をビルドできない)。`StartupLog` 一本化と `ImageLoader` の変更が Mac に及ぶので次に Mac を触るとき要確認 |
+| Mac 回帰 | **確認済(2026-09-14)。回帰なし。** `macos-ninja-metal-release` / `macos-ninja-release` ともビルドエラー 0・警告は従来と同数。Metal 構成を実行してタイトル画面〜ステージ走行(60 FPS / 入力 / HUD / ミニマップ / 地形・草・影)まで確認した。`StartupLog` 一本化(`aq.cpp` へ集約)と `ImageLoader` の `!AQ_PLATFORM_WINDOWS_FAMILY` 化、`SimpleJson::ParseFile` の `ResolveExistingResourcePath` 経由化はいずれも Mac で回帰なし。**Debug の終了時リークは Mac では 7117 件 / 822KB 残るが、これは移植前(`d1e7f6a`)でも 7070 件 / 922KB あった既存のもので、本移植による増加ではない**(§8-10) |
 | validation | **未確認**。検証レイヤの `.so` がどこにも無く同梱できない(§4.6) |
 
 導入手順とハマりどころは [Tools/SetupCMake/README.md](../Tools/SetupCMake/README.md) §6、
@@ -580,9 +580,25 @@ Mac の Vulkan 構成が動いていたのは `.app` が CWD を `Game/` に移�
    避けているためで不具合ではない。全画面に広げるならマニフェストのテーマへ
    `windowLayoutInDisplayCutoutMode="shortEdges"` を入れるが、UI がカメラ穴に
    隠れる可能性とのトレードオフ。見た目の詰めとして P6 で判断する。
-8. **UWP の JSON 読み込み**。P2 で直した `JsonParser::ParseFile` の CWD 依存は
+8. **`FindProjectRoot` の重複 6 本のうち 4 本が未移行**。P2 で `Resource.cpp` と
+   `VulkanShader.cpp` を `Engine::GetContentRoot()` 優先へ直したが、
+   `MetalShader.mm` / `MetalRenderContextImpl.mm` / `D3D11Shader.cpp` / `D3D12Shader.cpp` は
+   今も CWD からの上方探索のみ。D3D の 2 本は Windows 専用なので実害が無いが、
+   **Metal の 2 本は iOS で必ず詰まる**([iOS移植設計.md §7.1](iOS移植設計.md) の P2 で直す)。
+
+9. **UWP の JSON 読み込み**。P2 で直した `JsonParser::ParseFile` の CWD 依存は
    Xbox(UWP)で既知だった「JSON 全滅で画面がグレー」と同じ原因。Xbox 実機での
    確認は [Xbox移植設計.md](Xbox移植設計.md) 側の作業として残っている。
+
+10. **Mac の終了時リーク 7117 件 / 822KB**(2026-09-14 実測)。`ShutdownMemory()` の
+    導入で報告位置は正しくなったが、**Mac では大量に残る**。Android が
+    `No leaks detected` になるのと対照的で、**プラットフォーム差ではなく
+    バックエンド差(Metal 側の解放漏れ)の可能性が高い**。
+    移植前(`d1e7f6a`)でも 7070 件 / 922KB あったので**本移植が作ったものではない**が、
+    「リーク報告が意味を持つようにした」目的からすると未達。
+    調査は本移植とは別の `<Engine>` 作業として切る。
+    `ResourceBase::data_` が `void*` で、delete する側が `static_cast` しないと
+    デストラクタが走らず GPU リソースが漏れる既知の構造が第一の容疑。
 
 ---
 

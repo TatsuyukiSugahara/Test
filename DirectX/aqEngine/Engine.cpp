@@ -179,30 +179,36 @@ namespace aq
 	}
 
 
+	void Engine::FrameStep()
+	{
+		// 背面に回ったらサウンドも止める。描画と違ってフレームを飛ばすだけでは鳴り続ける。
+		SyncSoundActivity();
+
+		// 描画対象が差し替わったらサーフェスを作り直してから描く。
+		// Android ではバックグラウンド復帰・回転のたびにここへ来る。
+		if (!EnsureSurfaceUpToDate()) {
+			return;
+		}
+
+		// 提示先が無い間(Android のバックグラウンド等)はフレームごと飛ばす。
+		// PumpEvents 側がイベント待ちでブロックするので、ここは空転しない。
+		if (!platform_->IsRenderable()) {
+			return;
+		}
+
+		SyncScreenSize();
+		Update();
+	}
+
+
 	void Engine::RunGame()
 	{
-		// メッセージ/イベントのポンプはプラットフォーム層に委譲する。
-		// PumpEvents() が終了要求で false を返すまで Update を回す。
-		while (platform_->PumpEvents())
-		{
-			// 背面に回ったらサウンドも止める。描画と違ってフレームを飛ばすだけでは鳴り続ける。
-			SyncSoundActivity();
-
-			// 描画対象が差し替わったらサーフェスを作り直してから描く。
-			// Android ではバックグラウンド復帰・回転のたびにここへ来る。
-			if (!EnsureSurfaceUpToDate()) {
-				continue;
-			}
-
-			// 提示先が無い間(Android のバックグラウンド等)はフレームごと飛ばす。
-			// PumpEvents 側がイベント待ちでブロックするので、ここは空転しない。
-			if (!platform_->IsRenderable()) {
-				continue;
-			}
-
-			SyncScreenSize();
-			Update();
-		}
+		// メッセージ/イベントのポンプもフレーム駆動もプラットフォーム層に委譲する。
+		// 既定実装は「PumpEvents() が終了要求で false を返すまで FrameStep を回す」で、
+		// Win32 / UWP / Mac / Android は従来どおりここでループする。iOS だけは
+		// UIApplicationMain が run loop を持つため、CADisplayLink を張って即戻る
+		// (設計書/iOS移植設計.md §3.3)。
+		platform_->RunFrameLoop([this] { FrameStep(); });
 	}
 
 

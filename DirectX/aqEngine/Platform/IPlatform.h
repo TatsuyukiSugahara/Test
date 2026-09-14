@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include "Graphics/GraphicsTypes.h"
 
 namespace aq
@@ -31,6 +32,27 @@ namespace aq
 
 			// 保留中のイベントを処理する。終了要求を受けたら false を返す。
 			virtual bool PumpEvents() = 0;
+
+			/**
+			 * フレーム駆動をプラットフォームへ委譲する。
+			 *
+			 * 既定実装はデスクトップ相当:PumpEvents() が false を返すまで frame() を回す。
+			 * Win32 / UWP / Mac / Android はメインループを自分で所有できるので、これで足りる。
+			 *
+			 * この IF が要るのは **iOS だけがループを所有できない**ため。UIKit では
+			 * UIApplicationMain が run loop を握って戻ってこないので、呼び出し側で
+			 * `while (PumpEvents())` を回す形が構造的に成立しない。そこで iOS 実装は
+			 * これを override して CADisplayLink にフレーム駆動を登録し、
+			 * **すぐ return する**(以降は OS がコールバックでフレームを進める)。
+			 * 設計書/iOS移植設計.md §3.3。
+			 *
+			 * @param frame 1 フレーム分の処理。既定実装の間だけ有効な参照ではなく、
+			 *              すぐ return する実装ではコピーして保持すること。
+			 */
+			virtual void RunFrameLoop(const std::function<void()>& frame)
+			{
+				while (PumpEvents()) { frame(); }
+			}
 
 			// PLM ライフサイクル。UWP では suspend 中にメモリを 128MB 以下へ落とす起点。
 			// Win32 では未使用（既定実装は何もしない）。

@@ -10,19 +10,24 @@
 していたものの過半が既にリポジトリへ入った**。差分の棚卸しは §0.6。
 本書はその再評価を反映した第 2 版である。
 
-**P0(ビルド基盤)完了 — 2026-09-14。** iOS シミュレータ / 実機の両方で
-**コンパイルとリンクが通る**ようになった。実行はまだできない(P1)。
+**P1(シミュレータでクリア画面)完了 — 2026-09-14。**
+iPhone 17 シミュレータ(iOS 26.5)でアプリが起動し、**Metal のクリア色が横向き全面に出て、
+`CADisplayLink` が 60 FPS でフレームを回す**ところまで到達した。Engine の起動は P2。
 
 | | 状態 |
 |---|---|
 | 設計 | 第 2 版。§0.5 の 6 論点すべて決着(2026-09-14) |
-| 実装 | **P0 完了。次は P1(シミュレータでクリア画面)** |
+| 実装 | **P0 / P1 完了。次は P2(シミュレータで実シーン)** |
 | 環境 | Xcode 26.6 / iOS SDK 26.5 / iOS Simulator SDK 26.5。**iOS 実機は接続なし**(シミュレータ 11 種) |
 | 検証方針 | シミュレータ先行。実機は P5 |
 | シミュレータ | `ios-simulator-xcode` が configure / build 成功。`Game.app/Game` = Mach-O arm64 / `platform IOSSIMULATOR` / `minos 16.4` / `sdk 26.5` |
 | 実機 | `ios-xcode` が configure / build 成功(`CODE_SIGNING_ALLOWED=NO`)。`platform IOS` / `minos 16.4` |
 | Ninja | `ios-ninja` も configure 成功(コンパイルエラーの潰し込み用) |
 | バンドル | **`Contents/` の無いフラット構造**を確認(`Game.app/Game`)。§7.3 の前提どおり |
+| 起動(P1) | `iOSMain` → ウィンドウ **874x402(横向き)** 48ms → Metal デバイス 49ms → **クリア提示 82ms** |
+| フレーム駆動 | `CADisplayLink` で **16.2〜16.5 ms 間隔 = 60 FPS**。`UIApplicationMain` が戻らない構造で `RunFrameLoop` の委譲が効いている |
+| シミュレータ実測 | `Apple iOS simulator GPU` / **BC 圧縮: no** / GPU family `Apple2` / unified memory: no(§0.2-3 の事前実測と一致) |
+| Mac 実測(対照) | `Apple M5` / **BC 圧縮: yes** / GPU family `Apple9` / unified memory: yes |
 | Mac 回帰 | **確認済。回帰なし。** Metal / Vulkan とも Release がビルドでき、Metal 構成を実行してタイトル〜ステージ走行(59.7 FPS / 入力 / HUD / ミニマップ / ブーストパッド)まで確認。**警告は 14 件で P0 前と同一箇所** |
 | Windows 回帰 | **未確認**(この環境では Windows をビルドできない)。共通コードへの変更は §P0 の評価欄を参照 |
 
@@ -524,9 +529,19 @@ run loop へ add する。`preferredFramesPerSecond` はゼロ(= ディスプレ
 **エンジンは「ウィンドウサイズは呼び出し側が知っている」前提**で、`CreateMainWindow` から
 実サイズを受け取る経路が無い。
 
-iOS で画面サイズは OS が決めるので、**AppDelegate が `UIScreen` を見て
-`InitializeParameter` を埋める**(§3.2 の手順 2)。これで**エンジン側の改修はゼロ**。
-`CreateMainWindow` は `desc` を検証に使うだけにする。
+iOS で画面サイズは OS が決めるので、**`InitializeParameter` は実際に作られた
+ウィンドウのサイズで埋める**。これで**エンジン側の改修はゼロ**。
+`CreateMainWindow` は `desc` の寸法を使わない(OS が決めた値で上書きする)。
+
+実装した形(P1。**Android の `AndroidMain.cpp` と同型**):
+
+1. `PlatformiOS::CreateMainWindow` が `UIScreen` / `window.bounds` から実寸を決めてレイヤを作る
+   (**冪等**。2 回呼ばれても同じレイヤを返す)
+2. 呼び出し側は `GetDrawableWidth()` / `GetDrawableHeight()` で実寸を取り出す
+3. P2 ではその値で `InitializeParameter` を埋めてから `Engine::Initialize` を呼ぶ
+   (内部でもう一度 `CreateMainWindow` が呼ばれるが、冪等なので同じウィンドウが返る)
+
+**P1 実測: iPhone 17 シミュレータで 874x402**(論理解像度・横向き)。
 
 スケールの方針(§0.5-4):
 
@@ -1028,26 +1043,81 @@ iOS:    Game.app/Game/Assets/...
 
 ### P1: シミュレータでクリア画面
 
-UIKit エントリ + `CAMetalLayer` + フレーム駆動の委譲 + iOS 向け MSL。
+UIKit エントリ + `CAMetalLayer` + フレーム駆動の委譲。
+
+> **P1 では Engine を起動しない。**[Android移植設計.md の P1](Android移植設計.md) と同じ段取りを採る。
+> `Engine::Initialize` はシェーダとテクスチャの読み込みを伴うが、アセットをバンドルへ入れるのは
+> P2(`package_app.cmake` の iOS 分岐)なので、それまでゲーム本体は動かせない。
+> P1 は**グラフィクスデバイスだけを立ててクリア色を提示**し、検証対象を
+> 「UIKit → `CAMetalLayer` → Metal のドローアブル/提示」と「`CADisplayLink` によるフレーム駆動」に絞る。
+> この足場は P2 で `Engine::Create → Initialize → RunGame → Finalize` のブートへ置き換える。
+>
+> **アセットが 1 つも要らないことは確認済み**: `MetalGraphicsDeviceImpl::Initialize` は
+> ファイルを一切読まず、`CopyToBackBuffer` のフルスクリーン変換描画に使う MSL も
+> `.mm` に文字列で埋め込まれていて `newLibraryWithSource:` でコンパイルされる。
 
 - `iOSMain.mm`(`UIApplicationMain`)と `AqAppDelegate`(§3.2)。
   **`ShutdownMemory()` は `applicationWillTerminate:` に置く**(§0.6-(3))
 - `PlatformiOS`(`UIWindow` / `UIViewController` / `AqMetalView` / `+layerClass`)。
-  `GetContentRoot` はバンドルパス、`GetUserDataDirectory` は `NSDocumentDirectory`、
-  `IsRenderable` は背面で `false`(§3.4)
+  `GetContentRoot` はバンドルパス、`GetUserDataDirectory` は `NSDocumentDirectory`
 - **`IPlatform::RunFrameLoop` の追加**(既定実装 = 現行 while ループ)と
-  **`Engine::FrameStep` の切り出し**、`CADisplayLink`(§3.3)
-- `--msl-ios` の生成ターゲットと `msl-ios/` 読み出し分岐(§4.2)
-- 入力は `NullKeyboardBackend` / `NullMouseBackend` / `NullTouchBackend` を差す
+  **`Engine::FrameStep` の切り出し**、`CADisplayLink`(§3.3)。
+  P1 の足場も `Engine` と同じく `RunFrameLoop` 経由でフレームを回し、**P2 で本物に
+  差し替わる機構をそのまま検証する**
+- 機能クエリの起動ログ(GPU 名 / `supportsBCTextureCompression` / GPU family。§4.3)
 - Info.plist(`UILaunchScreen` / 向き / `UIRequiredDeviceCapabilities` / `CFBundleIdentifier`)
 
-**評価チェックリスト**
-- [ ] シミュレータにインストールでき、起動する
-- [ ] Metal のクリア色が画面に出る
-- [ ] `CADisplayLink` でフレームが回っている(フレーム番号のログで確認)
-- [ ] 起動ログに GPU 名 / `supportsBCTextureCompression` / GPU family が出る(§4.3)
-- [ ] **Windows / Mac の回帰**(`RunFrameLoop` + `FrameStep` は共通コード改修)。
-      Mac は実行してタイトル〜ステージまで確認する
+> **`--msl-ios` は P2 へ送った**(初版では P1 に置いていた)。P1 はアセットを
+> バンドルへ入れないため、生成しても**読めているかを確認する手段が無い**。
+> 「各フェーズのチェックリストが確認可能な粒度になっている」(§10)を優先した。
+
+**評価チェックリスト** — 2026-09-14 実施
+
+- [x] シミュレータにインストールでき、起動する(iPhone 17 / iOS 26.5)
+- [x] Metal のクリア色が画面に出る(`simctl io screenshot` で全面に指定色を確認)
+- [x] `CADisplayLink` でフレームが回っている
+      (`presented frame 1/2/3` が **16.2〜16.5 ms 間隔 = 60 FPS**)
+- [x] `RunFrameLoop` の委譲が効いている(`UIApplicationMain` が戻らない構造で
+      `[ios] CADisplayLink started` の後もフレームが回り続ける)
+- [~] **`applicationWillTerminate:` で後始末まで進む — 検証できなかった。**
+      `xcrun simctl terminate` では**このコールバックが呼ばれない**。詳細は下記「分かったこと」3
+- [x] 起動ログに GPU 名 / `supportsBCTextureCompression` / GPU family が出る(§4.3)。
+      **シミュレータ: `Apple iOS simulator GPU` / BC: no / `Apple2` / unified: no**
+      (§0.2-3 の事前実測と一致。**P2 の BC 展開経路が必要であることが確定した**)
+- [x] **Mac の回帰**: Metal / Vulkan とも Release がビルドでき(警告 14 / 17 件で P1 前と同数)、
+      Metal 構成を実行してステージ走行まで確認(60.1 FPS)。
+      機能クエリのログは Mac では `Apple M5` / BC: yes / `Apple9` / unified: yes
+- [ ] **Windows 3 構成の回帰 — 未確認**(この環境ではビルドできない)。
+      共通コードへの変更は `IPlatform::RunFrameLoop` の追加(既定実装 = 従来の while ループ)と
+      `Engine::FrameStep` の切り出し(純粋なリファクタ。`continue` が `return` になっただけ)、
+      および Metal のログ 2 行(Windows には届かない)のみ
+
+**P1 で分かったこと / 設計からの差分**
+
+1. **`StartupMark` が iOS では何も出していなかった。**Android P1 とまったく同じ罠。
+   出力先が「CWD の `startup_timing.log`」と `OutputDebugStringA` だけで、iOS は CWD が
+   `/`(read-only)なので `fopen` が黙って失敗し、**起動の到達点が一切見えない**。
+   `aq.cpp` に `AQ_PLATFORM_IOS` の分岐を足し、`aq::debug::OutputString`(= stderr)へ流した。
+   `xcrun simctl launch --console-pty` で読める。**これが無いと P1 の評価が 1 つも進まない。**
+2. **Info.plist テンプレートの落とし穴が 2 つ。**
+   - **コメント中に `${...}` の形を書くと `configure_file` が展開しようとして
+     configure ごと失敗する**(`Invalid character ('*') in a variable name`)。
+   - **Xcode は `TARGETED_DEVICE_FAMILY`(既定 `1` = iPhone のみ)から `UIDeviceFamily` を
+     上書きする。**テンプレートに `1,2` と書いても効かないので、
+     `XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"` を明示した。
+3. **`applicationWillTerminate:` は当てにできない。**`simctl terminate` では呼ばれず、
+   iOS 全般としてもアプリは「サスペンド → 予告なく kill」が通常で、このコールバックが
+   走る保証がない。**つまり iOS では Win32 / Mac / Android と違い、終了時の後始末と
+   リーク報告が実行されない前提で設計する必要がある。**
+   `Engine::Finalize` / `ShutdownMemory` の置き場所としては他に選択肢が無いので構造は
+   このままにするが、**リーク検出を iOS の品質ゲートに使わない**こと。P5 で改めて扱う。
+4. **向きの固定は効いている。**ウィンドウが **874x402(横向き)**で作られた。
+   デバイス画面のスクリーンショットは縦(1206x2622)のままなので、
+   **単色のクリアだけでは向きが判定できない**点に注意(ログの寸法で判断すること)。
+5. **P1 はアセットを 1 つも要求しなかった。**`MetalGraphicsDeviceImpl::Initialize` は
+   ファイルを読まず、`CopyToBackBuffer` のフルスクリーン変換描画に使う MSL も
+   `.mm` に埋め込まれた文字列を `newLibraryWithSource:` でコンパイルしている。
+   Android P1 と同じ段取りがそのまま成立した。
 
 ### P2: シミュレータで実シーン
 
@@ -1055,6 +1125,8 @@ UIKit エントリ + `CAMetalLayer` + フレーム駆動の委譲 + iOS 向け M
 
 - `package_app.cmake` の iOS 分岐(`<Bundle>/Game/Assets` レイアウト。§7.3)。
   **Vulkan 分岐はスキップ**。**署名の前に走らせる**
+- **`--msl-ios` の生成ターゲットと `msl-ios/` 読み出し分岐**(§4.2。P1 から移動)
+- P1 の足場(クリア画面)を `Engine::Create → Initialize → RunGame → Finalize` のブートへ置き換える
 - **Metal シェーダの `FindProjectRoot` を `GetContentRoot()` 優先へ**(§7.1)。
   `MetalShader.mm` と `MetalRenderContextImpl.mm` を**同時に**直す
 - **`Metal の GetSurfaceSize` 実装**(§4.5)

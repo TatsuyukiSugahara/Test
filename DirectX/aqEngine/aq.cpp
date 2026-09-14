@@ -51,6 +51,13 @@ namespace aq
 		// どこにも出ない。logcat が唯一の到達先なので DebugOutput へ流す
 		// (`adb logcat -s AquaDash` で見える)。
 		aq::debug::OutputString(line);
+#elif defined(AQ_PLATFORM_IOS)
+		// iOS も Android と同じくカレントディレクトリ("/")へは書けない。fopen が黙って
+		// 失敗して起動の到達点が一切見えなくなるので、DebugOutput(stderr)へ流す
+		// (`xcrun simctl launch --console-pty` や Xcode のコンソールで見える)。
+		// TODO(P2): GetUserDataDirectory() 配下へファイルとしても残す(設計書 §7.2)。
+		aq::debug::OutputString(line);
+		aq::debug::OutputString("\n");
 #else
 		static FILE* fp = nullptr;
 		static bool  opened = false;

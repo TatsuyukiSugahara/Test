@@ -107,6 +107,15 @@ namespace aq
 		 */
 		void SyncSoundActivity();
 
+		/**
+		 * 1 フレーム分の処理。RunGame() から IPlatform::RunFrameLoop() 経由で呼ばれる。
+		 *
+		 * かつては RunGame() の while ループの本体だったものを、そのまま切り出している。
+		 * ループの `continue` はここでは `return`(このフレームは何もしない)と読み替える。
+		 * 意味は変わらない。切り出した理由は設計書/iOS移植設計.md §3.3 を参照。
+		 */
+		void FrameStep();
+
 		void Update();
 
 	public:

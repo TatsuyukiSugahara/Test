@@ -73,6 +73,39 @@ namespace aq
 			/** CopyToBackBuffer のフォールバックログ。毎フレーム出ると使い物にならないので 1 度だけ出す */
 			bool g_copyFallbackLogged = false;
 
+			/**
+			 * 対応している最大の GPU family を名前で返す(設計書/iOS移植設計.md §4.3)。
+			 * 全部並べても読みづらいだけなので、上から順に問い合わせて最初に当たったものを返す。
+			 * Apple 系が当たらない Intel Mac は Mac2 に落ちる。
+			 */
+			const char* DescribeGpuFamily(id<MTLDevice> device)
+			{
+				struct FamilyEntry
+				{
+					MTLGPUFamily family;
+					const char*  name;
+				};
+				static const FamilyEntry FAMILY_TABLE[] = {
+					{ MTLGPUFamilyApple9, "Apple9" },
+					{ MTLGPUFamilyApple8, "Apple8" },
+					{ MTLGPUFamilyApple7, "Apple7" },
+					{ MTLGPUFamilyApple6, "Apple6" },
+					{ MTLGPUFamilyApple5, "Apple5" },
+					{ MTLGPUFamilyApple4, "Apple4" },
+					{ MTLGPUFamilyApple3, "Apple3" },
+					{ MTLGPUFamilyApple2, "Apple2" },
+					{ MTLGPUFamilyApple1, "Apple1" },
+					{ MTLGPUFamilyMac2,   "Mac2"   },
+				};
+
+				for (const FamilyEntry& entry : FAMILY_TABLE) {
+					if ([device supportsFamily:entry.family]) {
+						return entry.name;
+					}
+				}
+				return "unknown";
+			}
+
 			/** CopyToBackBuffer の失敗ログ(PSO が作れなかった等)。同上 */
 			bool g_copyFailureLogged = false;
 
@@ -381,6 +414,21 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 					return false;
 				}
 				aq::StartupMarkf("  [metal] device ok (%s)", [[objects_->device name] UTF8String]);
+
+				// 機能クエリ(設計書/iOS移植設計.md §4.3)。
+				// BC 圧縮の可否は環境依存で、非対応だと DDS のテクスチャ生成が nil を返して
+				// 静かに全滅する。検出せずに失敗しないよう、起動ログへ必ず残しておく。
+				// (iOS シミュレータは NO を返すことを実測済み)
+				if (@available(iOS 16.4, macOS 11.0, *)) {
+					aq::StartupMarkf("  [metal] BC texture compression: %s",
+					                 [objects_->device supportsBCTextureCompression] ? "yes" : "no");
+				} else {
+					// それ未満のバージョンではプロパティ自体が存在せず、問い合わせられない。
+					aq::StartupMark("  [metal] BC texture compression: unknown (needs iOS 16.4 / macOS 11.0)");
+				}
+				aq::StartupMarkf("  [metal] GPU family: %s / unified memory: %s",
+				                 DescribeGpuFamily(objects_->device),
+				                 [objects_->device hasUnifiedMemory] ? "yes" : "no");
 
 				objects_->commandQueue = [objects_->device newCommandQueue];  // MRR: +1
 				if (objects_->commandQueue == nil) {

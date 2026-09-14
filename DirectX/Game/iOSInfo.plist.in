@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+	iOS アプリバンドルの Info.plist テンプレート(設計書/iOS移植設計.md §2.3)。
+
+	CMake の既定 Info.plist は macOS 向けで、iOS に必須のキー(UILaunchScreen /
+	UIRequiredDeviceCapabilities / UISupportedInterfaceOrientations / UIDeviceFamily)を
+	与えられない。とくに **UILaunchScreen が無いと起動直後の画面が黒いまま**になるため、
+	テンプレートを自前で持って MACOSX_BUNDLE_INFO_PLIST で指定している。
+
+	MACOSX_BUNDLE_ で始まる置換子は CMake が Game ターゲットの同名プロパティから展開する。
+	(ここに置換子そのものの形を書くと configure_file が展開しようとして失敗するので書かない)
+	macOS 側は従来どおり CMake の既定テンプレートを使う(Game/CMakeLists.txt の if(IOS))。
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+	<key>CFBundleIdentifier</key>
+	<string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
+	<key>CFBundleVersion</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
+
+	<!-- Metal 非対応端末を除外する。本エンジンの iOS 構成は Metal 一本(設計書 §0.3)。 -->
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>metal</string>
+	</array>
+
+	<!-- 横向き固定。回転を許すと drawableSize が変わり、Metal 側にリサイズ経路が無い
+	     問題(設計書 §4.5)を本移植で解かねばならなくなる(§0.5-5 / §3.5)。 -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<!-- iOS 14 以降は launch screen が無いと黒画面のまま起動が終わる。
+	     ストーリーボードは要らないので空辞書で足りる。 -->
+	<key>UILaunchScreen</key>
+	<dict/>
+
+	<!-- 1 = iPhone / 2 = iPad -->
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>1</integer>
+		<integer>2</integer>
+	</array>
+</dict>
+</plist>

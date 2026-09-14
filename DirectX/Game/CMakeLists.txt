@@ -45,14 +45,29 @@ endif()
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
 
 # ----------------------------------------------------------------------------
-#  .app バンドルの情報(Mac のみ)
+#  .app バンドルの情報(Mac / iOS)
 #
 #  CMake の既定 Info.plist は CFBundleIdentifier / CFBundleName が **空文字列**になる。
 #  識別子が空のバンドルは macOS から通常のアプリとして扱われず、
 #  **ウィンドウがキーウィンドウにならずキーボードイベントがアプリのキューに届かない**
 #  (P2.5 の入力実装で発覚。nextEventMatchingMask がほぼ nil を返す状態になる)。
+#
+#  iOS は必要なキーが macOS より多く(UILaunchScreen / 向き / デバイス能力 /
+#  UIDeviceFamily。設計書/iOS移植設計.md §2.3)、既定テンプレートでは与えられないので
+#  iOSInfo.plist.in を自前で持つ。**Mac 側の設定は従来のまま**にするため分岐を分ける。
 # ----------------------------------------------------------------------------
-if(APPLE)
+if(IOS)
+	set_target_properties(Game PROPERTIES
+		MACOSX_BUNDLE_BUNDLE_NAME          "AquaDash"
+		MACOSX_BUNDLE_GUI_IDENTIFIER       "com.aqengine.aquadash"
+		MACOSX_BUNDLE_BUNDLE_VERSION       "1.0"
+		MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+		MACOSX_BUNDLE_INFO_PLIST           "${CMAKE_CURRENT_SOURCE_DIR}/iOSInfo.plist.in"
+		# Xcode は TARGETED_DEVICE_FAMILY(既定 "1" = iPhone のみ)から UIDeviceFamily を
+		# 上書きするため、テンプレート側に 1,2 を書いてもここを指定しないと iPhone 専用になる。
+		XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+	)
+elseif(APPLE)
 	set_target_properties(Game PROPERTIES
 		MACOSX_BUNDLE_BUNDLE_NAME          "AquaDash"
 		MACOSX_BUNDLE_GUI_IDENTIFIER       "com.aqengine.aquadash"

@@ -221,6 +221,7 @@ namespace aq
 			, drawableWidth_(0)
 			, drawableHeight_(0)
 			, exitRequested_(false)
+			, renderable_(true)
 		{
 		}
 
@@ -418,6 +419,72 @@ namespace aq
 			{
 				frameCallback_();
 			}
+		}
+
+
+		void PlatformiOS::OnSuspend()
+		{
+			// 冪等。二重に通知が来ても、既に止めていれば何もしない
+			// (ここを抜けないと下の「フレームを 1 回だけ回す」が余分に走る)。
+			if (!renderable_)
+			{
+				return;
+			}
+
+			// **停止の順序がここの肝**(設計書/iOS移植設計.md §3.4)。
+			//   1. renderable_ を false にする
+			//   2. フレームを 1 回だけ回す
+			//   3. CADisplayLink を止める
+			//
+			// **3 を先にやってはいけない。** リンクを止めると Engine::FrameStep が
+			// 呼ばれなくなり、その先頭にある Engine::SyncSoundActivity() も走らない。
+			// サウンドの停止/再開は SyncSoundActivity が IsRenderable() の変化を見て
+			// 決めているので、走らせないまま背面へ回ると**背面でも BGM が鳴り続ける**。
+			//
+			// 逆に 2 の 1 回で SyncSoundActivity がサウンドを止めてくれる。そのフレームの
+			// 描画のほうは IsRenderable() が既に false なので FrameStep が丸ごと飛ばす
+			// (= **GPU は一切触らない**)。バックグラウンドで Metal のコマンドを出すと
+			// iOS はアプリを kill するので、この「触らない」が保証されている必要がある。
+			renderable_ = false;
+
+			// RunFrameLoop より前に背面へ回るとコールバックがまだ無い。その場合は
+			// 回すものが無いだけで、フラグは落ちているので何も壊れない。
+			if (frameCallback_)
+			{
+				frameCallback_();
+			}
+
+			// invalidate ではなく paused。復帰時に張り直さずそのまま再開したいので、
+			// リンク自体は生かしておく(破棄は終了時の StopFrameLoop の仕事)。
+			// まだ張られていなければ何もしない。
+			if (objects_ != nullptr && objects_->displayLink != nil)
+			{
+				[objects_->displayLink setPaused:YES];
+			}
+
+			aq::StartupMark("[ios] suspended");
+		}
+
+
+		void PlatformiOS::OnResume()
+		{
+			// 冪等。止めていないのに再開すると、paused = NO を二重に打つだけでなく
+			// サウンドの状態も余計に触ることになる。
+			if (renderable_)
+			{
+				return;
+			}
+
+			// 再開はフレームを回す前にフラグを戻すだけでよい。次の表示更新で
+			// FrameStep が走り、SyncSoundActivity がサウンドを続きから鳴らす。
+			renderable_ = true;
+
+			if (objects_ != nullptr && objects_->displayLink != nil)
+			{
+				[objects_->displayLink setPaused:NO];
+			}
+
+			aq::StartupMark("[ios] resumed");
 		}
 
 

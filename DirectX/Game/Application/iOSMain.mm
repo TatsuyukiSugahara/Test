@@ -84,6 +84,40 @@
 }
 
 
+// ── ライフサイクル(設計書/iOS移植設計.md §3.4)────────────────────
+//
+// **applicationWillResignActive: / applicationDidBecomeActive: は使わない。**
+// あれは通知シェードを下ろした・アプリスイッチャを開いた・着信が来た、といった
+// 「まだ前面にいる」状態でも飛んでくる。そこで描画とサウンドを止めると、
+// 通知を一瞥しただけで BGM が切れてしまう。
+// Android が「通知シェードを下ろしただけでは窓は生きているので止めない」
+// (APP_CMD_LOST_FOCUS では入力を落とすだけで停止はしない)としているのと
+// まったく同じ判断で、実際に背面へ回ったことが確定する
+// DidEnterBackground / WillEnterForeground の対だけを使う。
+
+- (void)applicationDidEnterBackground:(UIApplication*)application
+{
+	(void)application;
+
+	// 停止の順序(フラグ → 1 フレーム → CADisplayLink)は PlatformiOS::OnSuspend が持つ。
+	if (platform_ != nullptr)
+	{
+		platform_->OnSuspend();
+	}
+}
+
+
+- (void)applicationWillEnterForeground:(UIApplication*)application
+{
+	(void)application;
+
+	if (platform_ != nullptr)
+	{
+		platform_->OnResume();
+	}
+}
+
+
 - (void)applicationWillTerminate:(UIApplication*)application
 {
 	(void)application;

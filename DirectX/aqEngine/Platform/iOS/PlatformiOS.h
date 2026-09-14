@@ -59,6 +59,12 @@ namespace aq
 			/** 終了要求。iOS には閉じるボタンが無いので、実際に立つ経路は今のところ無い */
 			bool exitRequested_;
 
+			/**
+			 * 前面にいるか(= 描画してよいか)。既定 true で、OnSuspend / OnResume が切り替える。
+			 * ウィンドウの有無から導けない理由は IsRenderable() のコメントを参照。
+			 */
+			bool renderable_;
+
 
 		// ── メンバ関数 ──
 		public:
@@ -73,9 +79,33 @@ namespace aq
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
 
-			// IsRenderable は override しない(既定の true のまま)。
-			// TODO(P5): バックグラウンド遷移(applicationDidEnterBackground)の間は
-			// ドロウアブルを取りに行ってはいけないので、そこで false を返すようにする。
+			/**
+			 * 描画してよい状態か。背面にいる間は false。
+			 *
+			 * PlatformAndroid は「ANativeWindow を持っているか」で判定している
+			 * (背面へ回ると OS が窓を取り上げるため、それがそのまま前面/背面の判定になる)。
+			 * **iOS は背面へ回っても CAMetalLayer が破棄されない**ので同じ手は使えず、
+			 * 前面/背面をフラグとして自前で持つ(設計書/iOS移植設計.md §3.4)。
+			 *
+			 * false の間、Engine::FrameStep は描画を丸ごと飛ばし、
+			 * Engine::SyncSoundActivity はサウンドを止める。
+			 */
+			bool        IsRenderable() const override { return renderable_; }
+
+
+			/**
+			 * ライフサイクル(設計書/iOS移植設計.md §3.4)
+			 *
+			 * 呼び元は AqAppDelegate(Game/Application/iOSMain.mm)。
+			 * **フォーカスの得喪(WillResignActive / DidBecomeActive)では呼ばないこと。**
+			 * 理由は呼び元のコメントに書いてある。
+			 */
+		public:
+			/** 背面へ回った(applicationDidEnterBackground: から呼ぶ)。冪等 */
+			void        OnSuspend() override;
+
+			/** 前面へ戻った(applicationWillEnterForeground: から呼ぶ)。冪等 */
+			void        OnResume() override;
 
 
 			/**

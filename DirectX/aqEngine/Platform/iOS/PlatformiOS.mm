@@ -499,7 +499,7 @@ namespace aq
 					// iOS のアプリバンドルは Contents/ 階層を持たず、リソースがバンドル直下に
 					// 並ぶ(設計書 §2.3 / §7.3)。ただし**バンドル直下をそのまま基点にはできない**。
 					//
-					// 基点の下には Game/Assets/... が並ぶ(BuildResourcePathCandidates が
+					// 基点の下には Game/Assets/... が並ぶ(aq::res::BuildAssetPathCandidates が
 					// "Assets/..." を <root>/Game/Assets/... へ組むため)が、フラットバンドルでは
 					// **実行ファイル自体が <Bundle>/Game** なので、その "Game" と衝突する。
 					// バンドル直下は Info.plist / PkgInfo / _CodeSignature / 実行ファイルという

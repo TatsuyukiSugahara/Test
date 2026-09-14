@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "Resource.h"
+#include "Resource/AssetPath.h"
 #include "ImageLoader.h"
 #include "Platform/PlatformBudget.h"
 #include <cctype>
@@ -246,138 +247,14 @@ namespace aq
 				return ToLowerString(path.substr(dotPos));
 			}
 
-			void PushUniquePath(std::vector<std::string>& paths, const std::string& path)
-			{
-				if (!path.empty() && std::find(paths.begin(), paths.end(), path) == paths.end()) {
-					paths.push_back(path);
-				}
-			}
-
-			std::string FindProjectRoot()
-			{
-				// 関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
-				aq::memory::ScopedPersistentAlloc persistent;
-				static std::string cachedRoot;
-				if (!cachedRoot.empty()) {
-					return cachedRoot;
-				}
-
-				// プラットフォームがコンテンツ基点を返す場合(UWP のパッケージ install
-				// フォルダ等)は、それを基点に採用し、ソースツリーの上方探索は行わない。
-				// sandbox では Game/Assets を遡れないため。Win32 は nullptr を返すので
-				// 従来どおり下の探索にフォールバックする。
-				if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
-					cachedRoot = contentRoot;
-					return cachedRoot;
-				}
-
-				std::error_code ec;
-				std::filesystem::path dir = std::filesystem::current_path(ec);
-				if (ec) {
-					return std::string();
-				}
-
-				while (!dir.empty()) {
-					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
-						cachedRoot = dir.generic_string();
-						return cachedRoot;
-					}
-					if (dir == dir.root_path()) {
-						break;
-					}
-					dir = dir.parent_path();
-				}
-
-				cachedRoot = std::filesystem::current_path(ec).generic_string();
-				return cachedRoot;
-			}
-
-			/**
-			 * 既存の候補それぞれについて、拡張子だけを小文字化/大文字化した候補を末尾へ足す。
-			 *
-			 * **大文字小文字を区別するファイルシステム対策。** tkm のマテリアルは
-			 * 参照テクスチャの拡張子を小文字 ".dds" へ machine 的に置換する
-			 * (ReplaceExtension(..., ".dds"))が、同梱アセットの実体は "utc_all2.DDS" の
-			 * ように大文字のことがある。Windows / macOS のボリュームは既定で
-			 * 大文字小文字を区別しないため今まで表面化しなかったが、
-			 * **iOS(シミュレータ・実機とも)と Android の内部ストレージは区別する**ので、
-			 * そのままではテクスチャが開けず「モデルだけ出て真っ白/灰色」になる
-			 * (iOS 移植 P2 で実際に踏んだ。設計書/iOS移植設計.md §7.4)。
-			 *
-			 * 完全一致を必ず優先するため、**元の候補をすべて並べた後**に足す。
-			 * 探索は「存在するものを 1 つ見つけるまで」なので、当たっている環境では
-			 * ここまで到達せず追加コストは無い。
-			 */
-			void PushExtensionCaseVariants(std::vector<std::string>& paths)
-			{
-				const size_t originalCount = paths.size();
-				for (size_t i = 0; i < originalCount; ++i) {
-					const std::string& original = paths[i];
-
-					const size_t dot = original.find_last_of('.');
-					if (dot == std::string::npos) {
-						continue;
-					}
-					// セパレータより後に '.' が無いものは拡張子ではない("../foo" など)。
-					const size_t separator = original.find_last_of('/');
-					if (separator != std::string::npos && dot < separator) {
-						continue;
-					}
-
-					std::string lower = original;
-					std::string upper = original;
-					for (size_t c = dot + 1; c < original.size(); ++c) {
-						lower[c] = static_cast<char>(std::tolower(static_cast<unsigned char>(original[c])));
-						upper[c] = static_cast<char>(std::toupper(static_cast<unsigned char>(original[c])));
-					}
-					PushUniquePath(paths, lower);
-					PushUniquePath(paths, upper);
-				}
-			}
-
-			std::vector<std::string> BuildResourcePathCandidates(std::string path)
-			{
-				std::replace(path.begin(), path.end(), '\\', '/');
-
-				std::vector<std::string> paths;
-				PushUniquePath(paths, path);
-
-				std::filesystem::path fsPath(path);
-				if (fsPath.is_absolute()) {
-					// 絶対パスでも拡張子の大小だけは面倒を見る。tkm のマテリアルは
-					// 解決済みの絶対パスを基点に組み立てられるため、ここを素通りすると
-					// 大文字小文字を区別する環境でテクスチャが 1 枚も開けない。
-					PushExtensionCaseVariants(paths);
-					return paths;
-				}
-
-				// UWP でもパッケージ内にソースツリー相対構造を再現するため、デスクトップと同じ規則で解決。
-				const std::filesystem::path root(FindProjectRoot());
-				if (path.rfind("Assets/", 0) == 0) {
-					PushUniquePath(paths, (root / "Game" / path).generic_string());
-				}
-				else if (path.rfind("Game/Assets/", 0) == 0) {
-					PushUniquePath(paths, (root / path).generic_string());
-				}
-				else {
-					PushUniquePath(paths, (root / path).generic_string());
-				}
-				PushExtensionCaseVariants(paths);
-				return paths;
-			}
-
 		}
 
 
 		std::string ResolveExistingResourcePath(const std::string& path)
 		{
-			std::error_code ec;
-			for (const std::string& candidate : BuildResourcePathCandidates(path)) {
-				if (std::filesystem::exists(candidate, ec) && !ec) {
-					return candidate;
-				}
-			}
-			return path;
+			// 実装は AssetPath へ移した。ImageLoader / SimpleJson / WavDecoder /
+			// WavStreamDecoder が既にこの名前で呼んでいるため、名前と引数はここに残す。
+			return ResolveExistingAssetPath(path);
 		}
 
 
@@ -393,7 +270,9 @@ namespace aq
 				}
 
 				*fp = nullptr;
-				for (const std::string& path : BuildResourcePathCandidates(filePath)) {
+				std::vector<std::string> candidates;
+				BuildAssetPathCandidates(filePath, candidates);
+				for (const std::string& path : candidates) {
 					*fp = fopen(path.c_str(), "rb");
 					if (*fp) {
 					// 予算照合: サイズ取得 → 照合 → 先頭へ巻き戻し。超過なら拒否。
@@ -411,6 +290,9 @@ namespace aq
 						return true;
 					}
 				}
+				// 全候補で開けなかったことを必ず残す。以前は静かに false を返していたため、
+				// アセットの置き場所を間違えても症状が「何も出ない」だけだった。
+				LogUnresolvedAssetPath(filePath);
 				return false;
 			}
 
@@ -710,7 +592,9 @@ namespace aq
 				ufbx_scene* scene = nullptr;
 				ufbx_error  error = {};
 				std::string resolvedFbxPath = filePath;
-				for (const std::string& candidate : BuildResourcePathCandidates(filePath)) {
+				std::vector<std::string> candidates;
+				BuildAssetPathCandidates(filePath, candidates);
+				for (const std::string& candidate : candidates) {
 					scene = ufbx_load_file(candidate.c_str(), &opts, &error);
 					if (scene) { resolvedFbxPath = candidate; break; }
 				}
@@ -902,7 +786,9 @@ namespace aq
 				ufbx_scene* scene = nullptr;
 				ufbx_error  error = {};
 				std::string resolvedFbxPath = filePath;
-				for (const std::string& candidate : BuildResourcePathCandidates(filePath)) {
+				std::vector<std::string> candidates;
+				BuildAssetPathCandidates(filePath, candidates);
+				for (const std::string& candidate : candidates) {
 					scene = ufbx_load_file(candidate.c_str(), &opts, &error);
 					if (scene) { resolvedFbxPath = candidate; break; }
 				}
@@ -1059,7 +945,9 @@ namespace aq
 
 				ufbx_scene* scene = nullptr;
 				ufbx_error  error = {};
-				for (const std::string& candidate : BuildResourcePathCandidates(filePath)) {
+				std::vector<std::string> candidates;
+				BuildAssetPathCandidates(filePath, candidates);
+				for (const std::string& candidate : candidates) {
 					scene = ufbx_load_file(candidate.c_str(), &opts, &error);
 					if (scene) break;
 				}
@@ -1842,7 +1730,9 @@ namespace aq
 
 			ufbx_scene* scene = nullptr;
 			ufbx_error  error = {};
-			for (const std::string& candidate : BuildResourcePathCandidates(fbxPath)) {
+			std::vector<std::string> candidates;
+			BuildAssetPathCandidates(fbxPath, candidates);
+			for (const std::string& candidate : candidates) {
 				scene = ufbx_load_file(candidate.c_str(), &opts, &error);
 				if (scene) break;
 			}

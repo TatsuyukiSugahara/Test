@@ -444,7 +444,7 @@ namespace aq
 					//    本物の .app だけを採る。
 					// TODO(Mac実機): 要確認 — 非バンドル実行時の mainBundle の bundlePath が
 					// 何を返すかは Apple の公式ドキュメントに記載が無い。拡張子判定で弾ける
-					// ことを実機で確認する(弾けないと FindProjectRoot へ落ちなくなる)。
+					// ことを実機で確認する(弾けないとコンテンツ基点の上方探索へ落ちなくなる)。
 					if (contentRoot_.empty())
 					{
 						NSBundle* bundle = [NSBundle mainBundle];
@@ -461,7 +461,7 @@ namespace aq
 				}
 			}
 
-			// 3) 空なら nullptr。Win32 と同じく Resource 側の FindProjectRoot 探索へ委ねる。
+			// 3) 空なら nullptr。Win32 と同じく aq::res::FindContentRoot() の上方探索へ委ねる。
 			return contentRoot_.empty() ? nullptr : contentRoot_.c_str();
 		}
 

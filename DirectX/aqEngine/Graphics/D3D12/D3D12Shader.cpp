@@ -2,6 +2,7 @@
 #ifdef ENGINE_GRAPHICS_D3D12
 #include "D3D12Common.h"
 #include "D3D12Shader.h"
+#include "Resource/AssetPath.h"
 #include <filesystem>
 #include <vector>
 #include <chrono>
@@ -18,57 +19,7 @@ namespace aq
 	{
 		namespace
 		{
-			// プロジェクトルート (Game/Assets を含むディレクトリ) を探す。
-			// ワーカースレッドから並列に呼ばれるため、C++11 のスレッドセーフな static 初期化で一度だけ算出する。
-			std::string FindProjectRoot()
-			{
-				static const std::string cached = []() -> std::string
-				{
-					// UWP 等でプラットフォームがコンテンツ基点(パッケージ install フォルダ)を
-					// 返す場合はそれを採用し、ソースツリーの上方探索は行わない。
-					if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
-						return contentRoot;
-					}
-
-					std::error_code ec;
-					std::filesystem::path dir = std::filesystem::current_path(ec);
-					if (ec) return std::string();
-
-					while (!dir.empty())
-					{
-						if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec)
-						{
-							return dir.generic_string();
-						}
-						if (dir == dir.root_path()) break;
-						dir = dir.parent_path();
-					}
-					return std::filesystem::current_path(ec).generic_string();
-				}();
-				return cached;
-			}
-
-			// 与えられたパスを解決して fopen 可能なパスを返す (D3D11 層と同じ探索規則)
-			std::string ResolveShaderPath(const char* filePath)
-			{
-				std::string path = filePath ? filePath : "";
-				std::replace(path.begin(), path.end(), '\\', '/');
-
-				if (std::filesystem::path(path).is_absolute()) return path;
-
-				// UWP でもパッケージ内にソースツリー相対構造(Game/Assets/... と aqEngine/Graphics/...)
-				// を再現して同梱するため、デスクトップと同じ "Game/" プレフィクス規則で解決する。
-				const std::filesystem::path root(FindProjectRoot());
-				std::filesystem::path candidate;
-				if (path.rfind("Assets/", 0) == 0)        candidate = root / "Game" / path;
-				else if (path.rfind("Game/Assets/", 0) == 0) candidate = root / path;
-				else                                       candidate = root / path;
-
-				std::error_code ec;
-				if (std::filesystem::exists(candidate, ec)) return candidate.generic_string();
-				return path;
-			}
-
+			// シェーダの #include 解決に渡すディレクトリ
 			std::string GetDirectoryPath(const std::string& path)
 			{
 				const size_t slash = path.find_last_of('/');
@@ -122,7 +73,7 @@ namespace aq
 #else
 					if (aq::Engine::Get().GetContentRoot()) return std::string();   // パッケージ配置 = 読み取り専用
 					std::error_code ec;
-					const std::filesystem::path dir = std::filesystem::path(FindProjectRoot()) / "x64" / "ShaderCache";
+					const std::filesystem::path dir = std::filesystem::path(aq::res::FindContentRoot()) / "x64" / "ShaderCache";
 					std::filesystem::create_directories(dir, ec);
 					if (ec) return std::string();
 					return dir.generic_string() + "/";
@@ -295,7 +246,7 @@ namespace aq
 			Release();
 			type_ = shaderType;
 
-			const std::string resolved = ResolveShaderPath(filePath);
+			const std::string resolved = aq::res::ResolveShaderPath(filePath);
 
 			// ファイル読み込み (スレッド安全: ワーカースレッドからも呼べるようローカルバッファを使う。
 			// 旧実装は 5MB の static バッファを共有していたため並列コンパイルで壊れる)

@@ -10,6 +10,7 @@
 #include "Graphics/Metal/MetalShader.h"
 #include "Graphics/Metal/MetalPipelineCache.h"
 #include "Graphics/Metal/MetalDepthStencilCache.h"
+#include "Resource/AssetPath.h"
 #include <spirv_reflect/spirv_reflect.h>
 #include <cstdio>
 #include <filesystem>
@@ -42,69 +43,12 @@ namespace aq
 			//  **本来の置き場所は MetalShader**(既に .spv を spirv_reflect で読んでいる)。
 			//  P4 の担当範囲が MetalShader を含まないため、いったんここへ置いている。
 			//  MetalShader に GetThreadGroupSize() 相当が生えたら、この無名名前空間の
-			//  4 関数と GetThreadGroupSize() / threadGroupSizes_ はまるごと消せる。
+			//  3 関数と GetThreadGroupSize() / threadGroupSizes_ はまるごと消せる。
 			//
-			//  パス解決は MetalShader.mm の FindProjectRoot / ResolveShaderPath /
-			//  BuildSpirvPath の**写し**。片方だけ変えないこと。
+			//  パス解決は aq::res へ集約済み(Resource/AssetPath.h)。
+			//  ただし .spv のパス組み立ては MetalShader.mm の BuildSpirvPath の**写し**
+			//  なので、そちらは片方だけ変えないこと。
 			// ────────────────────────────────────────────────────────────
-
-			/**
-			 * プロジェクトルート(この下に Game/Assets がある)を 1 度だけ求める。
-			 *
-			 * ワーカースレッドから並列に呼ばれるため、C++11 のスレッドセーフな
-			 * static 初期化で算出する(VulkanShader.cpp / Resource.cpp と同じ形)。
-			 */
-			std::string FindProjectRoot()
-			{
-				// 関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
-				aq::memory::ScopedPersistentAlloc persistent;
-				static const std::string cached = []() -> std::string
-					{
-						// プラットフォームがコンテンツ基点を返す場合(iOS のバンドル直下、
-						// macOS の Contents/Resources、UWP のパッケージ install フォルダ、
-						// Android の展開先)はそれを採用し、ソースツリーの上方探索は行わない。
-						// **iOS ではバンドルが read-only で CWD が "/" なので、上方探索では
-						// シェーダが 1 本も見つからない**(設計書/iOS移植設計.md §7.1)。
-						// Win32 は nullptr を返すので従来どおり下の探索へ落ちる。
-						if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
-							return contentRoot;
-						}
-
-						std::error_code ec;
-						std::filesystem::path dir = std::filesystem::current_path(ec);
-						if (ec) { return std::string(); }
-
-						while (!dir.empty()) {
-							if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
-								return dir.generic_string();
-							}
-							if (dir == dir.root_path()) { break; }
-							dir = dir.parent_path();
-						}
-
-						return std::filesystem::current_path(ec).generic_string();
-					}();
-				return cached;
-			}
-
-
-			std::string ResolveShaderPath(const char* filePath)
-			{
-				std::string path = filePath ? filePath : "";
-				std::replace(path.begin(), path.end(), '\\', '/');
-				if (std::filesystem::path(path).is_absolute()) { return path; }
-
-				const std::filesystem::path root(FindProjectRoot());
-				std::filesystem::path candidate;
-				if (path.rfind("Assets/", 0) == 0)           { candidate = root / "Game" / path; }
-				else if (path.rfind("Game/Assets/", 0) == 0) { candidate = root / path; }
-				else                                         { candidate = root / path; }
-
-				std::error_code ec;
-				if (std::filesystem::exists(candidate, ec)) { return candidate.generic_string(); }
-				return path;
-			}
-
 
 			/**
 			 * CS の中間生成物 .spv の探索パス:
@@ -1238,7 +1182,7 @@ namespace aq
 			// OpExecutionMode LocalSize から拾う(設計書 §9.3 と同じ「.metal の隣の .spv」規約)。
 			MTLSize size = MTLSizeMake(FALLBACK_THREADGROUP_X, FALLBACK_THREADGROUP_Y, FALLBACK_THREADGROUP_Z);
 
-			const std::string resolved = ResolveShaderPath(cs->GetFilePath());
+			const std::string resolved = aq::res::ResolveShaderPath(cs->GetFilePath());
 			const std::string spvPath  = BuildComputeSpirvPath(resolved.c_str(), cs->GetEntryFuncName());
 
 			char msg[512];

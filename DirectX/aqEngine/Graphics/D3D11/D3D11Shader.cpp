@@ -2,7 +2,7 @@
 #ifdef ENGINE_GRAPHICS_D3D11
 #include "D3D11Shader.h"
 #include "D3D11GraphicsDeviceImpl.h"
-#include <filesystem>
+#include "Resource/AssetPath.h"
 
 namespace aq
 {
@@ -10,67 +10,7 @@ namespace aq
 	{
 		namespace
 		{
-			/** ファイル読み込み。戻り値 false = ファイルが開けなかった */
-			void PushUniquePath(std::vector<std::string>& paths, const std::string& path)
-			{
-				if (!path.empty() && std::find(paths.begin(), paths.end(), path) == paths.end()) {
-					paths.push_back(path);
-				}
-			}
-
-			std::string FindProjectRoot()
-			{
-				static std::string cachedRoot;
-				if (!cachedRoot.empty()) {
-					return cachedRoot;
-				}
-
-				std::error_code ec;
-				std::filesystem::path dir = std::filesystem::current_path(ec);
-				if (ec) {
-					return std::string();
-				}
-
-				while (!dir.empty()) {
-					if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
-						cachedRoot = dir.generic_string();
-						return cachedRoot;
-					}
-					if (dir == dir.root_path()) {
-						break;
-					}
-					dir = dir.parent_path();
-				}
-
-				cachedRoot = std::filesystem::current_path(ec).generic_string();
-				return cachedRoot;
-			}
-
-			std::vector<std::string> BuildPathCandidates(std::string path)
-			{
-				std::replace(path.begin(), path.end(), '\\', '/');
-
-				std::vector<std::string> paths;
-				PushUniquePath(paths, path);
-
-				std::filesystem::path fsPath(path);
-				if (fsPath.is_absolute()) {
-					return paths;
-				}
-
-				const std::filesystem::path root(FindProjectRoot());
-				if (path.rfind("Assets/", 0) == 0) {
-					PushUniquePath(paths, (root / "Game" / path).generic_string());
-				}
-				else if (path.rfind("Game/Assets/", 0) == 0) {
-					PushUniquePath(paths, (root / path).generic_string());
-				}
-				else {
-					PushUniquePath(paths, (root / path).generic_string());
-				}
-				return paths;
-			}
-
+			/** シェーダの #include 解決に渡すディレクトリ */
 			std::string GetDirectoryPath(const std::string& path)
 			{
 				const size_t slash = path.find_last_of('/');
@@ -80,16 +20,25 @@ namespace aq
 				return path.substr(0, slash);
 			}
 
+			/** ファイル読み込み。戻り値 false = ファイルが開けなかった */
 			bool ReadFile(const char* filePath, char* readBuffer, uint32_t& fileSize, std::string& openedPath)
 			{
+				const std::string requested = filePath ? filePath : "";
+
+				std::vector<std::string> candidates;
+				aq::res::BuildAssetPathCandidates(requested, candidates);
+
 				FILE* fp = nullptr;
-				for (const std::string& path : BuildPathCandidates(filePath ? filePath : "")) {
+				for (const std::string& path : candidates) {
 					if (fopen_s(&fp, path.c_str(), "rb") == 0 && fp) {
 						openedPath = path;
 						break;
 					}
 				}
-				if (!fp) return false;
+				if (!fp) {
+					aq::res::LogUnresolvedAssetPath(requested);
+					return false;
+				}
 				fseek(fp, 0, SEEK_END);
 				fpos_t fPos;
 				fgetpos(fp, &fPos);

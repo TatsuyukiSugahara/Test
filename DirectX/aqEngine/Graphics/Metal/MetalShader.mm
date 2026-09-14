@@ -2,6 +2,7 @@
 // Metal のシェーダ。他構成では本体をガードして空 TU にする。
 #if defined(ENGINE_GRAPHICS_METAL)
 #include "Graphics/Metal/MetalShader.h"
+#include "Resource/AssetPath.h"
 #include <spirv_reflect/spirv_reflect.h>
 #include <cstdio>
 #include <filesystem>
@@ -29,66 +30,6 @@ namespace aq
 
 			/** StartupLog 1 行の上限(aq::StartupMark 側のバッファに合わせて短めに切る) */
 			static constexpr size_t LOG_LINE_MAX = 320;
-
-
-			// ── パス解決 (VulkanShader.cpp / D3D12Shader.cpp と同じ規則) ──
-
-			/**
-			 * プロジェクトルート(この下に Game/Assets がある)を 1 度だけ求める。
-			 *
-			 * ワーカースレッドから並列に呼ばれるため、C++11 のスレッドセーフな
-			 * static 初期化で算出する(VulkanShader.cpp / Resource.cpp と同じ形)。
-			 */
-			std::string FindProjectRoot()
-			{
-				// 関数ローカル static でプロセス終了まで残る。リーク報告の対象外にする。
-				aq::memory::ScopedPersistentAlloc persistent;
-				static const std::string cached = []() -> std::string
-					{
-						// プラットフォームがコンテンツ基点を返す場合(iOS のバンドル直下、
-						// macOS の Contents/Resources、UWP のパッケージ install フォルダ、
-						// Android の展開先)はそれを採用し、ソースツリーの上方探索は行わない。
-						// **iOS ではバンドルが read-only で CWD が "/" なので、上方探索では
-						// シェーダが 1 本も見つからない**(設計書/iOS移植設計.md §7.1)。
-						// Win32 は nullptr を返すので従来どおり下の探索へ落ちる。
-						if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
-							return contentRoot;
-						}
-
-						std::error_code ec;
-						std::filesystem::path dir = std::filesystem::current_path(ec);
-						if (ec) { return std::string(); }
-
-						while (!dir.empty()) {
-							if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
-								return dir.generic_string();
-							}
-							if (dir == dir.root_path()) { break; }
-							dir = dir.parent_path();
-						}
-
-						return std::filesystem::current_path(ec).generic_string();
-					}();
-				return cached;
-			}
-
-
-			std::string ResolveShaderPath(const char* filePath)
-			{
-				std::string path = filePath ? filePath : "";
-				std::replace(path.begin(), path.end(), '\\', '/');
-				if (std::filesystem::path(path).is_absolute()) { return path; }
-
-				const std::filesystem::path root(FindProjectRoot());
-				std::filesystem::path candidate;
-				if (path.rfind("Assets/", 0) == 0)           { candidate = root / "Game" / path; }
-				else if (path.rfind("Game/Assets/", 0) == 0) { candidate = root / path; }
-				else                                         { candidate = root / path; }
-
-				std::error_code ec;
-				if (std::filesystem::exists(candidate, ec)) { return candidate.generic_string(); }
-				return path;
-			}
 
 
 			/** ステージ名。.metal / .spv のファイル名に入る */
@@ -314,13 +255,12 @@ namespace aq
 		/**
 		 * Assets 相対のシェーダパスを実ファイルのパスへ解決する(宣言は MetalShader.h)
 		 *
-		 * 上の無名名前空間の ResolveShaderPath() へそのまま委譲する。
-		 * **同じ規則を 2 箇所に書かない**ためだけの薄い公開口で、
-		 * MetalGraphicsDeviceImpl.mm のフルスクリーン blit が使う。
+		 * パス解決は aq::res へ集約済み(Resource/AssetPath.h)。ここはそこへ委譲する
+		 * だけの薄い公開口で、MetalGraphicsDeviceImpl.mm のフルスクリーン blit が使う。
 		 */
 		std::string ResolveShaderFilePath(const char* filePath)
 		{
-			return ResolveShaderPath(filePath);
+			return aq::res::ResolveShaderPath(filePath);
 		}
 
 
@@ -384,7 +324,7 @@ namespace aq
 		{
 			// ── 1. ビルド時に生成したシェーダのパスを決める ──
 			// **macOS は .metal、iOS は .metallib** を指す(BuildMslPath のコメント参照)。
-			const std::string resolved = ResolveShaderPath(filePath_.c_str());
+			const std::string resolved = aq::res::ResolveShaderPath(filePath_.c_str());
 			const std::string mslPath  = BuildMslPath(resolved.c_str(), entryFuncName_.c_str(), type_);
 
 			@autoreleasepool {
@@ -655,7 +595,7 @@ namespace aq
 			// あり、その場合 MTLVertexDescriptor は nil のままが正しい姿だから
 			// (Vulkan 側も BuildInputLayout の失敗は黙って属性 0 本として扱っている)。
 			// ただし原因が追えるようログだけは残す。
-			const std::string resolved = ResolveShaderPath(filePath_.c_str());
+			const std::string resolved = aq::res::ResolveShaderPath(filePath_.c_str());
 			const std::string spvPath  = BuildSpirvPath(resolved.c_str(), entryFuncName_.c_str(), type_);
 
 			std::vector<uint32_t> spirv;

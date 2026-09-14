@@ -309,6 +309,7 @@
     <ClCompile Include="Physics\BulletGhostNarrowphase.cpp" />
     <ClCompile Include="Physics\CharacterController.cpp" />
     <ClCompile Include="Component\ParticleComponentSystem.cpp" />
+    <ClCompile Include="Resource\AssetPath.cpp" />
     <ClCompile Include="Resource\ParticleLoader.cpp" />
     <ClCompile Include="Resource\Resource.cpp" />
     <ClCompile Include="Resource\ImageLoader.cpp" />
@@ -617,6 +618,7 @@
     <ClInclude Include="Particle\ParticleTypes.h" />
     <ClInclude Include="Particle\ParticleRandom.h" />
     <ClInclude Include="Component\ParticleComponentSystem.h" />
+    <ClInclude Include="Resource\AssetPath.h" />
     <ClInclude Include="Resource\ParticleSystemData.h" />
     <ClInclude Include="Resource\ParticleLoader.h" />
     <ClInclude Include="Resource\Resource.h" />

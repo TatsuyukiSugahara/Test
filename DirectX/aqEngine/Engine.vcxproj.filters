@@ -485,6 +485,9 @@
     <ClCompile Include="Component\ParticleComponentSystem.cpp">
       <Filter>Component</Filter>
     </ClCompile>
+    <ClCompile Include="Resource\AssetPath.cpp">
+      <Filter>Resource</Filter>
+    </ClCompile>
     <ClCompile Include="Resource\ParticleLoader.cpp">
       <Filter>Resource</Filter>
     </ClCompile>
@@ -1338,6 +1341,9 @@
     </ClInclude>
     <ClInclude Include="Component\ParticleComponentSystem.h">
       <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource\AssetPath.h">
+      <Filter>Resource</Filter>
     </ClInclude>
     <ClInclude Include="Resource\ParticleSystemData.h">
       <Filter>Resource</Filter>

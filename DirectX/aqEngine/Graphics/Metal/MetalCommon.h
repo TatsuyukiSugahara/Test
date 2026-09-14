@@ -11,6 +11,7 @@
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#include <TargetConditionals.h>   // TARGET_OS_SIMULATOR (METALLIB_SDK_DIR_NAME の分岐)
 
 #include "Platform/Common/PlatformDefs.h"   // AQ_PLATFORM_IOS (MSL_DIR_NAME の分岐)
 #include "Graphics/GraphicsTypes.h"
@@ -54,6 +55,34 @@ namespace aq
 			 */
 #if defined(AQ_PLATFORM_IOS)
 			static constexpr char MSL_DIR_NAME[] = "msl-ios";
+
+
+			/**
+			 * ビルド時に焼いた .metallib を置くサブディレクトリ名(iOS 専用)。
+			 *
+			 * **iOS 実機では newLibraryWithSource: が使えない。**呼んだ瞬間に
+			 * SIGBUS(signal 10)でアプリが即死する(ソースの内容とは無関係。
+			 * 3 行の最小シェーダでも落ちる)。シミュレータでは同じコードが動くため
+			 * P1〜P5a では踏めなかった。したがって iOS は .metallib を事前ビルドし、
+			 * newLibraryWithURL: で読む(設計書/iOS移植設計.md §4.6)。
+			 *
+			 * **.metallib は SDK ごとに別物**(実機とシミュレータでは GPU も ABI も違う)
+			 * なので、msl-ios/ の下をさらに SDK 名で分ける。**どちらを読むかは
+			 * ビルド時ではなく実行中のバイナリで決まる**ので、TARGET_OS_SIMULATOR
+			 * (シミュレータ向けにコンパイルされたときだけ 1)で判定する。
+			 *
+			 * 生成側は Tools/ShaderCompile/compile_msl.cmake の AQ_MSL_METALLIB_DIR
+			 * (SDK は AQ_MSL_IOS_SDK。ルート CMakeLists.txt が CMAKE_OSX_SYSROOT から決める)。
+			 * **一対一で対応している。片方だけ変えないこと。**
+			 *
+			 * 読み出し側は MetalShader.mm の BuildMslPath() と
+			 * MetalGraphicsDeviceImpl.mm の EnsureFullscreenBlitPipeline() の 2 箇所。
+			 */
+#if TARGET_OS_SIMULATOR
+			static constexpr char METALLIB_SDK_DIR_NAME[] = "iphonesimulator";
+#else
+			static constexpr char METALLIB_SDK_DIR_NAME[] = "iphoneos";
+#endif
 #else
 			static constexpr char MSL_DIR_NAME[] = "msl";
 #endif

@@ -10,16 +10,19 @@
 していたものの過半が既にリポジトリへ入った**。差分の棚卸しは §0.6。
 本書はその再評価を反映した第 2 版である。
 
-**P5a(ライフサイクル)完了 — 2026-09-14。シミュレータで完結する範囲はここまで。**
-ホームに戻ると描画とサウンドが止まり、復帰すると**続きから**再開する。
-**残るは P5b(実機)と P6(性能とパッケージング)で、どちらも実機が要る。**
+**P5b(実機)完了 — 2026-09-14。実機 iPhone 17 で通しプレイできる。**
+署名・インストール・起動・タイトル〜ステージ・タッチ操作・サウンド・
+4 本指ダブルタップ・中断復帰まで実機で確認済み。**残るは P6(性能とパッケージング)。**
 
 | | 状態 |
 |---|---|
 | 設計 | 第 2 版。§0.5 の 6 論点すべて決着(2026-09-14) |
-| 実装 | **P0 〜 P5a 完了。次は P5b(実機)。実機が用意できるまで進められる範囲はここまで** |
+| 実装 | **P0 〜 P5b 完了。次は P6(性能とパッケージング)** |
+| 実機 | **iPhone 17(iPhone18,3)/ iOS 26.6.2 / Apple A19 GPU**。無料プロビジョニング(Personal Team、7 日間) |
+| 実機の起動 | Debug で **タイトル表示まで 174ms**(シェーダを事前ビルドしたので実行時コンパイルが無い) |
+| 実機の機能 | **BC 圧縮 yes / サンプラのボーダーカラー yes / read-write テクスチャ Tier 2 → compute on**。シミュレータの劣化経路 3 つは実機では通らない |
 | 環境 | Xcode 26.6 / iOS SDK 26.5 / iOS Simulator SDK 26.5。**iOS 実機は接続なし**(シミュレータ 11 種) |
-| 検証方針 | シミュレータ先行。実機は P5 |
+| 検証方針 | シミュレータ先行。実機は P5b(完了) |
 | シミュレータ | `ios-simulator-xcode` が configure / build 成功。`Game.app/Game` = Mach-O arm64 / `platform IOSSIMULATOR` / `minos 16.4` / `sdk 26.5` |
 | 実機 | `ios-xcode` が configure / build 成功(`CODE_SIGNING_ALLOWED=NO`)。`platform IOS` / `minos 16.4` |
 | Ninja | `ios-ninja` も configure 成功(コンパイルエラーの潰し込み用) |
@@ -734,13 +737,54 @@ spirv-cross --msl --msl-version 20000 --msl-decoration-binding --output <out.met
 > 通している([Android移植設計.md §4.3](Android移植設計.md))。Metal で回転対応まで
 > やるならその形に倣うが、本移植では扱わない。
 
-### 4.6 シェーダの起動時コンパイル(P6 の候補)
+### 4.6 シェーダの事前ビルド ★実機では必須(P5b で判明)
 
 [MetalShader.mm](../aqEngine/Graphics/Metal/MetalShader.mm) は **59 本の MSL を毎起動
-`newLibraryWithSource:` でコンパイル**する。macOS では Metal Toolchain が無い環境だったため
-この方式を採ったが、**iOS 向けには Xcode に Metal Toolchain が同梱されている**ので
-`.metallib` の事前ビルドが可能になる。起動時間に効くので P6 の候補に置く。
-**P1〜P5 では現行方式を維持**する(変更点を増やさない)。
+`newLibraryWithSource:` でコンパイル**する。macOS ではこれで動くので、初版は
+「`.metallib` の事前ビルドは起動時間の最適化として P6 の候補」と書いていた。
+
+**これは誤りだった。実機では `newLibraryWithSource:` が使えない。**
+
+2026-09-14 に実機(iPhone 17 / A19 / iOS 26.6.2)で確認した事実:
+
+- アプリは `newLibraryWithSource:` を呼んだ瞬間に **SIGBUS(signal 10)で即死**する。
+- **ソースの内容とは無関係。** 3 行の最小シェーダ
+  (`#include <metal_stdlib>` + 空の kernel)でも同じように落ちる。
+  `MTLCompileOptions` で `languageVersion` を明示しても到達前に落ちる。
+- シミュレータでは**同じコードが問題なく動く**(P1〜P5a はすべてこれで通してきた)。
+  つまり**シミュレータでは踏めない**類の差分である。
+
+したがって **`.metallib` の事前ビルドは「起動時間の最適化」ではなく
+「実機で起動するための必須要件」**であり、**P6 から P5b へ移す**。
+
+**Metal Toolchain は既定では入っていない。**
+
+```
+xcrun -sdk iphoneos metal --version
+  → error: cannot execute tool 'metal' due to missing Metal Toolchain;
+    use: xcodebuild -downloadComponent MetalToolchain
+```
+
+`xcodebuild -downloadComponent MetalToolchain`(688MB)で導入すると
+`metal` / `metallib` が iphoneos・iphonesimulator の両 SDK で使えるようになる
+(2026-09-14 に導入済み。Metal Toolchain 17F109)。
+
+**方式(§9 P5b で実装):**
+
+- 生成済みの `msl-ios/<stem>.<entry>.<stage>.metal` を
+  `xcrun -sdk <sdk> metal -c` → `metallib` で **1 本ずつ `.metallib` に**する。
+  - **1 本にまとめられない。** spirv-cross は全シェーダのエントリ関数を
+    `main0` という同じ名前で出すので(`MSL_ENTRY_NAME`)、1 つの `.metallib` に
+    同居させると名前が衝突する。ファイル分割は現行の命名がそのまま使える。
+- SDK ごとに別物になるので、出力は `msl-ios/<sdk>/` に分ける
+  (`iphoneos` / `iphonesimulator`)。
+- 実行時は `newLibraryWithURL:` で読み、`newFunctionWithName:@"main0"` は現状のまま。
+- **`CopyToBackBuffer` のフルスクリーン blit(`.mm` に埋め込んだ MSL 文字列)も
+  同じ理由で落ちる。**これも事前ビルドの対象にする。埋め込み文字列は
+  独立した `.metal` ファイルへ出し、**Mac もそのファイルを読む**ようにして
+  二重管理を避ける(§4.1)。
+- **Mac は実行時コンパイルのままにする。**macOS では動いており、変える理由が無い
+  (起動時間の最適化として事前ビルドへ寄せるのは P6 で別途判断する)。
 
 ### 4.7 デバイス機能の実測ゲート ★P2 で追加
 
@@ -892,6 +936,8 @@ Android 移植が [Platform/Common/ImGuiPointerInput](../aqEngine/Platform/Commo
 |---|---|
 | include | `<CoreAudio/CoreAudio.h>` は **iOS に存在しない**(アンブレラヘッダが無い)。`<AudioToolbox/AudioToolbox.h>` + `<AVFAudio/AVAudioSession.h>` へ |
 | 出力ユニット | `kAudioUnitSubType_DefaultOutput` → **`kAudioUnitSubType_RemoteIO`**。iOS SDK にはどちらの定数も宣言があるが、`DefaultOutput` は iOS では動かない。コード中の[コメント(:163-164)](../aqEngine/Sound/CoreAudio/CoreAudioSoundBackend.mm)に既にこの旨が書かれている |
+| **バッファ形式(P5b で判明)** | **インターリーブは使えない。** macOS は `DefaultOutput` にインターリーブ float32 を渡しているが、**RemoteIO のネイティブは非インターリーブ**で、インターリーブを渡すとユニット内部で `AudioConverter` が挟まり、**実機ではその生成(`AudioConverterNewWithOptions`)で SIGBUS になる**(サンプルレート・チャンネル数を一致させても再現)。`kAudioFormatFlagIsNonInterleaved` を立て、`mBytesPerFrame` はチャンネル数を掛けない。ミキサはインターリーブしか書けないので、**レンダーコールバックでスクラッチへ描いてから L/R へ配る**(1 コールバック 256 フレーム前後で、コストは無視できる) |
+| **サンプルレート** | `setPreferredSampleRate:48000` をセッションへ要求する。実機の実測値は 48000 / 2ch / `IOBufferDuration` 0.0053 秒 |
 | **AVAudioSession(新規)** | カテゴリ(`AVAudioSessionCategoryAmbient` か `Playback`)の設定と `setActive:`。**iOS だけの必須手順**で、やらないと音が出ない/他アプリと競合する |
 | **中断処理(新規)** | 電話着信・他アプリの再生で `AVAudioSessionInterruptionNotification` が来る。Began でユニット停止、Ended で再開。**やらないと復帰後に無音になる** |
 | 前面/背面(**IF は導入済**) | `ISoundBackend::OnSuspend/OnResume` が Android 移植で入り、`Engine::SyncSoundActivity()` → `SoundEngine::OnSuspend/OnResume` → バックエンド、の経路が既に通っている(§0.6)。**`CoreAudioSoundBackend` にこの 2 つを実装するだけ**。Mac は既定の no-op のままでよい |
@@ -1030,7 +1076,17 @@ iOS:    Game.app/Content/Game/Assets/...
 11. **`LoadFromDDSFile` / `LoadFromTGAFile` の失敗が無言**。WIC / stb_image 経路は
     失敗ログを出すのに DDS / TGA だけ出さない。P2 の「キャラクタが灰色」の切り分けに
     時間を要した直接の原因。`<Engine>` の小改善として切る。
-12. **アセットの拡張子の大小が揃っていない**(`utc_all2.DDS` と `Terrain/grass.DDS` は大文字、
+13. **実機の物理コントローラが未確認**。コントローラが手元に無いため P5b で確認できなかった。
+    `GameControllerPadBackend` は Mac と共有で無改修、`CompositePadBackend` で仮想パッドと
+    合成済みなので、繋げば動く見込み。**入手し次第確認する**。
+14. **★ グローバル `operator new` 差し替えとシステムライブラリの干渉**(P5b)。
+    現状は iOS でのみトラッキングのヘッダを外して回避しているが、
+    **「システムフレームワークの確保もエンジンのアロケータを通る」構造自体は残っている**。
+    Apple 以外(Android / Windows)でも同種の事故は起こりうる。
+    恒久対処は「エンジンの型だけを差し替え対象にする」「トラッキングを
+    アドレス→情報の別表にしてポインタをずらさない」のどちらか。
+    **移植とは別の `<Engine>` 作業として切る。**
+15. **アセットの拡張子の大小が揃っていない**(`utc_all2.DDS` と `Terrain/grass.DDS` は大文字、
     tkm が要求するのは小文字)。P2 で解決経路を大小両対応にしたので実害は無くなったが、
     **アセット側を小文字へ揃えるのが本来**。移植とは別の片付けとして残す。
 
@@ -1437,17 +1493,75 @@ UIKit エントリ + `CAMetalLayer` + フレーム駆動の委譲。
 - 署名・プロビジョニングの設定(§2.3)。`aqBundleApp` → 署名 の順序(§7.3)
 - 実機での通しプレイ
 
-**評価チェックリスト**
-- [ ] 実機にインストールでき、タイトルからステージクリアまで通しで動く
-- [ ] 実機の `supportsBCTextureCompression` を記録し §4.3 / §8-1 を更新した
-- [ ] **§4.7 の 3 つの劣化経路が実機で本来の経路を通る**
-      (サンプラのボーダーカラー / read-write テクスチャ Tier2 = compute とポストプロセス / BC 圧縮)。
-      **とくに compute が有効になるとポストプロセス一式が初めて iOS で走る**ので、
-      そこで新たな問題が出る可能性がある
-- [ ] **4 本指ダブルタップでデバッグ UI が切り替わる**(シミュレータでは合成できなかった。P3)
-- [ ] **サウンドの中断(着信・他アプリの再生)→ 復帰で音が壊れない・二重再生しない**(P4)
-- [ ] 実機でパッド(物理コントローラ)が使える
-- [ ] 指を複数本使った同時操作(スティック + 別の指で UI)が破綻しない(P3)
+**評価チェックリスト** — 2026-09-14 実施(見た目・操作感はユーザー確認)
+
+- [x] 実機にインストールでき、タイトルからステージまで動く
+- [x] 実機の機能クエリを記録した(下表)。**§4.3 / §4.7 の想定どおり実機はすべて対応あり**
+- [x] **§4.7 の 3 つの劣化経路が実機で本来の経路を通る**。
+      **compute が有効になりポストプロセス一式が iOS で初めて走ったが、
+      絵の明るさ・色味に問題は出なかった**(いちばん結果が読めなかった項目)
+- [x] **4 本指ダブルタップでデバッグ UI が切り替わる**(シミュレータでは合成できなかった。P3)
+- [x] **サウンドの中断(他アプリの再生)→ 復帰で音が壊れない・二重再生しない**(P4)
+- [x] ホームに戻る → 復帰で描画と音が止まり、続きから再開する(P5a の実機確認)
+- [x] 指を複数本使った同時操作(スティック + 別の指で UI)が破綻しない(P3)
+- [x] ImGui の文字サイズ(×1.25)が実機で読める
+- [ ] **実機でパッド(物理コントローラ)が使える — 未確認。**コントローラが手元に無い。
+      `GameControllerPadBackend` は Mac と共有で無改修、`CompositePadBackend` で
+      仮想パッドと合成済み。**残タスク**(§8-13)
+
+| 実機の機能クエリ | 値 |
+|---|---|
+| GPU | `Apple A19 GPU` / family **Apple9** / unified memory: yes |
+| BC 圧縮 | **yes**(シミュレータは no。展開経路は実機では走らない) |
+| サンプラのボーダーカラー | **yes**(シミュレータは no) |
+| read-write テクスチャ | **Tier 2**(シミュレータは Tier 0)→ **compute on** |
+
+**P5b で分かったこと — 実機でしか出ない不具合が 3 つ、しかもどれも致命的だった**
+
+シミュレータで P0〜P5a を全部通してあったが、**実機では最初の 1 フレームも出なかった**。
+順に潰した結果が以下。**「シミュレータで動いた」は実機の保証にまったくならない**という
+教訓がこのフェーズの最大の収穫。
+
+1. **★ 実行時 MSL コンパイルが使えない**(§4.6)。`newLibraryWithSource:` が SIGBUS で即死。
+   `.metallib` の事前ビルドが必須要件になった。
+2. **★ RemoteIO はインターリーブを受け付けない**(§6)。
+   `AudioUnitInitialize` の中で `AudioConverterNewWithOptions` が落ちる。
+   サンプルレート・チャンネル数を一致させても再現する。**非インターリーブ**へ変更した。
+3. **★ エンジンのメモリトラッカーが Apple のライブラリを壊していた**(下記)。
+
+**★ メモリトラッカーの前置ヘッダが原因の SIGBUS(エンジン全体に関わる)**
+
+`Memory/GlobalNew.cpp` がグローバル `operator new` を差し替えているが、
+**Apple の dyld はフラット名前空間なので、システムフレームワークの確保もこれを通る**。
+Debug の `HeapAllocator` はユーザー領域の手前に `TrackHeader` を置き、
+**実確保の先頭からずれたポインタを返す**。相手がそれを `free()` で解放した瞬間に壊れる。
+
+- 逆方向(他所のポインタがこちらへ来る)は `TRACK_MAGIC` で既に弾いているが、
+  **この方向は弾きようがない**。
+- 実機の `AudioUnitInitialize` → `caulk` の中で `SIGBUS (BUS_ADRALN)` として出た。
+- 切り分け: **Release では起きない**(ヘッダ無し)。
+  **Debug でも `GlobalNew.cpp` を外すと起きない**。
+  C++17 の over-aligned 版(`operator new(size, align_val_t)`)を足しても直らない。
+
+**対処: iOS では Debug でもヘッダを付けない**(`HeapAllocator.h`)。
+確保・解放の経路は従来どおりエンジンのアロケータを通るが、返すポインタが
+実確保の先頭と一致するので `free()` されても壊れない。
+
+**代償はリーク検出が iOS で効かなくなること。**ただし iOS は
+`applicationWillTerminate:` が走る保証が無く(§3.2 / P1 の知見)、
+**元からリーク報告を品質ゲートに使えない**ので実害は小さい。
+**恒久対処(エンジン型だけを差し替え対象にする等)は移植とは別の `<Engine>` 作業として切る**(§8-14)。
+
+**署名と実機投入の手順**
+
+- 無料の Apple ID(Personal Team)で足りる。**プロビジョニングは 7 日間**で切れる。
+- `cmake --preset ios-xcode -D AQ_IOS_DEVELOPMENT_TEAM=<TeamID>` で自動署名を有効化。
+- **`xcodebuild` には `-allowProvisioningUpdates` だけでなく
+  `-allowProvisioningDeviceRegistration` が要る。**前者だけだと
+  「Your team has no devices」で止まる(デバイスがチームに未登録のため)。
+- デバイス側で 2 つ必要: **Developer Mode を有効化**(設定 → プライバシーとセキュリティ)と、
+  **開発者証明書を信頼**(設定 → 一般 → VPN とデバイス管理)。
+- **Metal Toolchain の導入が前提**(`xcodebuild -downloadComponent MetalToolchain`。688MB)。
 - [ ] 終了時に `MemoryTracker: No leaks detected`(`ShutdownMemory` の位置が正しい)
 
 ### P6: 性能とパッケージング

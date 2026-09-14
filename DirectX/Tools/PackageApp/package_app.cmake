@@ -63,6 +63,9 @@
 #    AQ_PKG_GRAPHICS_API  Vulkan / Metal(必須)
 #    AQ_PKG_PLATFORM      macOS / iOS(任意。既定 macOS)。バンドル構造と
 #                         シェーダのサブディレクトリ、Vulkan 同梱の有無を切り替える
+#    AQ_PKG_METAL_SDK     iOS + Metal のとき、同梱を確認する .metallib の SDK
+#                         (iphoneos / iphonesimulator。任意。未指定なら
+#                          どちらか一方でもあれば通す)
 #    AQ_PKG_VULKAN_SDK    Vulkan SDK のルート(Vulkan 構成のみ必須)
 #    AQ_PKG_EXECUTABLE    実行ファイル。指定すると SDK の rpath を剥がして
 #                         バンドル内の Frameworks だけを見るようにする(任意。
@@ -140,10 +143,21 @@ endif()
 #
 #  iOS 版 MSL は spirv-cross の --msl-ios で作った別物で、macOS 版とは
 #  ディレクトリごと分かれている(Tools/ShaderCompile/compile_msl.cmake)。
+#
+#  **iOS が実行時に読むのは .metal ではなく .metallib** (実機では
+#  newLibraryWithSource: が SIGBUS で即死する。設計書 iOS移植設計.md §4.6)。
+#  .metallib は SDK ごとに別物なので msl-ios/<sdk>/ に分かれている。
+#  確認するのはこちら。msl-ios/ が在るだけでは実機は起動できない。
+#  どの SDK 向けのバンドルかはここへ渡ってきていないので、AQ_PKG_METAL_SDK が
+#  指定されていればそれを、無ければ**どちらか一方でも在れば**通す。
 # ----------------------------------------------------------------------------
 if(AQ_PKG_GRAPHICS_API STREQUAL "Metal")
 	if(AQ_PKG_PLATFORM STREQUAL "iOS")
-		set(AQ_PKG_SHADER_SUBDIR "msl-ios")
+		if(AQ_PKG_METAL_SDK)
+			set(AQ_PKG_SHADER_SUBDIR "msl-ios/${AQ_PKG_METAL_SDK}")
+		else()
+			set(AQ_PKG_SHADER_SUBDIR "msl-ios/iphoneos" "msl-ios/iphonesimulator")
+		endif()
 	else()
 		set(AQ_PKG_SHADER_SUBDIR "msl")
 	endif()
@@ -153,9 +167,16 @@ else()
 	set(AQ_PKG_SHADER_TARGET "aqCompileSpv")
 endif()
 
-if(NOT IS_DIRECTORY "${AQ_PKG_ASSETS_DIR}/Shader/${AQ_PKG_SHADER_SUBDIR}")
+set(AQ_PKG_SHADER_FOUND OFF)
+foreach(aqPkgSubdir IN LISTS AQ_PKG_SHADER_SUBDIR)
+	if(IS_DIRECTORY "${AQ_PKG_ASSETS_DIR}/Shader/${aqPkgSubdir}")
+		set(AQ_PKG_SHADER_FOUND ON)
+	endif()
+endforeach()
+if(NOT AQ_PKG_SHADER_FOUND)
+	string(REPLACE ";" " / " AQ_PKG_SHADER_SUBDIR_TEXT "${AQ_PKG_SHADER_SUBDIR}")
 	message(FATAL_ERROR
-		"シェーダ生成物がありません: ${AQ_PKG_ASSETS_DIR}/Shader/${AQ_PKG_SHADER_SUBDIR}\n"
+		"シェーダ生成物がありません: ${AQ_PKG_ASSETS_DIR}/Shader/{${AQ_PKG_SHADER_SUBDIR_TEXT}}\n"
 		"先に ${AQ_PKG_SHADER_TARGET} をビルドしてください。")
 endif()
 
@@ -165,6 +186,19 @@ endif()
 #
 #  file(COPY) は「同じタイムスタンプのファイルはコピーしない」ので、2 回目以降は
 #  差分だけになる(Assets は 92MB あるため毎回の全コピーは避けたい)。
+#
+#  **iOS でも Assets を丸ごと入れる**(msl-ios/<sdk>/ の片方だけを選り分けない)。
+#  実行時に読むのは実行中の SDK 側だけなので、原理的にはもう一方は要らないが、
+#    - .metallib は 61 本で **1 SDK あたり約 0.5MB**。Assets 92MB に対して誤差で、
+#      選り分ける手間と「片方しか無いバンドルを別の SDK 向けに使ってしまう」事故の
+#      リスクに見合わない。
+#    - そもそも aqCompileMsl は**その構成の SDK 用しか生成しない**(ルート
+#      CMakeLists.txt が CMAKE_OSX_SYSROOT から AQ_MSL_IOS_SDK を決める)ので、
+#      通常は片方しか存在しない。両方入るのは同じソースツリーで実機用と
+#      シミュレータ用を交互にビルドしたときだけ。
+#    - 除外を書くと「.metallib 以外(.metal / .spv)は SDK 非依存」という
+#      階層の約束をここにも複製することになり、変更点が 1 つ増える。
+#  よって除外は入れず、丸ごとコピーのままにする。
 # ----------------------------------------------------------------------------
 message(STATUS "aqBundleApp: Assets -> ${AQ_PKG_RESOURCES_DIR}/Game/Assets")
 file(MAKE_DIRECTORY "${AQ_PKG_RESOURCES_DIR}/Game")

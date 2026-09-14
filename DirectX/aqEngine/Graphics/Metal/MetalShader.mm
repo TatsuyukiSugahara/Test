@@ -105,13 +105,19 @@ namespace aq
 
 
 			/**
-			 * ビルド時に生成した MSL の探索パス:
-			 *   <shaderDir>/<metal::MSL_DIR_NAME>/<stem>.<entry>.<stage>.metal
+			 * ビルド時に生成したシェーダの探索パス:
+			 *   macOS: <shaderDir>/msl/<stem>.<entry>.<stage>.metal
+			 *   iOS  : <shaderDir>/msl-ios/<sdk>/<stem>.<entry>.<stage>.metallib
 			 *
 			 * ディレクトリ名は macOS が "msl"、**iOS は "msl-ios"**(MetalCommon.h の
 			 * MSL_DIR_NAME で分岐。macOS 版 MSL と iOS 版 MSL は別物なので混ぜられない。
 			 * 設計書/iOS移植設計.md §4.2)。MetalRenderContextImpl.mm の
 			 * BuildComputeSpirvPath() も同じ定数を見る。**片方だけ変えないこと。**
+			 *
+			 * **iOS だけ .metallib を指す。**実機では newLibraryWithSource: が SIGBUS で
+			 * 即死するので、ビルド時に焼いたものを読むしかない(設計書/iOS移植設計.md §4.6)。
+			 * .metallib は SDK ごとに別物なので、さらに metal::METALLIB_SDK_DIR_NAME
+			 * (実行中のバイナリを TARGET_OS_SIMULATOR で判定)の 1 段が入る。
 			 *
 			 * Tools/ShaderCompile/compile_msl.cmake の出力名と**一対一で対応**させること
 			 * (どちらか一方だけを変えない。compile_spv.cmake と VulkanShader.cpp の
@@ -130,10 +136,19 @@ namespace aq
 				const std::filesystem::path src(resolvedPath ? resolvedPath : "");
 				if (src.empty()) { return std::string(); }
 
+#if defined(AQ_PLATFORM_IOS)
+				// iOS: ビルド時に焼いた .metallib(msl-ios/<sdk>/ の下)
+				const std::string name = src.stem().string() + "."
+				                       + ((entry && entry[0]) ? entry : "main") + "."
+				                       + StageSuffix(type) + ".metallib";
+				return (src.parent_path() / metal::MSL_DIR_NAME / metal::METALLIB_SDK_DIR_NAME / name).generic_string();
+#else
+				// macOS: 実行時コンパイルする MSL のソース(msl/ の直下)
 				const std::string name = src.stem().string() + "."
 				                       + ((entry && entry[0]) ? entry : "main") + "."
 				                       + StageSuffix(type) + ".metal";
 				return (src.parent_path() / metal::MSL_DIR_NAME / name).generic_string();
+#endif
 			}
 
 
@@ -142,8 +157,8 @@ namespace aq
 			 *   <shaderDir>/<metal::MSL_DIR_NAME>/<stem>.<entry>.<stage>.spv
 			 *
 			 * compile_msl.cmake は dxc の中間生成物である .spv を **.metal と同じディレクトリに
-			 * 同名で残している**ので、BuildMslPath() と拡張子だけが違う(iOS では
-			 * どちらも msl-ios/ の下になる)。
+			 * 同名で残している**(iOS でも msl-ios/ の直下。.spv は SDK 非依存なので、
+			 * SDK 名のサブディレクトリへ下りる .metallib とは階層が 1 段違う)。
 			 * Vulkan 用の spv/ とは register -> binding のシフトが違う別物なので混ぜないこと
 			 * (ただし頂点入力の location はシフトの影響を受けないため、どちらで読んでも同じ)。
 			 */
@@ -297,6 +312,24 @@ namespace aq
 
 
 		/**
+		 * Assets 相対のシェーダパスを実ファイルのパスへ解決する(宣言は MetalShader.h)
+		 *
+		 * 上の無名名前空間の ResolveShaderPath() へそのまま委譲する。
+		 * **同じ規則を 2 箇所に書かない**ためだけの薄い公開口で、
+		 * MetalGraphicsDeviceImpl.mm のフルスクリーン blit が使う。
+		 */
+		std::string ResolveShaderFilePath(const char* filePath)
+		{
+			return ResolveShaderPath(filePath);
+		}
+
+
+		/************************************/
+
+
+
+
+		/**
 		 * Metal シェーダ
 		 */
 		MetalShader::MetalShader(id<MTLDevice> device)
@@ -349,29 +382,75 @@ namespace aq
 
 		bool MetalShader::LoadMsl()
 		{
-			// ── 1. ビルド時に生成した .metal を読む ──
+			// ── 1. ビルド時に生成したシェーダのパスを決める ──
+			// **macOS は .metal、iOS は .metallib** を指す(BuildMslPath のコメント参照)。
 			const std::string resolved = ResolveShaderPath(filePath_.c_str());
 			const std::string mslPath  = BuildMslPath(resolved.c_str(), entryFuncName_.c_str(), type_);
 
-			std::string source;
-			if (mslPath.empty() || !ReadWholeFile(mslPath.c_str(), source) || source.empty()) {
-				// Metal には実行時 HLSL コンパイル経路が無いので .metal 不在は致命的。
-				// 原因が分かるようにパスと生成方法をログへ出す(VulkanShader の .spv 欠落時と同じ作法)。
-				char msg[512];
-				std::snprintf(msg, sizeof(msg),
-					"[MetalShader] .metal がありません: %s"
-					" (ビルド時生成物です。ビルドターゲット aqCompileMsl を実行するか、"
-					"cmake -P DirectX/Tools/ShaderCompile/compile_msl.cmake で生成してください)",
-					mslPath.empty() ? filePath_.c_str() : mslPath.c_str());
-				aq::StartupLog(msg);
-				EngineAssertMsg(false, "Metal シェーダの .metal が見つかりません");
-				return false;
-			}
-
-			// ── 2. MSL を実行時コンパイルする(設計書 §9.2)──
-			// xcrun metal(Metal Toolchain)が入っていないため .metallib の事前ビルドは採れない。
-			// 将来 Toolchain を入れたらこの関数の中だけを差し替えられるようにしてある。
 			@autoreleasepool {
+#if defined(AQ_PLATFORM_IOS)
+				// ── 2. (iOS) ビルド時に焼いた .metallib を読む(設計書/iOS移植設計.md §4.6)──
+				// **実機では newLibraryWithSource: が使えない。**呼んだ瞬間に SIGBUS(signal 10)で
+				// 即死する。ソースの内容とは無関係で、3 行の最小シェーダでも落ちることを
+				// 実機(iPhone 17 / iOS 26.6.2)で確認済み。シミュレータでは動いてしまうため
+				// P1〜P5a では踏めなかった。よって iOS は事前ビルド一本にする。
+				// 読むファイルは SDK ごとに別物なので、パスに SDK 名の 1 段が入っている。
+				NSString* libPath = mslPath.empty()
+					? nil
+					: [[NSString alloc] initWithBytes:mslPath.data()
+					                           length:mslPath.size()
+					                         encoding:NSUTF8StringEncoding];
+				if (libPath == nil) {
+					char msg[512];
+					std::snprintf(msg, sizeof(msg), "[MetalShader] .metallib のパスを作れません: %s", filePath_.c_str());
+					aq::StartupLog(msg);
+					EngineAssertMsg(false, "Metal シェーダの .metallib のパスを作れません");
+					return false;
+				}
+
+				NSError* error = nil;
+				// new... なので既に +1。追加の retain は要らない(付けると解放されない)。
+				library_ = [device_ newLibraryWithURL:[NSURL fileURLWithPath:libPath] error:&error];
+				[libPath release];
+
+				if (library_ == nil) {
+					// .metallib 不在も読み込み失敗もここへ来る。**ここを出さないとデバッグが
+					// 成立しない**ので、パスと生成方法と Metal の本文を必ず残す。
+					char msg[512];
+					std::snprintf(msg, sizeof(msg),
+						"[MetalShader] .metallib を読めません: %s"
+						" (ビルド時生成物です。ビルドターゲット aqCompileMsl を実行するか、"
+						"cmake -D AQ_MSL_IOS=ON -D AQ_MSL_IOS_SDK=<iphoneos|iphonesimulator>"
+						" -P DirectX/Tools/ShaderCompile/compile_msl.cmake で生成してください)",
+						mslPath.c_str());
+					aq::StartupLog(msg);
+					if (error != nil) {
+						const char* detail = [[error localizedDescription] UTF8String];
+						LogMultiLine("[MetalShader]   ", detail ? detail : "(詳細なし)");
+					}
+					EngineAssertMsg(false, "Metal シェーダの .metallib を読めません");
+					return false;
+				}
+#else
+				// ── 2. (macOS) MSL を実行時コンパイルする(設計書 §9.2)──
+				// **macOS ではこの経路が動いており、変える理由が無いので残す。**
+				// 事前ビルドへ寄せるかどうかは起動時間の最適化として P6 で別途判断する
+				// (設計書/iOS移植設計.md §4.6)。
+				std::string source;
+				if (mslPath.empty() || !ReadWholeFile(mslPath.c_str(), source) || source.empty()) {
+					// Metal には実行時 HLSL コンパイル経路が無いので .metal 不在は致命的。
+					// 原因が分かるようにパスと生成方法をログへ出す(VulkanShader の .spv 欠落時と同じ作法)。
+					char msg[512];
+					std::snprintf(msg, sizeof(msg),
+						"[MetalShader] .metal がありません: %s"
+						" (ビルド時生成物です。ビルドターゲット aqCompileMsl を実行するか、"
+						"cmake -P DirectX/Tools/ShaderCompile/compile_msl.cmake で生成してください)",
+						mslPath.empty() ? filePath_.c_str() : mslPath.c_str());
+					aq::StartupLog(msg);
+					EngineAssertMsg(false, "Metal シェーダの .metal が見つかりません");
+					return false;
+				}
+
 				NSString* sourceString = [[NSString alloc] initWithBytes:source.data()
 				                                                  length:source.size()
 				                                                encoding:NSUTF8StringEncoding];
@@ -405,6 +484,7 @@ namespace aq
 					EngineAssertMsg(false, "Metal シェーダのコンパイルに失敗しました");
 					return false;
 				}
+#endif
 
 				// 成功しても警告が載ってくることがあるので拾っておく。
 				if (error != nil) {

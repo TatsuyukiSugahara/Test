@@ -66,7 +66,35 @@ if(IOS)
 		# Xcode は TARGETED_DEVICE_FAMILY(既定 "1" = iPhone のみ)から UIDeviceFamily を
 		# 上書きするため、テンプレート側に 1,2 を書いてもここを指定しないと iPhone 専用になる。
 		XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+
+		# ------------------------------------------------------------------
+		#  コード署名(実機のみ。設計書/iOS移植設計.md §2.3)
+		#
+		#  シミュレータは署名が要らないので、プリセット側で
+		#  CODE_SIGNING_ALLOWED=NO を渡している。ここは実機向けの設定。
+		#
+		#  AQ_IOS_DEVELOPMENT_TEAM に Team ID(10 文字)を渡すと自動署名になる。
+		#  未指定なら署名関連を何も設定しない(= 従来どおり、シミュレータ用に
+		#  configure しても余計な要求が出ない)。
+		#
+		#      cmake --preset ios-xcode -D AQ_IOS_DEVELOPMENT_TEAM=XXXXXXXXXX
+		#
+		#  Team ID は Xcode に Apple ID を追加すると発行される。無料アカウントでも
+		#  「Personal Team」として使えるが、プロビジョニングの有効期間は 7 日間。
+		# ------------------------------------------------------------------
+		XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.aqengine.aquadash"
 	)
+
+	if(AQ_IOS_DEVELOPMENT_TEAM)
+		set_target_properties(Game PROPERTIES
+			XCODE_ATTRIBUTE_CODE_SIGN_STYLE      "Automatic"
+			XCODE_ATTRIBUTE_DEVELOPMENT_TEAM     "${AQ_IOS_DEVELOPMENT_TEAM}"
+		)
+		message(STATUS "AquaDash: iOS の自動署名を有効化 (team = ${AQ_IOS_DEVELOPMENT_TEAM})")
+	else()
+		message(STATUS "AquaDash: AQ_IOS_DEVELOPMENT_TEAM が未指定のため署名を設定しません"
+		               " (シミュレータのみ。実機は -D AQ_IOS_DEVELOPMENT_TEAM=<TeamID> が要ります)")
+	endif()
 elseif(APPLE)
 	set_target_properties(Game PROPERTIES
 		MACOSX_BUNDLE_BUNDLE_NAME          "AquaDash"
@@ -210,6 +238,33 @@ if(APPLE)
 		COMMENT "Game.app へ Assets(と Vulkan ランタイム)を同梱"
 	)
 	add_dependencies(aqBundleApp Game)
+
+	# ------------------------------------------------------------------
+	#  iOS 実機向け: 同梱を **コード署名より前** に済ませる
+	#
+	#  署名済みのバンドルへ後からファイルを足すと署名が壊れて
+	#  「インストールできるが起動しない」になる。Xcode の CodeSign は
+	#  ターゲットの全ビルドフェーズの **後** に走るので、POST_BUILD
+	#  (= 末尾の Run Script フェーズ)へ置けば順序が保証される。
+	#
+	#  **毎ビルド 98MB をコピーするわけではない。** package_app.cmake の
+	#  file(COPY) はタイムスタンプが同じファイルを飛ばすので、実質は初回だけ。
+	#  それでも手動 aqBundleApp を残してあるのは、Mac(署名しない)では
+	#  従来どおり「配布形態を作りたいときだけ」で足りるため。
+	# ------------------------------------------------------------------
+	if(IOS)
+		add_custom_command(TARGET Game POST_BUILD
+			COMMAND "${CMAKE_COMMAND}"
+				"-DAQ_PKG_BUNDLE_DIR=$<TARGET_BUNDLE_DIR:Game>"
+				"-DAQ_PKG_EXECUTABLE=$<TARGET_FILE:Game>"
+				"-DAQ_PKG_ASSETS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/Assets"
+				"-DAQ_PKG_GRAPHICS_API=${AQ_GRAPHICS_API}"
+				"-DAQ_PKG_PLATFORM=iOS"
+				-P "${CMAKE_SOURCE_DIR}/Tools/PackageApp/package_app.cmake"
+			VERBATIM
+			COMMENT "Game.app へ Assets を同梱(署名の前)"
+		)
+	endif()
 
 	# Vulkan 構成は実行ファイルが @rpath/libvulkan.1.dylib を参照するため、
 	# バンドル内の Frameworks を探索パスに足す。CMake が自動で足す

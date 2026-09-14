@@ -13,16 +13,35 @@ namespace aq
 	namespace graphics
 	{
 		/**
+		 * Assets 相対のシェーダパスを実ファイルのパスへ解決する
+		 *
+		 * 実体は MetalShader.mm(VulkanShader.cpp / D3D12Shader.cpp と同じ規則)。
+		 * **同じ規則を 2 箇所に書かない**ために公開している。現在の利用者は
+		 * MetalGraphicsDeviceImpl.mm の EnsureFullscreenBlitPipeline()
+		 * (フルスクリーン blit の MSL / .metallib の在り処を求める)。
+		 * @param filePath "Assets/Shader/..." などのプロジェクト相対パス(絶対パスならそのまま)
+		 * @return 解決後のパス。見つからなければ入力をそのまま返す
+		 */
+		std::string ResolveShaderFilePath(const char* filePath);
+
+
+
+
+		/**
 		 * Metal シェーダ
 		 *
-		 * ビルド時に Tools/ShaderCompile/compile_msl.cmake が生成した .metal(MSL)を読み、
-		 * newLibraryWithSource: で実行時コンパイルして newFunctionWithName: で
-		 * MTLFunction を取り出す(設計書 §9.2)。
-		 * xcrun metal が使えないため .metallib の事前ビルドは採らない(同書 §0.2)。
+		 * Tools/ShaderCompile/compile_msl.cmake がビルド時に生成したものを読み、
+		 * newFunctionWithName: で MTLFunction を取り出す(設計書 §9.2)。
+		 * **読むものはプラットフォームで違う**(設計書/iOS移植設計.md §4.6):
+		 *   macOS … .metal(MSL)を newLibraryWithSource: で実行時コンパイルする。
+		 *   iOS   … ビルド時に焼いた .metallib を newLibraryWithURL: で読む。
+		 *           実機では newLibraryWithSource: が SIGBUS で即死するため必須。
 		 *
-		 * 探索パスは <.fx の親>/<metal::MSL_DIR_NAME>/<stem>.<entry>.<vs|ps|cs>.metal で、
-		 * compile_msl.cmake の出力名と**一対一で対応している**(片方だけ変えないこと)。
-		 * ディレクトリ名は macOS が "msl"、iOS は "msl-ios"(設計書/iOS移植設計.md §4.2)。
+		 * 探索パスは
+		 *   macOS: <.fx の親>/msl/<stem>.<entry>.<vs|ps|cs>.metal
+		 *   iOS  : <.fx の親>/msl-ios/<sdk>/<stem>.<entry>.<vs|ps|cs>.metallib
+		 * で、compile_msl.cmake の出力名と**一対一で対応している**(片方だけ変えないこと)。
+		 * ディレクトリ名は metal::MSL_DIR_NAME / metal::METALLIB_SDK_DIR_NAME。
 		 *
 		 * 参照カウントは MRR(ARC ではない)。library_ / function_ は newXxx 系で
 		 * +1 されたものを持つので、Release() で対に release する。

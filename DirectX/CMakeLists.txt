@@ -195,6 +195,21 @@ if(AQ_GRAPHICS_API STREQUAL "Metal")
 	include(${CMAKE_CURRENT_SOURCE_DIR}/Tools/ShaderCompile/compile_msl.cmake)
 	if(IOS)
 		set(AQ_MSL_IOS ON)
+		# **iOS は .metallib まで焼く**(設計書 iOS移植設計.md §4.6)。実機では
+		# newLibraryWithSource: が SIGBUS で即死するので事前ビルドが必須。
+		# .metallib は SDK ごとに別物(実機とシミュレータで GPU も ABI も違う)なので、
+		# どちらを焼くかを CMAKE_OSX_SYSROOT から決めて渡す。実行時にどちらを読むかは
+		# TARGET_OS_SIMULATOR で判定する(MetalCommon.h の METALLIB_SDK_DIR_NAME)。
+		# **両者は一対一で対応している。片方だけ変えないこと。**
+		# CMAKE_OSX_SYSROOT は短縮名 ("iphoneos") のことも SDK の絶対パス
+		# ("..../iPhoneOS.sdk") のこともあるので、小文字化してから判定する。
+		# "iPhoneSimulator.sdk" は小文字化しても "iphoneos" を含まないので取り違えない。
+		string(TOLOWER "${CMAKE_OSX_SYSROOT}" aqMslSysroot)
+		if(aqMslSysroot MATCHES "iphoneos")
+			set(AQ_MSL_IOS_SDK "iphoneos")
+		else()
+			set(AQ_MSL_IOS_SDK "iphonesimulator")
+		endif()
 	endif()
 	aq_add_compile_msl_target(aqCompileMsl)
 	add_dependencies(Game aqCompileMsl)

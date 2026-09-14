@@ -5,11 +5,30 @@
 #  2 段構成でコンパイルし、Game/Assets/Shader/msl/ (macOS 版) または
 #  Game/Assets/Shader/msl-ios/ (iOS 版。AQ_MSL_IOS=ON) へ
 #      <stem>.<entry>.<stage>.spv    (中間。P2 の頂点入力リフレクション用に残す)
-#      <stem>.<entry>.<stage>.metal  (実行時 newLibraryWithSource: へ渡す MSL)
+#      <stem>.<entry>.<stage>.metal  (MSL。macOS は実行時 newLibraryWithSource: へ渡す)
 #  という名前で出力する。
 #
 #      dxc          -spirv ... -E <entry> -T <stage>_6_0 -I <shaderDir> -Fo <out.spv> <src.fx>
 #      spirv-cross  --msl --msl-version 20000 --msl-decoration-binding [--msl-ios] --output <out.metal> <out.spv>
+#
+#  **iOS (AQ_MSL_IOS=ON) はさらに 3 段目で .metallib まで焼く** (設計書
+#  iOS移植設計.md §4.6)。iOS 実機では newLibraryWithSource: を呼んだ瞬間に
+#  SIGBUS (signal 10) で即死する (ソース内容とは無関係。3 行の最小シェーダでも同じ)ので、
+#  **事前ビルドは起動時間の最適化ではなく実機で起動するための必須要件**である。
+#
+#      xcrun -sdk <sdk> metal    -c <out.metal> -o <out.air>
+#      xcrun -sdk <sdk> metallib    <out.air>   -o <out.metallib>
+#
+#  出力は msl-ios/<sdk>/<stem>.<entry>.<stage>.metallib。**.metallib は SDK ごとに
+#  別物** (iphoneos と iphonesimulator で GPU も ABI も違う)なので SDK 名の
+#  サブディレクトリへ分ける。.metal / .spv 自体は SDK 非依存なので msl-ios/ 直下のまま。
+#
+#  **1 本にまとめないこと。** spirv-cross は全シェーダのエントリ関数を "main0" という
+#  同じ名前で出す (MetalShader.mm の MSL_ENTRY_NAME) ので、1 つの .metallib へ
+#  同居させると名前が衝突する。よってファイル分割は現行の命名をそのまま使う。
+#
+#  .air は .metallib を作るためだけの中間物なので、成功したらその場で捨てる
+#  (バンドルへ持っていっても使い道が無い)。
 #
 #  出力名は aqEngine/Graphics/Metal/MetalShader.mm の BuildMslPath() が探すパスと
 #  一対一で対応している。**片方だけ変えないこと** (compile_spv.cmake と
@@ -41,6 +60,8 @@
 #    アドレス空間をまたぐキャストを含み newLibraryWithSource: が
 #    "converts between mismatching address spaces" で落ちる (設計書 §13-1)。
 #    ここでは特別扱いせず普通に生成する。対処は P5 で決める。
+#    (なお **xcrun metal での事前ビルドは通る**ことを 2026-09-14 に実測した。
+#     落ちるのは実行時コンパイラのほうだけなので、iOS は .metallib 経路で回避できる)
 #
 #  ------------------------------------------------------------------------
 #  使い方 A: 単体スクリプトとして実行する (-D は -P より前に置くこと)
@@ -66,6 +87,10 @@
 #    AQ_MSL_DEBUG_INFO   ON で AQ_DXC_ARG_DEBUG(...) の引数も渡す。既定 OFF
 #    AQ_MSL_IOS          ON で iOS 向け MSL を生成する (spirv-cross へ --msl-ios を渡し、
 #                        既定の出力先を msl-ios/ にする)。既定 OFF (= macOS 向け)
+#    AQ_MSL_IOS_SDK      .metallib を焼く SDK。iphoneos (実機) / iphonesimulator。
+#                        既定 iphonesimulator。AQ_MSL_IOS=ON のときだけ使う
+#    AQ_MSL_HANDWRITTEN  .fx 由来ではない手書き MSL のファイル名 (AQ_MSL_SHADER_DIR 相対)。
+#                        既定 FullscreenBlit.metal。AQ_MSL_IOS=ON のときだけ .metallib 化する
 # ============================================================================
 
 # include されたときに呼び出し元のポリシースコープを書き換えないよう、
@@ -270,11 +295,100 @@ macro(aq_msl_resolve_defaults)
 	if(NOT DEFINED AQ_MSL_DEBUG_INFO)
 		set(AQ_MSL_DEBUG_INFO OFF)
 	endif()
+	if(NOT AQ_MSL_HANDWRITTEN)
+		# .fx 由来ではない**手書きの MSL**。エンジンのシェーダ資産ではなく
+		# Metal バックエンド内部の都合で要るものなので、shader_entries.txt には
+		# 載せず (載せると Vulkan / D3D 側のビルドに波及する)ここで列挙する。
+		# iOS のときだけ .metallib を焼く。macOS は実行時コンパイルなので何もしない。
+		set(AQ_MSL_HANDWRITTEN "FullscreenBlit.metal")
+	endif()
+	if(NOT AQ_MSL_IOS_SDK)
+		# 既定はシミュレータ。実機ビルドではルート CMakeLists.txt が
+		# CMAKE_OSX_SYSROOT を見て iphoneos を渡してくる。
+		set(AQ_MSL_IOS_SDK "iphonesimulator")
+	endif()
+	# .metallib の置き場。**SDK ごとに別物**なので混ぜない (実機用を
+	# シミュレータで読むと読み込みに失敗する)。読み出し側は MetalCommon.h の
+	# METALLIB_SDK_DIR_NAME。**片方だけ変えないこと。**
+	set(AQ_MSL_METALLIB_DIR "${AQ_MSL_OUT_DIR}/${AQ_MSL_IOS_SDK}")
 endmacro()
 
 
 # ----------------------------------------------------------------------------
-#  1 エントリを .spv -> .metal の 2 段でコンパイルする
+#  Metal Toolchain (xcrun metal / metallib) が使えるか確認する
+#
+#  Toolchain は Xcode に**既定では入っていない**。入っていないと 61 本ぶん
+#  同じエラーが並んで原因が読み取れなくなるので、始める前に 1 度だけ確かめて
+#  導入コマンドを添えて止める (設計書 iOS移植設計.md §4.6)。
+# ----------------------------------------------------------------------------
+function(aq_msl_check_metal_toolchain sdk)
+	execute_process(
+		COMMAND xcrun -sdk "${sdk}" metal --version
+		RESULT_VARIABLE rc
+		OUTPUT_VARIABLE stdOut
+		ERROR_VARIABLE  stdErr
+	)
+	if(NOT rc EQUAL 0)
+		message(FATAL_ERROR
+			"Metal Toolchain が使えません (xcrun -sdk ${sdk} metal --version が失敗)。\n"
+			"  xcodebuild -downloadComponent MetalToolchain\n"
+			"で導入してください (約 688MB)。iOS 実機では実行時 MSL コンパイルが使えないため、"
+			".metallib の事前ビルドは必須です (設計書 iOS移植設計.md §4.6)。\n${stdOut}${stdErr}")
+	endif()
+endfunction()
+
+
+# ----------------------------------------------------------------------------
+#  .metal 1 本を .metallib へ焼く (iOS 専用。AQ_MSL_IOS=ON のときだけ呼ぶ)
+#
+#  .air は中間物なので成功したら消す。失敗しても即 FATAL_ERROR にはせず、
+#  呼び出し元が件数を数えられるよう SEND_ERROR + outOk で返す
+#  (aq_msl_compile_one と同じ流儀)。
+# ----------------------------------------------------------------------------
+function(aq_msl_build_metallib sdk mslIn metallibOut label outOk)
+	set(${outOk} FALSE PARENT_SCOPE)
+
+	# NAME_WE は最初の "." までしか残さない (Foo.VSMain.vs -> Foo) ので使えない。
+	# .metallib の拡張子だけを落とした名前を自前で作る。同名の .air がぶつかると
+	# 並びの後ろのシェーダが前のものを上書きしてしまう。
+	get_filename_component(airDir  "${metallibOut}" DIRECTORY)
+	get_filename_component(airName "${metallibOut}" NAME)
+	string(REGEX REPLACE "\\.metallib$" ".air" airName "${airName}")
+	set(airOut "${airDir}/${airName}")
+
+	execute_process(
+		COMMAND xcrun -sdk "${sdk}" metal -c "${mslIn}" -o "${airOut}"
+		RESULT_VARIABLE rc
+		OUTPUT_VARIABLE stdOut
+		ERROR_VARIABLE  stdErr
+	)
+	if(NOT rc EQUAL 0)
+		message(SEND_ERROR "[compile_msl] metal 失敗: ${label} (${sdk})\n${stdOut}${stdErr}")
+		return()
+	elseif(NOT stdErr STREQUAL "")
+		message(STATUS "[compile_msl] metal 警告: ${label} (${sdk})\n${stdErr}")
+	endif()
+
+	execute_process(
+		COMMAND xcrun -sdk "${sdk}" metallib "${airOut}" -o "${metallibOut}"
+		RESULT_VARIABLE rc
+		OUTPUT_VARIABLE stdOut
+		ERROR_VARIABLE  stdErr
+	)
+	file(REMOVE "${airOut}")
+	if(NOT rc EQUAL 0)
+		message(SEND_ERROR "[compile_msl] metallib 失敗: ${label} (${sdk})\n${stdOut}${stdErr}")
+		return()
+	elseif(NOT stdErr STREQUAL "")
+		message(STATUS "[compile_msl] metallib 警告: ${label} (${sdk})\n${stdErr}")
+	endif()
+
+	set(${outOk} TRUE PARENT_SCOPE)
+endfunction()
+
+
+# ----------------------------------------------------------------------------
+#  1 エントリを .spv -> .metal (-> .metallib) の 2 (iOS は 3) 段でコンパイルする
 #
 #  失敗しても即 FATAL_ERROR にはせず、呼び出し元が件数を数えられるよう
 #  SEND_ERROR + outOk で返す (1 本目で止まると全体の状況が分からないため)。
@@ -342,6 +456,19 @@ function(aq_msl_compile_one dxc spirvCross commonArgs shaderModel fx entry stage
 		message(STATUS "[compile_msl] spirv-cross 警告: ${fx} ${entry} (${stage})\n${stdErr}")
 	endif()
 
+	# 3 段目: MSL -> .metallib (iOS のみ)
+	#   iOS 実機は newLibraryWithSource: が SIGBUS で即死するので、
+	#   実行時に読むのは .metallib になる (設計書 iOS移植設計.md §4.6)。
+	#   macOS は従来どおり .metal を実行時コンパイルするので、ここは通らない。
+	if(AQ_MSL_IOS)
+		set(metallibOut "${AQ_MSL_METALLIB_DIR}/${stem}.${entry}.${stage}.metallib")
+		aq_msl_build_metallib("${AQ_MSL_IOS_SDK}" "${mslOut}" "${metallibOut}"
+		                      "${fx} ${entry} (${stage})" libOk)
+		if(NOT libOk)
+			return()
+		endif()
+	endif()
+
 	set(${outOk} TRUE PARENT_SCOPE)
 endfunction()
 
@@ -357,6 +484,10 @@ function(aq_msl_compile_all)
 	aq_msl_read_entries("${AQ_MSL_ENTRIES}" entries)
 
 	file(MAKE_DIRECTORY "${AQ_MSL_OUT_DIR}")
+	if(AQ_MSL_IOS)
+		aq_msl_check_metal_toolchain("${AQ_MSL_IOS_SDK}")
+		file(MAKE_DIRECTORY "${AQ_MSL_METALLIB_DIR}")
+	endif()
 
 	list(LENGTH entries entryCount)
 	message(STATUS "[compile_msl] dxc          = ${dxc}")
@@ -365,6 +496,7 @@ function(aq_msl_compile_all)
 	message(STATUS "[compile_msl] out          = ${AQ_MSL_OUT_DIR}")
 	if(AQ_MSL_IOS)
 		message(STATUS "[compile_msl] platform     = iOS (--msl-ios)")
+		message(STATUS "[compile_msl] metallib     = ${AQ_MSL_METALLIB_DIR}")
 	else()
 		message(STATUS "[compile_msl] platform     = macOS")
 	endif()
@@ -383,6 +515,29 @@ function(aq_msl_compile_all)
 			math(EXPR failed "${failed}+1")
 		endif()
 	endforeach()
+
+	# 手書き MSL (.fx 由来ではない Metal バックエンド内部のシェーダ) も
+	# iOS では .metallib が要る。**shader_entries.txt には載せない**
+	# (載せると Vulkan / D3D 側のビルドに波及する。理由は .metal の先頭コメント)。
+	# macOS はこのファイルを実行時コンパイルするので、ここは通らない。
+	if(AQ_MSL_IOS)
+		foreach(handwritten IN LISTS AQ_MSL_HANDWRITTEN)
+			get_filename_component(handStem "${handwritten}" NAME_WE)
+			set(handSrc "${AQ_MSL_SHADER_DIR}/${handwritten}")
+			if(NOT EXISTS "${handSrc}")
+				message(SEND_ERROR "[compile_msl] 手書き MSL がありません: ${handSrc}")
+				math(EXPR failed "${failed}+1")
+				continue()
+			endif()
+
+			aq_msl_build_metallib("${AQ_MSL_IOS_SDK}" "${handSrc}"
+			                      "${AQ_MSL_METALLIB_DIR}/${handStem}.metallib"
+			                      "${handwritten}" libOk)
+			if(NOT libOk)
+				math(EXPR failed "${failed}+1")
+			endif()
+		endforeach()
+	endif()
 
 	if(NOT failed EQUAL 0)
 		message(FATAL_ERROR "[compile_msl] ${failed} 件のシェーダがコンパイルできませんでした")
@@ -418,6 +573,8 @@ function(aq_add_compile_msl_target targetName)
 		-D "AQ_MSL_ARGS_FILE=${AQ_MSL_ARGS_FILE}"
 		-D "AQ_MSL_DEBUG_INFO=${AQ_MSL_DEBUG_INFO}"
 		-D "AQ_MSL_IOS=${AQ_MSL_IOS}"
+		-D "AQ_MSL_IOS_SDK=${AQ_MSL_IOS_SDK}"
+		-D "AQ_MSL_HANDWRITTEN=${AQ_MSL_HANDWRITTEN}"
 	)
 	list(APPEND scriptArgs -D "AQ_MSL_DXC=${AQ_MSL_DXC}")
 	list(APPEND scriptArgs -D "AQ_MSL_SPIRV_CROSS=${AQ_MSL_SPIRV_CROSS}")

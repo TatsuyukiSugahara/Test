@@ -3,6 +3,7 @@
 #if defined(AQ_PLATFORM_APPLE)
 #include "Sound/CoreAudio/CoreAudioSoundBackend.h"
 #include "Sound/Mixer/MixerSoundVoice.h"
+#include <cstring>
 
 #include <AudioToolbox/AudioToolbox.h>
 #include <AudioUnit/AudioUnit.h>
@@ -143,6 +144,14 @@ namespace aq
 					aq::StartupMarkf("  [sound] AVAudioSession のカテゴリ設定に失敗: %s", ErrorText(error));
 				}
 
+				// ハードウェアのサンプルレートをミキサ(48kHz)に合わせておく。
+				// 合っていないと RemoteIO が内部で AudioConverter を挟む。
+				error = nil;
+				if (![session setPreferredSampleRate:static_cast<double>(OUTPUT_SAMPLE_RATE) error:&error])
+				{
+					aq::StartupMarkf("  [sound] 希望サンプルレートを設定できない: %s", ErrorText(error));
+				}
+
 				error = nil;
 				if (![session setActive:YES error:&error])
 				{
@@ -214,6 +223,43 @@ namespace aq
 					return noErr;
 				}
 
+#if defined(AQ_PLATFORM_IOS)
+				// iOS(RemoteIO)は**非インターリーブ**で開いている(§6)。
+				// ミキサはインターリーブしか書けないので、一旦スクラッチへ描いてから L/R へ配る。
+				// コールバックは実時間制約下なので確保はしない。スクラッチは関数ローカル static で
+				// 1 度だけ確保し、オーディオスレッド 1 本からしか触らない。
+				if (ioData->mNumberBuffers < 2)
+				{
+					return noErr;
+				}
+				auto* left  = static_cast<float*>(ioData->mBuffers[0].mData);
+				auto* right = static_cast<float*>(ioData->mBuffers[1].mData);
+				if (left == nullptr || right == nullptr)
+				{
+					return noErr;
+				}
+
+				// 1 コールバックのフレーム数は IOBufferDuration で決まり、実測 256 前後。
+				// 余裕を見て 4096 まで受ける(超えたら無音にする。落とさないことを優先)。
+				static constexpr uint32_t MAX_SCRATCH_FRAMES = 4096u;
+				static float scratch[MAX_SCRATCH_FRAMES * 2];
+
+				const uint32_t frames = static_cast<uint32_t>(inNumberFrames);
+				if (frames > MAX_SCRATCH_FRAMES)
+				{
+					std::memset(left,  0, ioData->mBuffers[0].mDataByteSize);
+					std::memset(right, 0, ioData->mBuffers[1].mDataByteSize);
+					return noErr;
+				}
+
+				backend->RenderFrames(scratch, frames);
+				for (uint32_t i = 0; i < frames; ++i)
+				{
+					left[i]  = scratch[i * 2 + 0];
+					right[i] = scratch[i * 2 + 1];
+				}
+				return noErr;
+#else
 				auto* out = static_cast<float*>(ioData->mBuffers[0].mData);
 				if (out == nullptr)
 				{
@@ -222,6 +268,7 @@ namespace aq
 
 				backend->RenderFrames(out, static_cast<uint32_t>(inNumberFrames));
 				return noErr;
+#endif
 			}
 		}
 
@@ -318,11 +365,30 @@ namespace aq
 			AudioStreamBasicDescription format{};
 			format.mSampleRate       = static_cast<Float64>(OUTPUT_SAMPLE_RATE);
 			format.mFormatID         = kAudioFormatLinearPCM;
-			format.mFormatFlags      = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked;
 			format.mChannelsPerFrame = OUTPUT_CHANNELS;
 			format.mBitsPerChannel   = 32u;
 			format.mFramesPerPacket  = 1u;
-			format.mBytesPerFrame    = format.mChannelsPerFrame * sizeof(float);
+#if defined(AQ_PLATFORM_IOS)
+			// ★ iOS は**非インターリーブ** float32 にする。
+			//
+			// RemoteIO のネイティブ形式が非インターリーブなので、インターリーブを渡すと
+			// ユニット内部で AudioConverter が挟まる。**実機ではその生成
+			// (AudioConverterNewWithOptions)が SIGBUS で落ちる**(iPhone 17 / iOS 26.6.2 で実測。
+			// サンプルレートもチャンネル数も一致させた状態で再現する)。
+			// ネイティブ形式に合わせれば変換自体が起きないので、この経路を踏まない。
+			// 設計書/iOS移植設計.md §6。
+			//
+			// 非インターリーブでは 1 チャンネルぶんが 1 バッファなので、
+			// mBytesPerFrame / mBytesPerPacket は**チャンネル数を掛けない**。
+			format.mFormatFlags   = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked
+			                      | kAudioFormatFlagIsNonInterleaved;
+			format.mBytesPerFrame = sizeof(float);
+#else
+			// macOS(DefaultOutput)はインターリーブのまま。ミキサの出力を
+			// そのままコールバックのバッファへ書けるので中間コピーが要らない。
+			format.mFormatFlags   = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked;
+			format.mBytesPerFrame = format.mChannelsPerFrame * sizeof(float);
+#endif
 			format.mBytesPerPacket   = format.mBytesPerFrame * format.mFramesPerPacket;
 
 			if (AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat,

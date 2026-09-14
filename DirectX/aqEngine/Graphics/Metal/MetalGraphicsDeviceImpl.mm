@@ -13,6 +13,7 @@
 #ifdef AQ_IMGUI
 #include "Graphics/Metal/MetalImGui.h"
 #endif
+#include <filesystem>   // フルスクリーン blit のシェーダパス組み立て
 
 // 本 TU は手動参照カウント(MRR)前提。CMake は -fobjc-arc を渡していない。
 #if __has_feature(objc_arc)
@@ -128,62 +129,98 @@ namespace aq
 			bool g_copyFailureLogged = false;
 
 			/**
-			 * CopyToBackBuffer のフルスクリーン変換描画に使う MSL。
+			 * CopyToBackBuffer のフルスクリーン変換描画に使う MSL のファイル名
+			 * (AQ_MSL_SHADER_DIR = Game/Assets/Shader 直下)。
 			 *
-			 * **なぜ .fx ではなく .mm への埋め込みなのか**
-			 * この描画は「バックバッファのフォーマットが表示 RT と違うときに変換して出す」という
-			 * **Metal バックエンド内部の都合**で、エンジンのシェーダ資産ではない。.fx を増やすと
-			 *  (a) 設計の「.fx は無改変で移植する」が崩れ、
-			 *  (b) shader_entries.txt に載せる必要が出て Vulkan / D3D 側のビルドにも波及し、
-			 *  (c) 起動時のシェーダコンパイル本数(§13-2 で問題視している)がさらに増える。
-			 * ソース文字列を newLibraryWithSource: に通せば追加ファイルなしで完結するので、
-			 * ここに直接置いている。コンパイルは起動時の 1 回だけ。
+			 * **中身は Assets/Shader/FullscreenBlit.metal に移した**(iOS 移植 P5b)。
+			 * 以前はこの TU に文字列で埋め込んでいたが、iOS 実機では
+			 * newLibraryWithSource: が SIGBUS で即死するため、この MSL も
+			 * ビルド時に .metallib へ焼く必要がある(設計書/iOS移植設計.md §4.6)。
+			 * コンパイラへ渡せる実ファイルが要るので独立した .metal にした。
+			 * **なぜ .fx ではないのか / 大三角形 / Y 反転**の説明はその .metal の先頭にある。
 			 *
-			 * **頂点バッファは使わない**。vertex_id からクリップ空間を覆う大三角形
-			 * (-1,-1)-(3,-1)-(-1,3) を作る。全画面を 2 枚の三角形で覆うより
-			 * 対角線上の重複シェーディングが無い分だけ速く、頂点記述子も要らない。
+			 *   macOS … このファイルをそのまま読んで newLibraryWithSource: でコンパイルする
+			 *           (実行時コンパイルが動いており、変える理由が無い)。
+			 *   iOS   … compile_msl.cmake が焼いた
+			 *           msl-ios/<sdk>/FullscreenBlit.metallib を newLibraryWithURL: で読む。
 			 *
-			 * **Y 反転について**(ここを間違えると上下逆さまになる)
-			 *  - Metal のクリップ空間は D3D と同じく **y = +1 が画面の上端**
-			 *    (OpenGL/Vulkan のような下端ではない)。
-			 *  - Metal のテクスチャ座標は **v = 0 がテクスチャの先頭行(上端)**。
-			 *  - よって「画面の上端 (y=+1)」に「テクスチャの上端 (v=0)」を貼るには
-			 *    v = (1 - y) * 0.5 とする。u はそのまま u = (x + 1) * 0.5。
-			 *  - src テクスチャはエンジンが同じ Metal のラスタライズ規約で描いたものなので、
-			 *    blit 経路(生バイトコピー)と同じ向きで出る。**追加の反転は不要**。
+			 * **どちらも同じ .metal を単一ソースにしている**ので二重管理にはならない。
+			 * ファイル名・関数名は compile_msl.cmake の AQ_MSL_HANDWRITTEN と
+			 * .metal 側の定義に**一対一で対応している。片方だけ変えないこと。**
 			 */
-			static const char* const FULLSCREEN_BLIT_MSL = R"MSL(
-#include <metal_stdlib>
-using namespace metal;
+			static constexpr char FULLSCREEN_BLIT_SHADER[] = "Assets/Shader/FullscreenBlit.metal";
 
-struct FullscreenVSOut
-{
-	float4 position [[position]];
-	float2 uv;
-};
 
-vertex FullscreenVSOut aqFullscreenBlitVS(uint vertexId [[vertex_id]])
-{
-	// クリップ空間を覆う大三角形。頂点バッファは要らない。
-	const float2 positions[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
+			/**
+			 * フルスクリーン blit のライブラリを作る(EnsureFullscreenBlitPipeline から括り出し)
+			 *
+			 * **macOS と iOS で読むものが違う**(上のコメント参照)。分岐をここに閉じ込めて
+			 * 呼び出し側を 1 本にしておく。MRR: 成功時は +1 されたライブラリを返す。
+			 * @param device 生成に使う Metal デバイス
+			 * @return 作れたら MTLLibrary(呼び出し側が release する)。失敗したら nil
+			 */
+			id<MTLLibrary> CreateFullscreenBlitLibrary(id<MTLDevice> device)
+			{
+				// .metal の在り処は MetalShader.mm と同じ規則で解決する
+				// (iOS のバンドル直下 / macOS の Contents/Resources / ソースツリー)。
+				const std::string metalPath = ResolveShaderFilePath(FULLSCREEN_BLIT_SHADER);
+				if (metalPath.empty()) {
+					aq::StartupMark("  [metal] fullscreen blit shader path not resolved");
+					return nil;
+				}
 
-	const float2 p = positions[vertexId];
-	FullscreenVSOut out;
-	out.position = float4(p, 0.0, 1.0);
+				NSError* error = nil;
 
-	// クリップ空間は y = +1 が上端、テクスチャは v = 0 が上端。よって v は反転して取る。
-	out.uv = float2((p.x + 1.0) * 0.5, (1.0 - p.y) * 0.5);
-	return out;
-}
+#if defined(AQ_PLATFORM_IOS)
+				// iOS: ビルド時に焼いた .metallib を読む。**実機では
+				// newLibraryWithSource: が SIGBUS で即死する**ので、この経路しか無い
+				// (設計書/iOS移植設計.md §4.6)。.metallib は SDK ごとに別物なので
+				// msl-ios/<sdk>/ の下にある。
+				// 名前は compile_msl.cmake の AQ_MSL_HANDWRITTEN("FullscreenBlit.metal")の
+				// 拡張子違い。**片方だけ変えないこと。**
+				static constexpr char FULLSCREEN_BLIT_LIB_NAME[] = "FullscreenBlit.metallib";
 
-fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
-                                   texture2d<float> src [[texture(0)]],
-                                   sampler          samp [[sampler(0)]])
-{
-	// 変換はフォーマット間の読み替えだけ。トーンマップは既にポストプロセスが済ませている。
-	return src.sample(samp, in.uv);
-}
-)MSL";
+				const std::filesystem::path libPath =
+					std::filesystem::path(metalPath).parent_path()
+					/ metal::MSL_DIR_NAME / metal::METALLIB_SDK_DIR_NAME / FULLSCREEN_BLIT_LIB_NAME;
+
+				NSString* libPathString = [NSString stringWithUTF8String:libPath.generic_string().c_str()];
+				if (libPathString == nil) {
+					aq::StartupMark("  [metal] fullscreen blit metallib path not representable");
+					return nil;
+				}
+
+				// new... なので +1。呼び出し側が release する。
+				id<MTLLibrary> library = [device newLibraryWithURL:[NSURL fileURLWithPath:libPathString]
+				                                             error:&error];
+				if (library == nil) {
+					aq::StartupMarkf("  [metal] fullscreen blit metallib failed: %s (%s)",
+					                 (error != nil) ? [[error localizedDescription] UTF8String] : "unknown",
+					                 libPath.generic_string().c_str());
+				}
+				return library;
+#else
+				// macOS: .metal をそのまま読んで実行時コンパイルする(従来どおり)。
+				NSString* pathString = [NSString stringWithUTF8String:metalPath.c_str()];
+				NSString* source     = (pathString != nil)
+					? [NSString stringWithContentsOfFile:pathString encoding:NSUTF8StringEncoding error:&error]
+					: nil;
+				if (source == nil) {
+					aq::StartupMarkf("  [metal] fullscreen blit source not readable: %s (%s)",
+					                 metalPath.c_str(),
+					                 (error != nil) ? [[error localizedDescription] UTF8String] : "unknown");
+					return nil;
+				}
+
+				// new... なので +1。呼び出し側が release する。
+				id<MTLLibrary> library = [device newLibraryWithSource:source options:nil error:&error];
+				if (library == nil) {
+					aq::StartupMarkf("  [metal] fullscreen blit library failed: %s",
+					                 (error != nil) ? [[error localizedDescription] UTF8String] : "unknown");
+				}
+				return library;
+#endif
+			}
 
 
 			/**
@@ -207,18 +244,15 @@ fragment float4 aqFullscreenBlitPS(FullscreenVSOut in [[stage_in]],
 				@autoreleasepool
 				{
 					// ライブラリは宛先フォーマットに依存しないので 1 度だけ作る。
+					// 中身の読み方(macOS: .metal を実行時コンパイル / iOS: .metallib)は
+					// CreateFullscreenBlitLibrary() に閉じ込めてある。
 					if (objects->blitLibrary == nil)
 					{
-						NSError* error  = nil;
-						NSString* source = [NSString stringWithUTF8String:FULLSCREEN_BLIT_MSL];
 						// new... なので既に +1。追加の retain は要らない(付けると解放されない)。
-						objects->blitLibrary = [objects->device newLibraryWithSource:source
-						                                                     options:nil
-						                                                       error:&error];  // MRR: +1
+						objects->blitLibrary = CreateFullscreenBlitLibrary(objects->device);  // MRR: +1
 						if (objects->blitLibrary == nil)
 						{
-							aq::StartupMarkf("  [metal] fullscreen blit library failed: %s",
-							                 (error != nil) ? [[error localizedDescription] UTF8String] : "unknown");
+							// 失敗の詳細は CreateFullscreenBlitLibrary が出している。
 							return false;
 						}
 					}

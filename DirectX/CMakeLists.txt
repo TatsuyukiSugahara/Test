@@ -58,12 +58,17 @@ if(NOT WIN32 AND AQ_GRAPHICS_API MATCHES "^D3D")
 	message(FATAL_ERROR "Windows 以外では AQ_GRAPHICS_API=Vulkan / Metal のみ指定できます (現在: ${AQ_GRAPHICS_API})")
 endif()
 
+# APPLE は iOS でも真になるので、この条件式のままで iOS も許可される。
 if(AQ_GRAPHICS_API STREQUAL "Metal" AND NOT APPLE)
-	message(FATAL_ERROR "AQ_GRAPHICS_API=Metal は macOS 専用です")
+	message(FATAL_ERROR "AQ_GRAPHICS_API=Metal は Apple プラットフォーム(macOS / iOS)専用です")
 endif()
 
 if(ANDROID AND NOT AQ_GRAPHICS_API STREQUAL "Vulkan")
 	message(FATAL_ERROR "Android では AQ_GRAPHICS_API=Vulkan のみ指定できます (現在: ${AQ_GRAPHICS_API})")
+endif()
+
+if(IOS AND NOT AQ_GRAPHICS_API STREQUAL "Metal")
+	message(FATAL_ERROR "iOS では AQ_GRAPHICS_API=Metal のみ指定できます (現在: ${AQ_GRAPHICS_API})")
 endif()
 
 
@@ -145,8 +150,9 @@ add_subdirectory(aqEngine)
 add_subdirectory(Game)
 
 # 開発用ツール(CMake 専用。vcxproj は用意しない)
-# Android では実行ファイルを端末上で直接叩けないため配線しない。
-if(NOT ANDROID)
+# Android / iOS では実行ファイルを端末上で直接叩けないため配線しない
+# (iOS では .app にまとめられてしまい、ビルド時間だけが増える)。
+if(NOT ANDROID AND NOT IOS)
 	add_subdirectory(Tools/MixerTest)
 endif()
 

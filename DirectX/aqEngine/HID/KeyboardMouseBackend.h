@@ -8,6 +8,7 @@
 //                            CocoaMouseBackend)は P4 で追加する
 //    Android               : キーボードは Null。マウスは TouchMouseBackend(タッチをポインタとして
 //                            供給する。物理マウスを想定するという意味ではない)
+//    iOS                   : どちらも入力なし(Null)。P0 の骨格
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -68,6 +69,23 @@ namespace aq
 		// 物理コントローラ)が引き続き担う。
 		using DefaultKeyboardBackend = NullKeyboardBackend;
 		using DefaultMouseBackend    = TouchMouseBackend;
+	}
+}
+#elif defined(AQ_PLATFORM_IOS)
+#include "HID/NullKeyboardBackend.h"
+#include "HID/NullMouseBackend.h"
+
+namespace aq
+{
+	namespace hid
+	{
+		// iOS: タッチ経路がまだ無い P0 の骨格なので、どちらも Null で通す。
+		// 物理キーボードは Android と同じく想定しないため、こちらは最終形も Null。
+		// TODO(P3): マウスを TouchMouseBackend にする(iOSTouchBackend が取り込んだ
+		// タッチを既存のポインタ経路(UIInputSystem / ImGui)へ載せるための合成。
+		// Android と同じ形で、下の CreateDefaultMouseBackend の #if も iOS を含める)。
+		using DefaultKeyboardBackend = NullKeyboardBackend;
+		using DefaultMouseBackend    = NullMouseBackend;
 	}
 }
 #else

@@ -52,6 +52,21 @@ namespace aq
 				/*threadPoolWorkerCount*/  0u,
 				/*maxSingleFileBytes*/     0
 			};
+#elif defined(AQ_PLATFORM_IOS)
+			// iOS: jetsam がメモリ上限を超えたアプリを警告なく kill する。Win32/Mac の
+			// 0(上限なし)は使えないため、over-budget 観測用の設計目標として 1.5GB を置く。
+			// 実際の上限は機種と OS バージョンで変わるので、対象機が決まるまでの暫定値。
+			// ワーカ数は当面 0(論理コア数)。iPhone も big.LITTLE 構成で、小コアに
+			// 描画スレッドが載ると詰まるため、実機計測のうえで固定値に変える
+			// (Android と同じ理由)。
+			// TODO(P6): memoryBudgetBytes を実機計測に基づく値へ。
+			// TODO(P6): threadPoolWorkerCount を実機計測に基づく固定値へ。
+			return ResourceBudget{
+				/*memoryBudgetBytes*/      static_cast<size_t>(1536) * 1024 * 1024,
+				/*stackSizeBytes*/         static_cast<size_t>(4) * 1024 * 1024,
+				/*threadPoolWorkerCount*/  0u,
+				/*maxSingleFileBytes*/     0
+			};
 #elif defined(AQ_PLATFORM_ANDROID)
 			// Android: OS が per-app のヒープ上限を持つため、over-budget 観測用の
 			// 設計目標として 2GB を置く(強制ではない)。
@@ -70,7 +85,7 @@ namespace aq
 		}
 
 		// 単一ファイルのバイト数が予算(maxSingleFileBytes)内か。0(無制限)なら常に true。
-		// Win32 / Mac は 0 のため常に true = チェック無効。UWP(2GB)でのみ実効。
+		// Win32 / Mac / iOS は 0 のため常に true = チェック無効。UWP(2GB)でのみ実効。
 		constexpr bool IsWithinSingleFileBudget(size_t fileBytes)
 		{
 			constexpr size_t maxBytes = GetResourceBudget().maxSingleFileBytes;

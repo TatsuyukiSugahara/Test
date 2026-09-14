@@ -92,6 +92,53 @@
       "generator": "Xcode"
     },
     {
+      "name": "ios-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "AQ_GRAPHICS_API": "Metal",
+        "CMAKE_SYSTEM_NAME": "iOS",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "16.4"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "ios-simulator-xcode",
+      "displayName": "iOS シミュレータ / Xcode (ネイティブ Metal)",
+      "description": "設計書/iOS移植設計.md の P0〜P4 の主経路。署名不要で simctl から実行できる。デプロイターゲット 16.4 は BC 圧縮テクスチャの API が入ったバージョン(§2.2)。",
+      "inherits": "ios-base",
+      "generator": "Xcode",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "iphonesimulator",
+        "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
+      }
+    },
+    {
+      "name": "ios-xcode",
+      "displayName": "iOS 実機 / Xcode (ネイティブ Metal)",
+      "description": "実機向け(P5)。インストールには署名が要るので DEVELOPMENT_TEAM を別途指定すること。",
+      "inherits": "ios-base",
+      "generator": "Xcode",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "iphoneos"
+      }
+    },
+    {
+      "name": "ios-ninja",
+      "displayName": "iOS シミュレータ / Ninja Multi-Config (ネイティブ Metal)",
+      "description": "コンパイルエラーの潰し込み用。実行と署名は Xcode ジェネレータ側で行う。",
+      "inherits": "ios-base",
+      "generator": "Ninja Multi-Config",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "iphonesimulator"
+      }
+    },
+    {
       "name": "android-base",
       "hidden": true,
       "inherits": "base",
@@ -192,6 +239,36 @@
     {
       "name": "macos-xcode-metal-release",
       "configurePreset": "macos-xcode-metal",
+      "configuration": "Release"
+    },
+    {
+      "name": "ios-simulator-xcode-debug",
+      "configurePreset": "ios-simulator-xcode",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ios-simulator-xcode-release",
+      "configurePreset": "ios-simulator-xcode",
+      "configuration": "Release"
+    },
+    {
+      "name": "ios-xcode-debug",
+      "configurePreset": "ios-xcode",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ios-xcode-release",
+      "configurePreset": "ios-xcode",
+      "configuration": "Release"
+    },
+    {
+      "name": "ios-ninja-debug",
+      "configurePreset": "ios-ninja",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ios-ninja-release",
+      "configurePreset": "ios-ninja",
       "configuration": "Release"
     },
     {

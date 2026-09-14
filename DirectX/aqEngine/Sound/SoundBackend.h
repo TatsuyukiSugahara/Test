@@ -7,6 +7,7 @@
 //    Xbox(UWP / 道A)      : XAudio2（UWP でも XAudio2 2.9 が標準。ほぼ無改修）
 //    Mac                  : CoreAudio（AudioUnit + SoftwareMixer）
 //    Android              : AAudio（NDK 同梱 + SoftwareMixer）
+//    iOS                  : 無音（Null）。P0 の骨格
 // ============================================================
 
 // AQ_PLATFORM_WINDOWS_FAMILY は AQ_PLATFORM_WIN32 / AQ_PLATFORM_UWP のときに
@@ -17,6 +18,13 @@
 #  define SOUND_BACKEND_COREAUDIO
 #elif defined(AQ_PLATFORM_ANDROID)
 #  define SOUND_BACKEND_AAUDIO
+#elif defined(AQ_PLATFORM_IOS)
+// iOS: P0 は無音バックエンドでリンクだけ通す。
+// TODO(P4): SOUND_BACKEND_COREAUDIO にする。iOS の CoreAudio は既定出力デバイスでは
+// なく RemoteIO(AudioUnit)を開き、AVAudioSession でカテゴリと中断を扱う点だけが
+// macOS と違う。SoftwareMixer::Render を回す構造は共通なので、
+// CoreAudioSoundBackend 側に iOS 分岐を入れて共有する（設計書/iOS移植設計.md §6）。
+#  define SOUND_BACKEND_NULL
 #endif
 
 

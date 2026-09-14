@@ -1,6 +1,7 @@
 #pragma once
-// macOS 専用。他構成では中身を空にして、既存ビルドに一切影響させない。
-#if defined(AQ_PLATFORM_MAC)
+// Apple プラットフォーム(macOS / iOS)専用。AudioToolbox はどちらでも同じ API が使える。
+// 他構成では中身を空にして、既存ビルドに一切影響させない。
+#if defined(AQ_PLATFORM_APPLE)
 #include <cstdint>
 #include <vector>
 #include "ISoundDecoder.h"
@@ -57,4 +58,4 @@ namespace aq
 		};
 	}
 }
-#endif // AQ_PLATFORM_MAC
+#endif // AQ_PLATFORM_APPLE

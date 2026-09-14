@@ -24,9 +24,10 @@
 #error "Define exactly one ENGINE_GRAPHICS_* backend"
 #endif
 
-// ENGINE_GRAPHICS_METAL は macOS 専用(設計書/MetalBackend設計.md)。
-#if defined(ENGINE_GRAPHICS_METAL) && !defined(AQ_PLATFORM_MAC)
-#error "ENGINE_GRAPHICS_METAL is macOS only"
+// ENGINE_GRAPHICS_METAL は Apple プラットフォーム(macOS / iOS)専用
+// (設計書/MetalBackend設計.md、設計書/iOS移植設計.md §0.3)。
+#if defined(ENGINE_GRAPHICS_METAL) && !defined(AQ_PLATFORM_APPLE)
+#error "ENGINE_GRAPHICS_METAL is Apple platforms (macOS / iOS) only"
 #endif
 
 // レンダリング同期モードの切り替え (AQ_RENDER_PIPELINED) はここではなく

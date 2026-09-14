@@ -9,6 +9,7 @@
 //    Android               : 入力なし(Null)。仮想パッド(タッチ)と物理コントローラを
 //                            同一視する実装は P4 で追加する
 //                            (設計書/Android移植設計.md)
+//    iOS                   : 入力なし(Null)。P0 の骨格
 // ============================================================
 
 #if defined(AQ_PLATFORM_WIN32)
@@ -59,6 +60,21 @@ namespace aq
 		// 上位(ActionMap / ゲーム側)は入力ソースを区別しない。
 		// 組み立てには TouchState が要るので、生成は下の CreateDefaultPadBackend で行う。
 		using DefaultPadBackend = CompositePadBackend;
+	}
+}
+#elif defined(AQ_PLATFORM_IOS)
+#include "HID/NullPadBackend.h"
+
+namespace aq
+{
+	namespace hid
+	{
+		// iOS: 仮想パッドもタッチ経路もまだ無い P0 の骨格なので Null で通す。
+		// TODO(P3): CompositePadBackend にする(GameControllerPadBackend +
+		// VirtualPadBackend。GameController.framework は iOS でも同じ API なので
+		// HID/Mac/ の実装をそのまま再利用でき、合成の形も Android と同じ。
+		// 下の CreateDefaultPadBackend の #if も iOS を含める)。
+		using DefaultPadBackend = NullPadBackend;
 	}
 }
 #else

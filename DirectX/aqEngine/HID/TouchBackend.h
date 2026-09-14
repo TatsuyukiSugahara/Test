@@ -4,6 +4,11 @@
 //  タッチバックエンドの選択(PadBackend.h と同じ流儀)。
 //    Win32 / UWP / Mac : タッチなし(Null)
 //    Android           : AndroidTouchBackend(AInputEvent 由来)
+//    iOS               : タッチなし(Null)。P0 の骨格なので下の #else へ落ちる。
+//                        TODO(P3): iOSTouchBackend を足してここへ分岐を書く
+//                        (AqMetalView の touchesBegan/Moved/Ended/Cancelled が
+//                        入力シンクへ流し、バックエンドはそれを読むだけ。
+//                        Android / Mac と同じ構造。設計書/iOS移植設計.md §5.2)
 // ============================================================
 
 #if defined(AQ_PLATFORM_ANDROID)

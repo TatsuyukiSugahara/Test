@@ -55,8 +55,19 @@ aq_exclude_sources(AQ_ENGINE_SOURCES
 #  HID/* と Platform/PlatformWin32.cpp は既にガード済みだが、意図を明示する
 #  ため同様に除外しておく(空 TU を並べる意味が無いため)。
 #
-#  Windows / Mac / Android の 3 分岐。Android は「非 Windows 共通の除外」に
-#  加えて Mac 専用実装も落とす必要があるため、除外集合を名前で持つ。
+#  Windows / iOS / Android / macOS の 4 分岐。除外集合を名前で持ち、
+#  分岐ごとに「そのプラットフォームに要らないもの」を組み合わせる。
+#
+#  Apple 系が 2 つに割れたので、旧 MAC_ONLY を 2 段に分けている:
+#    APPLE_ONLY … Windows / Android から落とす Apple 共通の実装。
+#                 .mm の一括除外もここに含める(Windows / Android は
+#                 OBJCXX を有効にしていないため、そもそもコンパイルできない)
+#    MAC_ONLY   … Apple のうち **iOS からだけ** 落とす macOS 専用(AppKit 前提)
+#    IOS_ONLY   … Apple のうち macOS からだけ落とす iOS 専用
+#
+#  **iOS を \.mm$ の一括除外に掛けてはいけない。** iOS は Graphics/Metal/ の .mm と
+#  ExtAudioFileDecoder.mm を実際に使うため、iOS 側は「macOS 専用ディレクトリだけ」を
+#  名指しで落とす形にする必要がある(設計書/iOS移植設計.md §9 P0)。
 # ----------------------------------------------------------------------------
 set(AQ_ENGINE_WINDOWS_ONLY_PATTERNS
 	"/Graphics/D3D11/"
@@ -72,13 +83,29 @@ set(AQ_ENGINE_WINDOWS_ONLY_PATTERNS
 	"/Sound/Video/VideoPlayer\\.cpp$"
 )
 
-set(AQ_ENGINE_MAC_ONLY_PATTERNS
-	"/Platform/Common/DebugOutputMac\\.cpp$"
+#  Apple 共通(macOS / iOS)の実装。Windows / Android から落とす。
+set(AQ_ENGINE_APPLE_ONLY_PATTERNS
+	"/Platform/Common/DebugOutputApple\\.cpp$"
 	"/Platform/Mac/"
+	"/Platform/iOS/"
 	"/HID/Mac/"
 	"/Sound/CoreAudio/"
 	"/Graphics/Metal/"
 	"\\.mm$"
+)
+
+#  macOS 専用(AppKit / デスクトップ前提)。iOS から落とす。
+#  HID/Mac/ の再利用(GameController は iOS でも使える)は P3 の作業なので、
+#  P0 の時点では iOS からまとめて外しておく。
+set(AQ_ENGINE_MAC_ONLY_PATTERNS
+	"/Platform/Mac/"
+	"/HID/Mac/"
+	"/Sound/CoreAudio/"
+)
+
+#  iOS 専用(UIKit 前提)。macOS から落とす。
+set(AQ_ENGINE_IOS_ONLY_PATTERNS
+	"/Platform/iOS/"
 )
 
 #  Android 専用実装(Platform/Android・HID/Android・Sound/AAudio)。
@@ -93,20 +120,29 @@ set(AQ_ENGINE_ANDROID_ONLY_PATTERNS
 
 #  ANDROID を先に判定すること(Android は UNIX が真になるため、
 #  「Windows でなければ Mac」という分岐では Mac 側へ落ちてしまう)。
+#  IOS も APPLE / UNIX が真になるので、macOS より先に判定すること
+#  (aq_apply_platform_definitions と同じ理由)。
 if(ANDROID)
 	aq_exclude_sources(AQ_ENGINE_SOURCES
 		${AQ_ENGINE_WINDOWS_ONLY_PATTERNS}
+		${AQ_ENGINE_APPLE_ONLY_PATTERNS}
+	)
+elseif(IOS)
+	aq_exclude_sources(AQ_ENGINE_SOURCES
+		${AQ_ENGINE_WINDOWS_ONLY_PATTERNS}
+		${AQ_ENGINE_ANDROID_ONLY_PATTERNS}
 		${AQ_ENGINE_MAC_ONLY_PATTERNS}
 	)
 elseif(WIN32)
 	aq_exclude_sources(AQ_ENGINE_SOURCES
-		${AQ_ENGINE_MAC_ONLY_PATTERNS}
+		${AQ_ENGINE_APPLE_ONLY_PATTERNS}
 		${AQ_ENGINE_ANDROID_ONLY_PATTERNS}
 	)
 else()
 	aq_exclude_sources(AQ_ENGINE_SOURCES
 		${AQ_ENGINE_WINDOWS_ONLY_PATTERNS}
 		${AQ_ENGINE_ANDROID_ONLY_PATTERNS}
+		${AQ_ENGINE_IOS_ONLY_PATTERNS}
 	)
 endif()
 
@@ -247,6 +283,19 @@ elseif(WIN32)
 	elseif(AQ_GRAPHICS_API STREQUAL "D3D12")
 		target_link_libraries(aqEngine PUBLIC d3d12 dxgi d3dcompiler)
 	endif()
+elseif(IOS)
+	# iOS のフレームワーク。ウィンドウ系だけが Cocoa(AppKit)ではなく UIKit になり、
+	# 残る 6 つは macOS と同じものがそのまま使える(設計書/iOS移植設計.md §2.2)。
+	# WIN32 / APPLE と同じく IOS を APPLE より先に判定すること。
+	target_link_libraries(aqEngine PUBLIC
+		"-framework UIKit"
+		"-framework QuartzCore"
+		"-framework Metal"
+		"-framework GameController"
+		"-framework AudioToolbox"
+		"-framework CoreAudio"
+		"-framework AVFoundation"
+	)
 elseif(APPLE)
 	# Mac のフレームワーク。実装(PlatformMac / CocoaInput / CoreAudio)は
 	# P2 以降で追加する(設計書 §9)。

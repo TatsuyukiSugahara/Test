@@ -3,8 +3,8 @@
 // ============================================================
 //  「wav 以外」用デコーダの選択(PadBackend.h / SoundBackend.h と同じ流儀)。
 //    Win32 / UWP : Media Foundation(MFDecoder)
-//    Mac         : 空デコーダ(NullDecoder)。AudioToolbox ExtAudioFile 実装
-//                  (ExtAudioFileDecoder)は P4 で追加する
+//    Mac / iOS   : AudioToolbox の ExtAudioFile(ExtAudioFileDecoder)。
+//                  OS のコーデックは Apple プラットフォームで共通なので分岐も共通
 //    Android     : 空デコーダ(NullDecoder)。現在のアセットは wav のみなので
 //                  可搬な WavDecoder で足りる。MediaCodec 実装が要るのは
 //                  圧縮音源を入れるときで、その時点で差し替える
@@ -28,14 +28,14 @@ namespace aq
 		using CompressedDecoder = MFDecoder;
 	}
 }
-#elif defined(AQ_PLATFORM_MAC)
+#elif defined(AQ_PLATFORM_APPLE)
 #include "Sound/Decoder/ExtAudioFileDecoder.h"
 
 namespace aq
 {
 	namespace sound
 	{
-		// Mac: AudioToolbox の ExtAudioFile。OS が対応する形式(mp3 / aac / m4a 等)を
+		// Mac / iOS: AudioToolbox の ExtAudioFile。OS が対応する形式(mp3 / aac / m4a 等)を
 		// 16bit PCM へ落とす。MFDecoder と同じ契約(Mac移植設計 §5)。
 		using CompressedDecoder = ExtAudioFileDecoder;
 	}

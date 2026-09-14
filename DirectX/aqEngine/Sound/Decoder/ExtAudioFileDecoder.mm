@@ -1,6 +1,6 @@
 #include "aq.h"
-// macOS 以外では空 TU。
-#if defined(AQ_PLATFORM_MAC)
+// Apple プラットフォーム(macOS / iOS)以外では空 TU。
+#if defined(AQ_PLATFORM_APPLE)
 #include "Sound/Decoder/ExtAudioFileDecoder.h"
 
 #include <AudioToolbox/AudioToolbox.h>
@@ -221,4 +221,4 @@ namespace aq
 		}
 	}
 }
-#endif // AQ_PLATFORM_MAC
+#endif // AQ_PLATFORM_APPLE

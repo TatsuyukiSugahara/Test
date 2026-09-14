@@ -124,7 +124,7 @@ namespace aq
 
 				// **ScratchImage 全体を渡す overload を使うこと。** 1 枚だけを取る
 				// overload (Decompress(const Image&, ...)) だと、キューブマップ
-				// (Assets/Sky/SkyCube.dds) の残り 5 面とミップが落ちる。
+				// (aqEngine/Assets/Sky/DefaultSkyCube.dds) の残り 5 面とミップが落ちる。
 				DirectX::ScratchImage decompressed;
 				const HRESULT hr = DirectX::Decompress(
 					outImage.GetImages(), outImage.GetImageCount(), metadata,

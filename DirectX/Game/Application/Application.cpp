@@ -78,7 +78,7 @@ namespace app
 			shadowSettings.softness    = 2.0f;
 
 			auto shadowRenderer = std::make_unique<aq::rendering::HardShadowRenderer>();
-			if (shadowRenderer->Create(shadowSettings, "Assets/Shader/ShadowDepth.fx"))
+			if (shadowRenderer->Create(shadowSettings))
 			{
 				renderer_.SetShadowRenderer(std::move(shadowRenderer),
 				                            aq::Engine::Get().GetMainRenderTargetHandle(),

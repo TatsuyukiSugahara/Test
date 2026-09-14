@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <string>
 #include "Rendering/RenderFrame.h"
 #include "Rendering/RenderCommandList.h"
 #include "Math/Vector.h"
@@ -14,7 +15,7 @@ namespace aq
 		/**
 		 * スカイボックスレンダラー。
 		 *
-		 * キューブマップ (Assets/Sky/SkyCube.dds)・Skybox.fx の VS/PS・サンプラを所有し、
+		 * キューブマップ (既定は aqEngine/Assets/Sky/DefaultSkyCube.dds)・Skybox.fx の VS/PS・サンプラを所有し、
 		 * SkyCommand を 1 本積むだけの薄いクラス。Renderer が postProcessRenderer_ と
 		 * 同じ位置づけで所有する (空はフォワード構成でも要るので DeferredRenderer には載せない)。
 		 *
@@ -29,9 +30,11 @@ namespace aq
 		public:
 			/**
 			 * キューブマップのロード要求・シェーダ生成・サンプラ生成を行う。
+			 * 既定はエンジン所有のキューブマップ。差し替えたいゲームは自前のパスを渡す。
+			 * @param cubemapPath 読み込むキューブマップ (.dds) のパス
 			 * @return 描画に必要な資源をそろえられたら true (キューブマップの完了は待たない)
 			 */
-			bool Create();
+			bool Create(const char* cubemapPath = "aqEngine/Assets/Sky/DefaultSkyCube.dds");
 
 			/** 今フレーム空を描けるか (キューブマップのロード完了と SRV の有無まで見る) */
 			bool IsReady() const;
@@ -52,6 +55,9 @@ namespace aq
 			std::unique_ptr<graphics::IShader>       skyVS_;
 			std::unique_ptr<graphics::IShader>       skyPS_;
 			std::unique_ptr<graphics::ISamplerState> sampler_;
+
+			/** ロード要求したキューブマップのパス (ログに出すため保持する) */
+			std::string cubemapPath_;
 
 			/** 見た目パラメータ */
 			math::Vector4 tint_ = math::Vector4(1.0f, 1.0f, 1.0f, 1.0f);

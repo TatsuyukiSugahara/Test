@@ -22,10 +22,12 @@ namespace aq
 
 			/**
 			 * デプスマップと深度パス用 VS を生成する。
+			 * 既定はエンジン所有の ShadowDepth.fx。差し替えたいゲームは自前のパスを渡す。
 			 * @param settings  解像度・投影範囲・バイアスなどの設定
 			 * @param shadowVSPath  ShadowDepth.fx へのパス
 			 */
-			bool Create(const ShadowSettings& settings, const char* shadowVSPath);
+			bool Create(const ShadowSettings& settings,
+			            const char* shadowVSPath = "aqEngine/Assets/Shader/ShadowDepth.fx");
 
 			// IShadowRenderer
 			void BuildShadowCommandList(

@@ -13,13 +13,13 @@ namespace aq
 
 			// シェーダーロード
 			extractShader_ = gd.CreateShader(
-				"Assets/Shader/BloomBrightExtract.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/BloomBrightExtract.fx", "main", graphics::IShader::ShaderType::CS);
 			dualBlurDownShader_ = gd.CreateShader(
-				"Assets/Shader/DualBlurDown.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/DualBlurDown.fx", "main", graphics::IShader::ShaderType::CS);
 			dualBlurUpShader_ = gd.CreateShader(
-				"Assets/Shader/DualBlurUp.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/DualBlurUp.fx", "main", graphics::IShader::ShaderType::CS);
 			dualBlurUpAccumShader_ = gd.CreateShader(
-				"Assets/Shader/DualBlurUpAccum.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/DualBlurUpAccum.fx", "main", graphics::IShader::ShaderType::CS);
 
 			if (!extractShader_ || !dualBlurDownShader_ || !dualBlurUpShader_ || !dualBlurUpAccumShader_)
 			{

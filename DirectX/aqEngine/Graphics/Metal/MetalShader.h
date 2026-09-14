@@ -19,7 +19,7 @@ namespace aq
 		 * **同じ規則を 2 箇所に書かない**ために公開している。現在の利用者は
 		 * MetalGraphicsDeviceImpl.mm の EnsureFullscreenBlitPipeline()
 		 * (フルスクリーン blit の MSL / .metallib の在り処を求める)。
-		 * @param filePath "Assets/Shader/..." などのプロジェクト相対パス(絶対パスならそのまま)
+		 * @param filePath "aqEngine/Assets/Shader/..." などのプロジェクト相対パス(絶対パスならそのまま)
 		 * @return 解決後のパス。見つからなければ入力をそのまま返す
 		 */
 		std::string ResolveShaderFilePath(const char* filePath);

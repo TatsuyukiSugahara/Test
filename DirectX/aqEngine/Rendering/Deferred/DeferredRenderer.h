@@ -20,7 +20,7 @@ namespace aq
 		 *   - GBuffer1: RGBA16F (normal XY + gloss)
 		 *   - GBuffer2: RGBA16F (worldPos XYZ + specularIntensity)
 		 *   - GBuffer3: RGBA16F (emissive RGB + pixelTag)
-		 *   - DeferredLighting VS/PS シェーダー
+		 *   - PBRLighting の VS/PS シェーダー(と、デカール用の Decal VS/PS)
 		 */
 		class DeferredRenderer final : public IDeferredRenderer
 		{

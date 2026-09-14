@@ -20,9 +20,9 @@ namespace aq
 			auto& gd = graphics::GraphicsDevice::Get();
 
 			reconstructShader_ = gd.CreateShader(
-				"Assets/Shader/HiZReconstruct.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/HiZReconstruct.fx", "main", graphics::IShader::ShaderType::CS);
 			downsampleShader_ = gd.CreateShader(
-				"Assets/Shader/HiZDownsample.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/HiZDownsample.fx", "main", graphics::IShader::ShaderType::CS);
 			if (!reconstructShader_ || !downsampleShader_)
 			{
 				EngineAssertMsg(false, "Hi-Z シェーダーのロードに失敗しました");

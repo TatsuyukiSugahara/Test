@@ -11,12 +11,11 @@ namespace aq
 	{
 		namespace
 		{
-			static constexpr const char* SKY_CUBEMAP_PATH = "Assets/Sky/SkyCube.dds";
-			static constexpr const char* SKY_SHADER_PATH  = "Assets/Shader/Skybox.fx";
+			static constexpr const char* SKY_SHADER_PATH = "aqEngine/Assets/Shader/Skybox.fx";
 		}
 
 
-		bool SkyRenderer::Create()
+		bool SkyRenderer::Create(const char* cubemapPath)
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
 
@@ -41,14 +40,16 @@ namespace aq
 			}
 
 			// キューブマップ (非同期ロード。完了は IsReady() でポーリングする)
-			cubeMap_ = res::ResourceManager::Get().Load<res::GPUResource>(SKY_CUBEMAP_PATH);
+			// パスはロード完了/失敗のログに出すので保持しておく
+			cubemapPath_ = cubemapPath;
+			cubeMap_ = res::ResourceManager::Get().Load<res::GPUResource>(cubemapPath);
 			if (!cubeMap_) {
 				aq::StartupMarkf("[sky] cubemap load request FAILED (%s) -> sky disabled",
-				                 SKY_CUBEMAP_PATH);
+				                 cubemapPath);
 				return false;
 			}
 
-			aq::StartupMarkf("[sky] created (VS/PS + sampler ok, loading %s)", SKY_CUBEMAP_PATH);
+			aq::StartupMarkf("[sky] created (VS/PS + sampler ok, loading %s)", cubemapPath);
 			return true;
 		}
 
@@ -91,7 +92,7 @@ namespace aq
 			logged_ = true;
 
 			if (!cubeMap_ || cubeMap_->IsFailed()) {
-				aq::StartupMarkf("[sky] cubemap load FAILED (%s) -> sky disabled", SKY_CUBEMAP_PATH);
+				aq::StartupMarkf("[sky] cubemap load FAILED (%s) -> sky disabled", cubemapPath_.c_str());
 				return;
 			}
 
@@ -99,12 +100,12 @@ namespace aq
 			// GPUResource は desc を公開していないので data_ (TextureData) を直接見る。
 			const res::TextureData* texture = static_cast<const res::TextureData*>(cubeMap_->GetData());
 			if (!texture) {
-				aq::StartupMarkf("[sky] cubemap has no TextureData (%s) -> sky disabled", SKY_CUBEMAP_PATH);
+				aq::StartupMarkf("[sky] cubemap has no TextureData (%s) -> sky disabled", cubemapPath_.c_str());
 				return;
 			}
 
 			aq::StartupMarkf("[sky] cubemap %s: %ux%u isCubemap=%d array=%u mips=%u srv=%s",
-			                 SKY_CUBEMAP_PATH,
+			                 cubemapPath_.c_str(),
 			                 texture->desc.width, texture->desc.height,
 			                 texture->desc.isCubemap ? 1 : 0,
 			                 texture->desc.arraySize, texture->desc.mipLevels,

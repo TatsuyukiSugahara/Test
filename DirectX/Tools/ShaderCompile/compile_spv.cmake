@@ -1,8 +1,8 @@
 # ============================================================================
 #  ビルド時 SPIR-V 生成 (Mac移植設計.md §4)
 #
-#  Game/Assets/Shader/shader_entries.txt に並んだ <file> <entry> <stage> を
-#  dxc で 1 本ずつコンパイルし、Game/Assets/Shader/spv/ へ
+#  aqEngine/Assets/Shader/shader_entries.txt に並んだ <file> <entry> <stage> を
+#  dxc で 1 本ずつコンパイルし、aqEngine/Assets/Shader/spv/ へ
 #      <stem>.<entry>.<stage>.spv
 #  という名前で出力する。出力名は aqEngine/Graphics/Vulkan/VulkanShader.cpp の
 #  BuildSpirvPath() が探すパスと一対一で対応している。
@@ -27,7 +27,7 @@
 #
 #  変数 (すべて任意。未指定なら既定値):
 #    AQ_SPV_DXC         dxc の実行ファイル。既定は $ENV{VULKAN_SDK} 配下 → PATH の順に探索
-#    AQ_SPV_SHADER_DIR  .fx の置き場。既定 <repo>/DirectX/Game/Assets/Shader
+#    AQ_SPV_SHADER_DIR  .fx の置き場。既定 <repo>/DirectX/aqEngine/Assets/Shader
 #    AQ_SPV_ENTRIES     エントリ一覧。既定 ${AQ_SPV_SHADER_DIR}/shader_entries.txt
 #    AQ_SPV_OUT_DIR     .spv の出力先。既定 ${AQ_SPV_SHADER_DIR}/spv
 #    AQ_SPV_ARGS_FILE   dxc 固定引数。既定 <このファイルの隣>/dxc_args.txt
@@ -175,8 +175,8 @@ endfunction()
 # ----------------------------------------------------------------------------
 macro(aq_spv_resolve_defaults)
 	if(NOT AQ_SPV_SHADER_DIR)
-		# Tools/ShaderCompile -> DirectX -> Game/Assets/Shader
-		get_filename_component(AQ_SPV_SHADER_DIR "${AQ_SPV_LIST_DIR}/../../Game/Assets/Shader" ABSOLUTE)
+		# Tools/ShaderCompile -> DirectX -> aqEngine/Assets/Shader
+		get_filename_component(AQ_SPV_SHADER_DIR "${AQ_SPV_LIST_DIR}/../../aqEngine/Assets/Shader" ABSOLUTE)
 	endif()
 	if(NOT AQ_SPV_ENTRIES)
 		set(AQ_SPV_ENTRIES "${AQ_SPV_SHADER_DIR}/shader_entries.txt")

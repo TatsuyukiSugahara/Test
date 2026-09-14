@@ -38,10 +38,10 @@ namespace aq
 			auto& gfx = graphics::GraphicsDevice::Get();
 
 			// --- シェーダー (同期コンパイル) ---
-			vs_            = gfx.CreateShader("Assets/Shader/UISprite.fx",      "VSMain", graphics::IShader::ShaderType::VS);
-			standardPS_    = gfx.CreateShader("Assets/Shader/UISprite.fx",      "PSMain", graphics::IShader::ShaderType::PS);
-			circleGaugePS_ = gfx.CreateShader("Assets/Shader/UICircleGauge.fx", "PSMain", graphics::IShader::ShaderType::PS);
-			sdfTextPS_     = gfx.CreateShader("Assets/Shader/UISDFText.fx",     "PSMain", graphics::IShader::ShaderType::PS);
+			vs_            = gfx.CreateShader("aqEngine/Assets/Shader/UISprite.fx",      "VSMain", graphics::IShader::ShaderType::VS);
+			standardPS_    = gfx.CreateShader("aqEngine/Assets/Shader/UISprite.fx",      "PSMain", graphics::IShader::ShaderType::PS);
+			circleGaugePS_ = gfx.CreateShader("aqEngine/Assets/Shader/UICircleGauge.fx", "PSMain", graphics::IShader::ShaderType::PS);
+			sdfTextPS_     = gfx.CreateShader("aqEngine/Assets/Shader/UISDFText.fx",     "PSMain", graphics::IShader::ShaderType::PS);
 
 			if (!vs_ || !standardPS_ || !circleGaugePS_ || !sdfTextPS_)
 			{

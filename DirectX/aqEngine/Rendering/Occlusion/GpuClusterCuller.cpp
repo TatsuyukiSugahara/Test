@@ -32,8 +32,8 @@ namespace aq
 		bool GpuClusterCuller::Initialize()
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
-			resetCS_ = gd.CreateShader("Assets/Shader/ClusterCullReset.fx", "main", graphics::IShader::ShaderType::CS);
-			cullCS_  = gd.CreateShader("Assets/Shader/ClusterCull.fx",      "main", graphics::IShader::ShaderType::CS);
+			resetCS_ = gd.CreateShader("aqEngine/Assets/Shader/ClusterCullReset.fx", "main", graphics::IShader::ShaderType::CS);
+			cullCS_  = gd.CreateShader("aqEngine/Assets/Shader/ClusterCull.fx",      "main", graphics::IShader::ShaderType::CS);
 			ready_   = (resetCS_ != nullptr && cullCS_ != nullptr);
 			if (!ready_) EngineAssertMsg(false, "GPU クラスタカリング シェーダのロードに失敗");
 			return ready_;

@@ -9,7 +9,7 @@
 #  書式: <file> <entry> <stage>      stage = vs | ps | cs
 #  "#" 始まりの行と空行は無視される。
 #
-#  内容は Game/Assets/Shader/*.fx の実体 (エントリ関数の定義) を全走査して作成した。
+#  内容は aqEngine/Assets/Shader/*.fx の実体 (エントリ関数の定義) を全走査して作成した。
 #  .fx = 41 本 / うちエントリを持つもの 36 本 / インクルード専用 5 本
 #  (Common.fx, Lighting.fx, PBRFunctions.fx, ShadowSampling.fx, Tonemap.fx)。
 #  エントリ総数 = 61。

@@ -43,9 +43,9 @@ namespace aq
 			}
 
 			// PBR ディファードライティングシェーダーをロード（同期）
-			auto vs = gd.CreateShader("Assets/Shader/PBRLighting.fx", "VSMain",
+			auto vs = gd.CreateShader("aqEngine/Assets/Shader/PBRLighting.fx", "VSMain",
 			                          graphics::IShader::ShaderType::VS);
-			auto ps = gd.CreateShader("Assets/Shader/PBRLighting.fx", "PSMain",
+			auto ps = gd.CreateShader("aqEngine/Assets/Shader/PBRLighting.fx", "PSMain",
 			                          graphics::IShader::ShaderType::PS);
 			if (!vs || !ps) return false;
 
@@ -53,9 +53,9 @@ namespace aq
 			lightingPS_ = std::move(ps);
 
 			// 投影デカール用シェーダー・サンプラー (任意機能: 失敗してもライティングは継続)
-			decalVS_ = gd.CreateShader("Assets/Shader/Decal.fx", "VSMain",
+			decalVS_ = gd.CreateShader("aqEngine/Assets/Shader/Decal.fx", "VSMain",
 			                           graphics::IShader::ShaderType::VS);
-			decalPS_ = gd.CreateShader("Assets/Shader/Decal.fx", "PSMain",
+			decalPS_ = gd.CreateShader("aqEngine/Assets/Shader/Decal.fx", "PSMain",
 			                           graphics::IShader::ShaderType::PS);
 			graphics::SamplerDesc decalSamp;
 			decalSamp.filter   = graphics::FilterMode::MinMagMipLinear;

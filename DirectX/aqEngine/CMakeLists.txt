@@ -35,6 +35,19 @@ set(AQ_ENGINE_BUILD_DIR_PATTERNS
 aq_exclude_sources(AQ_ENGINE_SOURCES ${AQ_ENGINE_BUILD_DIR_PATTERNS})
 aq_exclude_sources(AQ_ENGINE_HEADERS ${AQ_ENGINE_BUILD_DIR_PATTERNS})
 
+
+# ----------------------------------------------------------------------------
+#  Assets/ の除外
+#
+#  エンジンが同梱するアセット(HLSL のシェーダと、C++ と register 定義を共有する
+#  定数ヘッダ)。拡張子が .h なのでヘッダの GLOB が拾ってしまうが C++ のヘッダ
+#  ではない。混ざると IDE のソースツリーが汚れるうえ、Assets/Shader/MaterialDef.h
+#  (aqEngine/Graphics/MaterialDef.h への 1 行の転送ヘッダ)が同名で並ぶため
+#  紛らわしい。将来 .cpp が置かれても拾わないようソース側も落とす。
+# ----------------------------------------------------------------------------
+aq_exclude_sources(AQ_ENGINE_SOURCES "/Assets/")
+aq_exclude_sources(AQ_ENGINE_HEADERS "/Assets/")
+
 aq_exclude_sources(AQ_ENGINE_SOURCES
 	"/Graphics/GPUBuffer\\.cpp$"
 	"/Platform/PlatformUWP\\.cpp$"

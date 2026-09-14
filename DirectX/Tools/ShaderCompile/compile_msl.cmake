@@ -1,9 +1,9 @@
 # ============================================================================
 #  ビルド時 MSL 生成 (MetalBackend設計.md §9.1)
 #
-#  Game/Assets/Shader/shader_entries.txt に並んだ <file> <entry> <stage> を
-#  2 段構成でコンパイルし、Game/Assets/Shader/msl/ (macOS 版) または
-#  Game/Assets/Shader/msl-ios/ (iOS 版。AQ_MSL_IOS=ON) へ
+#  aqEngine/Assets/Shader/shader_entries.txt に並んだ <file> <entry> <stage> を
+#  2 段構成でコンパイルし、aqEngine/Assets/Shader/msl/ (macOS 版) または
+#  aqEngine/Assets/Shader/msl-ios/ (iOS 版。AQ_MSL_IOS=ON) へ
 #      <stem>.<entry>.<stage>.spv    (中間。P2 の頂点入力リフレクション用に残す)
 #      <stem>.<entry>.<stage>.metal  (MSL。macOS は実行時 newLibraryWithSource: へ渡す)
 #  という名前で出力する。
@@ -37,7 +37,7 @@
 #  エントリ一覧は Vulkan 用と同じ shader_entries.txt をそのまま再利用する
 #  (新規ファイルを作らない。59 エントリ)。
 #
-#  出力先は **Vulkan 用の Game/Assets/Shader/spv/ とは別ディレクトリ**にする。
+#  出力先は **Vulkan 用の aqEngine/Assets/Shader/spv/ とは別ディレクトリ**にする。
 #  register -> binding のシフトが違う (Vulkan: b:0/t:16/s:32/u:48、
 #  Metal: b:0/t:0/s:0/u:16) ので、同名でも中身がまったくの別物になる。
 #  混ざると Vulkan 構成が壊れる。
@@ -79,7 +79,7 @@
 #  変数 (すべて任意。未指定なら既定値):
 #    AQ_MSL_DXC          dxc の実行ファイル。既定は $ENV{VULKAN_SDK} 配下 → PATH の順に探索
 #    AQ_MSL_SPIRV_CROSS  spirv-cross の実行ファイル。既定は同上 (Vulkan SDK 同梱)
-#    AQ_MSL_SHADER_DIR   .fx の置き場。既定 <repo>/DirectX/Game/Assets/Shader
+#    AQ_MSL_SHADER_DIR   .fx の置き場。既定 <repo>/DirectX/aqEngine/Assets/Shader
 #    AQ_MSL_ENTRIES      エントリ一覧。既定 ${AQ_MSL_SHADER_DIR}/shader_entries.txt
 #    AQ_MSL_OUT_DIR      .spv / .metal の出力先。既定は AQ_MSL_IOS 次第
 #                        (OFF: ${AQ_MSL_SHADER_DIR}/msl、ON: ${AQ_MSL_SHADER_DIR}/msl-ios)
@@ -268,8 +268,8 @@ endfunction()
 # ----------------------------------------------------------------------------
 macro(aq_msl_resolve_defaults)
 	if(NOT AQ_MSL_SHADER_DIR)
-		# Tools/ShaderCompile -> DirectX -> Game/Assets/Shader
-		get_filename_component(AQ_MSL_SHADER_DIR "${AQ_MSL_LIST_DIR}/../../Game/Assets/Shader" ABSOLUTE)
+		# Tools/ShaderCompile -> DirectX -> aqEngine/Assets/Shader
+		get_filename_component(AQ_MSL_SHADER_DIR "${AQ_MSL_LIST_DIR}/../../aqEngine/Assets/Shader" ABSOLUTE)
 	endif()
 	if(NOT AQ_MSL_ENTRIES)
 		# Vulkan 用と同じファイルを再利用する (新規に作らない)。

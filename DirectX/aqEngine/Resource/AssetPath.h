@@ -26,9 +26,10 @@ namespace aq
 		 * コンテンツ基点を求める(プロセスで 1 度だけ算出してキャッシュ)
 		 *
 		 * Engine::GetContentRoot() を最優先で見る。返れば上方探索は行わない
-		 * (サンドボックスでは Game/Assets を遡れないため。UWP のパッケージ install
+		 * (サンドボックスでは番兵を遡れないため。UWP のパッケージ install
 		 * フォルダ、macOS の Contents/Resources、iOS のバンドル、Android の展開先)。
-		 * Win32 は nullptr を返すので、カレントディレクトリから親へ番兵を探す。
+		 * Win32 は nullptr を返すので、カレントディレクトリから親へ番兵
+		 * (`aqEngine/Assets`)を探す。
 		 *
 		 * ワーカースレッドから並列に呼ばれる([07_リソース管理設計.md] §5)ため、
 		 * C++11 のスレッドセーフな static 初期化で算出する。

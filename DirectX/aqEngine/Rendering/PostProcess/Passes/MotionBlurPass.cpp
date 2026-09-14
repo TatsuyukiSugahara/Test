@@ -15,7 +15,7 @@ namespace aq
 			// 任意機能。シェーダー / RT が用意できないときはブラー無効のまま先へ進む
 			// (チェーン全体を止めない)。
 			shader_ = gd.CreateShader(
-				"Assets/Shader/MotionBlur.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/MotionBlur.fx", "main", graphics::IShader::ShaderType::CS);
 			if (shader_)
 			{
 				graphics::RenderTargetDesc blurDesc;

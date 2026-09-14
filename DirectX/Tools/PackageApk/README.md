@@ -129,10 +129,14 @@ META-INF/...                         (署名)
 
 | 元のファイル | APK 内のエントリ名 |
 |---|---|
-| `Game\Assets\Shader\spv\Foo.main.vs.spv` | `assets/Game/Assets/Shader/spv/Foo.main.vs.spv` |
+| `Game\Assets\animData\run.tka` | `assets/Game/Assets/animData/run.tka` |
 | `Game\Assets\Character\Albedo.png` | `assets/Game/Assets/Character/Albedo.png` |
 
 区切りは**必ず `/`**。
+
+シェーダの生成物(`.spv`)はエンジン側の `aqEngine/Assets/Shader/spv/` へ移ったため、
+**現状このスクリプトの同梱対象には入っていない**(受け取るアセットディレクトリが 1 個だけで、
+それが `Game/Assets` に固定されている)。エンジンアセットの同梱はパッケージング追随の作業で入れる。
 
 ### なぜ `aapt2 link -A` を使わないのか
 
@@ -163,7 +167,7 @@ Game/Assets/animData/walk.tka
 Game/Assets/Audio/Main.audiobank.json
 Game/Assets/Character/Albedo.png
 ...
-Game/Assets/Shader/spv/BloomBrightExtract.main.cs.spv
+Game/Assets/UI/AquaDash/Title.screen.json
 ```
 
 ### `asset_stamp.txt`

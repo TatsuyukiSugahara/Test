@@ -130,9 +130,9 @@ namespace aq
 
 			/**
 			 * CopyToBackBuffer のフルスクリーン変換描画に使う MSL のファイル名
-			 * (AQ_MSL_SHADER_DIR = Game/Assets/Shader 直下)。
+			 * (AQ_MSL_SHADER_DIR = aqEngine/Assets/Shader 直下)。
 			 *
-			 * **中身は Assets/Shader/FullscreenBlit.metal に移した**(iOS 移植 P5b)。
+			 * **中身は aqEngine/Assets/Shader/FullscreenBlit.metal に移した**(iOS 移植 P5b)。
 			 * 以前はこの TU に文字列で埋め込んでいたが、iOS 実機では
 			 * newLibraryWithSource: が SIGBUS で即死するため、この MSL も
 			 * ビルド時に .metallib へ焼く必要がある(設計書/iOS移植設計.md §4.6)。
@@ -148,7 +148,7 @@ namespace aq
 			 * ファイル名・関数名は compile_msl.cmake の AQ_MSL_HANDWRITTEN と
 			 * .metal 側の定義に**一対一で対応している。片方だけ変えないこと。**
 			 */
-			static constexpr char FULLSCREEN_BLIT_SHADER[] = "Assets/Shader/FullscreenBlit.metal";
+			static constexpr char FULLSCREEN_BLIT_SHADER[] = "aqEngine/Assets/Shader/FullscreenBlit.metal";
 
 
 			/**

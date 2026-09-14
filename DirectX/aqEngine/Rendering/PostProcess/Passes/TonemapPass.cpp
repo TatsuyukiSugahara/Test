@@ -13,7 +13,7 @@ namespace aq
 			auto& gd = graphics::GraphicsDevice::Get();
 
 			compositeShader_ = gd.CreateShader(
-				"Assets/Shader/BloomComposite.fx", "main", graphics::IShader::ShaderType::CS);
+				"aqEngine/Assets/Shader/BloomComposite.fx", "main", graphics::IShader::ShaderType::CS);
 			if (!compositeShader_)
 			{
 				EngineAssertMsg(false, "Bloom シェーダーのロードに失敗しました");

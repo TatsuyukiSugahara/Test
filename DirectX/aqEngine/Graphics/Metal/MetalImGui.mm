@@ -208,8 +208,8 @@ namespace aq
 
 				// **ImGuiVK.fx をそのまま使う**(P0.5 で msl/ImGuiVK.*.metal が生成済み)。
 				// Metal 用に .fx を増やすと shader_entries.txt が Vulkan / D3D 側にも波及する。
-				g_vs = g_dev->CreateShader("Assets/Shader/ImGuiVK.fx", "VSMain", IShader::ShaderType::VS);
-				g_ps = g_dev->CreateShader("Assets/Shader/ImGuiVK.fx", "PSMain", IShader::ShaderType::PS);
+				g_vs = g_dev->CreateShader("aqEngine/Assets/Shader/ImGuiVK.fx", "VSMain", IShader::ShaderType::VS);
+				g_ps = g_dev->CreateShader("aqEngine/Assets/Shader/ImGuiVK.fx", "PSMain", IShader::ShaderType::PS);
 				if (FunctionOf(g_vs.get()) == nil || FunctionOf(g_ps.get()) == nil)
 				{
 					EngineAssertMsg(false, "ImGui Metal シェーダ読み込み失敗");

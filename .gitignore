@@ -88,12 +88,12 @@ build/
 CMakeUserPresets.json
 
 # ビルド時に dxc が生成する SPIR-V(Tools/ShaderCompile/compile_spv.cmake)
-DirectX/Game/Assets/Shader/spv/
+DirectX/aqEngine/Assets/Shader/spv/
 
 # ビルド時に dxc + spirv-cross が生成する MSL と、その中間の SPIR-V
 # (Tools/ShaderCompile/compile_msl.cmake)。Vulkan 用の spv/ とはシフトが違う別物。
-DirectX/Game/Assets/Shader/msl/
+DirectX/aqEngine/Assets/Shader/msl/
 
 # iOS 版 MSL(spirv-cross --msl-ios。AQ_MSL_IOS=ON)。方言が違うので macOS 版の
 # msl/ とも別ディレクトリになる。
-DirectX/Game/Assets/Shader/msl-ios/
+DirectX/aqEngine/Assets/Shader/msl-ios/

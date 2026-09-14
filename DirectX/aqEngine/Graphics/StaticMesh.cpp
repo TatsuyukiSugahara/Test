@@ -20,15 +20,15 @@ namespace aq
 				const char* gbufferPSFuncName;
 			};
 			ShaderInformation shaderInformations[] = {
-				{ "Assets/Shader/Model.fx",      "VSMain", "Assets/Shader/Model.fx",      "PSMain", nullptr,                                 nullptr  },  // NormalModel
-				{ "Assets/Shader/SimpleBox.fx",  "VSMain", "Assets/Shader/SimpleBox.fx",  "PSMain", nullptr,                                 nullptr  },  // SimpleBox
-				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain", nullptr,                                 nullptr  },  // ModelLit (forward-only; GBuffer は PBRLit へ移行)
-				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain", nullptr,                                 nullptr  },  // TerrainLit (forward-only)
-				{ "Assets/Shader/OceanLit.fx",   "VSMain", "Assets/Shader/OceanLit.fx",   "PSMain", nullptr,                                 nullptr  },  // OceanLit
-				{ "Assets/Shader/ModelLit.fx",   "VSMain", "Assets/Shader/ModelLit.fx",   "PSMain", "Assets/Shader/PBRGBuffer.fx",           "PSMain" },  // PBRLit
-				{ "Assets/Shader/TerrainLit.fx", "VSMain", "Assets/Shader/TerrainLit.fx", "PSMain", "Assets/Shader/TerrainPBRGBuffer.fx",    "PSMain" },  // TerrainPBRLit
-				{ "Assets/Shader/InstancedSimple.fx", "VSMain", "Assets/Shader/InstancedSimple.fx", "PSMain", nullptr,             nullptr  },  // InstancedSimple
-				{ "Assets/Shader/InstancedModelTex.fx", "VSMain", "Assets/Shader/InstancedModelTex.fx", "PSMain", nullptr,       nullptr  },  // InstancedTextured
+				{ "aqEngine/Assets/Shader/Model.fx",             "VSMain", "aqEngine/Assets/Shader/Model.fx",             "PSMain", nullptr,                                       nullptr  },  // NormalModel
+				{ "aqEngine/Assets/Shader/SimpleBox.fx",         "VSMain", "aqEngine/Assets/Shader/SimpleBox.fx",         "PSMain", nullptr,                                       nullptr  },  // SimpleBox
+				{ "aqEngine/Assets/Shader/ModelLit.fx",          "VSMain", "aqEngine/Assets/Shader/ModelLit.fx",          "PSMain", nullptr,                                       nullptr  },  // ModelLit (forward-only; GBuffer は PBRLit へ移行)
+				{ "aqEngine/Assets/Shader/TerrainLit.fx",        "VSMain", "aqEngine/Assets/Shader/TerrainLit.fx",        "PSMain", nullptr,                                       nullptr  },  // TerrainLit (forward-only)
+				{ "aqEngine/Assets/Shader/OceanLit.fx",          "VSMain", "aqEngine/Assets/Shader/OceanLit.fx",          "PSMain", nullptr,                                       nullptr  },  // OceanLit
+				{ "aqEngine/Assets/Shader/ModelLit.fx",          "VSMain", "aqEngine/Assets/Shader/ModelLit.fx",          "PSMain", "aqEngine/Assets/Shader/PBRGBuffer.fx",        "PSMain" },  // PBRLit
+				{ "aqEngine/Assets/Shader/TerrainLit.fx",        "VSMain", "aqEngine/Assets/Shader/TerrainLit.fx",        "PSMain", "aqEngine/Assets/Shader/TerrainPBRGBuffer.fx", "PSMain" },  // TerrainPBRLit
+				{ "aqEngine/Assets/Shader/InstancedSimple.fx",   "VSMain", "aqEngine/Assets/Shader/InstancedSimple.fx",   "PSMain", nullptr,                                       nullptr  },  // InstancedSimple
+				{ "aqEngine/Assets/Shader/InstancedModelTex.fx", "VSMain", "aqEngine/Assets/Shader/InstancedModelTex.fx", "PSMain", nullptr,                                       nullptr  },  // InstancedTextured
 			};
 		}
 

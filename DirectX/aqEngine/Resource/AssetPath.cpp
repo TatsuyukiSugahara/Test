@@ -83,7 +83,7 @@ namespace aq
 					// プラットフォームがコンテンツ基点を返す場合(UWP のパッケージ install
 					// フォルダ、macOS の Contents/Resources、iOS のバンドル、Android の
 					// 展開先)は、それを基点に採用し、ソースツリーの上方探索は行わない。
-					// sandbox では Game/Assets を遡れないため。Win32 は nullptr を返すので
+					// サンドボックスでは番兵を遡れないため。Win32 は nullptr を返すので
 					// 従来どおり下の探索にフォールバックする。
 					if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
 						return contentRoot;
@@ -96,7 +96,10 @@ namespace aq
 					}
 
 					while (!dir.empty()) {
-						if (std::filesystem::exists(dir / "Game" / "Assets", ec) && !ec) {
+						// 番兵は aqEngine/Assets。ゲーム側の Assets を番兵にすると、
+						// アセットを 1 個も持たないゲーム(最小サンプル)が基点を見つけられない。
+						// エンジンのアセットは必ず存在する。
+						if (std::filesystem::exists(dir / "aqEngine" / "Assets", ec) && !ec) {
 							return dir.generic_string();
 						}
 						if (dir == dir.root_path()) {

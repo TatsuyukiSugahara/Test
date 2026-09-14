@@ -406,11 +406,11 @@ namespace aq
 		{
 			auto& rm = aq::res::ResourceManager::Get();
 			if (!particleVs_)
-				particleVs_ = rm.LoadShader("Assets/Shader/Particle.fx", "VSMain", graphics::IShader::ShaderType::VS);
+				particleVs_ = rm.LoadShader("aqEngine/Assets/Shader/Particle.fx", "VSMain", graphics::IShader::ShaderType::VS);
 			if (!particlePs_)
-				particlePs_ = rm.LoadShader("Assets/Shader/Particle.fx", "PSMain", graphics::IShader::ShaderType::PS);
+				particlePs_ = rm.LoadShader("aqEngine/Assets/Shader/Particle.fx", "PSMain", graphics::IShader::ShaderType::PS);
 			if (!particlePsTextured_)
-				particlePsTextured_ = rm.LoadShader("Assets/Shader/Particle.fx", "PSTextured", graphics::IShader::ShaderType::PS);
+				particlePsTextured_ = rm.LoadShader("aqEngine/Assets/Shader/Particle.fx", "PSTextured", graphics::IShader::ShaderType::PS);
 
 			// テクスチャ PS は使うエミッタが無ければ未完了でも構わないので必須にしない。
 			return particleVs_ && particleVs_->IsCompleted() && particleVs_->GetShader()

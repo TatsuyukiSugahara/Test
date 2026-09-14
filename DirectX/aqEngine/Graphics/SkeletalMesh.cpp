@@ -22,10 +22,10 @@ namespace aq
 			// SkeletalMesh 用シェーダー一覧
 			// TKM v101 (ボーンあり) 専用シェーダー。頂点レイアウトに BLENDWEIGHTS / BLENDINDICES が必要。
 			ShaderInformation skeletalShaderInformations[] = {
-				{ "Assets/Shader/SkeletalModelLit.fx", "VSMain", "Assets/Shader/SkeletalModelLit.fx", "PSMain",
-				  nullptr, nullptr },                                                                               // SkeletalModelLit (forward-only)
-				{ "Assets/Shader/SkeletalModelLit.fx", "VSMain", "Assets/Shader/SkeletalModelLit.fx", "PSMain",
-				  "Assets/Shader/SkeletalPBRGBuffer.fx", "PSMain" },                                              // SkeletalPBRLit
+				{ "aqEngine/Assets/Shader/SkeletalModelLit.fx", "VSMain", "aqEngine/Assets/Shader/SkeletalModelLit.fx", "PSMain",
+				  nullptr, nullptr },                                          // SkeletalModelLit (forward-only)
+				{ "aqEngine/Assets/Shader/SkeletalModelLit.fx", "VSMain", "aqEngine/Assets/Shader/SkeletalModelLit.fx", "PSMain",
+				  "aqEngine/Assets/Shader/SkeletalPBRGBuffer.fx", "PSMain" },  // SkeletalPBRLit
 			};
 
 			// forward(SkeletalModelLit.fx)の半透明アルファを載せる MaterialCB のパラメータ。

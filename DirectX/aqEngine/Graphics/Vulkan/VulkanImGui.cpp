@@ -132,8 +132,8 @@ namespace aq
 				io.BackendRendererName = "imgui_impl_aq_vulkan";
 				io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
-				g_vs = g_dev->CreateShader("Assets/Shader/ImGuiVK.fx", "VSMain", IShader::ShaderType::VS);
-				g_ps = g_dev->CreateShader("Assets/Shader/ImGuiVK.fx", "PSMain", IShader::ShaderType::PS);
+				g_vs = g_dev->CreateShader("aqEngine/Assets/Shader/ImGuiVK.fx", "VSMain", IShader::ShaderType::VS);
+				g_ps = g_dev->CreateShader("aqEngine/Assets/Shader/ImGuiVK.fx", "PSMain", IShader::ShaderType::PS);
 				if (!g_vs || !g_ps) return false;
 
 				SamplerDesc sd; sd.filter = FilterMode::MinMagMipLinear;

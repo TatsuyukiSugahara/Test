@@ -166,7 +166,7 @@ endif()
 # ----------------------------------------------------------------------------
 #  Android も実行時 DXC を持たないが、dxc 自体が Vulkan SDK 同梱で NDK には
 #  無いため、ビルド時生成はここでは配線しない。デスクトップ側で生成した
-#  Assets/Shader/spv を APK へ同梱する(設計書/Android移植設計.md)。
+#  aqEngine/Assets/Shader/spv を APK へ同梱する(設計書/Android移植設計.md)。
 if(AQ_GRAPHICS_API STREQUAL "Vulkan" AND NOT ANDROID)
 	include(${CMAKE_CURRENT_SOURCE_DIR}/Tools/ShaderCompile/compile_spv.cmake)
 	aq_add_compile_spv_target(aqCompileSpv)
@@ -182,11 +182,11 @@ endif()
 #  dxc / spirv-cross はどちらも Vulkan SDK 同梱の **ホスト側ツール**なので、
 #  iOS ターゲットでもそのまま動く。Metal 構成では VULKAN_SDK を要求している
 #  (上の AQ_VULKAN_SDK の解決を参照)。
-#  シフトが Vulkan と違うので、出力先も Game/Assets/Shader/msl と別にしてある。
+#  シフトが Vulkan と違うので、出力先も aqEngine/Assets/Shader/msl と別にしてある。
 #
 #  iOS では spirv-cross に --msl-ios を渡した **iOS 版 MSL** が要る
 #  (設計書 iOS移植設計.md §4.2)。macOS 版とは方言が違う別物なので、
-#  出力先も Game/Assets/Shader/msl-ios と分かれる。
+#  出力先も aqEngine/Assets/Shader/msl-ios と分かれる。
 #  生成するのは **どちらか一方だけ**にする。iOS ビルドで macOS 版を作っても
 #  使わないぶんビルド時間が延びるだけで、逆も同じ。よって
 #  ターゲットは aqCompileMsl 1 つのままで、AQ_MSL_IOS で中身を切り替える。

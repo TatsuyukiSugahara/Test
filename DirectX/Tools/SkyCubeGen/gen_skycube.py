@@ -9,11 +9,11 @@
 #  ------------------------------------------------------------------------
 #  使い方
 #
-#      python3 Tools/SkyCubeGen/gen_skycube.py Game/Assets/Sky/SkyCube.dds 512
+#      python3 Tools/SkyCubeGen/gen_skycube.py aqEngine/Assets/Sky/DefaultSkyCube.dds 512
 #
 #  第 1 引数 = 出力パス、第 2 引数 = 1 面の解像度(省略時 512)。
 #
-#  **ビルドには組み込まない。** 生成物 (SkyCube.dds) をリポジトリへコミットし、
+#  **ビルドには組み込まない。** 生成物 (DefaultSkyCube.dds) をリポジトリへコミットし、
 #  絵を変えたいときだけ手で叩く。理由:
 #    - 毎ビルド走らせるには遅い (512 で数十秒)
 #    - Python をビルドの必須依存にしたくない

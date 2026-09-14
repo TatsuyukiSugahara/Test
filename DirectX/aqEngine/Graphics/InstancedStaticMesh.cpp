@@ -21,9 +21,9 @@ namespace aq
 			{
 				switch (type)
 				{
-				case StaticMesh::ShaderType::InstancedTextured: return "Assets/Shader/InstancedModelTex.fx";
-				case StaticMesh::ShaderType::InstancedGrass:    return "Assets/Shader/InstancedGrass.fx";
-				default:                                        return "Assets/Shader/InstancedSimple.fx";
+				case StaticMesh::ShaderType::InstancedTextured: return "aqEngine/Assets/Shader/InstancedModelTex.fx";
+				case StaticMesh::ShaderType::InstancedGrass:    return "aqEngine/Assets/Shader/InstancedGrass.fx";
+				default:                                        return "aqEngine/Assets/Shader/InstancedSimple.fx";
 				}
 			}
 		}

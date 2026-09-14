@@ -84,8 +84,10 @@ set(AQ_ENGINE_WINDOWS_ONLY_PATTERNS
 )
 
 #  Apple 共通(macOS / iOS)の実装。Windows / Android から落とす。
-#  HID/Apple/ は macOS と iOS の両方で使う(GameController.framework は同一 API)ため、
-#  下の MAC_ONLY / IOS_ONLY のどちらにも入れないこと。
+#  HID/Apple/ と Sound/CoreAudio/ は macOS と iOS の両方で使う
+#  (GameController.framework は同一 API、CoreAudio は出力ユニットのサブタイプだけが
+#  違う。設計書/iOS移植設計.md §6)ため、下の MAC_ONLY / IOS_ONLY のどちらにも
+#  入れないこと。
 set(AQ_ENGINE_APPLE_ONLY_PATTERNS
 	"/Platform/Common/DebugOutputApple\\.cpp$"
 	"/Platform/Mac/"
@@ -101,10 +103,10 @@ set(AQ_ENGINE_APPLE_ONLY_PATTERNS
 #  macOS 専用(AppKit / デスクトップ前提)。iOS から落とす。
 #  HID/Mac/ は Cocoa 依存のキーボード / マウス実装なので Mac 専用のまま残す
 #  (iOS はキーボードが Null、マウスが TouchMouseBackend。設計書/iOS移植設計.md §5.2)。
+#  Sound/CoreAudio/ は P4 で iOS と共有になったのでここから外した(上の APPLE_ONLY のみ)。
 set(AQ_ENGINE_MAC_ONLY_PATTERNS
 	"/Platform/Mac/"
 	"/HID/Mac/"
-	"/Sound/CoreAudio/"
 )
 
 #  iOS 専用(UIKit 前提)。macOS から落とす。

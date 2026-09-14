@@ -10,15 +10,15 @@
 していたものの過半が既にリポジトリへ入った**。差分の棚卸しは §0.6。
 本書はその再評価を反映した第 2 版である。
 
-**P3(入力)完了 — 2026-09-14。**
-iPhone 17 シミュレータ(iOS 26.5)で **タッチだけでタイトル → ステージへ進み、仮想パッドで
-298 km/h まで走行**できる。ImGui も指で操作でき、表示切替は **4 本指ダブルタップ**に割り当てた。
-残るはサウンド(P4)。
+**P4(サウンド)完了 — 2026-09-14。**
+iPhone 17 シミュレータ(iOS 26.5)で **BGM が鳴り、出力は Mac と一致**する。
+タッチでタイトル → ステージへ進み、仮想パッドで 298 km/h まで走行できる。
+**残るは P5(ライフサイクルと実機)。実機はまだ一度も触れていない。**
 
 | | 状態 |
 |---|---|
 | 設計 | 第 2 版。§0.5 の 6 論点すべて決着(2026-09-14) |
-| 実装 | **P0 / P1 / P2 / P3 完了。次は P4(サウンド)** |
+| 実装 | **P0 〜 P4 完了。次は P5(ライフサイクルと実機)** |
 | 環境 | Xcode 26.6 / iOS SDK 26.5 / iOS Simulator SDK 26.5。**iOS 実機は接続なし**(シミュレータ 11 種) |
 | 検証方針 | シミュレータ先行。実機は P5 |
 | シミュレータ | `ios-simulator-xcode` が configure / build 成功。`Game.app/Game` = Mach-O arm64 / `platform IOSSIMULATOR` / `minos 16.4` / `sdk 26.5` |
@@ -34,6 +34,8 @@ iPhone 17 シミュレータ(iOS 26.5)で **タッチだけでタイトル → �
 | Validation | **Metal API Validation を有効(`SIMCTL_CHILD_METAL_DEVICE_WRAPPER_TYPE=1`)にしてエラー 0** |
 | 入力(P3) | タッチでタイトル→ステージ、仮想パッドで **298 km/h** まで走行。ImGui はドラッグで操作可。1 フレーム(0.02 秒)のタップも取りこぼさない |
 | デバッグ UI | ImGui の倍率は **iOS だけ 1.25**(Android は 2.0 のまま)。表示切替は **4 本指ダブルタップ** |
+| サウンド(P4) | RemoteIO で **48kHz / float32 / 2ch** の出力が開始。BGM が鳴る |
+| 出力の一致 | レンダーコールバックの **L/R ピークが Mac と一致**(6 秒ぶんの毎秒ピークが小数 4 桁でほぼ同値)。ミキサ出力と定位が同一であることを確認 |
 | フレーム駆動 | `CADisplayLink` で **16.2〜16.5 ms 間隔 = 60 FPS**。`UIApplicationMain` が戻らない構造で `RunFrameLoop` の委譲が効いている |
 | シミュレータ実測 | `Apple iOS simulator GPU` / **BC 圧縮: no** / GPU family `Apple2` / unified memory: no(§0.2-3 の事前実測と一致) |
 | Mac 実測(対照) | `Apple M5` / **BC 圧縮: yes** / GPU family `Apple9` / unified memory: yes |
@@ -1324,12 +1326,56 @@ UIKit エントリ + `CAMetalLayer` + フレーム駆動の委譲。
   `Engine::SyncSoundActivity` → `SoundEngine` として既に通っている。§0.6)
 - `SoundBackend.h` の分岐(`AQ_PLATFORM_APPLE` を使えば追加ゼロ)
 
-**評価チェックリスト**
-- [ ] BGM / SE がシミュレータで鳴る
-- [ ] 3D 音響の定位が Mac と一致する
-- [ ] 他アプリの再生や着信で中断 → 復帰しても音が壊れない・二重再生しない
-- [ ] バックグラウンド → 復帰で音が戻る(`IsRenderable` が false を返せていること)
-- [ ] **Mac の回帰**(`CoreAudioSoundBackend.mm` は Mac と共有)
+**評価チェックリスト** — 2026-09-14 実施
+
+**音は耳で確認できない環境なので、レンダーコールバックが書いた PCM の L/R ピークを
+一時ログで測って判定した**(1 秒ぶんごとに 1 行)。
+
+- [x] BGM がシミュレータで鳴る。`[sound] CoreAudio 出力を開始 (48kHz / float32 / 2ch)` の後、
+      **L/R ピークが 0.62〜0.84 で推移**(無音なら 0)。フレームカウンタは
+      **1 秒あたり 48128** でリアルタイム駆動している
+- [x] **定位が Mac と一致する。** 同じ起動直後 6 秒の毎秒ピークを突き合わせたところ、
+      L/R とも小数 4 桁でほぼ同値(6 点中 5 点が完全一致、1 点のみ 1 秒境界のずれによる差)。
+      **L と R で値が違う = ステレオの定位が保たれている**ことも同時に確認できる
+- [ ] **他アプリの再生や着信での中断 → 復帰 — 未確認。**
+      **シミュレータでは中断を発生させられない**(電話・Siri・他アプリの再生が無い)。
+      実装(`AVAudioSessionInterruptionNotification` の購読と `ApplyOutputRunState`)は
+      入っているが、**動作確認は P5 の実機で行う**
+- [ ] **バックグラウンド → 復帰で音が戻る — 未確認。**
+      ホームへ送って戻したが、**音は止まらず連続していた**(フレームカウンタに欠落なし)。
+      これは `PlatformiOS::IsRenderable()` がまだ常に true で
+      **アプリが実際にはサスペンドされない**ため(P5 の作業)。
+      止まらない以上「戻る」も確認できない。**P5 とセットで見る**
+- [x] **Mac の回帰**: Metal / Vulkan とも Release がビルドでき、
+      CoreAudio 出力が従来どおり開始し、出力ピークも従来どおり
+- [x] iOS 実機構成(`ios-xcode`)のコンパイルが通る
+- [ ] **Windows 3 構成の回帰 — 未確認**(この環境ではビルドできない)。
+      変更は `Sound/CoreAudio/`(Windows では元から除外)と `SoundBackend.h` の
+      分岐統合(Windows は先に `WINDOWS_FAMILY` で分岐するため到達しない)、
+      および CMake の除外集合のみ
+
+**P4 で分かったこと / 設計からの差分**
+
+1. **`CoreAudioSoundBackend` は Mac と共有のまま Apple 共通にできた。**
+   macOS / iOS の差は **3 点だけ**で、すべて `.mm` に閉じている:
+   出力ユニットのサブタイプ(`DefaultOutput` / **`RemoteIO`**)、
+   遅延の取得先(HAL のデバイスプロパティ / **`AVAudioSession` の
+   `outputLatency` + `IOBufferDuration`**)、**AVAudioSession の有効化と中断購読**。
+   `<CoreAudio/CoreAudio.h>` は iOS に無いので macOS のときだけ include する。
+2. **カテゴリは `AVAudioSessionCategoryAmbient`。**`Playback` は他アプリの再生を
+   止めてしまうため採らない(ゲームの BGM/SE は他アプリより優先されるべきではない)。
+3. **CoreAudio では「積んだ音の破棄」は要らない。**
+   Android の `AAudioSoundBackend::OnSuspend` は **push 型**ゆえに
+   `requestFlush` で積んだ分を捨てているが、CoreAudio は **pull 型**で
+   呼ばれた分しか PCM を作らず、ミキサの読み位置は停止時点で凍る。
+   よって flush 相当は不要。RemoteIO が内部に抱える 1 バッファ分だけ
+   `AudioUnitReset` で落としている。**Android のコードをそのまま写さないこと。**
+4. **停止理由を「背面」と「中断」で別々に持つ。**
+   中断中にホームへ回る等で順序が前後しうるため、両方が下りたときだけ再開する。
+   実 Start/Stop は状態と突き合わせるので二重停止・二重再開が起きない。
+5. **`OnSuspend` / `OnResume` は実装済みだが P4 では 1 度も呼ばれない。**
+   `Engine::SyncSoundActivity()` は `IPlatform::IsRenderable()` の変化で呼ぶが、
+   `PlatformiOS` はまだ常に true を返す(P5)。**P5 で `IsRenderable` を入れた瞬間に効く。**
 
 ### P5: ライフサイクルと実機
 

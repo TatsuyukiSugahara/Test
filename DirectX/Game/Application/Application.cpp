@@ -9,15 +9,10 @@
 #include "ECS/CoinComponentSystem.h"
 #include "ECS/SessionComponent.h"
 #include "Component/AnimationComponentSystem.h"
-#include "UI/Font/FontResource.h"
-#include "Resource/ParticleSystemData.h"
-#include "Resource/ParticleLoader.h"
-#include "Sound/SoundClip.h"
 #include "Sound/SoundEngine.h"
 #include "Sound/SoundStream.h"
 #include "Sound/Component/SoundSystem.h"
 #include "Sound/Authoring/Audio.h"
-#include "Rendering/Sky/SkyRenderer.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/DebugUI.h"
 #include "Sound/Authoring/Debug/AudioAuthoringPanel.h"
@@ -62,74 +57,17 @@ namespace app
 		app::GameFlow::Get().Initialize();
 		aq::StartupMark("    [game] GameFlow ok");
 
-		// Shadow renderer
+		// 標準の描画構成(Shadow + Deferred + PostProcess + Sky)をまとめて組む。
+		// AquaDash で既定から変えているのは影の範囲だけ(コースが細長く、影を落としたいのは
+		// プレイヤー周辺の狭い範囲なので、遠クリップと柔らかさを詰めてある)。
 		{
-			const float renderW = static_cast<float>(aq::Engine::Get().GetRenderWidth());
-			const float renderH = static_cast<float>(aq::Engine::Get().GetRenderHeight());
-
-			aq::rendering::ShadowSettings shadowSettings;
-			shadowSettings.resolution  = 2048;
-			shadowSettings.orthoWidth  = 50.0f;
-			shadowSettings.orthoHeight = 50.0f;
-			shadowSettings.nearPlane   = 0.1f;
-			shadowSettings.farPlane    = 60.0f;
-			shadowSettings.sceneCenter = aq::math::Vector3(0.0f, 3.0f, 0.0f);
-			shadowSettings.depthBias   = 0.005f;
-			shadowSettings.softness    = 2.0f;
-
-			auto shadowRenderer = std::make_unique<aq::rendering::HardShadowRenderer>();
-			if (shadowRenderer->Create(shadowSettings))
-			{
-				renderer_.SetShadowRenderer(std::move(shadowRenderer),
-				                            aq::Engine::Get().GetMainRenderTargetHandle(),
-				                            renderW, renderH);
-			}
+			aq::RendererPreset preset;
+			preset.shadow.nearPlane   = 0.1f;
+			preset.shadow.farPlane    = 60.0f;
+			preset.shadow.sceneCenter = aq::math::Vector3(0.0f, 3.0f, 0.0f);
+			preset.shadow.softness    = 2.0f;
+			SetupStandardRenderers(preset);
 		}
-		aq::StartupMark("    [game] Shadow ok (VS x1)");
-
-		// Deferred Renderer
-		{
-			const uint32_t renderW = aq::Engine::Get().GetRenderWidth();
-			const uint32_t renderH = aq::Engine::Get().GetRenderHeight();
-
-			auto deferred = std::make_unique<aq::rendering::DeferredRenderer>();
-			if (deferred->Create(renderW, renderH))
-			{
-				renderer_.SetDeferredRenderer(std::move(deferred));
-			}
-		}
-		aq::StartupMark("    [game] Deferred ok (shaders x4 + GBuffer)");
-
-		// Bloom
-		{
-			const uint32_t renderW = aq::Engine::Get().GetRenderWidth();
-			const uint32_t renderH = aq::Engine::Get().GetRenderHeight();
-
-			auto bloom = std::make_unique<aq::rendering::PostProcessChain>();
-			if (bloom->Initialize(renderW, renderH))
-			{
-				// カメラモーションブラー用に GBuffer2 (worldPos) を渡す (ディファード有効時のみ)。
-				if (auto* dr = dynamic_cast<aq::rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer())) {
-					bloom->SetWorldPosRT(dr->GetGBuffer2Handle());
-				}
-				renderer_.SetPostProcessRenderer(std::move(bloom));
-			}
-		}
-		aq::StartupMark("    [game] Bloom ok (CS x6)");
-
-		// スカイキューブ (設計書/Skybox設計.md)。
-		//
-		// ロードに失敗しても続行する。空が出ないだけで背景はクリア色のまま残る
-		// (Deferred の decal と同じ作法)。テクスチャの完了待ちは SkyRenderer が
-		// 描画時にポーリングするので、ここでは待たない。
-		{
-			auto sky = std::make_unique<aq::rendering::SkyRenderer>();
-			if (sky->Create())
-			{
-				renderer_.SetSkyRenderer(std::move(sky));
-			}
-		}
-		aq::StartupMark("    [game] Sky ok (cubemap load kicked + shaders x2)");
 
 		// BGM: 起動時から常時ループ再生する(バンク登録に依存しない wav 直読み)。
 		// SoundEngine の初期化は Engine が別スレッドで進めているので、ここで合流してから開く。
@@ -256,7 +194,7 @@ namespace app
 		aq::ecs::EntityContext::Get().AddSystem<aq::sound::SoundSystem,
 			aq::ecs::HierarcicalTransformSystem>();
 
-		// データ駆動オーディオ Bank をロード（SoundClip バンク登録後に行う）。
+		// データ駆動オーディオ Bank をロード（SoundClip のバンクはエンジンが既定登録済み）。
 		aq::audio::LoadBank("Assets/Audio/Main.audiobank.json");
 	}
 

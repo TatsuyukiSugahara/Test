@@ -20,6 +20,10 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
+// SetupStandardRenderers が生成する具象レンダラ群。
+#include "Rendering/Shadow/HardShadowRenderer.h"
+#include "Rendering/Deferred/DeferredRenderer.h"
+#include "Rendering/PostProcess/PostProcessChain.h"
 #include "Graphics/InstancedStaticMesh.h"      // Finalize での名前レジストリ解放
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Occlusion/Debug/CullingDebugPanel.h"
@@ -104,6 +108,69 @@ namespace aq
 			ResourceManager::Reflection<sound::SoundClip,     sound::SoundClipLoader>();
 			ResourceManager::Reflection<ParticleSystemData,   ParticleLoader>();
 		}
+	}
+
+
+	void Application::SetupStandardRenderers(const RendererPreset& preset)
+	{
+		const uint32_t renderW = Engine::Get().GetRenderWidth();
+		const uint32_t renderH = Engine::Get().GetRenderHeight();
+
+		// 影。メイン RT とビューポートは Renderer 側がデバッグ同期パスで使う。
+		if (preset.enableShadow)
+		{
+			auto shadow = std::make_unique<rendering::HardShadowRenderer>();
+			if (shadow->Create(preset.shadow, preset.shadowVSPath))
+			{
+				renderer_.SetShadowRenderer(std::move(shadow),
+				                            Engine::Get().GetMainRenderTargetHandle(),
+				                            static_cast<float>(renderW),
+				                            static_cast<float>(renderH));
+			}
+		}
+
+		// ディファード。失敗したらフォワードのまま続行する。
+		if (preset.enableDeferred)
+		{
+			auto deferred = std::make_unique<rendering::DeferredRenderer>();
+			if (deferred->Create(renderW, renderH))
+			{
+				renderer_.SetDeferredRenderer(std::move(deferred));
+			}
+		}
+
+		// ポストプロセス(MotionBlur / Bloom / Tonemap)。
+		if (preset.enablePostProcess)
+		{
+			auto postProcess = std::make_unique<rendering::PostProcessChain>();
+			if (postProcess->Initialize(renderW, renderH,
+			                            preset.bloomThreshold,
+			                            preset.bloomIntensity,
+			                            preset.bloomBlurPasses))
+			{
+				// カメラモーションブラーに G-Buffer2(worldPos)が要る。
+				// **ディファードが有効なときだけ繋ぐ。** これは「Deferred があれば
+				// こう配線する」というエンジンの都合で、ゲームが知る必要はない。
+				if (auto* dr = dynamic_cast<rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer()))
+				{
+					postProcess->SetWorldPosRT(dr->GetGBuffer2Handle());
+				}
+				renderer_.SetPostProcessRenderer(std::move(postProcess));
+			}
+		}
+
+		// 空。ロードに失敗しても続行する(背景はクリア色のまま)。
+		// キューブマップは非同期ロードで、完了待ちは SkyRenderer が描画時にポーリングする。
+		if (preset.enableSky)
+		{
+			auto sky = std::make_unique<rendering::SkyRenderer>();
+			if (sky->Create(preset.skyCubemapPath))
+			{
+				renderer_.SetSkyRenderer(std::move(sky));
+			}
+		}
+
+		aq::StartupMark("  [app] standard renderers ok (shadow/deferred/postprocess/sky)");
 	}
 
 

@@ -148,6 +148,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>")
 add_subdirectory(ThirdParty)
 add_subdirectory(aqEngine)
 add_subdirectory(Game)
+# 最小サンプル(新規プロジェクトの雛形)。iOS / Android では作らない
+# (エントリを Windows / macOS の 2 本しか持たないため。設計書/使いやすさ改善設計.md P3-B)。
+if(NOT IOS AND NOT ANDROID)
+	add_subdirectory(Sample)
+endif()
 
 # 開発用ツール(CMake 専用。vcxproj は用意しない)
 # Android / iOS では実行ファイルを端末上で直接叩けないため配線しない

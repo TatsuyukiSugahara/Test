@@ -26,6 +26,15 @@ namespace aq
 			static constexpr const char* CONTENT_SENTINEL_PATH = "aqEngine/Assets";
 
 
+			/**
+			 * `"Assets/..."` を組み立てるときのゲームルート名(既定 `"Game"`)。
+			 *
+			 * `SetGameRootName()` が Engine の初期化中に 1 度だけ書き、以降は
+			 * ワーカースレッドから読まれるだけ(書き込みと読み出しの期間が重ならない)。
+			 */
+			std::string g_gameRootName = "Game";
+
+
 			/** dir が番兵を持つ(= コンテンツ基点として使える)か */
 			bool HasContentSentinel(const std::filesystem::path& dir)
 			{
@@ -141,6 +150,14 @@ namespace aq
 		}
 
 
+		void SetGameRootName(const char* name)
+		{
+			// 関数ローカルでない static への代入なので、リーク報告の対象外にする必要はない
+			// (プロセス寿命の静的オブジェクトで、確保は初回代入時の 1 回きり)。
+			g_gameRootName = (name != nullptr && name[0] != '\0') ? name : "Game";
+		}
+
+
 		void BuildAssetPathCandidates(const std::string& path, std::vector<std::string>& candidates)
 		{
 			candidates.clear();
@@ -160,9 +177,9 @@ namespace aq
 			// UWP でもパッケージ内にソースツリー相対構造を再現するため、デスクトップと同じ規則で解決。
 			const std::filesystem::path root(FindContentRoot());
 			if (normalized.rfind("Assets/", 0) == 0) {
-				PushUniquePath(candidates, (root / "Game" / normalized).generic_string());
-			} else if (normalized.rfind("Game/Assets/", 0) == 0) {
-				PushUniquePath(candidates, (root / normalized).generic_string());
+				// ゲームルート名は可変(既定 "Game")。自分のプロジェクトのフォルダ名を
+				// SetGameRootName() で渡しておけば、"Assets/..." が常に自分のアセットを指す。
+				PushUniquePath(candidates, (root / g_gameRootName / normalized).generic_string());
 			} else {
 				PushUniquePath(candidates, (root / normalized).generic_string());
 			}

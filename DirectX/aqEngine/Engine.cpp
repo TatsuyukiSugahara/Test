@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "Engine.h"
+#include "Resource/AssetPath.h"
 #include "Core/IApplication.h"
 #include "Platform/IPlatform.h"
 #include "Platform/PlatformBudget.h"
@@ -56,6 +57,11 @@ namespace aq
 		// メモリマネージャを最初に初期化することで、ウィンドウ・グラフィクス初期化中の
 		// new/delete もエンジンアロケータ管理下に置く。
 		aq::memory::MemoryManager::Initialize(initializeParameter.memoryConfig);
+
+		// "Assets/..." をどのフォルダへ組むかを決める。**アセット解決より前**に
+		// 済ませる必要がある(解決はワーカースレッドから並列に走るので、走り出した後に
+		// 変えるとデータ競合になる)。
+		aq::res::SetGameRootName(initializeParameter.gameRootName);
 
 		// Bullet allocator hook は MemoryManager 直後、かつ Bullet 型が一切生成される前に設定する。
 		aq::physics::PhysicsWorld::InstallAllocatorHook();

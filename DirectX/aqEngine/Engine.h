@@ -37,6 +37,16 @@ namespace aq
 		int32_t   renderHeight;
 		uint8_t   gameObjectPriortyMax;
 		aq::memory::MemoryConfig memoryConfig; // アロケータサイズ設定 (デフォルト値あり)
+
+		/**
+		 * 自分のプロジェクトのフォルダ名(既定 `"Game"`)。
+		 *
+		 * `"Assets/foo.png"` は `<コンテンツ基点>/<ここ>/Assets/foo.png` へ解決される。
+		 * 新しいプロジェクトを `Sample/` に作るなら `"Sample"` を入れる。そうすれば
+		 * `"Assets/..."` が自分のアセットを指し、パスにフォルダ名を書かなくてよい
+		 * (設計書/使いやすさ改善設計.md P3-A)。
+		 */
+		const char* gameRootName = "Game";
 	};
 
 	class Engine

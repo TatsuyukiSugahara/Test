@@ -16,6 +16,24 @@ namespace aq
 			static constexpr size_t MAX_LOGGED_CANDIDATE_COUNT = 8;
 
 
+			/**
+			 * コンテンツ基点を見分ける番兵ディレクトリ。
+			 *
+			 * **ゲーム側の Assets ではなくエンジン側を番兵にする。** アセットを 1 個も
+			 * 持たないゲーム(最小サンプル)が基点を見つけられなくなるため
+			 * (設計書/使いやすさ改善設計.md §1.3)。エンジンのアセットは必ず存在する。
+			 */
+			static constexpr const char* CONTENT_SENTINEL_PATH = "aqEngine/Assets";
+
+
+			/** dir が番兵を持つ(= コンテンツ基点として使える)か */
+			bool HasContentSentinel(const std::filesystem::path& dir)
+			{
+				std::error_code ec;
+				return std::filesystem::exists(dir / CONTENT_SENTINEL_PATH, ec) && !ec;
+			}
+
+
 			/** 空でなく、まだ含まれていない候補だけを追記する */
 			void PushUniquePath(std::vector<std::string>& paths, const std::string& path)
 			{
@@ -82,11 +100,23 @@ namespace aq
 				{
 					// プラットフォームがコンテンツ基点を返す場合(UWP のパッケージ install
 					// フォルダ、macOS の Contents/Resources、iOS のバンドル、Android の
-					// 展開先)は、それを基点に採用し、ソースツリーの上方探索は行わない。
-					// サンドボックスでは番兵を遡れないため。Win32 は nullptr を返すので
-					// 従来どおり下の探索にフォールバックする。
+					// 展開先)は、それを基点に採用する。サンドボックスでは番兵を遡れないため。
+					// Win32 は nullptr を返すので下の探索へ進む。
+					//
+					// **ただし番兵が実在するときだけ採用する。** macOS の
+					// PlatformMac::GetContentRoot() は実行ファイルが .app の中にあるだけで
+					// Contents/Resources を返すが、aqBundleApp を通していない開発ビルドには
+					// その中身が無い。存在を確かめずに採ると基点が実在しないパスに固定され、
+					// **エンジンアセットが 1 つも解決できず画面が真っ黒になる**
+					// (設計書/使いやすさ改善設計.md P1-C0。実際に踏んだ)。
+					// iOS / Android も同じくバンドル基点を返すので、同梱漏れのときは
+					// ここで下の探索へ落ちて開発実行が生き延びる。
 					if (const char* contentRoot = aq::Engine::Get().GetContentRoot()) {
-						return contentRoot;
+						if (HasContentSentinel(contentRoot)) {
+							return contentRoot;
+						}
+						aq::StartupMarkf("[asset] コンテンツ基点に %s が無いので上方探索へ落ちます: %s",
+						                 CONTENT_SENTINEL_PATH, contentRoot);
 					}
 
 					std::error_code ec;
@@ -96,10 +126,7 @@ namespace aq
 					}
 
 					while (!dir.empty()) {
-						// 番兵は aqEngine/Assets。ゲーム側の Assets を番兵にすると、
-						// アセットを 1 個も持たないゲーム(最小サンプル)が基点を見つけられない。
-						// エンジンのアセットは必ず存在する。
-						if (std::filesystem::exists(dir / "aqEngine" / "Assets", ec) && !ec) {
+						if (HasContentSentinel(dir)) {
 							return dir.generic_string();
 						}
 						if (dir == dir.root_path()) {

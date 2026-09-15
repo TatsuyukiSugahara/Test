@@ -6,6 +6,7 @@
 #
 #  macOS(AQ_PKG_PLATFORM=macOS。従来):
 #      Game.app/Contents/Resources/Game/Assets/...        ゲームアセット一式
+#      Game.app/Contents/Resources/aqEngine/Assets/...    エンジンアセット一式
 #      Game.app/Contents/Frameworks/libvulkan.1.dylib     Vulkan ローダー
 #      Game.app/Contents/Frameworks/libMoltenVK.dylib     ICD 本体
 #      Game.app/Contents/Resources/vulkan/icd.d/MoltenVK_icd.json   ICD 定義
@@ -14,7 +15,21 @@
 #       フレームワークしか使わないので Assets だけで自己完結する)
 #
 #  iOS(AQ_PKG_PLATFORM=iOS):
-#      Game.app/Game/Assets/...                           ゲームアセット一式
+#      Game.app/Content/Game/Assets/...                   ゲームアセット一式
+#      Game.app/Content/aqEngine/Assets/...               エンジンアセット一式
+#
+#  ------------------------------------------------------------------------
+#  **コンテンツルート配下は 2 系統**(設計書 使いやすさ改善設計.md §1.1)
+#
+#  シェーダと既定キューブマップは **エンジンの所有物**で、ソースツリーでは
+#  aqEngine/Assets/ に置いてある。ゲームの Game/Assets/ とは別ルートなので、
+#  バンドルにも 2 つとも投入する必要がある。片方だけだと
+#  「起動はするが画面が真っ黒」になる(エンジンのシェーダが 1 本も解決できない)。
+#
+#  基点の判定に使う番兵は **aqEngine/Assets**
+#  (aqEngine/Resource/AssetPath.cpp の HasContentSentinel)。
+#  つまりエンジンアセットを入れ忘れると、バンドル基点そのものが棄却されて
+#  ソースツリーの上方探索へ落ちる。配布物ではソースツリーが無いので起動しない。
 #
 #  ------------------------------------------------------------------------
 #  **iOS のバンドルは Contents/ 階層を持たない** ★macOS との最大の構造差
@@ -47,19 +62,24 @@
 #
 #      cmake -D AQ_PKG_BUNDLE_DIR=<...>/Game.app \
 #            -D AQ_PKG_ASSETS_DIR=<repo>/DirectX/Game/Assets \
+#            -D AQ_PKG_ENGINE_ASSETS_DIR=<repo>/DirectX/aqEngine/Assets \
 #            -D AQ_PKG_GRAPHICS_API=Vulkan \
 #            -D AQ_PKG_VULKAN_SDK=$VULKAN_SDK \
 #            -P DirectX/Tools/PackageApp/package_app.cmake
 #
 #      cmake -D AQ_PKG_BUNDLE_DIR=<...>/Game.app \
 #            -D AQ_PKG_ASSETS_DIR=<repo>/DirectX/Game/Assets \
+#            -D AQ_PKG_ENGINE_ASSETS_DIR=<repo>/DirectX/aqEngine/Assets \
 #            -D AQ_PKG_GRAPHICS_API=Metal \
 #            -D AQ_PKG_PLATFORM=iOS \
 #            -P DirectX/Tools/PackageApp/package_app.cmake
 #
 #  変数:
 #    AQ_PKG_BUNDLE_DIR    投入先の .app(必須)
-#    AQ_PKG_ASSETS_DIR    同梱する Assets ディレクトリ(必須)
+#    AQ_PKG_ASSETS_DIR    同梱するゲーム Assets ディレクトリ(必須)
+#    AQ_PKG_ENGINE_ASSETS_DIR
+#                         同梱するエンジン Assets ディレクトリ(必須)。
+#                         シェーダと既定キューブマップはこちらに入っている
 #    AQ_PKG_GRAPHICS_API  Vulkan / Metal(必須)
 #    AQ_PKG_PLATFORM      macOS / iOS(任意。既定 macOS)。バンドル構造と
 #                         シェーダのサブディレクトリ、Vulkan 同梱の有無を切り替える
@@ -86,6 +106,9 @@ if(NOT IS_DIRECTORY "${AQ_PKG_BUNDLE_DIR}")
 endif()
 if(NOT AQ_PKG_ASSETS_DIR OR NOT IS_DIRECTORY "${AQ_PKG_ASSETS_DIR}")
 	message(FATAL_ERROR "AQ_PKG_ASSETS_DIR が不正です: ${AQ_PKG_ASSETS_DIR}")
+endif()
+if(NOT AQ_PKG_ENGINE_ASSETS_DIR OR NOT IS_DIRECTORY "${AQ_PKG_ENGINE_ASSETS_DIR}")
+	message(FATAL_ERROR "AQ_PKG_ENGINE_ASSETS_DIR が不正です: ${AQ_PKG_ENGINE_ASSETS_DIR}")
 endif()
 if(NOT AQ_PKG_GRAPHICS_API MATCHES "^(Vulkan|Metal)$")
 	message(FATAL_ERROR "AQ_PKG_GRAPHICS_API は Vulkan / Metal のいずれかです(現在: ${AQ_PKG_GRAPHICS_API})")
@@ -136,7 +159,10 @@ endif()
 # ----------------------------------------------------------------------------
 #  1. シェーダ生成物の存在確認
 #
-#  Assets/Shader/msl(macOS Metal)/ msl-ios(iOS Metal)/ spv(Vulkan)は
+#  **見る先は AQ_PKG_ENGINE_ASSETS_DIR**(エンジン側)。シェーダは
+#  aqEngine/Assets/Shader/ へ移設済み(使いやすさ改善設計.md P1-B)。
+#
+#  aqEngine/Assets/Shader/msl(macOS Metal)/ msl-ios(iOS Metal)/ spv(Vulkan)は
 #  .gitignore 済みのビルド生成物で、これが無いとバンドルは起動できても
 #  シェーダ作成で落ちる。aqBundleApp は Game 経由で aqCompileMsl / aqCompileSpv に
 #  依存しているので通常は存在するが、手で -P を叩いたときのために確認しておく。
@@ -169,14 +195,14 @@ endif()
 
 set(AQ_PKG_SHADER_FOUND OFF)
 foreach(aqPkgSubdir IN LISTS AQ_PKG_SHADER_SUBDIR)
-	if(IS_DIRECTORY "${AQ_PKG_ASSETS_DIR}/Shader/${aqPkgSubdir}")
+	if(IS_DIRECTORY "${AQ_PKG_ENGINE_ASSETS_DIR}/Shader/${aqPkgSubdir}")
 		set(AQ_PKG_SHADER_FOUND ON)
 	endif()
 endforeach()
 if(NOT AQ_PKG_SHADER_FOUND)
 	string(REPLACE ";" " / " AQ_PKG_SHADER_SUBDIR_TEXT "${AQ_PKG_SHADER_SUBDIR}")
 	message(FATAL_ERROR
-		"シェーダ生成物がありません: ${AQ_PKG_ASSETS_DIR}/Shader/{${AQ_PKG_SHADER_SUBDIR_TEXT}}\n"
+		"シェーダ生成物がありません: ${AQ_PKG_ENGINE_ASSETS_DIR}/Shader/{${AQ_PKG_SHADER_SUBDIR_TEXT}}\n"
 		"先に ${AQ_PKG_SHADER_TARGET} をビルドしてください。")
 endif()
 
@@ -203,6 +229,12 @@ endif()
 message(STATUS "aqBundleApp: Assets -> ${AQ_PKG_RESOURCES_DIR}/Game/Assets")
 file(MAKE_DIRECTORY "${AQ_PKG_RESOURCES_DIR}/Game")
 file(COPY "${AQ_PKG_ASSETS_DIR}" DESTINATION "${AQ_PKG_RESOURCES_DIR}/Game")
+
+# エンジンアセット。ソースツリーの aqEngine/ 1 段ぶんを同じように再現する
+# (基点の番兵が <root>/aqEngine/Assets なので、この階層でないと基点が立たない)。
+message(STATUS "aqBundleApp: Engine assets -> ${AQ_PKG_RESOURCES_DIR}/aqEngine/Assets")
+file(MAKE_DIRECTORY "${AQ_PKG_RESOURCES_DIR}/aqEngine")
+file(COPY "${AQ_PKG_ENGINE_ASSETS_DIR}" DESTINATION "${AQ_PKG_RESOURCES_DIR}/aqEngine")
 
 
 # ----------------------------------------------------------------------------

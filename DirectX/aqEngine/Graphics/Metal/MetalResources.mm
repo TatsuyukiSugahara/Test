@@ -373,7 +373,7 @@ namespace aq
 				//    newBufferWithBytes:length:byteSize では **initData の終端より先を読んでしまう**。
 				buffer_ = [device newBufferWithLength:byteSize
 				                              options:MTLResourceStorageModeShared];  // MRR: +1
-				if (buffer_ == nil) {
+				if (metal::ReportCreationFailure(buffer_ == nil, "MetalStructuredBuffer: MTLBuffer")) {
 					Release();
 					return false;
 				}

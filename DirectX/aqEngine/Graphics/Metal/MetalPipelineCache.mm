@@ -155,7 +155,9 @@ namespace aq
 			if (it != pipelineMap_.end()) { return it->second; }
 
 			if (device_ == nil || key.vsFunction == nullptr) {
-				aq::StartupLog("[MetalPipelineCache] VS が nil のため PSO を生成できません");
+				// **毎描画で通り得る**。以前はここで直接 StartupLog していたため、
+				// 一度こうなると startup_timing.log が 19MB まで膨れた。重複を畳む側へ通す。
+				metal::ReportCreationFailure(true, "MetalPipelineCache: VS が nil のため PSO を生成できません");
 				return nil;
 			}
 

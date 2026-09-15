@@ -80,14 +80,19 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 
 ## 既知の課題
 
+- (解決済 2026-09-14)`FindProjectRoot` の 6 重複は `Resource/AssetPath.{h,cpp}` へ一元化した
+  (使いやすさ改善設計.md P1-A)。以下は発見当時の記録。
 - (2026-09-12 発見)`FindProjectRoot` が **6 ファイルに重複実装**されている
   (`Resource.cpp` / `VulkanShader.cpp` / `MetalShader.mm` / `MetalRenderContextImpl.mm` / `D3D12Shader.cpp` / `D3D11Shader.cpp`)。
   うち Metal 経路の 2 本は `GetContentRoot()` を見ずカレントディレクトリ依存のままで、
   サウンド(`OpenStream` / `LoadBank`)と一部メッシュ(`.tkm` / `.obj` / `.pmd`)も同様。
   Mac は `chdir` で凌いでいる([iOS移植設計.md](iOS移植設計.md) §7.1)。パス解決の一元化は別途 `<Engine>` で行う。
-- (2026-09-12 発見)Metal バックエンドに GPU の**機能クエリが一箇所も無い**
-  (`supportsFamily` / `supportsBCTextureCompression` 等)。非対応フォーマットを検出せず
-  テクスチャ生成が nil になって静かに失敗する([iOS移植設計.md](iOS移植設計.md) §4.3)。
+- (解決済 2026-09-15)Metal バックエンドに GPU の機能クエリが無かった件は、iOS 移植で
+  `supportsBCTextureCompression` / `supportsFamily` / `hasUnifiedMemory` /
+  read-write texture tier を起動時に実測してログへ出し、機能フラグへ流す形で解消
+  ([MetalGraphicsDeviceImpl.mm](../aqEngine/Graphics/Metal/MetalGraphicsDeviceImpl.mm) §機能クエリ)。
+  残っていた「生成が nil でも何も言わない」ほうは
+  `metal::ReportCreationFailure()` で報告するようにした(使いやすさ改善設計.md P4-A)。
 - (解決済 2026-09-09)オフスクリーンパス(512²)がディファード経路でシーンを描けない件
   (512² RTV × 1920×1080 DSV の寸法不一致。2026-09-06 発見)は、P17 で縮小 GBuffer を
   自前所有する独立パス `OffscreenScenePass` を新設して解消(01_レンダリング設計.md §8)。

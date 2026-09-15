@@ -35,7 +35,11 @@ namespace aq
 				if (device == nil || byteSize == 0) {
 					return nil;
 				}
-				return [device newBufferWithLength:byteSize options:MTLResourceStorageModeShared];
+				// 呼び出し側 4 箇所はどれも nil を黙って false に畳むので、報告はここへ集約する。
+				id<MTLBuffer> buffer =
+					[device newBufferWithLength:byteSize options:MTLResourceStorageModeShared];
+				metal::ReportCreationFailure(buffer == nil, "MetalBuffers: MTLBuffer (shared)");
+				return buffer;
 			}
 
 

@@ -14,6 +14,15 @@
 #include <TargetConditionals.h>   // TARGET_OS_SIMULATOR (METALLIB_SDK_DIR_NAME の分岐)
 
 #include "Platform/Common/PlatformDefs.h"   // AQ_PLATFORM_IOS (MSL_DIR_NAME の分岐)
+#include <cstdio>
+#include <mutex>
+#include <set>
+#include <string>
+
+// 起動ログ。**aq.h は include しない**(非 Windows の DirectXTex がスタブ basetsd.h 経由で
+// BOOL を再定義し、Cocoa の typedef bool BOOL と衝突して @interface が全滅する。
+// 設計書/Mac移植設計.md §6)。宣言だけ引く。
+namespace aq { void StartupLog(const char* msg); }
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/IRenderContextImpl.h"   // DepthMode / BlendMode
 
@@ -24,6 +33,53 @@ namespace aq
 	{
 		namespace metal
 		{
+			// ----------------------------------------------------------------
+			//  生成失敗の報告
+			// ----------------------------------------------------------------
+
+			/**
+			 * Metal オブジェクトの生成が失敗(nil)したことを起動ログへ残す。
+			 *
+			 * Metal の生成 API は失敗しても例外も理由も返さず **nil を返すだけ**で、
+			 * 呼び出し側はたいてい false を返して畳む。そこに何も残らないため、
+			 * 症状は「画面が真っ黒」や「そのメッシュだけ出ない」という形でしか現れず、
+			 * どこで何が失敗したのか追えない(設計書/使いやすさ改善設計.md P4-A)。
+			 *
+			 * **同じ文言は 1 度しか出さない。** 生成は毎フレーム走る経路にもあるので、
+			 * 失敗し続けるとログが際限なく膨れる(実際に startup_timing.log を 19MB まで
+			 * 育てた前科がある)。初回だけ残せば原因を指すには足りる。
+			 *
+			 * 生成はワーカースレッドからも走る(シェーダ/テクスチャのロード)ので、
+			 * 記録済み集合はミューテックスで守る。
+			 *
+			 * @param isNil 生成結果が nil だったか
+			 * @param what  何の生成か。ファイル名やパスを含めてよい(この文言で重複を判定する)
+			 * @return 生成に失敗していれば true。`if (ReportCreationFailure(...)) { 畳む }` と書ける
+			 */
+			inline bool ReportCreationFailure(bool isNil, const char* what)
+			{
+				if (!isNil) {
+					return false;
+				}
+
+				static std::mutex           s_mutex;
+				static std::set<std::string> s_reported;
+				{
+					std::lock_guard<std::mutex> lock(s_mutex);
+					if (!s_reported.insert(what != nullptr ? what : "(unknown)").second) {
+						return true;   // 報告済み
+					}
+				}
+
+				char message[512] = {};
+				std::snprintf(message, sizeof(message),
+				              "[metal] 生成に失敗しました(nil): %s",
+				              what != nullptr ? what : "(unknown)");
+				aq::StartupLog(message);
+				return true;
+			}
+
+
 			// ----------------------------------------------------------------
 			//  フレーム
 			// ----------------------------------------------------------------

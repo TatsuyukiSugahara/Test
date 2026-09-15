@@ -143,7 +143,7 @@ namespace aq
 				desc.storageMode      = MTLStorageModePrivate;
 
 				texture_ = [device newTextureWithDescriptor:desc];  // MRR: +1
-				if (texture_ == nil) {
+				if (metal::ReportCreationFailure(texture_ == nil, "MetalDepthMap: depth texture array")) {
 					Release();
 					return false;
 				}
@@ -156,7 +156,8 @@ namespace aq
 						                            textureType:MTLTextureType2D
 						                                 levels:NSMakeRange(0, 1)
 						                                 slices:NSMakeRange(slice, 1)];  // MRR: +1
-					if (sliceTextures_[slice] == nil) {
+					if (metal::ReportCreationFailure(sliceTextures_[slice] == nil,
+					                                 "MetalDepthMap: slice texture view")) {
 						Release();
 						return false;
 					}

@@ -62,7 +62,7 @@ namespace aq
 				colorDesc.storageMode = MTLStorageModePrivate;
 
 				colorTexture_ = [device newTextureWithDescriptor:colorDesc];  // MRR: +1
-				if (colorTexture_ == nil) {
+				if (metal::ReportCreationFailure(colorTexture_ == nil, "MetalRenderTarget: color texture")) {
 					Release();
 					return false;
 				}
@@ -78,7 +78,7 @@ namespace aq
 					depthDesc.storageMode = MTLStorageModePrivate;
 
 					depthTexture_ = [device newTextureWithDescriptor:depthDesc];  // MRR: +1
-					if (depthTexture_ == nil) {
+					if (metal::ReportCreationFailure(depthTexture_ == nil, "MetalRenderTarget: depth texture")) {
 						Release();
 						return false;
 					}

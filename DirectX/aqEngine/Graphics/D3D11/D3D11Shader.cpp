@@ -13,15 +13,73 @@ namespace aq
 			/** シェーダの #include 解決に渡すディレクトリ */
 			std::string GetDirectoryPath(const std::string& path)
 			{
-				const size_t slash = path.find_last_of('/');
+				const size_t slash = path.find_last_of("/\\");
 				if (slash == std::string::npos) {
 					return ".";
 				}
 				return path.substr(0, slash);
 			}
 
-			/** ファイル読み込み。戻り値 false = ファイルが開けなかった */
-			bool ReadFile(const char* filePath, char* readBuffer, uint32_t& fileSize, std::string& openedPath)
+
+			/**
+			 * シェーダの #include をシェーダのあるディレクトリ基準で解決するハンドラ
+			 *
+			 * D3DCompile 標準の解決(D3D_COMPILE_STANDARD_FILE_INCLUDE)は #include を
+			 * CWD 相対で探すため、以前はコンパイルを挟んでプロセス全体の CWD を
+			 * 差し替えていた。シェーダのロードはワーカースレッドから並列に走るので、
+			 * その窓の間に別スレッドが相対パスを解決すると外れる。自前で解決すれば
+			 * CWD に触らずに済む(D3D12 側は同じ理由で先に自前実装へ移してある)。
+			 */
+			class ShaderIncludeHandler : public ID3DInclude
+			{
+			private:
+				std::string baseDir_;
+
+
+			public:
+				explicit ShaderIncludeHandler(std::string baseDir) : baseDir_(std::move(baseDir)) {}
+
+
+			public:
+				HRESULT __stdcall Open(D3D_INCLUDE_TYPE /*includeType*/, LPCSTR fileName,
+				                       LPCVOID /*parentData*/, LPCVOID* outData, UINT* outBytes) override
+				{
+					if (!fileName || !outData || !outBytes) return E_FAIL;
+
+					const std::string full = baseDir_ + "/" + fileName;
+					FILE* fp = nullptr;
+					if (fopen_s(&fp, full.c_str(), "rb") != 0 || !fp) return E_FAIL;
+
+					fseek(fp, 0, SEEK_END);
+					const long size = ftell(fp);
+					fseek(fp, 0, SEEK_SET);
+					if (size <= 0) {
+						fclose(fp);
+						return E_FAIL;
+					}
+					char* buffer = new char[static_cast<size_t>(size)];
+					const size_t readSize = fread(buffer, 1, static_cast<size_t>(size), fp);
+					fclose(fp);
+
+					*outData  = buffer;
+					*outBytes = static_cast<UINT>(readSize);
+					return S_OK;
+				}
+
+				HRESULT __stdcall Close(LPCVOID data) override
+				{
+					delete[] static_cast<const char*>(data);
+					return S_OK;
+				}
+			};
+
+			/**
+			 * ファイル読み込み。戻り値 false = ファイルが開けなかった
+			 *
+			 * 読み込み先は呼び出しごとのバッファ。シェーダのロードはワーカースレッドから
+			 * 並列に走るため、ここを共有バッファにするとソースが互いに混ざる。
+			 */
+			bool ReadFile(const char* filePath, std::vector<char>& readBuffer, uint32_t& fileSize, std::string& openedPath)
 			{
 				const std::string requested = filePath ? filePath : "";
 
@@ -44,7 +102,8 @@ namespace aq
 				fgetpos(fp, &fPos);
 				fseek(fp, 0, SEEK_SET);
 				fileSize = static_cast<uint32_t>(fPos);
-				fread(readBuffer, fileSize, 1, fp);
+				readBuffer.resize(fileSize);
+				if (fileSize > 0) fread(readBuffer.data(), fileSize, 1, fp);
 				fclose(fp);
 				return true;
 			}
@@ -143,10 +202,10 @@ namespace aq
 #if defined(_DEBUG)
 			dwordShaderFlags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #endif
-			static char shaderBuffer[5 * 1024 * 1024];
+			std::vector<char> shaderSource;
 			uint32_t fileSize = 0;
 			std::string openedPath;
-			if (!ReadFile(filePath, shaderBuffer, fileSize, openedPath)) return false;
+			if (!ReadFile(filePath, shaderSource, fileSize, openedPath)) return false;
 
 			// シェーダモデルをデバイスの機能レベルに合わせる。SM5.0 は FL11_0 必須のため、
 			// FL10_1(Xbox One UWP 等)では SM4.1、FL10_0 では SM4.0 でコンパイルする。
@@ -161,22 +220,21 @@ namespace aq
 			sprintf_s(shaderModel, "%s%s", shaderPrefix[static_cast<uint32_t>(shaderType_)], verSuffix);
 
 			ID3DBlob* errorBlob = nullptr;
-			char currentDirectory[MAX_PATH] = {};
-			GetCurrentDirectoryA(MAX_PATH, currentDirectory);
-			SetCurrentDirectoryA(GetDirectoryPath(openedPath).c_str());
+			ShaderIncludeHandler includeHandler(GetDirectoryPath(openedPath));
 			HRESULT hr = D3DCompile(
-				shaderBuffer, fileSize, nullptr, nullptr,
-				((ID3DInclude*)(UINT_PTR)1), entryFuncName,
+				shaderSource.data(), fileSize, openedPath.c_str(), nullptr,
+				&includeHandler, entryFuncName,
 				shaderModel,
 				dwordShaderFlags, 0, &blob_, &errorBlob);
-			SetCurrentDirectoryA(currentDirectory);
 
 			if (FAILED(hr)) {
 				if (errorBlob) {
-					static char text[5 * 1024];
+					char text[5 * 1024];
 					snprintf(text, ArraySize(text), "[Shader Error] %s\n%s",
 					         filePath, (char*)errorBlob->GetBufferPointer());
 					OutputDebugStringA(text);
+					// デバッガを繋いでいないと OutputDebugString は誰にも見えないので、起動ログにも残す
+					aq::StartupLog(text);
 					errorBlob->Release();
 				}
 				{

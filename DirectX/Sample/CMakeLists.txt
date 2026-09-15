@@ -37,6 +37,10 @@ if(APPLE)
 	)
 endif()
 
+# コンパイルオプション(C++20 / /utf-8 / 警告レベル)は PRIVATE なので aqEngine から伝播しない。
+# 省くと MSVC がコードページ 932 でエンジンの日本語コメントを読み違え、ヘッダで構文エラーになる。
+aq_apply_common_compile_options(Sample)
+
 target_include_directories(Sample PRIVATE
 	"${CMAKE_CURRENT_SOURCE_DIR}"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Application"

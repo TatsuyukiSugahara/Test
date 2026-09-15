@@ -19,7 +19,16 @@
 
 ### ビルドする
 
-**Windows** は `DirectX.sln` を開き、`Sample` をスタートアッププロジェクトにして実行します。
+**Windows** はこのフォルダの `build_windows.bat` を叩きます。
+
+```
+Sample\build_windows.bat run
+```
+
+CMake が Visual Studio のプロジェクトを `build\windows-vs2026\` へ生成し、`Sample` だけを
+ビルドして起動します。Visual Studio で編集やデバッグをしたいときは、生成された
+`build\windows-vs2026\AquaDash.slnx` を開いて `Sample` をスタートアッププロジェクトにしてください。
+リポジトリ直下の `DirectX.sln` は**エンジン開発用**で、このサンプルは入っていません。
 
 **macOS** はコマンドラインから叩きます。
 

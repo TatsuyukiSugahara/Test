@@ -158,7 +158,7 @@ namespace app
 					if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
 					startRequested_ = true;
 					if (title) { title->RequestStart(); }
-					// 決定 SE を再生(クリップは GameFlow::Update で先読み済み)。
+					// 決定 SE を再生(クリップは GameFlow::Initialize で先読み済み)。
 					if (aq::sound::SoundEngine::IsAvailable()) {
 						auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);
 						aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
@@ -420,6 +420,22 @@ namespace app
 
 	void GameFlow::Initialize()
 	{
+		// UI 画像テクスチャの事前ロード。未ロード中はバインドがスキップされ表示が遅れるため、
+		// 事前にキャッシュして決定時に即座に黒背景を出せるようにする。
+		//
+		// 以前は「リソースバンクの登録が OnRegister(OnInitialize より後)なので
+		// 最初の Update まで待つ」という理由で Update 側に置いていたが、
+		// バンクはエンジンの Initialize で揃うようになったのでここへ戻した
+		// (設計書/使いやすさ改善設計.md P2-A)。
+		{
+			// UI フォント(小さな ASCII アトラス)を先読み。テキストはアトラス完了まで描画されないため。
+			aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
+			// タイトル/ローディングの単色塗りに使う白テクスチャ(1×1)。
+			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/UI/Textures/white.png");
+			// 決定 SE を先読み(タイトルで押した瞬間に即鳴らせるように)。
+			aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);
+		}
+
 		// セッション状態 (System / UI が読む共有データ) を載せるエンティティ。
 		// ステージ再入場でも破棄しないので stageEntities_ には積まない。
 		{
@@ -463,22 +479,6 @@ namespace app
 
 	void GameFlow::Update(const float dt)
 	{
-		// UI 画像テクスチャの事前ロード(初回のみ)。リソースバンク登録は OnRegister(OnInitialize より後)なので、
-		// 最初の Update 時点で行う。未ロード中はバインドがスキップされ表示が遅れるため、
-		// 事前にキャッシュして決定時に即座に黒背景を出せるようにする。
-		if (!preloaded_)
-		{
-			// UI フォント(小さな ASCII アトラス)を先読み。テキストはアトラス完了まで描画されないため。
-			// (CorporateLogo の先読みは撤去。上の UI_FONT_PATH の注を参照)
-			aq::ui::FontAssetCache::Get().Load(UI_FONT_PATH);
-			// タイトル/ローディングの単色塗りに使う白テクスチャ(1×1)。ローディング背景も以前は
-			// 2.9MB の rock.png を黒く着色して使っていたが、これに置き換えた(Loading.screen.json)。
-			// Character.png の先読みも旧 SetupWorld 経路専用だったため撤去。
-			aq::res::ResourceManager::Get().Load<aq::res::GPUResource>("Assets/UI/Textures/white.png");
-			// 決定 SE を先読み(タイトルで押した瞬間に即鳴らせるように)。
-			aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);
-			preloaded_ = true;
-		}
 
 		// 保留中の遷移を境界で適用する(状態の OnUpdate 内から ChangeState しても安全)。
 		if (pending_)

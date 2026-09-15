@@ -117,6 +117,20 @@ namespace app
 		}
 		aq::StartupMark("    [game] Bloom ok (CS x6)");
 
+		// スカイキューブ (設計書/Skybox設計.md)。
+		//
+		// ロードに失敗しても続行する。空が出ないだけで背景はクリア色のまま残る
+		// (Deferred の decal と同じ作法)。テクスチャの完了待ちは SkyRenderer が
+		// 描画時にポーリングするので、ここでは待たない。
+		{
+			auto sky = std::make_unique<aq::rendering::SkyRenderer>();
+			if (sky->Create())
+			{
+				renderer_.SetSkyRenderer(std::move(sky));
+			}
+		}
+		aq::StartupMark("    [game] Sky ok (cubemap load kicked + shaders x2)");
+
 		// BGM: 起動時から常時ループ再生する(バンク登録に依存しない wav 直読み)。
 		// SoundEngine の初期化は Engine が別スレッドで進めているので、ここで合流してから開く。
 		// レンダラ初期化(シェーダコンパイル)の後ろに置くことで、その間もサウンド初期化が並走する。
@@ -209,46 +223,6 @@ namespace app
 
 	void Application::OnRegister()
 	{
-		aq::res::ResourceManager::RegisterBank<aq::res::GPUResource, aq::res::TResourceBank<aq::res::GPUResource>>();
-		aq::res::ResourceManager::RegisterBank<aq::res::MeshResource, aq::res::TResourceBank<aq::res::MeshResource>>();
-		aq::res::ResourceManager::RegisterBank<aq::res::PMDResource, aq::res::TResourceBank<aq::res::PMDResource>>();
-		aq::res::ResourceManager::RegisterBank<aq::res::ShaderResource, aq::res::TResourceBank<aq::res::ShaderResource>>();
-		aq::res::ResourceManager::RegisterBank<aq::res::SkeletalMeshResource, aq::res::TResourceBank<aq::res::SkeletalMeshResource>>();
-		aq::res::ResourceManager::RegisterBank<aq::res::AnimationResource, aq::res::TResourceBank<aq::res::AnimationResource>>();
-		aq::res::ResourceManager::RegisterBank<aq::ui::FontResource, aq::res::TResourceBank<aq::ui::FontResource>>();
-		aq::res::ResourceManager::RegisterBank<aq::sound::SoundClip, aq::res::TResourceBank<aq::sound::SoundClip>>();
-		aq::res::ResourceManager::RegisterBank<aq::res::ParticleSystemData, aq::res::TResourceBank<aq::res::ParticleSystemData>>();
-
-		aq::res::ResourceManager::Reflection<aq::res::GPUResource, aq::res::TextureLoader>();
-		aq::res::ResourceManager::Reflection<aq::res::MeshResource, aq::res::MeshLoader>();
-		aq::res::ResourceManager::Reflection<aq::res::PMDResource, aq::res::PMDLoader>();
-		aq::res::ResourceManager::Reflection<aq::res::ShaderResource, aq::res::ShaderLoader>();
-		aq::res::ResourceManager::Reflection<aq::res::SkeletalMeshResource, aq::res::SkeletalMeshLoader>();
-		aq::res::ResourceManager::Reflection<aq::res::AnimationResource, aq::res::AnimationLoader>();
-		aq::res::ResourceManager::Reflection<aq::ui::FontResource, aq::ui::FontLoader>();
-		aq::res::ResourceManager::Reflection<aq::sound::SoundClip, aq::sound::SoundClipLoader>();
-		aq::res::ResourceManager::Reflection<aq::res::ParticleSystemData, aq::res::ParticleLoader>();
-
-		// スカイキューブ (設計書/Skybox設計.md)。
-		//
-		// **OnInitialize ではなくここで生成する。** SkyRenderer はキューブマップを
-		// ResourceManager 経由で非同期ロードするが、リソースバンクの登録は上の
-		// RegisterBank 群 (= OnRegister) が済むまで行われない。Engine は
-		// Initialize() -> Register() の順に呼ぶので、OnInitialize で Load すると
-		// バンクが無く EngineAssert で落ちる。
-		//
-		// ロードに失敗しても続行する。空が出ないだけで背景はクリア色のまま残る
-		// (Deferred の decal と同じ作法)。テクスチャの完了待ちは SkyRenderer が
-		// 描画時にポーリングするので、ここでは待たない。
-		{
-			auto sky = std::make_unique<aq::rendering::SkyRenderer>();
-			if (sky->Create())
-			{
-				renderer_.SetSkyRenderer(std::move(sky));
-			}
-		}
-		aq::StartupMark("    [game] Sky ok (cubemap load kicked + shaders x2)");
-
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::ActorStateMachineSystem>();
 

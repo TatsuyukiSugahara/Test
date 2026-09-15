@@ -11,6 +11,11 @@
 #include "Component/AnimationComponentSystem.h"
 #include "Component/ParticleComponentSystem.h"
 #include "ECS/SpawnSystem.h"
+// エンジン既定のリソースバンク登録(RegisterEngineResourceBanks)で要る型とローダー。
+#include "Resource/ParticleSystemData.h"
+#include "Resource/ParticleLoader.h"
+#include "UI/Font/FontResource.h"
+#include "Sound/SoundClip.h"
 #include "Util/Profiler.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
@@ -58,6 +63,50 @@
 
 namespace aq
 {
+	namespace
+	{
+		/**
+		 * エンジンが所有するリソース型のバンクとローダーを登録する。
+		 *
+		 * **ゲーム側ではなくここで登録する。** 9 型すべて `aq::` 所有で、ゲームが
+		 * 登録する理由がない(設計書/使いやすさ改善設計.md P2-A)。
+		 *
+		 * **呼ぶ位置が重要。** `ResourceManager::Initialize()` の直後、つまり
+		 * `OnInitialize()` より前に済ませる。以前はゲームの `OnRegister()`
+		 * (= `OnInitialize()` の後)で登録していたため、`OnInitialize` で
+		 * `Load` するとバンクが無く `EngineAssert` で落ちた。その回避として
+		 * SkyRenderer の生成や UI の先読みが後段へ逃がされていた。
+		 *
+		 * `ComponentRegistry::RegisterCoreComponents()` と同じ流儀
+		 * (エンジンの初期化中にエンジン既定を登録する)。
+		 */
+		void RegisterEngineResourceBanks()
+		{
+			using namespace aq::res;
+
+			ResourceManager::RegisterBank<GPUResource,          TResourceBank<GPUResource>>();
+			ResourceManager::RegisterBank<MeshResource,         TResourceBank<MeshResource>>();
+			ResourceManager::RegisterBank<PMDResource,          TResourceBank<PMDResource>>();
+			ResourceManager::RegisterBank<ShaderResource,       TResourceBank<ShaderResource>>();
+			ResourceManager::RegisterBank<SkeletalMeshResource, TResourceBank<SkeletalMeshResource>>();
+			ResourceManager::RegisterBank<AnimationResource,    TResourceBank<AnimationResource>>();
+			ResourceManager::RegisterBank<ui::FontResource,     TResourceBank<ui::FontResource>>();
+			ResourceManager::RegisterBank<sound::SoundClip,     TResourceBank<sound::SoundClip>>();
+			ResourceManager::RegisterBank<ParticleSystemData,   TResourceBank<ParticleSystemData>>();
+
+			ResourceManager::Reflection<GPUResource,          TextureLoader>();
+			ResourceManager::Reflection<MeshResource,         MeshLoader>();
+			ResourceManager::Reflection<PMDResource,          PMDLoader>();
+			ResourceManager::Reflection<ShaderResource,       ShaderLoader>();
+			ResourceManager::Reflection<SkeletalMeshResource, SkeletalMeshLoader>();
+			ResourceManager::Reflection<AnimationResource,    AnimationLoader>();
+			ResourceManager::Reflection<ui::FontResource,     ui::FontLoader>();
+			ResourceManager::Reflection<sound::SoundClip,     sound::SoundClipLoader>();
+			ResourceManager::Reflection<ParticleSystemData,   ParticleLoader>();
+		}
+	}
+
+
 	bool Application::Initialize(aq::graphics::RenderContext& renderContext)
 	{
 #ifdef AQ_PROFILE_ENABLED
@@ -67,6 +116,8 @@ namespace aq
 		renderThreadReady_ = true;
 
 		aq::res::ResourceManager::Initialize();
+		// バンクは OnInitialize より前に揃える(上の関数コメントの「呼ぶ位置が重要」)。
+		RegisterEngineResourceBanks();
 		aq::ecs::EntityContext::Initialize();
 		aq::hid::InputManager::Initialize();
 		// InputManager::Setup() は P1 の入力 Bridge 化で HRESULT → bool になった

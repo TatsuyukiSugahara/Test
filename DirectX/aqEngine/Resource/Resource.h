@@ -826,7 +826,11 @@ public:\
 			{
 				TResourceBank<Resource>* bank = FindBank<Resource, TResourceBank<Resource>>();
 				if (bank == nullptr) {
- 					EngineAssert(false);
+					// ゲーム独自のリソース型で RegisterBank を書いていないか、
+					// Application::Initialize() より前に Load を呼んでいる。
+					EngineAssertMsg(false,
+						"ResourceManager::Load: この型のバンクが登録されていません。"
+						"ゲーム独自の型なら OnRegister() で RegisterBank / Reflection を呼んでください。");
 					return nullptr;
 				}
 
@@ -971,8 +975,14 @@ public:\
 			static void RegisterBank()
 			{
 				if (bankMap_.count(Resource::ID()) > 0) {
-					// 登録済み
-					EngineAssert(false);
+					// エンジン所有の型は Application::Initialize() の
+					// RegisterEngineResourceBanks() が既定登録するので、ゲーム側で
+					// 登録し直す必要はない(設計書/使いやすさ改善設計.md P2-A)。
+					// ゲーム独自の型でここへ来たなら、登録が 2 回書かれている。
+					EngineAssertMsg(false,
+						"ResourceManager::RegisterBank: 既に登録済みです。"
+						"エンジン所有の型(GPUResource / MeshResource / ShaderResource 等)は"
+						"エンジンが既定登録するため、ゲーム側の登録は不要です。");
 					return;
 				}
 				bankMap_.insert(BankPair(Resource::ID(), new TResourceBank()));

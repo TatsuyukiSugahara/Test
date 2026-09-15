@@ -120,7 +120,6 @@ namespace app
 		/** 状態間共有データ */
 		aq::ecs::EntityHandle       playerHandle_;
 		aq::level::LevelLoadHandle  loadHandle_;
-		bool                        preloaded_ = false;   // UI テクスチャの事前ロードを一度だけ行う
 
 		/** セッションエンティティ (SessionComponent 1 体)。生成者として破棄責任を持つ */
 		aq::ecs::EntityHandle       sessionHandle_;

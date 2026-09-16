@@ -112,7 +112,7 @@
     <Filter Include="Rendering\PostProcess\Debug">
       <UniqueIdentifier>{f4a1bad1-f13e-5e67-b46a-1f7a26e3d634}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Rendering\PostProcess\Passes">
+    <Filter Include="Rendering\PostProcess\Effects">
       <UniqueIdentifier>{6b0c1d24-7e3a-4f58-9c61-2d8ab5f70e13}</UniqueIdentifier>
     </Filter>
     <Filter Include="Rendering\PostProcess\Commands">
@@ -587,23 +587,29 @@
     <ClCompile Include="Rendering\Pipeline\Passes\ParticlePass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\Pipeline\Passes\PostProcessPass.cpp">
+    <ClCompile Include="Rendering\Pipeline\Passes\MotionBlurPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\BloomPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\TonemapPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\Pipeline\Passes\UIPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\PostProcessChain.cpp">
-      <Filter>Rendering\PostProcess</Filter>
+    <ClCompile Include="Rendering\Pipeline\FullscreenComputeCommand.cpp">
+      <Filter>Rendering\Pipeline</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\Passes\MotionBlurPass.cpp">
-      <Filter>Rendering\PostProcess\Passes</Filter>
+    <ClCompile Include="Rendering\PostProcess\Effects\MotionBlurEffect.cpp">
+      <Filter>Rendering\PostProcess\Effects</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\Passes\BloomPass.cpp">
-      <Filter>Rendering\PostProcess\Passes</Filter>
+    <ClCompile Include="Rendering\PostProcess\Effects\BloomEffect.cpp">
+      <Filter>Rendering\PostProcess\Effects</Filter>
     </ClCompile>
-    <ClCompile Include="Rendering\PostProcess\Passes\TonemapPass.cpp">
-      <Filter>Rendering\PostProcess\Passes</Filter>
+    <ClCompile Include="Rendering\PostProcess\Effects\TonemapEffect.cpp">
+      <Filter>Rendering\PostProcess\Effects</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.cpp">
       <Filter>Rendering\PostProcess\Commands</Filter>
@@ -1363,14 +1369,20 @@
     <ClInclude Include="Rendering\PostProcess\Commands\TonemapPassCommand.h">
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\Passes\MotionBlurPass.h">
-      <Filter>Rendering\PostProcess\Passes</Filter>
+    <ClInclude Include="Rendering\PostProcess\Effects\IPostProcessEffect.h">
+      <Filter>Rendering\PostProcess\Effects</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\Passes\BloomPass.h">
-      <Filter>Rendering\PostProcess\Passes</Filter>
+    <ClInclude Include="Rendering\PostProcess\Effects\MotionBlurEffect.h">
+      <Filter>Rendering\PostProcess\Effects</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\Passes\TonemapPass.h">
-      <Filter>Rendering\PostProcess\Passes</Filter>
+    <ClInclude Include="Rendering\PostProcess\Effects\BloomEffect.h">
+      <Filter>Rendering\PostProcess\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Effects\TonemapEffect.h">
+      <Filter>Rendering\PostProcess\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\PostProcessContext.h">
+      <Filter>Rendering\PostProcess</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Offscreen\OffscreenScenePass.h">
       <Filter>Rendering\Offscreen</Filter>
@@ -1388,6 +1400,9 @@
       <Filter>Rendering\Pipeline</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Pipeline\PipelinePresets.h">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\FullscreenComputeCommand.h">
       <Filter>Rendering\Pipeline</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\ShadowPass.h">
@@ -1420,23 +1435,17 @@
     <ClInclude Include="Rendering\Pipeline\Passes\ParticlePass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
-    <ClInclude Include="Rendering\Pipeline\Passes\PostProcessPass.h">
+    <ClInclude Include="Rendering\Pipeline\Passes\MotionBlurPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\BloomPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\TonemapPass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\UIPass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
-    </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\PostProcessChain.h">
-      <Filter>Rendering\PostProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\PostProcessContext.h">
-      <Filter>Rendering\PostProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\IPostProcessPass.h">
-      <Filter>Rendering\PostProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="Rendering\PostProcess\IPostProcessRenderer.h">
-      <Filter>Rendering\PostProcess</Filter>
     </ClInclude>
     <ClInclude Include="Particle\ParticleTypes.h">
       <Filter>Particle</Filter>

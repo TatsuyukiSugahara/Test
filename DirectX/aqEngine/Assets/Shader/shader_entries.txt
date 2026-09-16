@@ -25,17 +25,17 @@
 #    現役かを確認し、不要なら行ごと削除すること (.fx 自体は改変しない)。
 # ============================================================================
 
-BloomBrightExtract.fx main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
-BloomComposite.fx     main       cs   # [参照] Rendering/PostProcess/Passes/TonemapPass.cpp
+BloomBrightExtract.fx main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp
+BloomComposite.fx     main       cs   # [参照] Rendering/PostProcess/Effects/TonemapEffect.cpp
 ClusterCull.fx        main       cs   # [参照] Rendering/Occlusion/GpuClusterCuller.cpp
 ClusterCullReset.fx   main       cs   # [参照] Rendering/Occlusion/GpuClusterCuller.cpp
 Decal.fx              VSMain     vs   # [参照] Rendering/Deferred/DeferredRenderer.cpp
 Decal.fx              PSMain     ps   # [参照] Rendering/Deferred/DeferredRenderer.cpp
 DeferredLighting.fx   VSMain     vs   # [未参照]
 DeferredLighting.fx   PSMain     ps   # [未参照]
-DualBlurDown.fx       main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
-DualBlurUp.fx         main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
-DualBlurUpAccum.fx    main       cs   # [参照] Rendering/PostProcess/Passes/BloomPass.cpp
+DualBlurDown.fx       main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp
+DualBlurUp.fx         main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp
+DualBlurUpAccum.fx    main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp
 GBufferLit.fx         VSMain     vs   # [未参照]
 GBufferLit.fx         PSMain     ps   # [未参照]
 HiZDownsample.fx      main       cs   # [参照] Rendering/Occlusion/HiZRenderer.cpp
@@ -53,7 +53,7 @@ Model.fx              PSMain     ps   # [参照] Graphics/StaticMesh.cpp
 ModelLit.fx           VSMain     vs   # [参照] Graphics/StaticMesh.cpp
 ModelLit.fx           PSMain     ps   # [参照] Graphics/StaticMesh.cpp
 ModelPS.fx            PSMain     ps   # [未参照]
-MotionBlur.fx         main       cs   # [参照] Rendering/PostProcess/Passes/MotionBlurPass.cpp
+MotionBlur.fx         main       cs   # [参照] Rendering/PostProcess/Effects/MotionBlurEffect.cpp
 OceanLit.fx           VSMain     vs   # [参照] Graphics/StaticMesh.cpp
 OceanLit.fx           PSMain     ps   # [参照] Graphics/StaticMesh.cpp
 PBRGBuffer.fx         VSMain     vs   # [未参照]
@@ -86,3 +86,4 @@ UISDFText.fx          VSMain     vs   # [未参照]
 UISDFText.fx          PSMain     ps   # [参照] UI/Rendering/UIRenderPipeline.cpp
 UISprite.fx           VSMain     vs   # [参照] UI/Rendering/UIRenderPipeline.cpp
 UISprite.fx           PSMain     ps   # [参照] UI/Rendering/UIRenderPipeline.cpp
+Vignette.fx           main       cs   # [参照] Sample/Application/VignettePass.cpp

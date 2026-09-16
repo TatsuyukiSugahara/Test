@@ -5,7 +5,6 @@
 #include "RenderTargetHandle.h"
 #include "Pipeline/RenderPipeline.h"
 #include "Shadow/IShadowRenderer.h"
-#include "PostProcess/IPostProcessRenderer.h"
 #include "Deferred/IDeferredRenderer.h"
 #include "Sky/SkyRenderer.h"
 
@@ -61,10 +60,11 @@ namespace aq
 			// AquaDash (Game/Application/Application.cpp) が使っている。
 			// P1〜P2 の間は pipeline_->Find<T>() へ転送する形で残し、P5 で削除する
 			// (設計書/レンダーパイプライン設計.md §2)。
-			IShadowRenderer*      GetShadowRenderer() const;
-			IPostProcessRenderer* GetPostProcessRenderer() const;
-			IDeferredRenderer*    GetDeferredRenderer() const;
-			SkyRenderer*          GetSkyRenderer() const;
+			// GetPostProcessRenderer() は P2 でポストプロセスが 3 パスに割れたため削除
+			// (呼び出し側は pipeline_->Find<MotionBlurPass/BloomPass/TonemapPass>() を使う)。
+			IShadowRenderer*   GetShadowRenderer() const;
+			IDeferredRenderer* GetDeferredRenderer() const;
+			SkyRenderer*       GetSkyRenderer() const;
 
 			/**
 			 * ゲームスレッドでフレームデータを outList に記録する。RenderPipeline::Build() への委譲。

@@ -4,7 +4,6 @@
 #include "Graphics/RenderContext.h"
 #include "Pipeline/Passes/ShadowPass.h"
 #include "Pipeline/Passes/GBufferPass.h"
-#include "Pipeline/Passes/PostProcessPass.h"
 #include "Pipeline/Passes/SkyPass.h"
 
 
@@ -34,14 +33,6 @@ namespace aq
 			if (!pipeline_) { return nullptr; }
 			auto* pass = pipeline_->Find<ShadowPass>();
 			return pass ? pass->GetShadowRenderer() : nullptr;
-		}
-
-
-		IPostProcessRenderer* Renderer::GetPostProcessRenderer() const
-		{
-			if (!pipeline_) { return nullptr; }
-			auto* pass = pipeline_->Find<PostProcessPass>();
-			return pass ? pass->GetPostProcessRenderer() : nullptr;
 		}
 
 

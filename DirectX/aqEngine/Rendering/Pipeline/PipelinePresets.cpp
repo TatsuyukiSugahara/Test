@@ -10,10 +10,9 @@
 #include "Passes/ForwardPass.h"
 #include "Passes/OceanPass.h"
 #include "Passes/ParticlePass.h"
-#include "Passes/PostProcessPass.h"
 #include "Passes/UIPass.h"
-// HardShadowRenderer / DeferredRenderer / PostProcessChain は aq.h が供給済み。
-// HiZRenderer と SkyRenderer は供給されないのでここで足す。
+// HardShadowRenderer / DeferredRenderer / MotionBlurPass / BloomPass / TonemapPass は
+// aq.h が供給済み。HiZRenderer と SkyRenderer は供給されないのでここで足す。
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Sky/SkyRenderer.h"
 
@@ -79,23 +78,86 @@ namespace aq
 				// パーティクル(半透明ビルボード。先頭ビューのみ)。
 				builder.Add<ParticlePass>();
 
-				// ポストプロセス(MotionBlur → Bloom → Tonemap)。compute 必須。
-				// worldPos (GBuffer2) の配線は PostProcessPass::Setup が掲示板から行う。
+				// ポストプロセス(MotionBlur → Bloom → Tonemap)。compute 必須(各パスの IsSupported() で判定)。
+				// worldPos (GBuffer2) の配線は MotionBlurPass::Build が掲示板(WorldPos キー)から行う。
 				if (preset.enablePostProcess)
 				{
-					auto postProcess = std::make_unique<PostProcessChain>();
-					if (postProcess->Initialize(renderW, renderH,
-					                            preset.bloomThreshold,
-					                            preset.bloomIntensity,
-					                            preset.bloomBlurPasses)) {
-						builder.Add<PostProcessPass>(std::move(postProcess));
-					}
+					builder.Add<MotionBlurPass>();
+
+					auto bloom = std::make_unique<BloomPass>();
+					bloom->GetEffect()->SetThreshold(preset.bloomThreshold);
+					bloom->GetEffect()->SetIntensity(preset.bloomIntensity);
+					bloom->GetEffect()->SetBlurPasses(preset.bloomBlurPasses);
+					BloomPass* bloomPtr = bloom.get();
+					builder.Add(std::move(bloom));
+
+					auto tonemap = std::make_unique<TonemapPass>();
+					tonemap->SetBloomIntensitySource(bloomPtr);
+					builder.Add(std::move(tonemap));
 				}
 
 				// UI(ポストプロセス後・ImGui 前に描画)。
 				builder.Add<UIPass>(std::move(uiCallback));
 
 				return builder;
+			}
+
+
+			PipelineBuilder Mobile(const RendererPreset& preset, std::function<void(RenderCommandList&)> uiCallback)
+			{
+				PipelineBuilder builder;
+
+				// 影。生成に失敗したら影なしで続行する(Standard() と同じ作法)。
+				if (preset.enableShadow)
+				{
+					auto shadow = std::make_unique<HardShadowRenderer>();
+					if (shadow->Create(preset.shadow, preset.shadowVSPath)) {
+						builder.Add<ShadowPass>(std::move(shadow));
+					}
+				}
+
+				// GBuffer を持たない(フォワードのみ)。Depth が無いので全アイテムをここで描く。
+				builder.Add<ForwardPass>();
+
+				// 空。ロードに失敗しても続行する(背景はクリア色のまま)。
+				if (preset.enableSky)
+				{
+					auto sky = std::make_unique<SkyRenderer>();
+					if (sky->Create(preset.skyCubemapPath)) {
+						builder.Add<SkyPass>(std::move(sky));
+					}
+				}
+
+				// パーティクル(半透明ビルボード。先頭ビューのみ)。
+				builder.Add<ParticlePass>();
+
+				// トーンマップのみ(Bloom / MotionBlur は無し。compute 必須)。
+				if (preset.enablePostProcess) {
+					builder.Add<TonemapPass>();
+				}
+
+				// UI(ポストプロセス後・ImGui 前に描画)。
+				builder.Add<UIPass>(std::move(uiCallback));
+
+				return builder;
+			}
+
+
+			PipelineBuilder ForCurrentPlatform(const RendererPreset& preset, std::function<void(RenderCommandList&)> uiCallback)
+			{
+				PipelineKind kind = preset.pipeline;
+				if (kind == PipelineKind::Auto)
+				{
+#if defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
+					kind = PipelineKind::Mobile;
+#else
+					kind = PipelineKind::Standard;
+#endif
+				}
+
+				return (kind == PipelineKind::Mobile)
+					? Mobile(preset, std::move(uiCallback))
+					: Standard(preset, std::move(uiCallback));
 			}
 		}
 	}

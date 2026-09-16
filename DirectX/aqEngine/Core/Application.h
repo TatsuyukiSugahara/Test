@@ -105,6 +105,16 @@ namespace aq
 		void SetupStandardRenderers(const RendererPreset& preset = {});
 
 		/**
+		 * UI パス込みの標準パイプラインを `PipelineBuilder` のまま返す(設計書/レンダーパイプライン設計.md P2)。
+		 * `PipelinePresets::ForCurrentPlatform(preset, uiCallback)` を呼ぶだけの薄い包み。
+		 * `SetupStandardRenderers()` はこれを `Build()` して `SetRenderPipeline()` するだけの 2 行になった。
+		 *
+		 * ゲームが `InsertBefore<UIPass>(...)` 等で列を組み替えてから `SetRenderPipeline()` したいときに使う
+		 * (`preset.pipeline` の既定は `Standard` なので、何もしなければ従来と同じ列になる)。
+		 */
+		rendering::PipelineBuilder BuildStandardPipeline(const RendererPreset& preset = {});
+
+		/**
 		 * ゲームが自前で組んだ RenderPipeline を丸ごと設定する。
 		 * SetupStandardRenderers() を使わず PipelineBuilder で独自の構成を組みたいゲーム向けの入口。
 		 * メイン RT とビューポートは Engine から取り、RenderDebugSync 用に Renderer へ渡す。

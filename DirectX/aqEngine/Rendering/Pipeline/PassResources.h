@@ -48,14 +48,22 @@ namespace aq
 			constexpr PassResourceKey WorldPos     = MakePassKey("aq.WorldPos");
 			/** Hi-Z ピラミッドの読み戻し面。HiZPass が書く */
 			constexpr PassResourceKey HiZ          = MakePassKey("aq.HiZ");
-			/** ポストプロセスの入出力(ピンポン)。P2 で各ポストパスが使う */
+			/** ポストプロセスの中継(MotionBlurPass が書き、BloomPass/TonemapPass が読む)。P2 */
 			constexpr PassResourceKey PostInput    = MakePassKey("aq.PostInput");
+			/** 予約(現状未使用。P2 は PostInput 1 本で中継する方式にしたため) */
 			constexpr PassResourceKey PostOutput   = MakePassKey("aq.PostOutput");
 			/** Bloom の結果(Tonemap の第 2 入力)。P2 */
 			constexpr PassResourceKey BloomTexture = MakePassKey("aq.BloomTexture");
 			/** 最終出力。RenderThread::Submit の displayRT に渡す。最後に書いたパスの RT が採用される */
 			constexpr PassResourceKey Output       = MakePassKey("aq.Output");
 		}
+
+
+		/**
+		 * ログ用。既知のキーは接頭辞なしの名前("WorldPos" 等)を返し、未知のキーは "0x########" を返す。
+		 * PipelineBuilder::Build() の検証失敗メッセージに使う(実装は PassResources.cpp)。
+		 */
+		const char* DescribePassKey(const PassResourceKey key);
 
 
 

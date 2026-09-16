@@ -1,5 +1,5 @@
 #include "aq.h"
-#include "BloomPass.h"
+#include "BloomEffect.h"
 #include "Graphics/GraphicsTypes.h"
 
 
@@ -7,7 +7,7 @@ namespace aq
 {
 	namespace rendering
 	{
-		bool BloomPass::Initialize(const uint32_t width, const uint32_t height)
+		bool BloomEffect::Initialize(const uint32_t width, const uint32_t height)
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
 
@@ -83,7 +83,7 @@ namespace aq
 		}
 
 
-		bool BloomPass::IsEnabled(const PostProcessContext&) const
+		bool BloomEffect::IsEnabled(const PostProcessContext&) const
 		{
 			return extractShader_
 			    && dualBlurDownShader_
@@ -95,7 +95,7 @@ namespace aq
 		}
 
 
-		RenderTargetHandle BloomPass::Build(
+		RenderTargetHandle BloomEffect::Build(
 			RenderCommandList&        outList,
 			const PostProcessContext& context,
 			const RenderTargetHandle  input)

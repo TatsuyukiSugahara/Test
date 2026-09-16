@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include "Rendering/PostProcess/IPostProcessPass.h"
+#include "Rendering/PostProcess/Effects/IPostProcessEffect.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Graphics/IShader.h"
 #include "Graphics/IBuffer.h"
@@ -15,11 +15,11 @@ namespace aq
 
 
 		/**
-		 * カメラモーションブラーのパス。
+		 * カメラモーションブラーのエフェクト(旧 MotionBlurPass。設計書/レンダーパイプライン設計.md P2 で改名)。
 		 * GBuffer2 (worldPos) と前フレームの viewProj からスクリーン空間速度を再構成し、
 		 * シーン RT を速度方向にぼかす。シェーダー / RT が用意できない環境では無効のまま動く。
 		 */
-		class MotionBlurPass final : public IPostProcessPass
+		class MotionBlurEffect final : public IPostProcessEffect
 		{
 		private:
 			std::unique_ptr<graphics::IShader>         shader_;
@@ -37,8 +37,8 @@ namespace aq
 
 
 		public:
-			MotionBlurPass() = default;
-			~MotionBlurPass() override = default;
+			MotionBlurEffect() = default;
+			~MotionBlurEffect() override = default;
 
 
 		public:
@@ -61,7 +61,7 @@ namespace aq
 			 * パラメータ
 			 */
 		public:
-			/** ブラー強度スケール (0 でパス無効) */
+			/** ブラー強度スケール (0 でエフェクト無効) */
 			inline void SetStrength(const float strength) { strength_ = strength < 0.0f ? 0.0f : strength; }
 			inline float GetStrength() const { return strength_; }
 		};

@@ -7,19 +7,26 @@ namespace aq
 {
 	namespace rendering
 	{
-		class PostProcessChain;
+		class MotionBlurEffect;
+		class BloomEffect;
+		class TonemapEffect;
 
 
-		/** ポストエフェクト(Bloom + トーンマップ)のデバッグ UI パネル。 */
+		/**
+		 * ポストエフェクト(MotionBlur + Bloom + トーンマップ)のデバッグ UI パネル。
+		 * パイプラインに無いエフェクトは nullptr で渡してよい(該当セクションを出さない)。
+		 */
 		class PostProcessDebugPanel : public IDebugRenderable
 		{
 		private:
-			PostProcessChain& chain_;
+			MotionBlurEffect* motionBlur_;
+			BloomEffect*      bloom_;
+			TonemapEffect*    tonemap_;
 			bool              show_ = false;
 
 
 		public:
-			explicit PostProcessDebugPanel(PostProcessChain& chain);
+			PostProcessDebugPanel(MotionBlurEffect* motionBlur, BloomEffect* bloom, TonemapEffect* tonemap);
 
 
 		public:

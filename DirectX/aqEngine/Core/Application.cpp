@@ -24,10 +24,10 @@
 // SetupStandardRenderers が生成する具象レンダラ群。
 #include "Rendering/Shadow/HardShadowRenderer.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
-#include "Rendering/PostProcess/PostProcessChain.h"
 #include "Graphics/InstancedStaticMesh.h"      // Finalize での名前レジストリ解放
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Occlusion/Debug/CullingDebugPanel.h"
+#include "Rendering/PostProcess/Debug/PostProcessDebugPanel.h"
 #endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
@@ -112,16 +112,22 @@ namespace aq
 	}
 
 
-	void Application::SetupStandardRenderers(const RendererPreset& preset)
+	rendering::PipelineBuilder Application::BuildStandardPipeline(const RendererPreset& preset)
 	{
-		// worldPos (GBuffer2) → PostProcessPass の配線や Shadow/Sky の生成失敗時のフォールバックは
-		// 各パスの Setup() 側の責務になった(設計書/レンダーパイプライン設計.md §2)。
-		// ここでは PipelineBuilder を組んで確定させ、Renderer へ渡すだけ。
-		auto builder = rendering::PipelinePresets::Standard(preset,
+		// worldPos (GBuffer2) → MotionBlurPass の配線や Shadow/Sky の生成失敗時のフォールバックは
+		// 各パスの Setup() / Build() 側の責務になった(設計書/レンダーパイプライン設計.md §2)。
+		// preset.pipeline の既定は Standard なので、何もしなければ従来と同じ列になる。
+		return rendering::PipelinePresets::ForCurrentPlatform(preset,
 			[](aq::rendering::RenderCommandList& list)
 			{
 				aq::ui::UIContext::Get().GetBatchRenderer().BuildCommandList(list);
 			});
+	}
+
+
+	void Application::SetupStandardRenderers(const RendererPreset& preset)
+	{
+		auto builder = BuildStandardPipeline(preset);
 
 		const uint32_t renderW = Engine::Get().GetRenderWidth();
 		const uint32_t renderH = Engine::Get().GetRenderHeight();
@@ -130,7 +136,7 @@ namespace aq
 		if (!pipeline)
 		{
 			// 理由は Build() が [pipeline] ログへ既に出している。
-			EngineAssertMsg(false, "PipelinePresets::Standard: PipelineBuilder::Build failed (see [pipeline] log)");
+			EngineAssertMsg(false, "PipelinePresets::ForCurrentPlatform: PipelineBuilder::Build failed (see [pipeline] log)");
 			return;
 		}
 
@@ -428,12 +434,20 @@ namespace aq
 				}
 			}
 
-			// PostProcess (Bloom など) — 同上
-			if (auto* pp = renderer_.GetPostProcessRenderer())
+			// PostProcess (MotionBlur / Bloom / Tonemap) — パイプラインにあるものだけ集めて 1 枚のパネルにする
+			// (P2 でポストプロセスが 3 パスに割れたため、PostProcessChain::CreateDebugPanel() 経由ではなく
+			// ここで Find<T>() して直接組み立てる。設計書/レンダーパイプライン設計.md §2)。
+			if (auto* pipeline = renderer_.GetPipeline())
 			{
-				auto panel = pp->CreateDebugPanel();
-				if (panel)
+				auto* motionBlurPass = pipeline->Find<rendering::MotionBlurPass>();
+				auto* bloomPass      = pipeline->Find<rendering::BloomPass>();
+				auto* tonemapPass    = pipeline->Find<rendering::TonemapPass>();
+				if (motionBlurPass || bloomPass || tonemapPass)
 				{
+					auto panel = std::make_unique<rendering::PostProcessDebugPanel>(
+						motionBlurPass ? motionBlurPass->GetEffect() : nullptr,
+						bloomPass      ? bloomPass->GetEffect()      : nullptr,
+						tonemapPass    ? tonemapPass->GetEffect()    : nullptr);
 					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
 					renderingDebugPanel_->TakeOwnership(std::move(panel));
 				}

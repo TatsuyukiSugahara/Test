@@ -1,5 +1,5 @@
 #include "aq.h"
-#include "MotionBlurPass.h"
+#include "MotionBlurEffect.h"
 #include "Rendering/PostProcess/Commands/MotionBlurPassCommand.h"
 #include "Graphics/GraphicsTypes.h"
 
@@ -8,7 +8,7 @@ namespace aq
 {
 	namespace rendering
 	{
-		bool MotionBlurPass::Initialize(const uint32_t width, const uint32_t height)
+		bool MotionBlurEffect::Initialize(const uint32_t width, const uint32_t height)
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
 
@@ -33,7 +33,7 @@ namespace aq
 		}
 
 
-		bool MotionBlurPass::IsEnabled(const PostProcessContext& context) const
+		bool MotionBlurEffect::IsEnabled(const PostProcessContext& context) const
 		{
 			// 当該フレームのカメラを受け取っていないビュー (分割画面など) では無効。
 			return context.hasCamera
@@ -45,7 +45,7 @@ namespace aq
 		}
 
 
-		RenderTargetHandle MotionBlurPass::Build(
+		RenderTargetHandle MotionBlurEffect::Build(
 			RenderCommandList&        outList,
 			const PostProcessContext& context,
 			const RenderTargetHandle  input)
@@ -65,7 +65,7 @@ namespace aq
 		}
 
 
-		void MotionBlurPass::SetFrameCamera(const CameraData& camera)
+		void MotionBlurEffect::SetFrameCamera(const CameraData& camera)
 		{
 			// 今フレームの viewProj を計算し、「前フレームぶん」を CB 用に確定させる。
 			// 初回は前フレームが無いので今フレームの値を使う (速度ゼロ = ブラーなし)。

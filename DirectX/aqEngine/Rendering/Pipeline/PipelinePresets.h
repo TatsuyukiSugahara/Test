@@ -11,6 +11,20 @@ namespace aq
 	namespace rendering
 	{
 		/**
+		 * ゲームが選べるパイプライン構成(設計書/レンダーパイプライン設計.md §1.4、P2)。
+		 * Auto は ForCurrentPlatform() がプラットフォームで Standard / Mobile を選ぶ。
+		 */
+		enum class PipelineKind : uint8_t
+		{
+			Standard,
+			Mobile,
+			Auto,
+		};
+
+
+
+
+		/**
 		 * 標準的な描画構成の設定値(設計書/使いやすさ改善設計.md P2-B)。
 		 *
 		 * 元は Core/Application.h の RendererPreset。`Rendering/` から `Core/` への依存を避けるため
@@ -49,6 +63,9 @@ namespace aq
 			bool        enableSky = true;
 			/** キューブマップ。既定はエンジン所有 */
 			const char* skyCubemapPath = "aqEngine/Assets/Sky/DefaultSkyCube.dds";
+
+			/** 使うパイプライン構成。既定は Standard(従来どおり)。Auto はプラットフォームで選ぶ */
+			PipelineKind pipeline = PipelineKind::Standard;
 		};
 
 
@@ -56,19 +73,35 @@ namespace aq
 
 		/**
 		 * プラットフォーム別の標準パイプライン構成(設計書/レンダーパイプライン設計.md §1.4)。
-		 * P1 では Standard() のみを提供する。Mobile() / ForCurrentPlatform() は P2 で追加する。
 		 */
 		namespace PipelinePresets
 		{
 			/**
 			 * 今の Application::SetupStandardRenderers と同じ構成
 			 * (Shadow / ClusterCull / GBuffer / Hi-Z / Decal / Lighting / Sky / Forward / Ocean /
-			 *  Particle / PostProcess / UI)。ClusterCull は GBuffer の前に置く。
+			 *  Particle / MotionBlur / Bloom / Tonemap / UI)。ClusterCull は GBuffer の前に置く。
 			 * 動かない機能(compute 非対応など)は PipelineBuilder::Build() の IsSupported() 検証で
 			 * 自動的に除外される。
 			 * @param uiCallback UIPass にそのまま渡す UI 描画コールバック
 			 */
 			PipelineBuilder Standard(const RendererPreset& preset, std::function<void(RenderCommandList&)> uiCallback);
+
+			/**
+			 * フォワードのみの軽量構成(GBuffer を持たない)。
+			 * Shadow(preset.enableShadow)→ Forward → Sky(preset.enableSky)→ Particle →
+			 * Tonemap(preset.enablePostProcess。Bloom / MotionBlur は無し)→ UI。
+			 * @param uiCallback UIPass にそのまま渡す UI 描画コールバック
+			 */
+			PipelineBuilder Mobile(const RendererPreset& preset, std::function<void(RenderCommandList&)> uiCallback);
+
+			/**
+			 * プラットフォームに応じて Standard() / Mobile() を選ぶ。
+			 * preset.pipeline が Standard / Mobile ならそれを優先し、Auto のときだけ
+			 * プラットフォーム(AQ_PLATFORM_ANDROID / AQ_PLATFORM_IOS なら Mobile、他は Standard)で選ぶ。
+			 * `#if AQ_PLATFORM_*` を持つのはこの関数だけ(ゲームコードに書かせない、architecture.md §2)。
+			 * @param uiCallback UIPass にそのまま渡す UI 描画コールバック
+			 */
+			PipelineBuilder ForCurrentPlatform(const RendererPreset& preset, std::function<void(RenderCommandList&)> uiCallback);
 		}
 	}
 }

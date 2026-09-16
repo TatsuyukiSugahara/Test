@@ -123,7 +123,8 @@ namespace app
 		}
 
 		// スピード感演出: 速度に応じたカメラモーションブラー強度 (タイトル/リザルトでは 0 で無効)。
-		if (auto* postProcess = renderer_.GetPostProcessRenderer())
+		auto* motionBlur = renderer_.GetPipeline() ? renderer_.GetPipeline()->Find<aq::rendering::MotionBlurPass>() : nullptr;
+		if (motionBlur)
 		{
 			constexpr float BLUR_SPEED_MIN     = 30.0f;   // [m/s] これ以下はブラーなし
 			// ブースト最高速 (MAX_SPEED 83 × BOOST_SPEED_MULTIPLIER 1.50) に合わせる。
@@ -154,7 +155,7 @@ namespace app
 					}
 				}
 			}
-			postProcess->SetMotionBlurStrength(strength);
+			motionBlur->SetStrength(strength);
 		}
 	}
 

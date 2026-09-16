@@ -1,5 +1,5 @@
 #include "aq.h"
-#include "TonemapPass.h"
+#include "TonemapEffect.h"
 #include "Rendering/PostProcess/Commands/TonemapPassCommand.h"
 #include "Graphics/GraphicsTypes.h"
 
@@ -8,7 +8,7 @@ namespace aq
 {
 	namespace rendering
 	{
-		bool TonemapPass::Initialize(const uint32_t width, const uint32_t height)
+		bool TonemapEffect::Initialize(const uint32_t width, const uint32_t height)
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
 
@@ -47,14 +47,14 @@ namespace aq
 		}
 
 
-		bool TonemapPass::IsEnabled(const PostProcessContext&) const
+		bool TonemapEffect::IsEnabled(const PostProcessContext&) const
 		{
 			// HDR → LDR 変換が無いと表示できないため常時 ON。
 			return true;
 		}
 
 
-		RenderTargetHandle TonemapPass::Build(
+		RenderTargetHandle TonemapEffect::Build(
 			RenderCommandList&        outList,
 			const PostProcessContext& context,
 			const RenderTargetHandle  input)

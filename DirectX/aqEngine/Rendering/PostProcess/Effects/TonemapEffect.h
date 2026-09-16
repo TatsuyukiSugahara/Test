@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include "Rendering/PostProcess/IPostProcessPass.h"
+#include "Rendering/PostProcess/Effects/IPostProcessEffect.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Graphics/IShader.h"
 #include "Graphics/IBuffer.h"
@@ -11,11 +11,12 @@ namespace aq
 	namespace rendering
 	{
 		/**
-		 * ブルーム合成 + 露出 + トーンマップ + ガンマのパス。
+		 * ブルーム合成 + 露出 + トーンマップ + ガンマのエフェクト。
+		 * 旧 TonemapPass。設計書/レンダーパイプライン設計.md P2 で改名。
 		 * HDR のシーンとブルームを合成して LDR の最終 RT を作る。
 		 * HDR → LDR 変換が無いと表示できないため常時有効。
 		 */
-		class TonemapPass final : public IPostProcessPass
+		class TonemapEffect final : public IPostProcessEffect
 		{
 		public:
 			/** トーンマップ演算子。BloomComposite.fx の Tonemap.fx と一致させること。 */
@@ -36,7 +37,7 @@ namespace aq
 			/** トーンマップ後の LDR 出力 */
 			RenderTargetHandle finalRTHandle_;
 
-			/** 合成に使うブルーム入力 (チェーンが Build 前に渡す) */
+			/** 合成に使うブルーム入力 (呼び出し側が Build 前に渡す) */
 			RenderTargetHandle bloomRTHandle_;
 			float              bloomIntensity_ = 0.0f;
 
@@ -48,8 +49,8 @@ namespace aq
 
 
 		public:
-			TonemapPass() = default;
-			~TonemapPass() override = default;
+			TonemapEffect() = default;
+			~TonemapEffect() override = default;
 
 
 		public:

@@ -14,6 +14,30 @@ namespace aq
 		}
 
 
+		void PipelineBuilder::LogMissingAnchor(const char* typeName)
+		{
+			aq::StartupMarkf("[pipeline] 挿入先が無い: %s", typeName);
+		}
+
+
+		void PipelineBuilder::InsertAtIndex(const size_t index, std::unique_ptr<IRenderPass> pass)
+		{
+			passes_.insert(passes_.begin() + static_cast<std::ptrdiff_t>(index), std::move(pass));
+		}
+
+
+		void PipelineBuilder::ReplaceAtIndex(const size_t index, std::unique_ptr<IRenderPass> pass)
+		{
+			passes_[index] = std::move(pass);
+		}
+
+
+		void PipelineBuilder::RemoveAtIndex(const size_t index)
+		{
+			passes_.erase(passes_.begin() + static_cast<std::ptrdiff_t>(index));
+		}
+
+
 		std::unique_ptr<RenderPipeline> PipelineBuilder::Build(const uint32_t width, const uint32_t height)
 		{
 			// 1. IsSupported() が false のパスを列から外す。
@@ -31,7 +55,7 @@ namespace aq
 			}
 
 			// 2. Reads の検証。初期状態は Scene のみが在るものとする。
-			//    P1 は検証の宣言だけ入れて、この段では失敗させない(ログのみ)。
+			//    未登録のキーを読むパスがあれば、名指しで失敗させる。
 			{
 				std::vector<PassResourceKey> available;
 				available.push_back(PassResourceKeys::Scene);
@@ -46,7 +70,9 @@ namespace aq
 							if (a == key) { found = true; break; }
 						}
 						if (!found) {
-							aq::StartupMarkf("[pipeline] %s は未登録のキーを読む", pass->GetName());
+							aq::StartupMarkf("[pipeline] %s は %s を読むが、それを書くパスが前に無い",
+							                 pass->GetName(), DescribePassKey(key));
+							return nullptr;
 						}
 					}
 
@@ -56,7 +82,7 @@ namespace aq
 				}
 			}
 
-			// 3. Frame scope が View scope の列の途中に挟まっていないかの検証(P1 はログのみ)。
+			// 3. Frame scope が View scope の列の途中に挟まっていないかの検証。
 			{
 				size_t firstView = passes_.size();
 				size_t lastView  = 0;
@@ -70,6 +96,7 @@ namespace aq
 					for (size_t i = firstView + 1; i < lastView; ++i) {
 						if (passes_[i]->GetScope() == PassScope::Frame) {
 							aq::StartupMarkf("[pipeline] View scope の列の途中に Frame scope の %s がある", passes_[i]->GetName());
+							return nullptr;
 						}
 					}
 				}

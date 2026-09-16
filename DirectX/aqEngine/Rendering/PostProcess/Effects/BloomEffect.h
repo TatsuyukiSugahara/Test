@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include "Rendering/PostProcess/IPostProcessPass.h"
+#include "Rendering/PostProcess/Effects/IPostProcessEffect.h"
 #include "Rendering/PostProcess/Commands/BloomPassCommand.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Graphics/IShader.h"
@@ -13,11 +13,12 @@ namespace aq
 	namespace rendering
 	{
 		/**
-		 * CS ベースのブルーム生成パス（Dual Blur アルゴリズム）。
+		 * CS ベースのブルーム生成エフェクト(Dual Blur アルゴリズム)。
+		 * 旧 BloomPass。設計書/レンダーパイプライン設計.md P2 で改名。
 		 * 輝度抽出 → Down × N → Up × N を行い、結果を bright RT に残す。
-		 * 合成は TonemapPass が担当する。
+		 * 合成は TonemapEffect が担当する。
 		 */
-		class BloomPass final : public IPostProcessPass
+		class BloomEffect final : public IPostProcessEffect
 		{
 		public:
 			/** ブルームピラミッドの最大段数 */
@@ -41,8 +42,8 @@ namespace aq
 
 
 		public:
-			BloomPass() = default;
-			~BloomPass() override = default;
+			BloomEffect() = default;
+			~BloomEffect() override = default;
 
 
 		public:

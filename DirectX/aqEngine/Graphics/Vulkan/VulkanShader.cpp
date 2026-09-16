@@ -235,26 +235,32 @@ namespace aq
 			srcBuf.Size     = source.size();
 			srcBuf.Encoding = DXC_CP_UTF8;
 
-			wchar_t prevDir[MAX_PATH] = {};
-			GetCurrentDirectoryW(MAX_PATH, prevDir);
-			SetCurrentDirectoryW(includeDir.c_str());
-
+			// CWD は動かさない。#include は上の -I (シェーダの絶対ディレクトリ) と
+			// DXC の既定ハンドラで解決する。シェーダのロードはワーカースレッドから並列に
+			// 走るので、プロセス全体の作業ディレクトリを一時的に差し替えると、その窓の間に
+			// 別スレッドの相対パス解決が外れる。
 			ComPtr<IDxcResult> result;
 			HRESULT hr = compiler->Compile(&srcBuf, args.data(), (UINT32)args.size(),
 			                               includeHandler.Get(), IID_PPV_ARGS(&result));
-
-			SetCurrentDirectoryW(prevDir);
 
 			if (SUCCEEDED(hr) && result)
 			{
 				ComPtr<IDxcBlobUtf8> errors;
 				result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
 				if (errors && errors->GetStringLength() > 0)
+				{
 					aq::debug::OutputString(errors->GetStringPointer());
+					// デバッガを繋いでいないと OutputDebugString は誰にも見えないので、起動ログにも残す
+					aq::StartupLog(errors->GetStringPointer());
+				}
 				result->GetStatus(&hr);
 			}
 			if (FAILED(hr))
 			{
+				char msg[512];
+				std::snprintf(msg, sizeof(msg), "[VulkanShader] DXC コンパイル失敗: %s (%s)",
+				              resolvedPath ? resolvedPath : "", entry ? entry : "main");
+				aq::StartupLog(msg);
 				EngineAssertMsg(false, "Vulkan シェーダ DXC コンパイルエラー");
 				return false;
 			}

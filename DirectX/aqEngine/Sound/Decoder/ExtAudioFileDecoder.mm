@@ -2,6 +2,7 @@
 // Apple プラットフォーム(macOS / iOS)以外では空 TU。
 #if defined(AQ_PLATFORM_APPLE)
 #include "Sound/Decoder/ExtAudioFileDecoder.h"
+#include "Resource/AssetPath.h"
 
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -26,10 +27,14 @@ namespace aq
 			{
 				if (path == nullptr || path[0] == '\0') { return nullptr; }
 
+				// パスは CWD 相対で来る。.app の中では CWD がそのまま基点にならないので、
+				// WavDecoder / MFDecoder と同じく解決を通してから開く。
+				const std::string resolvedPath = aq::res::ResolveExistingAssetPath(path);
+
 				CFURLRef url = CFURLCreateFromFileSystemRepresentation(
 					kCFAllocatorDefault,
-					reinterpret_cast<const UInt8*>(path),
-					static_cast<CFIndex>(std::strlen(path)),
+					reinterpret_cast<const UInt8*>(resolvedPath.c_str()),
+					static_cast<CFIndex>(resolvedPath.size()),
 					false);
 				if (url == nullptr) { return nullptr; }
 

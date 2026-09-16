@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "MFDecoder.h"
+#include "Resource/AssetPath.h"
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
@@ -72,7 +73,12 @@ namespace aq
 			}
 			mfStarted_ = true;
 
-			const std::wstring widePath = ToWide(path);
+			// パスは CWD 相対で来る。UWP は読み取り専用ルート、Mac の .app は Resources 配下、
+			// ゲームルート名が既定("Game")以外のこともあるので、CWD がそのまま基点にならない。
+			// WavDecoder / WavStreamDecoder と同じく、解決を通してから渡す。
+			const std::string resolvedPath = aq::res::ResolveExistingAssetPath(path != nullptr ? path : "");
+
+			const std::wstring widePath = ToWide(resolvedPath.c_str());
 			if (widePath.empty()) {
 				Close();
 				return false;

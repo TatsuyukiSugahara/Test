@@ -867,7 +867,7 @@ namespace aq
 				? static_cast<uint32_t>(splitViews_.size()) : MAX_VIEW_COUNT;
 
 			aq::rendering::RenderFrame           viewFrames[MAX_VIEW_COUNT];
-			aq::rendering::Renderer::ViewRect    viewRects[MAX_VIEW_COUNT];
+			aq::rendering::ViewRect              viewRects[MAX_VIEW_COUNT];
 			for (uint32_t v = 0; v < viewCount; ++v)
 			{
 				viewFrames[v].lighting = mainFrame.lighting;
@@ -876,8 +876,11 @@ namespace aq
 					true /*frustum*/, false /*occlusion*/, v == 0 /*stats*/, v == 0 /*gather*/);
 				viewRects[v] = splitViews_[v].rect;
 			}
-			renderer_.BuildCommandListViews(viewFrames, viewRects, viewCount, *mainCmdList,
-			                                Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+			if (auto* pipeline = renderer_.GetPipeline())
+			{
+				pipeline->BuildViews(viewFrames, viewRects, viewCount, *mainCmdList,
+				                     Engine::Get().GetMainRenderTargetHandle(), renderW, renderH);
+			}
 
 			// Submit に渡す per-frame CB (b1/b3) はビュー共有 (シャドウは view0 で確定)。
 			mainFrame.shadow = viewFrames[0].shadow;

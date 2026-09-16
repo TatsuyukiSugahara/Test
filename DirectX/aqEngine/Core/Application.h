@@ -44,7 +44,7 @@ namespace aq
 		struct SplitView
 		{
 			const Camera*                 camera = nullptr;
-			rendering::Renderer::ViewRect rect;
+			rendering::ViewRect           rect;
 		};
 
 

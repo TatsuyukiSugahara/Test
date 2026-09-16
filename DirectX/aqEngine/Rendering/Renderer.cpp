@@ -61,15 +61,6 @@ namespace aq
 		}
 
 
-		void Renderer::BuildCommandListViews(RenderFrame* frames, const ViewRect* rects, const uint32_t viewCount,
-		                                     RenderCommandList& outList, RenderTargetHandle rtHandle,
-		                                     float viewportW, float viewportH) const
-		{
-			if (!pipeline_) { return; }
-			pipeline_->BuildViews(frames, rects, viewCount, outList, rtHandle, viewportW, viewportH);
-		}
-
-
 #if _DEBUG
 		void Renderer::RenderDebugSync(graphics::RenderContext& context, RenderFrame& frame)
 		{

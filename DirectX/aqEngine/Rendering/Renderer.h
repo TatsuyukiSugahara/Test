@@ -20,7 +20,7 @@ namespace aq
 		 *
 		 * パスの並び自体は Renderer が持たない。ゲームが PipelineBuilder で組んだ
 		 * （または PipelinePresets::Standard() が組んだ）RenderPipeline を SetPipeline() で丸ごと
-		 * 受け取り、BuildCommandList / BuildCommandListViews はそこへ委譲するだけになる
+		 * 受け取り、BuildCommandList はそこへ委譲するだけになる
 		 * (設計書/レンダーパイプライン設計.md)。
 		 *
 		 * 非同期パス（推奨）:
@@ -32,11 +32,6 @@ namespace aq
 		 */
 		class Renderer
 		{
-		public:
-			/** 分割画面のビュー矩形 (ピクセル単位)。実体は Pipeline/RenderPipeline.h の rendering::ViewRect */
-			using ViewRect = rendering::ViewRect;
-
-
 		public:
 			/**
 			 * 確定済みのパイプラインを設定する。
@@ -73,15 +68,6 @@ namespace aq
 			void BuildCommandList(RenderFrame& frame, RenderCommandList& outList,
 			                      RenderTargetHandle rtHandle,
 			                      float viewportW, float viewportH) const;
-
-			/**
-			 * 分割画面用: 複数ビュー (カメラ毎に構築済みの RenderFrame + ビューポート矩形) を
-			 * 1 本のコマンドリストへ記録する。RenderPipeline::BuildViews() への委譲。
-			 * ビュー数 1 の分岐は設けない (その場合は従来の BuildCommandList を使うこと)。
-			 */
-			void BuildCommandListViews(RenderFrame* frames, const ViewRect* rects, const uint32_t viewCount,
-			                           RenderCommandList& outList, RenderTargetHandle rtHandle,
-			                           float viewportW, float viewportH) const;
 
 #if _DEBUG
 			/**

@@ -47,6 +47,12 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 | [FBX・ParticleSystem導入設計](FBX・ParticleSystem導入設計.md) | ufbx、Unityエクスポータ、CPU simulation、描画実装 |
 | [.particleフォーマット仕様 v1](particleフォーマット仕様v1.md) | Unityから受け渡す独自JSON形式の正本 |
 
+## UI
+
+| 資料 | 内容 |
+| --- | --- |
+| [UIアニメーション階層統合設計](UIアニメーション階層統合設計.md) | `Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を 3 階層へ畳む設計。同時実行の受け皿を Clip 側へ移す、条件付きクリップの常時評価、グループ起動の 32bit ハッシュ化、フェーズ計画 P0〜P3(2026-09-16 設計、実装未着手) |
+
 ## 使いやすさ
 
 | 資料 | 内容 |

@@ -1,6 +1,6 @@
 ---
 name: render-pipeline-phase-status
-description: レンダーパイプラインのパス列化(案 A)の到達点 — P1〜P4 完了(b067de7)。次は P5(輪郭線パスで実証 + 旧 API 削除)
+description: レンダーパイプラインのパス列化(案 A)— P1〜P5 完了(e6409b3)。残るは Mac / iOS / Android での P3〜P5 のビルド確認
 metadata: 
   node_type: memory
   type: project
@@ -25,9 +25,18 @@ metadata:
   2 本目の `RenderPipeline`(`GBufferPass > DeferredLightingPass > ForwardPass`)へ。`OffscreenScenePass` は削除し、
   `MakeNeutralShadowCBData()` は `Rendering/Shadow/ShadowData.h` の inline 関数へ移した。
   置き換え前後でミニマップ矩形の画素は完全一致(平均 0.000 / 最大 0)
-- P5 = 輪郭線パスで実証 + 旧 API(`Renderer::Set*/Get*`)削除 + 01_レンダリング設計.md §3 のリンク化
+- **P5 完了**(`e6409b3`。設計書は `5c8ed94` / `a815d86`)— `OutlinePass`(エンジンの**任意**パス。`Standard()` には
+  入れない)+ `Outline.fx`。worldPos から作ったカメラ距離の隣接差でエッジを拾い、色 / 濃さ / しきい値 / 太さは `Set*` で指定。
+  AquaDash は `InsertBefore<UIPass>` で挿す。`Renderer` の互換アクセサ(`GetShadowRenderer` 等)を削除し、
+  呼び出し側は `Find<ShadowPass>()` / `Find<GBufferPass>()` へ。01_レンダリング設計.md §3 は本書へのリンクに
+- **全フェーズ完了。残作業 = Mac / iOS / Android での P3〜P5 のビルド確認**(Windows 3 構成は確認済み)
 
 **How to apply:**
+- **`Depth` キーからは深度を読めない**(実体は GBuffer0 のハンドルで、SRV は albedo)。深度が要るパスは
+  `WorldPos`(GBuffer2)からカメラ距離を作る(Hi-Z と同じ)
+- **`Setup` 失敗 = パイプライン全体の失敗**。任意入力が無いだけのときは何も登録せず `true` を返し、`Build` で早期 return する
+- **Windows の Vulkan は `.spv` が無ければ実行時 DXC にフォールバック**するので、シェーダを足しても Windows は追加作業不要。
+  `.spv` / `.msl` は git 管理外(Mac / Android / iOS のビルド手順が生成する)
 - **2 本目のパイプラインは掲示板ごと別**(`PassResources` は `RenderPipeline` が 1 枚ずつ所有)。`Scene` / `GBuffer0` が
   同名でも干渉しない。`[pipeline] 確定:` が 2 行出るのが正常
 - **`DeferredRenderer` の寸法は `GBufferPass::Setup` 任せ**。未 `Create` の `shared_ptr` を渡せば `Build(w,h)` の寸法で作る

@@ -37,7 +37,7 @@ namespace app
 		/** 線の色。海と空に馴染む濃紺 */
 		static const aq::math::Vector3 OUTLINE_COLOR;
 		static constexpr float   OUTLINE_INTENSITY = 0.55f;  // 線の濃さ
-		static constexpr float   OUTLINE_THRESHOLD = 0.03f;  // エッジとみなす相対深度差
+		static constexpr float   OUTLINE_THRESHOLD = 0.30f;  // 折り目とみなす法線の差 (1 - dot。0.30 ≒ 45 度)
 		static constexpr int32_t OUTLINE_THICKNESS = 1;      // 線の太さ (px)
 
 	// ── BGM（起動時から常時ループ再生）──

@@ -13,9 +13,14 @@ namespace aq
 		/**
 		 * 輪郭線パス(設計書/レンダーパイプライン設計.md P5)。
 		 *
-		 * G-Buffer の worldPos からカメラまでの距離を作り、隣り合う画素との相対差が大きい場所を
-		 * エッジとして線色で塗る。直前の色(Output。無ければ Scene)を読んで自前の RT へ書き、
-		 * それを新しい Output にする(compute は入力と出力を同じ RT にできないため)。
+		 * G-Buffer の法線(GBuffer1)を隣り合う画素と比べ、シルエット(片方だけ背景)と
+		 * 折り目(法線が大きく向きを変える)を線色で塗る。直前の色(Output。無ければ Scene)を
+		 * 読んで自前の RT へ書き、それを新しい Output にする
+		 * (compute は入力と出力を同じ RT にできないため)。
+		 *
+		 * **深度(worldPos)は使わない。** worldPos は half float なので刻み幅が座標の大きさに
+		 * 比例し(|座標| 2360m のコースでは 2m)、距離の差分を見ると平坦な路面や地形に
+		 * 刻みの境目が等間隔の線として出てしまう。
 		 *
 		 * **`PipelinePresets::Standard()` には入らない任意パス**。使うゲームが自分で挿す:
 		 *   auto builder = BuildStandardPipeline(preset);
@@ -23,7 +28,7 @@ namespace aq
 		 *   outline->SetColor(math::Vector3(0.0f, 0.05f, 0.1f));
 		 *   builder.InsertBefore<UIPass>(std::move(outline));
 		 *
-		 * worldPos を書くパス(GBufferPass)が前に無い列(フォワードのみ構成)では、何もせず
+		 * 法線を書くパス(GBufferPass)が前に無い列(フォワードのみ構成)では、何もせず
 		 * 素通しする(Setup 失敗はパイプライン全体の失敗になるため、黙って無効化する)。
 		 */
 		class OutlinePass final : public IRenderPass
@@ -32,14 +37,12 @@ namespace aq
 			/** シェーダ定数(Outline.fx の b0 と同じ並び) */
 			struct OutlineCBData
 			{
-				math::Vector3 cameraPos = {};
-				float         threshold = 0.02f;
 				math::Vector3 color     = math::Vector3(0.0f, 0.0f, 0.0f);
 				float         intensity = 0.8f;
+				float         threshold = 0.25f;
 				uint32_t      width     = 0;
 				uint32_t      height    = 0;
 				int32_t       thickness = 1;
-				int32_t       padding   = 0;
 			};
 
 			std::unique_ptr<graphics::IShader>         shader_;
@@ -49,8 +52,8 @@ namespace aq
 			RenderTargetHandle outputRT_;
 			/** Setup 時点の Output(無ければ INVALID。その場合は毎フレームの Scene を読む) */
 			RenderTargetHandle inputRT_;
-			/** GBuffer2(worldPos)。掲示板に無ければ INVALID = このパスは何もしない */
-			RenderTargetHandle worldPosRT_;
+			/** GBuffer1(法線)。掲示板に無ければ INVALID = このパスは何もしない */
+			RenderTargetHandle normalRT_;
 
 			OutlineCBData params_;
 
@@ -78,7 +81,7 @@ namespace aq
 		public:
 			inline void SetColor(const math::Vector3& color)   { params_.color     = color; }
 			inline void SetIntensity(const float intensity)    { params_.intensity = intensity; }
-			/** エッジとみなす相対深度差(0.01 = 1%)。小さいほど線が増える */
+			/** 折り目とみなす法線の差 `1 - dot(n0, n1)`(0.25 ≒ 41 度)。小さいほど線が増える */
 			inline void SetThreshold(const float threshold)    { params_.threshold = threshold; }
 			/** 線の太さ(隣接画素までの距離。px) */
 			inline void SetThickness(const int32_t thickness)  { params_.thickness = thickness; }

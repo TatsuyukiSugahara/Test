@@ -20,7 +20,7 @@ namespace aq
 			// ポストプロセスの無い列でも組めるように任意にする(無ければ Scene を直接読む)。
 			decl.ReadsOptional(PassResourceKeys::Output);
 			// GBuffer を持たない列でも組めるように任意にする(無ければ何もしない)。
-			decl.ReadsOptional(PassResourceKeys::WorldPos);
+			decl.ReadsOptional(PassResourceKeys::GBuffer1);
 			decl.Writes(PassResourceKeys::Output);
 		}
 
@@ -29,13 +29,13 @@ namespace aq
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
 
-			// worldPos を書くパスが前に無いなら、何もしないパスとして素通しする
+			// 法線を書くパスが前に無いなら、何もしないパスとして素通しする
 			// (Setup 失敗はパイプライン全体の失敗になるため、ここでは false を返さない)。
-			if (!res.Has(PassResourceKeys::WorldPos)) {
-				aq::StartupMark("[pipeline] OutlinePass: WorldPos が無いので無効(フォワードのみの列)");
+			if (!res.Has(PassResourceKeys::GBuffer1)) {
+				aq::StartupMark("[pipeline] OutlinePass: GBuffer1 が無いので無効(フォワードのみの列)");
 				return true;
 			}
-			worldPosRT_ = res.Get(PassResourceKeys::WorldPos);
+			normalRT_ = res.Get(PassResourceKeys::GBuffer1);
 
 			shader_ = gd.CreateShader("aqEngine/Assets/Shader/Outline.fx", "main",
 			                          graphics::IShader::ShaderType::CS);
@@ -65,15 +65,13 @@ namespace aq
 		void OutlinePass::Build(RenderFrame& frame, const PassViewInfo& view,
 		                        PassResources& res, RenderCommandList& outList)
 		{
+			(void)frame;
+
 			if (!shader_ || !outputRT_.IsValid()) { return; }
 
 			// ポストプロセスが無い列では Scene(毎フレーム差し替わる)をそのまま読む。
 			const RenderTargetHandle input = inputRT_.IsValid() ? inputRT_ : res.Get(PassResourceKeys::Scene);
-			const RenderTargetHandle inputs[2] = { input, worldPosRT_ };
-
-			// カメラ位置はフレームごとに変わるので、ここで詰め直す(レンダースレッドから
-			// CameraManager を読まないための規約)。
-			params_.cameraPos = frame.camera.position;
+			const RenderTargetHandle inputs[2] = { input, normalRT_ };
 
 			outList.Enqueue<FullscreenComputeCommand>(
 				shader_.get(), inputs, 2u, outputRT_,

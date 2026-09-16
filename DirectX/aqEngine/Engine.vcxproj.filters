@@ -100,6 +100,12 @@
     <Filter Include="Rendering\Offscreen">
       <UniqueIdentifier>{3f8c51d7-2a64-4b19-9d07-5c8e12ab7f40}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\Pipeline">
+      <UniqueIdentifier>{5f1deef7-8548-44c3-a913-2e500efbc1a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rendering\Pipeline\Passes">
+      <UniqueIdentifier>{07e5089a-0c2f-4c18-8f90-e1fef88ab1ab}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Rendering\PostProcess">
       <UniqueIdentifier>{a1e2f3b4-c5d6-7890-ef12-34567890abcd}</UniqueIdentifier>
     </Filter>
@@ -538,6 +544,54 @@
     </ClCompile>
     <ClCompile Include="Rendering\Offscreen\OffscreenScenePass.cpp">
       <Filter>Rendering\Offscreen</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\PassResources.cpp">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\PipelineBuilder.cpp">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\RenderPipeline.cpp">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\PipelinePresets.cpp">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\ShadowPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\ClusterCullPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\GBufferPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\HiZPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\DecalPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\DeferredLightingPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\SkyPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\ForwardPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\OceanPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\ParticlePass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\PostProcessPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\UIPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\PostProcess\PostProcessChain.cpp">
       <Filter>Rendering\PostProcess</Filter>
@@ -1320,6 +1374,57 @@
     </ClInclude>
     <ClInclude Include="Rendering\Offscreen\OffscreenScenePass.h">
       <Filter>Rendering\Offscreen</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\IRenderPass.h">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\PassResources.h">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\PipelineBuilder.h">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\RenderPipeline.h">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\PipelinePresets.h">
+      <Filter>Rendering\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\ShadowPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\ClusterCullPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\GBufferPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\HiZPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\DecalPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\DeferredLightingPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\SkyPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\ForwardPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\OceanPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\ParticlePass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\PostProcessPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\UIPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\PostProcessChain.h">
       <Filter>Rendering\PostProcess</Filter>

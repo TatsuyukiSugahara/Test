@@ -1,9 +1,9 @@
 ﻿#pragma once
 #include <memory>
-#include <functional>
 #include "RenderFrame.h"
 #include "RenderCommandList.h"
 #include "RenderTargetHandle.h"
+#include "Pipeline/RenderPipeline.h"
 #include "Shadow/IShadowRenderer.h"
 #include "PostProcess/IPostProcessRenderer.h"
 #include "Deferred/IDeferredRenderer.h"
@@ -17,7 +17,12 @@ namespace aq
 	namespace rendering
 	{
 		/**
-		 * RenderFrame を RenderCommandList に変換する（記録フェーズ担当）。
+		 * RenderPipeline を保持し、RenderFrame から RenderCommandList を組み立てる（記録フェーズ担当）。
+		 *
+		 * パスの並び自体は Renderer が持たない。ゲームが PipelineBuilder で組んだ
+		 * （または PipelinePresets::Standard() が組んだ）RenderPipeline を SetPipeline() で丸ごと
+		 * 受け取り、BuildCommandList / BuildCommandListViews はそこへ委譲するだけになる
+		 * (設計書/レンダーパイプライン設計.md)。
 		 *
 		 * 非同期パス（推奨）:
 		 *   BuildCommandList() でコマンドを記録し、RenderThread::Submit() で実行する。
@@ -29,83 +34,49 @@ namespace aq
 		class Renderer
 		{
 		public:
+			/** 分割画面のビュー矩形 (ピクセル単位)。実体は Pipeline/RenderPipeline.h の rendering::ViewRect */
+			using ViewRect = rendering::ViewRect;
+
+
+		public:
 			/**
-			 * シャドウレンダラーを設定する。nullptr を渡すと影なしになる。
+			 * 確定済みのパイプラインを設定する。
 			 * mainRTHandle / mainViewportW / mainViewportH は RenderDebugSync 専用
 			 * （デバッグ同期パスでメイン RT に描画する際に使う）。
 			 */
-			void SetShadowRenderer(std::unique_ptr<IShadowRenderer> sr,
-			                       RenderTargetHandle mainRTHandle,
-			                       float mainViewportW, float mainViewportH);
+			void SetPipeline(std::unique_ptr<RenderPipeline> pipeline,
+			                 RenderTargetHandle mainRTHandle,
+			                 float mainViewportW, float mainViewportH);
 
-			IShadowRenderer* GetShadowRenderer() const { return shadowRenderer_.get(); }
-
-			void SetPostProcessRenderer(std::unique_ptr<IPostProcessRenderer> pp);
-			IPostProcessRenderer* GetPostProcessRenderer() const { return postProcessRenderer_.get(); }
-
-			/** ディファードレンダラーを設定する。nullptr を渡すとフォワードのみになる。 */
-			void SetDeferredRenderer(std::unique_ptr<IDeferredRenderer> dr);
-			IDeferredRenderer* GetDeferredRenderer() const { return deferredRenderer_.get(); }
+			/** 設定済みのパイプライン。ゲームが Find<T>() でパスへアクセスする入口 */
+			RenderPipeline* GetPipeline() const { return pipeline_.get(); }
 
 			/**
-			 * スカイボックスレンダラーを設定する。nullptr を渡すと空なしになる。
-			 * 未設定のままなら初回の BuildCommandList / BuildCommandListViews で自動生成する
-			 * (生成に失敗しても描画は継続し、空が出ないだけ)。
-			 */
-			void SetSkyRenderer(std::unique_ptr<SkyRenderer> sky);
-			SkyRenderer* GetSkyRenderer() const { return skyRenderer_.get(); }
-
-			/**
-			 * UI 描画コールバックを設定する。
-			 * BuildCommandList() のポストプロセス後・ImGui 前に呼ばれる。
-			 * Renderer が UI に直接依存しないよう、std::function で疎結合にする。
-			 * Application::OnInitialize() 等で UIContext::GetBatchRenderer() と接続する。
-			 */
-			void SetUIRenderCallback(std::function<void(RenderCommandList&)> cb)
-			{
-				uiRenderCallback_ = std::move(cb);
-			}
-
-			/**
-			 * Hi-Z ピラミッド構築コールバックを設定する。
-			 * G-Buffer パスの直後 (worldPos 確定後) に呼ばれる。
-			 * Renderer が Occlusion 層に直接依存しないよう std::function で疎結合にする。
-			 */
-			void SetHiZBuildCallback(std::function<void(const RenderFrame&, RenderCommandList&)> cb)
-			{
-				hiZBuildCallback_ = std::move(cb);
-			}
-
-			/**
-			 * ポストプロセスが設定されている場合はその最終出力 RT を、そうでなければ sceneRT を返す。
+			 * パイプラインの Output キーが登録されていればその RT、無ければ直近に使った Scene RT。
 			 * RenderThread::Submit の displayRT に渡す値を決めるために使う。
 			 */
-			RenderTargetHandle GetDisplayRTHandle(RenderTargetHandle sceneRT) const;
+			RenderTargetHandle GetOutputRT() const;
+
+			// ---- 互換アクセサ ----
+			// AquaDash (Game/Application/Application.cpp) が使っている。
+			// P1〜P2 の間は pipeline_->Find<T>() へ転送する形で残し、P5 で削除する
+			// (設計書/レンダーパイプライン設計.md §2)。
+			IShadowRenderer*      GetShadowRenderer() const;
+			IPostProcessRenderer* GetPostProcessRenderer() const;
+			IDeferredRenderer*    GetDeferredRenderer() const;
+			SkyRenderer*          GetSkyRenderer() const;
 
 			/**
-			 * ゲームスレッドでフレームデータを outList に記録する。
-			 * シャドウレンダラーが設定されている場合は frame.shadow を自動的に埋める。
-			 * rtHandle / viewportW / viewportH はシャドウパス後に復元するRTとビューポートを指定する。
+			 * ゲームスレッドでフレームデータを outList に記録する。RenderPipeline::Build() への委譲。
+			 * rtHandle / viewportW / viewportH は今フレームのシーン RT とビューポート。
 			 */
 			void BuildCommandList(RenderFrame& frame, RenderCommandList& outList,
 			                      RenderTargetHandle rtHandle,
-			                      float viewportW, float viewportH,
-			                      bool applyPostProcess = true) const;
-
-			/** 分割画面のビュー矩形 (ピクセル単位) */
-			struct ViewRect
-			{
-				float x = 0.0f;
-				float y = 0.0f;
-				float w = 0.0f;
-				float h = 0.0f;
-			};
+			                      float viewportW, float viewportH) const;
 
 			/**
 			 * 分割画面用: 複数ビュー (カメラ毎に構築済みの RenderFrame + ビューポート矩形) を
-			 * 1 本のコマンドリストへ記録する。シャドウは frames[0] で 1 回だけ描き全ビューで共有、
-			 * G-Buffer のクリアは先頭ビューのみ、ポストプロセスと UI はビューループ後に全画面で 1 回行う。
-			 * パーティクルはエミッタ共有の動的 VB への多重書き込みを避けるため先頭ビューにのみ描く。
+			 * 1 本のコマンドリストへ記録する。RenderPipeline::BuildViews() への委譲。
 			 * ビュー数 1 の分岐は設けない (その場合は従来の BuildCommandList を使うこと)。
 			 */
 			void BuildCommandListViews(RenderFrame* frames, const ViewRect* rects, const uint32_t viewCount,
@@ -122,22 +93,10 @@ namespace aq
 #endif
 
 		private:
-			void RecordDrawItem(const RenderItem&  item,
-			                    const CameraData&  camera,
-			                    RenderCommandList& outList) const;
-
-			/** 空のコマンドを積む。シーン RT + 深度がバインド済みの位置から呼ぶこと。 */
-			void BuildSkyCommandList(RenderFrame& frame, RenderCommandList& outList) const;
-
-			std::unique_ptr<IShadowRenderer>        shadowRenderer_;
-			std::unique_ptr<IPostProcessRenderer>   postProcessRenderer_;
-			std::unique_ptr<IDeferredRenderer>      deferredRenderer_;
-			std::unique_ptr<SkyRenderer>            skyRenderer_;
-			std::function<void(RenderCommandList&)> uiRenderCallback_;
-			std::function<void(const RenderFrame&, RenderCommandList&)> hiZBuildCallback_;
-			RenderTargetHandle                      mainRTHandle_;
-			float                                   mainViewportW_ = 0.f;
-			float                                   mainViewportH_ = 0.f;
+			std::unique_ptr<RenderPipeline> pipeline_;
+			RenderTargetHandle              mainRTHandle_;
+			float                           mainViewportW_ = 0.0f;
+			float                           mainViewportH_ = 0.0f;
 		};
 	}
 }

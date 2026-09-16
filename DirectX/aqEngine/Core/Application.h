@@ -2,7 +2,7 @@
 #include "IApplication.h"
 #include "Rendering/Renderer.h"
 #include "Rendering/RenderThread.h"
-#include "Rendering/Occlusion/HiZRenderer.h"
+#include "Rendering/Pipeline/PipelinePresets.h"
 #include <memory>
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Debug/RenderingDebugPanel.h"
@@ -25,36 +25,12 @@ namespace aq
 	/**
 	 * 標準的な描画構成の設定値(設計書/使いやすさ改善設計.md P2-B)。
 	 *
-	 * ゲームが Shadow / Deferred / PostProcess / Sky を 1 つずつ生成して配線していた
-	 * 定型を、`Application::SetupStandardRenderers()` 1 呼び出しへ畳むための引数。
-	 * **既定値のまま渡せば従来と同じ絵になる。**
-	 *
-	 * 解像度はここで持たない。`Engine::GetRenderWidth/Height()` から取るため
-	 * (ゲームが Engine に渡した値を、もう一度ゲームが書き写す理由がない)。
+	 * 実体は `rendering::RendererPreset`(`Rendering/Pipeline/PipelinePresets.h`)。
+	 * `Rendering/` が `Core/` に依存しないよう定義をそちらへ移し、ここでは互換のため
+	 * `aq::RendererPreset` として使えるよう using で再公開する(ゲームは
+	 * `aq::RendererPreset` と書いている)。
 	 */
-	struct RendererPreset
-	{
-		/** 影。false でシャドウなし */
-		bool enableShadow = true;
-		/** 影の設定。既定値は ShadowSettings 側が持つ */
-		rendering::ShadowSettings shadow = {};
-		/** ShadowDepth のシェーダ。既定はエンジン所有 */
-		const char* shadowVSPath = "aqEngine/Assets/Shader/ShadowDepth.fx";
-
-		/** ディファード。false でフォワードのみ */
-		bool enableDeferred = true;
-
-		/** ポストプロセス(MotionBlur / Bloom / Tonemap)。false で素通し */
-		bool  enablePostProcess = true;
-		float bloomThreshold    = 1.0f;
-		float bloomIntensity    = 0.45f;
-		uint32_t bloomBlurPasses = 4;
-
-		/** 空。false で背景はクリア色のまま */
-		bool        enableSky   = true;
-		/** キューブマップ。既定はエンジン所有 */
-		const char* skyCubemapPath = "aqEngine/Assets/Sky/DefaultSkyCube.dds";
-	};
+	using RendererPreset = rendering::RendererPreset;
 
 
 	/**
@@ -78,7 +54,6 @@ namespace aq
 
 	private:
 		bool renderThreadReady_ = false;
-		std::unique_ptr<aq::rendering::HiZRenderer> hiZRenderer_;  // オクリュージョン基盤 (Hi-Z)
 
 		/** 分割画面ビュー (2 個以上でマルチビュー描画。空 or 1 個は従来の単一ビュー経路) */
 		std::vector<SplitView> splitViews_;
@@ -109,21 +84,32 @@ namespace aq
 
 	protected:
 		/**
-		 * 標準的な描画構成(Shadow + Deferred + PostProcess + Sky)をまとめて組む。
+		 * 標準的な描画構成(Shadow + Deferred + Hi-Z + PostProcess + Sky)をまとめて組む。
 		 *
-		 * `OnInitialize()` から 1 行呼べば従来と同じ絵になる。**呼ばなければ何も生成しない**
-		 * ので、個別に `SetShadowRenderer` 等を使う従来のやり方もそのまま通る。
+		 * `OnInitialize()` から 1 行呼べば従来と同じ絵になる。中身は
+		 * `PipelinePresets::Standard(preset, uiCallback)` で `PipelineBuilder` を組み、
+		 * `Build()` した `RenderPipeline` を `renderer_.SetPipeline()` へ渡すだけ
+		 * (設計書/レンダーパイプライン設計.md)。個別のパス構成を自分で組みたいゲームは
+		 * これを呼ばず `SetRenderPipeline()` を使う。
 		 *
 		 * 解像度は `Engine` から取る。ディファードが有効なときに G-Buffer の worldPos を
 		 * ポストプロセスへ渡す配線もここで行う(「Deferred が有効ならこう繋ぐ」は
 		 * エンジンの都合であって、ゲームが知る必要がない)。
 		 *
 		 * 生成に失敗したパスは黙って飛ばす。空やブルームが出ないだけで描画は継続する
-		 * (Deferred の decal と同じ作法)。
+		 * (Deferred の decal と同じ作法)。パイプライン全体の Build() が失敗した場合は
+		 * assert してログのみ出し、パイプラインを設定しない。
 		 *
 		 * @param preset 各パスの有効/無効と設定値。既定のままで従来構成
 		 */
 		void SetupStandardRenderers(const RendererPreset& preset = {});
+
+		/**
+		 * ゲームが自前で組んだ RenderPipeline を丸ごと設定する。
+		 * SetupStandardRenderers() を使わず PipelineBuilder で独自の構成を組みたいゲーム向けの入口。
+		 * メイン RT とビューポートは Engine から取り、RenderDebugSync 用に Renderer へ渡す。
+		 */
+		void SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline);
 
 		/** ゲーム固有の初期化（エンジンサブシステム初期化後に呼ばれる） */
 		virtual bool OnInitialize() { return true; }

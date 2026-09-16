@@ -510,7 +510,7 @@ namespace aq
 
 			// compute の対応表明(P4)。
 			//
-			// P1〜P3 は false にしていた。true にすると Renderer::GetDisplayRTHandle() が
+			// P1〜P3 は false にしていた。true にすると Renderer::GetOutputRT()(旧 GetDisplayRTHandle)が
 			// displayRT をポストプロセスチェーンの最終 RT(Tonemap の出力)に切り替えるため、
 			// compute パスが動いていない段階では「誰も書いていない RT」が画面へ出てしまうからだった。
 			// P4 でポストプロセス一式を通すので true へ戻す。これが無いとトーンマップが走らず、

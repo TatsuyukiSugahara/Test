@@ -20,6 +20,7 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
+#include "Rendering/Pipeline/Passes/HiZPass.h"   // Hi-Z オクリュージョンの配線に使う
 // SetupStandardRenderers が生成する具象レンダラ群。
 #include "Rendering/Shadow/HardShadowRenderer.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
@@ -113,64 +114,44 @@ namespace aq
 
 	void Application::SetupStandardRenderers(const RendererPreset& preset)
 	{
+		// worldPos (GBuffer2) → PostProcessPass の配線や Shadow/Sky の生成失敗時のフォールバックは
+		// 各パスの Setup() 側の責務になった(設計書/レンダーパイプライン設計.md §2)。
+		// ここでは PipelineBuilder を組んで確定させ、Renderer へ渡すだけ。
+		auto builder = rendering::PipelinePresets::Standard(preset,
+			[](aq::rendering::RenderCommandList& list)
+			{
+				aq::ui::UIContext::Get().GetBatchRenderer().BuildCommandList(list);
+			});
+
 		const uint32_t renderW = Engine::Get().GetRenderWidth();
 		const uint32_t renderH = Engine::Get().GetRenderHeight();
 
-		// 影。メイン RT とビューポートは Renderer 側がデバッグ同期パスで使う。
-		if (preset.enableShadow)
+		auto pipeline = builder.Build(renderW, renderH);
+		if (!pipeline)
 		{
-			auto shadow = std::make_unique<rendering::HardShadowRenderer>();
-			if (shadow->Create(preset.shadow, preset.shadowVSPath))
-			{
-				renderer_.SetShadowRenderer(std::move(shadow),
-				                            Engine::Get().GetMainRenderTargetHandle(),
-				                            static_cast<float>(renderW),
-				                            static_cast<float>(renderH));
-			}
+			// 理由は Build() が [pipeline] ログへ既に出している。
+			EngineAssertMsg(false, "PipelinePresets::Standard: PipelineBuilder::Build failed (see [pipeline] log)");
+			return;
 		}
 
-		// ディファード。失敗したらフォワードのまま続行する。
-		if (preset.enableDeferred)
-		{
-			auto deferred = std::make_unique<rendering::DeferredRenderer>();
-			if (deferred->Create(renderW, renderH))
-			{
-				renderer_.SetDeferredRenderer(std::move(deferred));
-			}
-		}
-
-		// ポストプロセス(MotionBlur / Bloom / Tonemap)。
-		if (preset.enablePostProcess)
-		{
-			auto postProcess = std::make_unique<rendering::PostProcessChain>();
-			if (postProcess->Initialize(renderW, renderH,
-			                            preset.bloomThreshold,
-			                            preset.bloomIntensity,
-			                            preset.bloomBlurPasses))
-			{
-				// カメラモーションブラーに G-Buffer2(worldPos)が要る。
-				// **ディファードが有効なときだけ繋ぐ。** これは「Deferred があれば
-				// こう配線する」というエンジンの都合で、ゲームが知る必要はない。
-				if (auto* dr = dynamic_cast<rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer()))
-				{
-					postProcess->SetWorldPosRT(dr->GetGBuffer2Handle());
-				}
-				renderer_.SetPostProcessRenderer(std::move(postProcess));
-			}
-		}
-
-		// 空。ロードに失敗しても続行する(背景はクリア色のまま)。
-		// キューブマップは非同期ロードで、完了待ちは SkyRenderer が描画時にポーリングする。
-		if (preset.enableSky)
-		{
-			auto sky = std::make_unique<rendering::SkyRenderer>();
-			if (sky->Create(preset.skyCubemapPath))
-			{
-				renderer_.SetSkyRenderer(std::move(sky));
-			}
-		}
+		renderer_.SetPipeline(std::move(pipeline),
+		                      Engine::Get().GetMainRenderTargetHandle(),
+		                      static_cast<float>(renderW),
+		                      static_cast<float>(renderH));
 
 		aq::StartupMark("  [app] standard renderers ok (shadow/deferred/postprocess/sky)");
+	}
+
+
+	void Application::SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline)
+	{
+		const uint32_t renderW = Engine::Get().GetRenderWidth();
+		const uint32_t renderH = Engine::Get().GetRenderHeight();
+
+		renderer_.SetPipeline(std::move(pipeline),
+		                      Engine::Get().GetMainRenderTargetHandle(),
+		                      static_cast<float>(renderW),
+		                      static_cast<float>(renderH));
 	}
 
 
@@ -374,10 +355,6 @@ namespace aq
 		aq::StartupMark("  [app] ImGui ok (font atlas built, ASCII only)");
 #endif // AQ_IMGUI
 
-		renderer_.SetUIRenderCallback([](aq::rendering::RenderCommandList& list) {
-			aq::ui::UIContext::Get().GetBatchRenderer().BuildCommandList(list);
-		});
-
 		if (!OnInitialize()) return false;
 		aq::StartupMark("  [app] game OnInitialize ok");
 
@@ -388,33 +365,27 @@ namespace aq
 			aq::rendering::SetClusterCullEnabled(false);
 		}
 
-		// Hi-Z (オクリュージョン基盤): ディファードが有効なときのみ。
-		// G-Buffer の worldPos から深度ピラミッドを構築する。
+		// Hi-Z (オクリュージョン基盤): HiZRenderer の生成・破棄は HiZPass::Setup() が持つ
+		// (SetupStandardRenderers / SetRenderPipeline でパイプラインに組み込み済み)。
+		// ここでは compute シェーダのロードと、パイプラインに HiZPass があれば
+		// その HiZRenderer をオクリュージョンのテスターとして登録するだけ。
 		if (aq::graphics::IsComputeSupported())
 		{
-		aq::rendering::GpuClusterCuller::Get().Initialize();
-		if (auto* dr = dynamic_cast<rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer()))
-		{
-			hiZRenderer_ = std::make_unique<rendering::HiZRenderer>();
-			if (hiZRenderer_->Initialize(Engine::Get().GetRenderWidth(), Engine::Get().GetRenderHeight()))
+			aq::rendering::GpuClusterCuller::Get().Initialize();
+
+			if (auto* pipeline = renderer_.GetPipeline())
 			{
-				const rendering::RenderTargetHandle gb2 = dr->GetGBuffer2Handle();
-				auto* hiZ = hiZRenderer_.get();
-				renderer_.SetHiZBuildCallback(
-					[hiZ, gb2](const rendering::RenderFrame& f, rendering::RenderCommandList& l)
+				if (auto* hiZPass = pipeline->Find<rendering::HiZPass>())
+				{
+					if (auto* hiZ = hiZPass->GetHiZRenderer())
 					{
-						hiZ->BuildCommandList(f, l, gb2);
-					});
-				// オクリュージョンカリングのテスターとして登録
-				aq::ecs::RenderSystem::SetOcclusionTester(hiZ);
-				// GPU 駆動クラスタカリングの Hi-Z オクリュージョン供給元として登録
-				aq::rendering::GpuClusterCuller::Get().SetHiZSource(hiZ);
+						// オクリュージョンカリングのテスターとして登録
+						aq::ecs::RenderSystem::SetOcclusionTester(hiZ);
+						// GPU 駆動クラスタカリングの Hi-Z オクリュージョン供給元として登録
+						aq::rendering::GpuClusterCuller::Get().SetHiZSource(hiZ);
+					}
+				}
 			}
-			else
-			{
-				hiZRenderer_.reset();
-			}
-		}
 		}  // if (aq::graphics::IsComputeSupported())
 		aq::StartupMark("  [app] ClusterCull/HiZ ok (CS x4 compiled)");
 
@@ -434,7 +405,7 @@ namespace aq
 			oceanDebugPanel_ = std::make_unique<aq::ocean::OceanDebugPanel>();
 			renderingDebugPanel_->AddTab("Ocean", oceanDebugPanel_.get());
 
-			// Shadow — ゲームが SetShadowRenderer していれば自動でパネルを生成
+			// Shadow — パイプラインに ShadowPass があれば(= renderer_.GetShadowRenderer() が非 null なら)自動でパネルを生成
 			if (auto* sr = renderer_.GetShadowRenderer())
 			{
 				auto panel = sr->CreateDebugPanel();
@@ -502,11 +473,17 @@ namespace aq
 			aq::DebugUI::Get().Register(levelEditorPanel_.get());
 
 			// Hi-Z 可視化タブ
-			if (hiZRenderer_)
+			if (auto* pipeline = renderer_.GetPipeline())
 			{
-				auto panel = hiZRenderer_->CreateDebugPanel();
-				renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
-				renderingDebugPanel_->TakeOwnership(std::move(panel));
+				if (auto* hiZPass = pipeline->Find<rendering::HiZPass>())
+				{
+					if (auto* hiZ = hiZPass->GetHiZRenderer())
+					{
+						auto panel = hiZ->CreateDebugPanel();
+						renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
+						renderingDebugPanel_->TakeOwnership(std::move(panel));
+					}
+				}
 			}
 		}
 #endif
@@ -907,8 +884,7 @@ namespace aq
 		if (imguiDrawData)
 			mainCmdList->Enqueue<aq::rendering::ImGuiRenderCommand>(imguiDrawData);
 #endif
-		const auto sceneRT = Engine::Get().GetMainRenderTargetHandle();
-		AQ_PROFILE_SCOPE("Submit"); renderThread_.Submit(std::move(mainCmdList), renderer_.GetDisplayRTHandle(sceneRT),
+		AQ_PROFILE_SCOPE("Submit"); renderThread_.Submit(std::move(mainCmdList), renderer_.GetOutputRT(),
 		                    mainFrame.lighting, mainFrame.shadow);
 	}
 }

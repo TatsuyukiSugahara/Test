@@ -179,7 +179,6 @@ namespace aq
 #include "Rendering/Pipeline/Passes/BloomPass.h"
 #include "Rendering/Pipeline/Passes/TonemapPass.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
-#include "Rendering/Offscreen/OffscreenScenePass.h"
 #include "Resource/Resource.h"
 #include "UI/UIContext.h"
 #include "UI/Screen/UIScreenManager.h"

@@ -326,7 +326,6 @@
     <ClCompile Include="Rendering\Shadow\ShadowPassCommand.cpp" />
     <ClCompile Include="Rendering\Shadow\HardShadowRenderer.cpp" />
     <ClCompile Include="Rendering\Shadow\Debug\ShadowDebugPanel.cpp" />
-    <ClCompile Include="Rendering\Offscreen\OffscreenScenePass.cpp" />
     <ClCompile Include="Rendering\Pipeline\PassResources.cpp" />
     <ClCompile Include="Rendering\Pipeline\PipelineBuilder.cpp" />
     <ClCompile Include="Rendering\Pipeline\RenderPipeline.cpp" />
@@ -630,7 +629,6 @@
     <ClInclude Include="Rendering\PostProcess\Effects\BloomEffect.h" />
     <ClInclude Include="Rendering\PostProcess\Effects\TonemapEffect.h" />
     <ClInclude Include="Rendering\PostProcess\PostProcessContext.h" />
-    <ClInclude Include="Rendering\Offscreen\OffscreenScenePass.h" />
     <ClInclude Include="Rendering\Pipeline\IRenderPass.h" />
     <ClInclude Include="Rendering\Pipeline\PassResources.h" />
     <ClInclude Include="Rendering\Pipeline\PipelineBuilder.h" />

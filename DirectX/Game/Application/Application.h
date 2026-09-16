@@ -14,9 +14,13 @@ namespace app
 		Application();
 		~Application();
 
-	// ── ミニマップ用オフスクリーンパス（俯瞰スナップショット）──
+	// ── ミニマップ用オフスクリーンパイプライン（俯瞰スナップショット）──
+	//    メインとは別の 2 本目の RenderPipeline（GBuffer → ライティング → フォワードの 3 パス）。
+	//    掲示板もパスもこちらが単独で持つので、メインの列とは混ざらない
+	//    （設計書/レンダーパイプライン設計.md P4）。
 	protected:
-		aq::rendering::OffscreenScenePass offscreenPass_;
+		std::unique_ptr<aq::rendering::RenderPipeline> minimapPipeline_;
+		aq::rendering::RenderTargetHandle              minimapRT_;
 
 	private:
 		/** 次の描画で俯瞰ベイクを行うか（ステージ確定時に立てて 1 回だけ描く） */
@@ -24,6 +28,9 @@ namespace app
 
 		static constexpr uint32_t OFFSCREEN_RT_WIDTH  = 512;
 		static constexpr uint32_t OFFSCREEN_RT_HEIGHT = 512;
+
+		/** 俯瞰ベイクの背景色（ライティングは背景ピクセルを clip するのでこの色がそのまま残る） */
+		static constexpr float OFFSCREEN_CLEAR_COLOR[4] = { 0.02f, 0.08f, 0.16f, 1.0f };
 
 	// ── BGM（起動時から常時ループ再生）──
 	private:
@@ -36,7 +43,7 @@ namespace app
 		/** ミニマップの俯瞰ベイクを次の描画で 1 回だけ要求する（構図はオフスクリーンカメラ側で設定） */
 		inline void RequestMinimapBake() { minimapBakeRequested_ = true; }
 		/** 俯瞰ベイク先の RT。UI へ SRV を渡すのに使う */
-		inline aq::rendering::RenderTargetHandle GetMinimapRT() const { return offscreenPass_.GetSceneRT(); }
+		inline aq::rendering::RenderTargetHandle GetMinimapRT() const { return minimapRT_; }
 
 	protected:
 		bool OnInitialize() override;

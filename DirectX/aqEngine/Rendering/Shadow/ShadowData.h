@@ -36,6 +36,30 @@ namespace aq
 		static_assert(sizeof(ShadowCBData) == 256 + 16 + 16,
 		              "ShadowCBData size mismatch with HLSL ShadowCB");
 
+		/**
+		 * 影を無効化する b3 シャドウ CB を返す。
+		 *
+		 * オフスクリーンのように「影なしの素朴なライティング」で描きたいパイプラインが使う。
+		 * lightViewProj を「どのワールド座標も ndc.z = -1 へ落とす」行列にすることで、
+		 * ShadowSampling.fx の範囲外判定が常に「影なし (1.0)」を返すようにする
+		 * (単位行列のままだと原点付近がシャドウマップ範囲内と判定されてしまう)。
+		 */
+		inline ShadowCBData MakeNeutralShadowCBData()
+		{
+			const math::Matrix4x4 outside(
+				0.0f, 0.0f,  0.0f, 0.0f,
+				0.0f, 0.0f,  0.0f, 0.0f,
+				0.0f, 0.0f,  0.0f, 0.0f,
+				0.0f, 0.0f, -1.0f, 1.0f);
+
+			ShadowCBData shadow;
+			for (uint32_t i = 0; i < MaxShadowCascades; ++i) {
+				shadow.lightViewProj[i] = outside;
+			}
+			shadow.cascadeCount = 0;
+			return shadow;
+		}
+
 		// HLSL ShadowDepth.fx の ShadowLightCB (b2) と一致させる
 		struct ShadowSliceCBData
 		{

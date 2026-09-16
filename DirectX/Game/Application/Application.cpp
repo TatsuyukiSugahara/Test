@@ -1,6 +1,10 @@
 #include "stdafx.h"
 #include "Application.h"
 #include "GameFlow.h"
+#include "Rendering/Pipeline/PipelineBuilder.h"
+#include "Rendering/Pipeline/Passes/GBufferPass.h"
+#include "Rendering/Pipeline/Passes/DeferredLightingPass.h"
+#include "Rendering/Pipeline/Passes/ForwardPass.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
@@ -38,12 +42,28 @@ namespace app
 
 	bool Application::OnInitialize()
 	{
-		// ミニマップ用の俯瞰オフスクリーンパス (縮小 GBuffer を内包するので
-		// メイン解像度の深度と混ざらない)。背景はミニマップ下地と同じ暗い青。
-		if (offscreenPass_.Create(OFFSCREEN_RT_WIDTH, OFFSCREEN_RT_HEIGHT)) {
-			offscreenPass_.SetClearColor(aq::math::Vector4(0.02f, 0.08f, 0.16f, 1.0f));
-		} else {
-			EngineAssertMsg(false, "Failed to create offscreen scene pass");
+		// ミニマップ用の俯瞰オフスクリーン。メインとは別の 2 本目のパイプラインを組む。
+		// 縮小 GBuffer はこの列の GBufferPass が 512x512 で作るので、メイン解像度の深度と混ざらない。
+		{
+			// 描画先のカラー RT。深度は GBuffer0 が同じ寸法で持つので hasDepth は false。
+			aq::graphics::RenderTargetDesc desc;
+			desc.width       = OFFSCREEN_RT_WIDTH;
+			desc.height      = OFFSCREEN_RT_HEIGHT;
+			desc.colorFormat = aq::graphics::PixelFormat::R8G8B8A8_Unorm;
+			desc.hasDepth    = false;
+			minimapRT_       = aq::graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(desc);
+
+			// 俯瞰に要るのは GBuffer → ライティング → フォワード/インスタンスだけ。
+			// 影 / Hi-Z / デカール / 海 / パーティクル / ポスト / UI は積まない。
+			auto deferred = std::make_shared<aq::rendering::DeferredRenderer>();
+			aq::rendering::PipelineBuilder builder;
+			builder.Add<aq::rendering::GBufferPass>(deferred);
+			builder.Add<aq::rendering::DeferredLightingPass>(deferred);
+			builder.Add<aq::rendering::ForwardPass>();
+			minimapPipeline_ = builder.Build(OFFSCREEN_RT_WIDTH, OFFSCREEN_RT_HEIGHT);
+
+			EngineAssertMsg(minimapRT_.IsValid() && minimapPipeline_,
+			                "Failed to create minimap offscreen pipeline");
 		}
 		aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen)
 			->SetViewportSize(static_cast<float>(OFFSCREEN_RT_WIDTH),
@@ -207,7 +227,7 @@ namespace app
 		if (!minimapBakeRequested_) { return; }
 		minimapBakeRequested_ = false;
 
-		if (!offscreenPass_.IsReady() || !aq::ecs::RenderSystem::IsAvailable()) { return; }
+		if (!minimapPipeline_ || !minimapRT_.IsValid() || !aq::ecs::RenderSystem::IsAvailable()) { return; }
 
 		const aq::Camera* offscreenCamera =
 			aq::CameraManager::Get().GetCamera(aq::CameraType::Offscreen);
@@ -216,7 +236,7 @@ namespace app
 		aq::rendering::RenderFrame offscreenFrame;
 		offscreenFrame.lighting = aq::graphics::LightManager::Get().GetLightingData();
 		// 影なしの素朴なライティングにする (シャドウマップはメインカメラのカスケード用)。
-		offscreenFrame.shadow = aq::rendering::OffscreenScenePass::MakeNeutralShadowCBData();
+		offscreenFrame.shadow = aq::rendering::MakeNeutralShadowCBData();
 
 		// 俯瞰は全景が入るのでフラスタムカリング不要。オクリュージョンは Hi-Z が
 		// メインカメラ由来で誤判定するため無効。統計はメインパスの値を潰さないよう無効。
@@ -224,8 +244,15 @@ namespace app
 		aq::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, *offscreenCamera,
 			false /*frustum*/, false /*occlusion*/, false /*stats*/, true /*gather*/);
 
+		// メインパス (Application::Render) と同じ作法で、RT / クリア / ビューポートは呼び出し側が積む。
 		auto offscreenCmdList = std::make_unique<aq::rendering::RenderCommandList>();
-		offscreenPass_.BuildCommandList(offscreenFrame, *offscreenCmdList);
+		offscreenCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(minimapRT_);
+		offscreenCmdList->Enqueue<aq::rendering::ClearRenderTargetCommand>(0u, OFFSCREEN_CLEAR_COLOR);
+		offscreenCmdList->Enqueue<aq::rendering::SetViewportCommand>(
+			0.0f, 0.0f, static_cast<float>(OFFSCREEN_RT_WIDTH), static_cast<float>(OFFSCREEN_RT_HEIGHT));
+		minimapPipeline_->Build(offscreenFrame, *offscreenCmdList, minimapRT_,
+		                        static_cast<float>(OFFSCREEN_RT_WIDTH),
+		                        static_cast<float>(OFFSCREEN_RT_HEIGHT));
 
 		// displayRT は INVALID。オフスクリーンなので Present しない。
 		renderThread_.Submit(std::move(offscreenCmdList), aq::rendering::RenderTargetHandle{},

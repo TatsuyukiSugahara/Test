@@ -229,7 +229,7 @@ GDK（道B）は使わない個人開発方針。
 ---
 
 ## 8. 既知の制約・残作業
-- **ライティングが平坦（陰影ゼロ）**: VS/PS は全て SM4.1 で通っている（コンパイル失敗は Bloom cs のみ）。`LightManager` は既定で平行光1灯あり。SM4.1 でも `SampleCmp/SampleCmpLevelZero` 自体は使えるため、シェーダより先に **シャドウ深度パスが実際に描けているか**を疑うのが妥当（深度マップが clear 値のまま比較されると全面影=0 になり、平行光の寄与が消えて ambient だけ＝平坦）。切り分け: (a) DeferredLighting.fx のシャドウ項を色出力するデバッグ、(b) シャドウパスの Draw 数を StartupLog に出す。ただし後述の **PC-UWP で FL10 強制再現**ができれば PIX/RenderDoc で深度パスを直接確認できるので、そちらを先に整えるのが速い（→ §9-2）。
+- **ライティングが平坦（陰影ゼロ）**: VS/PS は全て SM4.1 で通っている（コンパイル失敗は Bloom cs のみ）。`LightManager` は既定で平行光1灯あり。SM4.1 でも `SampleCmp/SampleCmpLevelZero` 自体は使えるため、シェーダより先に **シャドウ深度パスが実際に描けているか**を疑うのが妥当（深度マップが clear 値のまま比較されると全面影=0 になり、平行光の寄与が消えて ambient だけ＝平坦）。切り分け: (a) PBRLighting.fx(Deferred のライティングで実際に使われているシェーダ。同名の DeferredLighting.fx は一度も使われていない旧世代で、2026-09-16 に削除した)のシャドウ項を色出力するデバッグ、(b) シャドウパスの Draw 数を StartupLog に出す。ただし後述の **PC-UWP で FL10 強制再現**ができれば PIX/RenderDoc で深度パスを直接確認できるので、そちらを先に整えるのが速い（→ §9-2）。
 - **DebugXbox の DirectXTex リンク衝突**（§5.4）。最小対処は GameUWP.vcxproj の DebugXbox PropertyGroup に `<NuGetConfiguration>Debug</NuGetConfiguration>` を明示（package の .targets は Configuration 完全一致 or 空のときしか設定しないので、先に入れれば勝てる。構成名変更は lib パス衝突を招くため非推奨 → §9-5）。
 - **Terrain の DirectXTex** は UWP 未有効化。
 - **入力**: GameInput 未実装（no-op）。

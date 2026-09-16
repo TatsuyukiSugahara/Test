@@ -43,7 +43,7 @@ Texture2D    layer1   : register(t2);  // rock
 Texture2D    layer2   : register(t3);  // dirt
 SamplerState samp     : register(s0);
 
-// no-tile サンプリング（TerrainGBufferLit.fx と同一）
+// no-tile サンプリング（TerrainLit.fx と同一）
 float2 HashUV(float2 p)
 {
     float2 q = float2(dot(p, float2(127.1, 311.7)),
@@ -79,7 +79,7 @@ PSInput VSMain(VSInput input)
 
 PSOutput PSMain(PSInput input)
 {
-    // params[0].x = layer UV tiling（TerrainGBufferLit.fx と同じ規則）
+    // params[0].x = layer UV tiling（TerrainLit.fx と同じ規則）
     float  tiling  = max(_extra[0].x, 0.001);
     float2 splatUV = input.uv;
     float2 layerUV = input.uv * tiling;

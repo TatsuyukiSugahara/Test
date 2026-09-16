@@ -1,6 +1,6 @@
 ---
 name: render-pipeline-phase-status
-description: レンダーパイプラインのパス列化(案 A)の到達点 — P1〜P3 完了(7145416)。次は P4(ミニマップを 2 本目のパイプラインへ)
+description: レンダーパイプラインのパス列化(案 A)の到達点 — P1〜P4 完了(b067de7)。次は P5(輪郭線パスで実証 + 旧 API 削除)
 metadata: 
   node_type: memory
   type: project
@@ -21,9 +21,18 @@ metadata:
 - **P3 完了**(`7145416`。設計書は `8114491`)— `Renderer::BuildCommandListViews` と `Renderer::ViewRect` 別名を削除し、
   `Application` は `GetPipeline()->BuildViews()` を直接呼ぶ。**Windows(D3D11 / D3D12 / Vulkan)の Debug x64 で
   P1〜P3 のビルドを確認**(0 エラー / 警告 54 件)。分割の確認は AquaDash に一時プローブを仮組みして実施し、確認後に revert
-- P4 = ミニマップを 2 本目のパイプラインへ(Game)。P5 = 輪郭線パスで実証 + 旧 API 削除
+- **P4 完了**(`b067de7`。設計書は `cfe7b63`)— ミニマップの俯瞰ベイクを、ゲームが `PipelineBuilder` で組む
+  2 本目の `RenderPipeline`(`GBufferPass > DeferredLightingPass > ForwardPass`)へ。`OffscreenScenePass` は削除し、
+  `MakeNeutralShadowCBData()` は `Rendering/Shadow/ShadowData.h` の inline 関数へ移した。
+  置き換え前後でミニマップ矩形の画素は完全一致(平均 0.000 / 最大 0)
+- P5 = 輪郭線パスで実証 + 旧 API(`Renderer::Set*/Get*`)削除 + 01_レンダリング設計.md §3 のリンク化
 
 **How to apply:**
+- **2 本目のパイプラインは掲示板ごと別**(`PassResources` は `RenderPipeline` が 1 枚ずつ所有)。`Scene` / `GBuffer0` が
+  同名でも干渉しない。`[pipeline] 確定:` が 2 行出るのが正常
+- **`DeferredRenderer` の寸法は `GBufferPass::Setup` 任せ**。未 `Create` の `shared_ptr` を渡せば `Build(w,h)` の寸法で作る
+  (`PipelinePresets::Standard` だけが `Engine::GetRenderWidth/Height` で先に `Create` している)
+- **オフスクリーンの RT / クリア / ビューポートは呼び出し側が積む**(メインパスと同じ作法)。Submit は `displayRT = INVALID`
 - **分割画面を呼ぶゲームコードは無い**(`74f4cf8` で一人プレイ専用に。`SetSplitViews` はエンジンに残るだけ)。
   確認するときは AquaDash の `OnUpdate` に「Num2=左右 2 分割 / Num1=解除 / Num3=全画面 1 ビュー」を仮組みし、
   2 ビューへ**同じメインカメラ**を渡す(左右が同じ絵になるので全面クリアの二重積みがすぐ見える)。

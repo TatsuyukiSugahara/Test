@@ -126,7 +126,7 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
 
 実装:
 - 分割画面(`BuildCommandListViews`)への反映。
-- ミニマップ(`OffscreenScenePass`)に空を出すかの判断。
+- ミニマップ(2 本目の `RenderPipeline`)に空を出すかの判断。
 - デバッグ UI のトグル(Rendering パネル)。
 
 評価:
@@ -170,7 +170,7 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
    `Resource.cpp` が読み込み時に自動生成しており `mips=10` になっていた。
 3. **HDR にするか**。メイン RT は `R16G16B16A16_Float` なので、LDR の DDS を
    そのまま出すとトーンマップで少し沈む。強度(`skyTint.a`)で持ち上げて様子を見る。
-4. **ミニマップに空を出すか**。`OffscreenScenePass` は独自のクリア色を持つ(暗い青)。
+4. **ミニマップに空を出すか**。ミニマップの列は `SkyPass` を積まず、呼び出し側が独自のクリア色を置く(暗い青)。
    真上から見下ろす画なので空はほぼ映らない。P3 で判断。
 
 ---

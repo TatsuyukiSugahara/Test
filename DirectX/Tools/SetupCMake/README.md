@@ -52,7 +52,8 @@ cmake --build --preset windows-vs2026-debug
 - VS2026 が無い環境は `windows-vs2022` プリセットを使う。
 - 実行ファイルは `build/<preset>/bin/<Config>/Game.exe`。
   デバッグ時の作業ディレクトリは `Game/` に設定してあるので、
-  `Resource.cpp` の `FindProjectRoot()` が `Game/Assets` を見つけられる。
+  `AssetPath.cpp` の `FindContentRoot()` が番兵 `aqEngine/Assets` を CWD から
+  上へ辿って見つけられる。
 
 ## 3. clang-cl 構成を生成する(可搬性検証用)
 
@@ -230,11 +231,16 @@ CMake が configure 時に解決して焼き込んである(手で設定する�
 Arguments(環境変数)。
 
 
-- **CWD は `Game/` にすること。** `.app` から起動すると `GetContentRoot()` が
-  `Contents/Resources` を返し、ソースツリーの上方探索が行われない。ビルドしただけの
-  `.app` には Assets が入っていないので、相対パス(`Assets/...` が CWD で解決する)に
-  頼っている。設計書 §8-16。Assets を同梱して CWD に依存しない `.app` を作る手順は
-  §5.2.2。
+- **CWD は `Game/` にしておくのが安全。** `.app` から起動すると `PlatformMac::GetContentRoot()`
+  (`PlatformMac.mm`)は無条件に `Contents/Resources` を返すが、`AssetPath::FindContentRoot()`
+  (`AssetPath.cpp`)側がその基点に番兵 `aqEngine/Assets` が実在するか確かめており、
+  `aqBundleApp` を通していないビルド(`Contents/Resources` が空)では無いと判断して
+  **CWD からの上方探索へ自動的に落ちる**(`[asset] コンテンツ基点に aqEngine/Assets が
+  無いので上方探索へ落ちます` のログが 1 回出る)。ただし CWD 自体がソースツリー
+  (`DirectX/` 配下)の外だと上方探索でも `aqEngine/Assets` に辿り着けず、依然として
+  アセットが見つからない。CWD を `Game/` にしておけば 1 段上の `DirectX/aqEngine/Assets`
+  が見つかる。設計書 使いやすさ改善設計.md §3 P1-C0。Assets を同梱して CWD に依存しない
+  `.app` を作る手順は §5.2.2。
 - 起動診断は CWD に `startup_timing.log` が出る。
 - validation layer のメッセージは stderr に出る。P2 時点で**エラー 0 / 警告 10**
   (警告はストレージイメージのフォーマット不一致。Mac 固有ではない。設計書 §8-15)。
@@ -264,13 +270,20 @@ cmake --build --preset macos-ninja-metal-debug --target aqBundleApp
 
 | 投入先 | 中身 | 構成 |
 |---|---|---|
-| `Contents/Resources/Game/Assets/` | `Game/Assets` 一式(生成した `Shader/msl` ・ `Shader/spv` を含む) | 共通 |
+| `Contents/Resources/Game/Assets/` | `Game/Assets` 一式(ゲームアセットのみ) | 共通 |
+| `Contents/Resources/aqEngine/Assets/` | `aqEngine/Assets` 一式(シェーダ `Shader/msl` ・ `Shader/spv` と既定スカイキューブ `Sky/DefaultSkyCube.dds`) | 共通 |
 | `Contents/Frameworks/libvulkan.1.dylib` | Vulkan ローダー | Vulkan のみ |
 | `Contents/Frameworks/libMoltenVK.dylib` | ICD(MoltenVK)本体 | Vulkan のみ |
 | `Contents/Resources/vulkan/icd.d/MoltenVK_icd.json` | ICD 定義。`library_path` はバンドル内の相対パスへ書き換え済み | Vulkan のみ |
 
-**`Resources` 直下ではなく `Resources/Game/Assets`** に置く点に注意。リソースの
-パス解決は `"Assets/..."` を `<コンテンツルート>/Game/Assets/...` へ組み立てる
+**`Resources` 直下ではなく `Resources/Game/Assets` と `Resources/aqEngine/Assets` の
+2 系統**に置く点に注意(使いやすさ改善設計.md §1.1)。パス解決は `"Assets/..."` を
+`<コンテンツルート>/<gameRootName>/Assets/...`(既定 `gameRootName="Game"`)へ、
+`"aqEngine/Assets/..."` はそのまま `<コンテンツルート>/aqEngine/Assets/...` へ組み立てる。
+基点の番兵も `aqEngine/Assets` なので、エンジンアセットを同梱し忘れるとバンドル基点
+そのものが棄却され、ソースツリーの上方探索へ落ちる(§5.2 参照)。
+エンジンアセットの投入元は `package_app.cmake` の `AQ_PKG_ENGINE_ASSETS_DIR`
+(`Game/CMakeLists.txt` から `aqEngine/Assets` を渡している)。
 (UWP の appx も同じ理由で `install/Game/Assets/...` に置いている)。
 
 Metal 構成は**外部 dylib 依存がゼロ**(`otool -L` がシステムフレームワークしか
@@ -291,16 +304,24 @@ cd /tmp && /tmp/Game.app/Contents/MacOS/Game
 ```
 
 Finder からダブルクリックしても起動する(CWD が `/` でも、`MacMain.mm` が
-バンドル内の `Contents/Resources` へ移すため)。
+バンドル内の `Contents/Resources/Game` へ移すため)。
 
 **アプリ側でしている手当ては 2 つ**(`Game/Application/MacMain.mm` の
 `SetupBundleEnvironment`。どちらもエンジン初期化より前):
 
-1. **CWD をバンドルの `Contents/Resources` へ移す。**
-   リソースは `GetContentRoot()` を見るが、**シェーダのパス解決だけは
-   見ていない**(`VulkanShader.cpp` / `MetalShader.mm` /
-   `MetalRenderContextImpl.mm` が CWD から上へ `Game/Assets` を探す独自実装)。
-   CWD を合わせると両者が同じルートを指す。
+1. **CWD をバンドルの `Contents/Resources/Game` へ移す。**
+   シェーダのパス解決は P1-A で `AssetPath`(`FindContentRoot()` 経由で
+   `GetContentRoot()` を見る)に一元化されたため、この用途では CWD を移さなくても
+   解決できるようになった(解消済 2026-09-14)。
+   **ただしサウンドは今も CWD 相対のまま開いている経路が残る。** `.wav` は
+   `WavDecoder::DecodeFile` が `ResolveExistingResourcePath`(`AssetPath` への転送)を
+   通すが、mp3/aac 等の圧縮音声は `ExtAudioFileDecoder::DecodeFileFully` →
+   `OpenAndConfigure` が `CFURLCreateFromFileSystemRepresentation` に生のパスを
+   渡すだけで `AssetPath` を通らない(Windows の `MFDecoder::Open` も同様、
+   `MFCreateSourceReaderFromURL` に生のパス)。そのため **CWD は今も移す必要がある**
+   (`Game/Application/MacMain.mm` の `SetupBundleEnvironment`)。移す先を
+   `Contents/Resources/Game` にすると、`"Assets/Sound/..."` が
+   `Contents/Resources/Game/Assets/Sound/...` に解決される。
 2. **Vulkan の `VK_DRIVER_FILES` / `VK_ICD_FILENAMES` にバンドル内の
    `MoltenVK_icd.json` を設定する。** 無いと配布先で `vkCreateInstance` が
    `VK_ERROR_INCOMPATIBLE_DRIVER`(-9)になる。**既に設定されていれば触らない**

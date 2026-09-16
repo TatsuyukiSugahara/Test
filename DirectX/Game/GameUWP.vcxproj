@@ -144,18 +144,27 @@
     <Image Include="Assets\SplashScreen.png" />
   </ItemGroup>
   <!-- ゲームアセットを appx に同梱。ソースツリー相対構造を再現するため install/Game/Assets/... に置く
-       (Link で Game\ プレフィクス)。これで "Assets/..." の解決も、シェーダ内の
-       ../../../aqEngine/Graphics/... 相対 include も、デスクトップと同じく成立する。
+       (Link で Game\ プレフィクス)。これで "Assets/..." の解決がデスクトップと同じく成立する。
        ロゴ PNG は上の Image 項目(install/Assets/ 直下)と重複しないよう除外。 -->
   <ItemGroup>
     <None Include="Assets\**\*.*" Exclude="Assets\StoreLogo.png;Assets\Square150x150Logo.png;Assets\Square44x44Logo.png;Assets\SplashScreen.png">
       <DeploymentContent>true</DeploymentContent>
       <Link>Game\%(Identity)</Link>
     </None>
-    <!-- シェーダが #include する engine 共有ヘッダを install/aqEngine/Graphics/ に同梱 -->
+    <!-- シェーダが #include する engine 共有ヘッダを install/aqEngine/Graphics/ に同梱。
+         install/aqEngine/Assets/Shader/MaterialDef.h が ../../Graphics/MaterialDef.h を引くので、
+         下のエンジンアセットと深さが一致している必要がある。 -->
     <None Include="..\aqEngine\Graphics\MaterialDef.h">
       <DeploymentContent>true</DeploymentContent>
       <Link>aqEngine\Graphics\MaterialDef.h</Link>
+    </None>
+    <!-- エンジンアセット(シェーダ一式と既定のスカイキューブ)を install/aqEngine/Assets/... に同梱。
+         コンテンツ基点の番兵が aqEngine/Assets なので、これが無いと基点が採用されず、
+         エンジンが要求するアセットを 1 つも解決できない。
+         spv / msl / .metal は Vulkan・Apple 用なので UWP(D3D11)には要らない。 -->
+    <None Include="..\aqEngine\Assets\**\*.*" Exclude="..\aqEngine\Assets\Shader\spv\**\*.*;..\aqEngine\Assets\Shader\msl\**\*.*;..\aqEngine\Assets\Shader\msl-ios\**\*.*;..\aqEngine\Assets\Shader\*.metal">
+      <DeploymentContent>true</DeploymentContent>
+      <Link>aqEngine\Assets\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </None>
   </ItemGroup>
   <ItemGroup>

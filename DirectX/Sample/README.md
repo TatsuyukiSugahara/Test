@@ -235,6 +235,76 @@ System は登録順ではなく、**宣言した依存関係の順**で走りま
 
 ---
 
+## 4 歩目: 描画パスを足す
+
+描画は「パス」の列で決まっています。影 → G-Buffer → ライティング → 空 → 前方描画 → ポストプロセス → UI、
+という並びをエンジンが `Standard` という名前で持っていて、`SetupStandardRenderers()` はそれを組んでいるだけです。
+起動ログ(`startup_timing.log`)に実際の列が 1 行出ます。
+
+```
+[pipeline] 確定: ShadowPass > ClusterCullPass > GBufferPass > ... > TonemapPass > UIPass
+```
+
+この列に、自分のパスを挟めます。ここでは画面の縁を暗くする「ビネット」を、UI の手前に入れます。
+
+### パスを書く
+
+パスは `aq::rendering::IRenderPass` を継承したクラスです。System と同じで、エンジンの標準パスも
+自分のパスも同じ型なので、扱いに差はありません。実物は
+[Application/VignettePass.h](Application/VignettePass.h) と [VignettePass.cpp](Application/VignettePass.cpp) にあります。
+書くのは次の 5 つです。
+
+| 関数 | 何を書くか |
+| --- | --- |
+| `GetName()` | ログに出る名前 |
+| `GetScope()` | フレームに 1 回(`Frame`)か、分割画面のビューごと(`View`)か |
+| `IsSupported()` | 動く条件。ビネットは compute シェーダで描くので `IsComputeSupported()` |
+| `DeclareResources()` | 読む RT と書く RT の宣言。ビネットは「トーンマップ後の `Output` を読み、新しい `Output` を書く」 |
+| `Setup()` | シェーダと自分の RT の生成。掲示板(`PassResources`)に自分の RT を `Output` として登録 |
+| `Build()` | コマンドを積む。`FullscreenComputeCommand` にシェーダ・入力・出力・定数を渡すだけ |
+
+RT の受け渡しは「掲示板」で行います。パスは前後のパスの型を知らず、`Scene` / `Depth` / `WorldPos` / `Output`
+といったキーで RT を読み書きします。読むと宣言したキーが前のパスに無ければ、起動時に
+「`VignettePass` は `WorldPos` を読むが、それを書くパスが前に無い」のように名指しで止まります。
+
+シェーダはエンジン所有の `aqEngine/Assets/Shader/Vignette.fx`(compute)を使っています。
+自分のシェーダを書く場合も同じ場所に置きます(ゲーム側フォルダのシェーダを Mac / iOS / Android 向けに
+事前コンパイルする経路がまだ無いためです)。
+
+### 列に挟む
+
+`SetupStandardRenderers()` を次の 3 行に置き換えます。標準の列を組み立て途中の形でもらい、
+`UIPass` の手前にビネットを挿してから確定させます。
+
+```cpp
+#include "VignettePass.h"
+#include "Rendering/Pipeline/Passes/UIPass.h"   // 挿す位置の目印にするパスのヘッダ
+
+// OnInitialize の中
+auto builder = BuildStandardPipeline();
+builder.InsertBefore<aq::rendering::UIPass>(std::make_unique<VignettePass>());
+SetRenderPipeline(builder.Build(aq::Engine::Get().GetRenderWidth(), aq::Engine::Get().GetRenderHeight()));
+```
+
+起動すると画面の縁が暗くなり、ログの列は `... > TonemapPass > VignettePass > UIPass` になります。
+UI はビネットの後ろなので暗くなりません。
+
+挿す以外の操作もあります。
+
+| やりたいこと | 書き方 |
+| --- | --- |
+| 前に挿す / 後ろに挿す | `InsertBefore<UIPass>(...)` / `InsertAfter<GBufferPass>(...)` |
+| 標準のパスを自分のものに替える | `Replace<TonemapPass>(std::make_unique<MyTonemapPass>())` |
+| 標準のパスを外す | `Remove<BloomPass>()` |
+| 全部自分で並べる | `aq::rendering::PipelineBuilder b; b.Add<ShadowPass>(...).Add<ForwardPass>()...;` |
+| 携帯向けの軽い列にする | `aq::RendererPreset p; p.pipeline = aq::rendering::PipelineKind::Mobile; SetupStandardRenderers(p);` |
+
+目印にするパスのヘッダは `Rendering/Pipeline/Passes/<名前>.h` を include します。
+`Build()` が失敗したとき(読む RT が無い、など)は理由をログに出して `nullptr` を返すので、
+その場合は何も描かれません。ログの `[pipeline]` 行を見てください。
+
+---
+
 ## この先
 
 ここから先は、やりたいことに応じて設計書を読んでください。
@@ -245,7 +315,8 @@ System は登録順ではなく、**宣言した依存関係の順**で走りま
 | エンティティを JSON で定義する | [Prefab設計](../設計書/Prefab設計.md) |
 | ステージを JSON で組む / 非同期で読む | [Level設計](../設計書/Level設計.md) |
 | ECS の仕組みを知る | [ECS設計](../設計書/04_ECS設計.md) |
-| 描画を差し替える / 足す | [レンダリング設計](../設計書/01_レンダリング設計.md) |
+| 描画パスの並びを変える / 足す | [レンダーパイプライン設計](../設計書/レンダーパイプライン設計.md) |
+| 描画の仕組みを知る | [レンダリング設計](../設計書/01_レンダリング設計.md) |
 | 音を鳴らす | [Sound設計](../設計書/Sound設計.md) |
 | 入力を増やす | [HID設計](../設計書/02_HID設計.md) |
 

@@ -41,6 +41,7 @@ DirectX/ThirdParty/DirectXTex/x64/
 # 親を .claude/* にしないと配下の再包含(!)が効かない
 .claude/*
 !.claude/skills/
+!.claude/memory/
 
 # Vulkan validation log (runtime)
 vk_debug.log

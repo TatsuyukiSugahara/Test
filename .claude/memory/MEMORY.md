@@ -1,0 +1,21 @@
+- [Mac ビルド環境](mac-build-environment.md) — Homebrew 無し。cmake/ninja は ~/.local、実行前に aq-mac-env.sh を source する
+- [Mac 移植の到達点](mac-port-phase-status.md) — Vulkan / Metal / .app 配布まで完了。aqBundleApp の副作用に注意
+- [Windows の回帰確認の宿題](windows-regression-pending.md) — 2026-09-10 に一度実施済み。残るのは UWP と P4b 以降の変更
+- [ResourceBase::data_ は void*](resource-data-void-ptr.md) — delete する側が static_cast しないとデストラクタが走らず GPU リソースが漏れる
+- [Mac でキー入力が来ないとき](mac-gui-app-activation.md) — CFBundleIdentifier とアプリのアクティブ化。診断時は stdout のバッファに注意
+- [Mac の ImGui は自前バックエンド](mac-imgui-own-backend.md) — imgui_impl_osx は不使用。AppFocusLost は false だけ送ると入力が死ぬ
+- [Metal バックエンドの罠](metal-backend-gotchas.md) — blit のチャンネル入替・threadsPerThreadgroup・binding シフト・Validation が既定オフ
+- [Mac で描画結果を確認する手順](mac-visual-verification.md) — ウィンドウ ID 指定の撮影と CGEvent の合成入力
+- [スカイキューブ実装の要点](skybox-implementation.md) — 深度 LESS + クリア 1.0 の罠、invVP の平行移動除去、生成タイミング
+- [フレーム番号の剰余で判定しない](frame-index-modulo-pitfall.md) — スロット数と FRAME_COUNT が噛み合うとリングが回収されず画面が真っ黒になる
+- [iOS 移植の到達点](ios-port-phase-status.md) — P0 完了。Android の着地で新規実装は激減。残るのは RunFrameLoop など
+- [FindProjectRoot の未移行 4 本](findprojectroot-contentroot-gap.md) — Metal の 2 本は iOS で必ず詰まる。写しなので同時に直す
+- [Mac の終了時リークは既存](mac-exit-leaks-preexisting.md) — 約 7100 件は移植前から在る。回帰と誤診しない
+- [iOS シミュレータの手順](ios-simulator-workflow.md) — ビルド/起動/ログ/撮影と P1 で踏んだ落とし穴
+- [シミュレータと実機の GPU 差](ios-simulator-device-gaps.md) — ボーダーカラー/compute/BC が劣化経路。実機確認は P5 必須
+- [アセットパスの大文字小文字](asset-path-case-sensitivity.md) — tkm は小文字 .dds を要求、実体は .DDS。iOS/Android でだけ落ちる
+- [シミュレータでのタッチ検証](ios-simulator-touch-testing.md) — simctl にタップは無い。Simulator.app へ CGEvent を送る。4本指は合成不可
+- [iOS 実機でしか出ない失敗](ios-device-only-failures.md) — 実行時MSLコンパイル/RemoteIO/メモリトラッカー。全部 SIGBUS
+- [iOS 実機の手順](ios-device-workflow.md) — 署名・インストール・ログ。-allowProvisioningDeviceRegistration が要る
+- [使いやすさ改善の到達点](usability-port-phase-status.md) — P1〜P4 完了。残るは P1-C2(Android/UWP 同梱)と VulkanShader の CWD 差し替え
+- [レンダーパイプライン(パス列化)の到達点](render-pipeline-phase-status.md) — 案 A で P1・P2 完了(279141a)。次は P3。画素比較の手順と契約の要点

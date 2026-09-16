@@ -39,9 +39,10 @@ DirectX/ThirdParty/DirectXTex/x64/
 
 # Claude Code 設定(個人/マシン固有の設定は除外。ただし共有スキルは追跡)
 # 親を .claude/* にしないと配下の再包含(!)が効かない
+# memory は Claude Code が各 PC のローカル(~/.claude/projects/<path>/memory/)に持つもので、
+# 端末固有の手順を含むうえ設計書と内容が二重化するため、リポジトリには置かない
 .claude/*
 !.claude/skills/
-!.claude/memory/
 
 # Vulkan validation log (runtime)
 vk_debug.log

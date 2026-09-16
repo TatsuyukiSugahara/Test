@@ -48,6 +48,9 @@ namespace aq
 
 		void VulkanGraphicsDeviceImpl::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& fn)
 		{
+			// uploadPool_ の確保/解放とキューへの提出をまとめて排他する(ヘッダの queueMutex_ 参照)。
+			std::lock_guard<std::mutex> queueLock(queueMutex_);
+
 			VkCommandBufferAllocateInfo ai{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 			ai.commandPool        = uploadPool_;
 			ai.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -781,7 +784,11 @@ namespace aq
 			submit.pCommandBufferInfos      = &cmdInfo;
 			submit.signalSemaphoreInfoCount = imageAcquired_ ? 1 : 0;
 			submit.pSignalSemaphoreInfos    = &signalSem;
-			vkQueueSubmit2(gfxQueue_, 1, &submit, f.inFlight);
+			{
+				// gfxQueue_ はメインスレッドの ImmediateSubmit と共有(ヘッダの queueMutex_ 参照)。
+				std::lock_guard<std::mutex> queueLock(queueMutex_);
+				vkQueueSubmit2(gfxQueue_, 1, &submit, f.inFlight);
+			}
 
 			if (imageAcquired_)
 			{
@@ -794,7 +801,13 @@ namespace aq
 
 				// 提示の戻り値も取得側と同じ扱い。OUT_OF_DATE は問答無用で作り直し、
 				// SUBOPTIMAL は寸法が変わったときだけ (Android は常時 SUBOPTIMAL を返すため)。
-				const VkResult result = vkQueuePresentKHR(gfxQueue_, &present);
+				// ロックはこの呼び出しだけに掛ける。作り直しの経路が ImmediateSubmit を呼んでも
+				// 二重ロックにならないようにするため。
+				VkResult result = VK_SUCCESS;
+				{
+					std::lock_guard<std::mutex> queueLock(queueMutex_);
+					result = vkQueuePresentKHR(gfxQueue_, &present);
+				}
 				if (result == VK_ERROR_OUT_OF_DATE_KHR
 				 || (result == VK_SUBOPTIMAL_KHR && IsSwapchainExtentStale()))
 				{

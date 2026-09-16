@@ -374,7 +374,7 @@ namespace aq
 				return chunkList_[loc.chunkIndex].GetComponent<T>(loc);
 			}
 
-			// true: 実際に追加した / false: 既に T を持っていたため何もしなかった
+			// true: 実際に追加した / false: 既に T を持っていた、または上限で追加できなかったため何もしなかった
 			template <typename T>
 			bool AddComponentByLocation(EntityLocation& loc)
 			{
@@ -383,7 +383,13 @@ namespace aq
 				}
 
 				auto newArchetype = chunkList_[loc.chunkIndex].GetArchetype();
-				newArchetype.AddType<T>();
+				if (!newArchetype.AddType<T>()) {
+					// 既に MAX_COMPONENT_COUNT 個持っている Entity への追加。ここで止めないと
+					// Archetype が元のままなので同じチャンクへの自己 Move になり、swap-remove で
+					// 位置が範囲外になった後に存在しない領域へ placement new してしまう。
+					EngineAssertMsg(false, "AddComponent: component count exceeds MAX_COMPONENT_COUNT");
+					return false;
+				}
 				auto newChunkIndex = GetChunkIndex(newArchetype);
 				if (newChunkIndex == chunkList_.size()) {
 					newChunkIndex = CreateChunk(newArchetype);
@@ -435,7 +441,7 @@ namespace aq
 			{
 				DedupTypes(types);
 
-				// MAX 超過は無言で切り捨てず診断エラーにする（AddType は上限超過を無視するため）
+				// MAX 超過は無言で切り捨てず診断エラーにする（AddType 単位で false を拾うより、件数で先に弾くほうが分かりやすい）
 				EngineAssertMsg(types.size() <= MAX_COMPONENT_COUNT,
 					"CreateEntityFromTypes: component count exceeds MAX_COMPONENT_COUNT");
 				if (types.size() > MAX_COMPONENT_COUNT) return Entity();

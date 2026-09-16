@@ -83,9 +83,10 @@ namespace aq
 
 			/**
 			 * Archetypeを追加（コンパイル時型版）
+			 * @return 追加できたら true。上限 MAX_COMPONENT_COUNT に達していれば false（何も変えない）
 			 */
 			template <typename T>
-			constexpr Archetype& AddType()
+			constexpr bool AddType()
 			{
 				return AddType(TypeInfo::Create<T>());
 			}
@@ -93,10 +94,13 @@ namespace aq
 			/**
 			 * Archetypeを追加（実行時 TypeInfo 版）
 			 * 既存の型を TypeInfo として渡して Archetype を動的に構築するときに使う。
+			 * 上限超過を無言で無視すると、呼び出し側が「追加した」つもりで存在しない
+			 * コンポーネント領域へ構築しに行く。必ず戻り値を見ること。
+			 * @return 追加できたら true。上限 MAX_COMPONENT_COUNT に達していれば false（何も変えない）
 			 */
-			constexpr Archetype& AddType(const TypeInfo& newType)
+			constexpr bool AddType(const TypeInfo& newType)
 			{
-				if (archetypeSize_ >= MAX_COMPONENT_COUNT) return *this;
+				if (archetypeSize_ >= MAX_COMPONENT_COUNT) return false;
 				size_t insertIndex = archetypeSize_;
 				for (size_t i = 0; i < archetypeSize_; ++i) {
 					if (typeList_[i].GetHash() > newType.GetHash()) {
@@ -116,7 +120,7 @@ namespace aq
 				for (size_t i = 0; i < archetypeSize_; ++i) {
 					archetypeMemorySize_ += AlignUp(typeList_[i].GetSize(), maxAlign_);
 				}
-				return *this;
+				return true;
 			}
 
 			/**

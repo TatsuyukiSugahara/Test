@@ -3,6 +3,7 @@
 #include "Graphics/IGraphicsDeviceImpl.h"
 #include <vector>
 #include <memory>
+#include <mutex>
 
 struct ImDrawData;
 
@@ -164,6 +165,11 @@ namespace aq
 			VkQueue           gfxQueue_       = VK_NULL_HANDLE;
 			VmaAllocator      allocator_      = VK_NULL_HANDLE;
 			VkCommandPool     uploadPool_     = VK_NULL_HANDLE;  // ImmediateSubmit 用 transient プール
+			// VkQueue と VkCommandPool は外部同期が必要。ImmediateSubmit(メインスレッドの
+			// テクスチャアップロード)と Present(レンダースレッド)が同じ gfxQueue_ を触るので、
+			// キューへ提出する区間だけこれで排他する。直列描画(AQ_RENDER_PIPELINED 無効)では
+			// 両者が重ならないが、パイプライン化した瞬間に競合する前提を残さない。
+			std::mutex        queueMutex_;
 
 			VkSwapchainKHR    swapchain_      = VK_NULL_HANDLE;
 			VkFormat          swapchainFormat_ = VK_FORMAT_UNDEFINED;

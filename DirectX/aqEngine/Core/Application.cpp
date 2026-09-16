@@ -663,6 +663,9 @@ namespace aq
 		// パーティクルはワールド変換確定後に更新し、描画構築前に済ませる
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::ParticleSystem, aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::RenderSystem, aq::ecs::ParticleSystem>();
+		// スポナーは親ハンドルを読み、階層変換は無効な親を DetachParent で書き換える。
+		// 同じ wave に置くと同一フィールドの読み書きが並走するので、変換確定後に回す。
+		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::SpawnSystem, aq::ecs::HierarcicalTransformSystem>();
 
 #ifdef AQ_DEBUG_IMGUI
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::SceneHierarchySystem>();

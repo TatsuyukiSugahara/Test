@@ -580,6 +580,20 @@ namespace aq
 				return FbxResolveTexturePath(resolvedFbxPath, tex);
 			}
 
+			// FBX の候補が全滅したときの診断。ファイルが無いなら候補一覧を、あるのに開けない
+			// (パース失敗など)なら ufbx の理由を残す。以前は静かに false を返していたため、
+			// 置き場所を間違えても症状が「モデルが出ない」だけで、原因に辿り着けなかった。
+			void LogFbxLoadFailure(const std::string& filePath, const ufbx_error& error)
+			{
+				if (error.type == UFBX_ERROR_FILE_NOT_FOUND || error.type == UFBX_ERROR_NONE) {
+					LogUnresolvedAssetPath(filePath);
+					return;
+				}
+				aq::StartupMarkf("[asset] fbx を開けません: %s (%s)", filePath.c_str(),
+					error.description.data ? error.description.data : "unknown");
+			}
+
+
 			// FBX を静的メッシュとして読み込む (スキニングなし)。
 			// ufbx で左手系 Y-up・メートル単位へ正規化し、三角形スープとして展開する。
 			bool LoadFbxStaticMesh(const std::string& filePath, MeshData& outMesh)
@@ -599,6 +613,7 @@ namespace aq
 					if (scene) { resolvedFbxPath = candidate; break; }
 				}
 				if (!scene) {
+					LogFbxLoadFailure(filePath, error);
 					return false;
 				}
 
@@ -793,6 +808,7 @@ namespace aq
 					if (scene) { resolvedFbxPath = candidate; break; }
 				}
 				if (!scene) {
+					LogFbxLoadFailure(filePath, error);
 					return false;
 				}
 
@@ -952,6 +968,7 @@ namespace aq
 					if (scene) break;
 				}
 				if (!scene) {
+					LogFbxLoadFailure(filePath, error);
 					return false;
 				}
 				if (scene->anim_stacks.count == 0) {
@@ -1066,20 +1083,16 @@ namespace aq
 
 			bool LoadTkmMeshFile(const std::string& filePath, MeshData& outMesh)
 			{
-				FILE* fp = fopen(filePath.c_str(), "rb");
-				// 予算照合(超過なら拒否)。
-				if (fp) {
-					std::fseek(fp, 0, SEEK_END);
-					const long budgetSize = std::ftell(fp);
-					std::fseek(fp, 0, SEEK_SET);
-					if (budgetSize > 0 && !CheckFileBudget(static_cast<size_t>(budgetSize), filePath.c_str())) {
-						std::fclose(fp);
-						return false;
-					}
-				}
-				if (!fp) {
+				// 生の fopen だと CWD 相対でしか開けず、配布配置(.app / APK / UWP)や
+				// gameRootName の変更で静的メッシュだけ見つからなくなる。スケルタル側と同じく
+				// 候補探索(予算照合と全滅時の候補ログを含む)を通す。
+				FILE* fp = nullptr;
+				std::string openedPath;
+				if (!OpenBinaryReadWithFallback(filePath, &fp, &openedPath)) {
 					return false;
 				}
+				// テクスチャは「実際に開いた tkm の隣」から解決する。
+				const std::string& assetBasePath = openedPath.empty() ? filePath : openedPath;
 
 				auto closeFile = [&fp]() {
 					if (fp) {
@@ -1117,13 +1130,13 @@ namespace aq
 						}
 
 						if (outMesh.material.albedo.empty() && !material.albedo.empty()) {
-							outMesh.material.albedo = ReplaceExtension(ResolveSiblingPath(filePath, material.albedo), ".dds");
+							outMesh.material.albedo = ReplaceExtension(ResolveSiblingPath(assetBasePath, material.albedo), ".dds");
 						}
 						if (outMesh.material.normal.empty() && !material.normal.empty()) {
-							outMesh.material.normal = ReplaceExtension(ResolveSiblingPath(filePath, material.normal), ".dds");
+							outMesh.material.normal = ReplaceExtension(ResolveSiblingPath(assetBasePath, material.normal), ".dds");
 						}
 						if (outMesh.material.specular.empty() && !material.specular.empty()) {
-							outMesh.material.specular = ReplaceExtension(ResolveSiblingPath(filePath, material.specular), ".dds");
+							outMesh.material.specular = ReplaceExtension(ResolveSiblingPath(assetBasePath, material.specular), ".dds");
 						}
 						// TKM フォーマットは emissive を持たないため省略
 					}
@@ -1445,16 +1458,13 @@ namespace aq
 			// DirectX 左上)。座標系・巻き順は Unity=DX とも左手 Y-up のためそのまま。
 			bool LoadObjMesh(const std::string& filePath, MeshData& outMesh)
 			{
-				FILE* fp = fopen(filePath.c_str(), "rb");
-				if (fp == nullptr) {
+				// 静的 tkm と同じ理由で候補探索を通す(予算照合は OpenBinaryReadWithFallback が行う)。
+				FILE* fp = nullptr;
+				if (!OpenBinaryReadWithFallback(filePath, &fp)) {
 					return false;
 				}
 				fseek(fp, 0, SEEK_END);
 				const long fileSize = ftell(fp);
-				if (fileSize > 0 && !CheckFileBudget(static_cast<size_t>(fileSize), filePath.c_str())) {
-					fclose(fp);
-					return false;
-				}
 				fseek(fp, 0, SEEK_SET);
 				std::string text(static_cast<size_t>(fileSize > 0 ? fileSize : 0), '\0');
 				if (fileSize > 0) {
@@ -1736,7 +1746,10 @@ namespace aq
 				scene = ufbx_load_file(candidate.c_str(), &opts, &error);
 				if (scene) break;
 			}
-			if (!scene) return;
+			if (!scene) {
+				LogFbxLoadFailure(fbxPath, error);
+				return;
+			}
 
 			out.reserve(scene->anim_stacks.count);
 			for (size_t i = 0; i < scene->anim_stacks.count; ++i) {

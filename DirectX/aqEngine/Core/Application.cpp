@@ -20,7 +20,9 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
-#include "Rendering/Pipeline/Passes/HiZPass.h"   // Hi-Z オクリュージョンの配線に使う
+#include "Rendering/Pipeline/Passes/HiZPass.h"      // Hi-Z オクリュージョンの配線に使う
+#include "Rendering/Pipeline/Passes/ShadowPass.h"   // デバッグパネルの配線に使う
+#include "Rendering/Pipeline/Passes/GBufferPass.h"  // 同上
 // SetupStandardRenderers が生成する具象レンダラ群。
 #include "Rendering/Shadow/HardShadowRenderer.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
@@ -411,10 +413,15 @@ namespace aq
 			oceanDebugPanel_ = std::make_unique<aq::ocean::OceanDebugPanel>();
 			renderingDebugPanel_->AddTab("Ocean", oceanDebugPanel_.get());
 
-			// Shadow — パイプラインに ShadowPass があれば(= renderer_.GetShadowRenderer() が非 null なら)自動でパネルを生成
-			if (auto* sr = renderer_.GetShadowRenderer())
+			// Shadow / GBuffer のパネルは、パイプラインに該当パスがあるときだけ生成する。
+			auto* shadowPass  = renderer_.GetPipeline() ? renderer_.GetPipeline()->Find<rendering::ShadowPass>()  : nullptr;
+			auto* gbufferPass = renderer_.GetPipeline() ? renderer_.GetPipeline()->Find<rendering::GBufferPass>() : nullptr;
+			auto* shadowRenderer = shadowPass ? shadowPass->GetShadowRenderer() : nullptr;
+
+			// Shadow
+			if (shadowRenderer)
 			{
-				auto panel = sr->CreateDebugPanel();
+				auto panel = shadowRenderer->CreateDebugPanel();
 				if (panel)
 				{
 					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
@@ -423,10 +430,9 @@ namespace aq
 			}
 
 			// GBuffer / Shadow テクスチャビューア — ディファードが有効な場合のみ
-			if (auto* dr = dynamic_cast<rendering::DeferredRenderer*>(renderer_.GetDeferredRenderer()))
+			if (auto* dr = gbufferPass ? gbufferPass->GetDeferredRenderer() : nullptr)
 			{
-				auto* sr = renderer_.GetShadowRenderer();
-				auto panel = dr->CreateDebugPanel(sr);
+				auto panel = dr->CreateDebugPanel(shadowRenderer);
 				if (panel)
 				{
 					renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());

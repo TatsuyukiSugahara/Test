@@ -342,6 +342,7 @@
     <ClCompile Include="Rendering\Pipeline\Passes\ParticlePass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\MotionBlurPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\BloomPass.cpp" />
+    <ClCompile Include="Rendering\Pipeline\Passes\OutlinePass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\TonemapPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\UIPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\FullscreenComputeCommand.cpp" />
@@ -647,6 +648,7 @@
     <ClInclude Include="Rendering\Pipeline\Passes\ParticlePass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\MotionBlurPass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\BloomPass.h" />
+    <ClInclude Include="Rendering\Pipeline\Passes\OutlinePass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\TonemapPass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\UIPass.h" />
     <ClInclude Include="Particle\ParticleTypes.h" />

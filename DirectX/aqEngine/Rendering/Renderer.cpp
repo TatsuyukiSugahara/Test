@@ -2,9 +2,6 @@
 #include "Renderer.h"
 #include "FrameContext.h"
 #include "Graphics/RenderContext.h"
-#include "Pipeline/Passes/ShadowPass.h"
-#include "Pipeline/Passes/GBufferPass.h"
-#include "Pipeline/Passes/SkyPass.h"
 
 
 namespace aq
@@ -25,30 +22,6 @@ namespace aq
 		RenderTargetHandle Renderer::GetOutputRT() const
 		{
 			return pipeline_ ? pipeline_->GetOutputRT() : RenderTargetHandle{};
-		}
-
-
-		IShadowRenderer* Renderer::GetShadowRenderer() const
-		{
-			if (!pipeline_) { return nullptr; }
-			auto* pass = pipeline_->Find<ShadowPass>();
-			return pass ? pass->GetShadowRenderer() : nullptr;
-		}
-
-
-		IDeferredRenderer* Renderer::GetDeferredRenderer() const
-		{
-			if (!pipeline_) { return nullptr; }
-			auto* pass = pipeline_->Find<GBufferPass>();
-			return pass ? pass->GetDeferredRenderer() : nullptr;
-		}
-
-
-		SkyRenderer* Renderer::GetSkyRenderer() const
-		{
-			if (!pipeline_) { return nullptr; }
-			auto* pass = pipeline_->Find<SkyPass>();
-			return pass ? pass->GetSkyRenderer() : nullptr;
 		}
 
 

@@ -5,6 +5,9 @@
 #include "Rendering/Pipeline/Passes/GBufferPass.h"
 #include "Rendering/Pipeline/Passes/DeferredLightingPass.h"
 #include "Rendering/Pipeline/Passes/ForwardPass.h"
+#include "Rendering/Pipeline/Passes/ShadowPass.h"
+#include "Rendering/Pipeline/Passes/OutlinePass.h"
+#include "Rendering/Pipeline/Passes/UIPass.h"
 #include "ECS/ActorComponentSystem.h"
 #include "ECS/ActorSteeringComponentSystem.h"
 #include "ECS/CameraSteeringComponentSystem.h"
@@ -25,6 +28,9 @@
 namespace app
 {
 	Application* Application::instance_ = nullptr;
+
+	// 輪郭線の色（海と空に馴染む濃紺。真っ黒はコースの陰と区別が付かない）。
+	const aq::math::Vector3 Application::OUTLINE_COLOR = aq::math::Vector3(0.02f, 0.06f, 0.12f);
 
 
 	// unique_ptr<aq::sound::SoundStream> の破棄に完全型が必要なため、ここで定義する。
@@ -86,7 +92,19 @@ namespace app
 			preset.shadow.farPlane    = 60.0f;
 			preset.shadow.sceneCenter = aq::math::Vector3(0.0f, 3.0f, 0.0f);
 			preset.shadow.softness    = 2.0f;
-			SetupStandardRenderers(preset);
+
+			// 輪郭線 (エンジンの任意パス。Standard() には入っていないのでここで挿す)。
+			// UI の手前 = トーンマップ後の LDR に乗るので、露出やブルームの影響を受けない。
+			auto builder = BuildStandardPipeline(preset);
+			auto outline = std::make_unique<aq::rendering::OutlinePass>();
+			outline->SetColor(OUTLINE_COLOR);
+			outline->SetIntensity(OUTLINE_INTENSITY);
+			outline->SetThreshold(OUTLINE_THRESHOLD);
+			outline->SetThickness(OUTLINE_THICKNESS);
+			builder.InsertBefore<aq::rendering::UIPass>(std::move(outline));
+
+			SetRenderPipeline(builder.Build(aq::Engine::Get().GetRenderWidth(),
+			                                aq::Engine::Get().GetRenderHeight()));
 		}
 
 		// BGM: 起動時から常時ループ再生する(バンク登録に依存しない wav 直読み)。
@@ -135,11 +153,13 @@ namespace app
 	{
 		app::GameFlow::Get().Update(aq::Engine::GetDeltaTime());
 
-		if (renderer_.GetShadowRenderer())
+		auto* shadowPass = renderer_.GetPipeline()
+			? renderer_.GetPipeline()->Find<aq::rendering::ShadowPass>() : nullptr;
+		if (auto* shadowRenderer = shadowPass ? shadowPass->GetShadowRenderer() : nullptr)
 		{
 			auto pos = app::GameFlow::Get().GetFocusPosition();
 			pos.y += 2.0f;
-			renderer_.GetShadowRenderer()->SetSceneCenter(pos);
+			shadowRenderer->SetSceneCenter(pos);
 		}
 
 		// スピード感演出: 速度に応じたカメラモーションブラー強度 (タイトル/リザルトでは 0 で無効)。

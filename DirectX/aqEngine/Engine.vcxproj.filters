@@ -587,6 +587,9 @@
     <ClCompile Include="Rendering\Pipeline\Passes\BloomPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\OutlinePass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Pipeline\Passes\TonemapPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
@@ -1430,6 +1433,9 @@
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\BloomPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\OutlinePass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\TonemapPass.h">

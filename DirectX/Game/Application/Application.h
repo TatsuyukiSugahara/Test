@@ -32,6 +32,14 @@ namespace app
 		/** 俯瞰ベイクの背景色（ライティングは背景ピクセルを clip するのでこの色がそのまま残る） */
 		static constexpr float OFFSCREEN_CLEAR_COLOR[4] = { 0.02f, 0.08f, 0.16f, 1.0f };
 
+	// ── 輪郭線（エンジンの任意パス OutlinePass に渡す値）──
+	private:
+		/** 線の色。海と空に馴染む濃紺 */
+		static const aq::math::Vector3 OUTLINE_COLOR;
+		static constexpr float   OUTLINE_INTENSITY = 0.55f;  // 線の濃さ
+		static constexpr float   OUTLINE_THRESHOLD = 0.03f;  // エッジとみなす相対深度差
+		static constexpr int32_t OUTLINE_THICKNESS = 1;      // 線の太さ (px)
+
 	// ── BGM（起動時から常時ループ再生）──
 	private:
 		std::unique_ptr<aq::sound::SoundStream> bgmStream_;

@@ -1,6 +1,6 @@
 # UIアニメーション統合設計
 
-> 対象コミット: 367b967(P5 まで)/ 最終更新: 2026-09-17 / **再開するときは §16 から読む**
+> 対象コミット: P6(Windows 回帰 + エディタ寸法)まで / 最終更新: 2026-09-17 / **再開するときは §16 から読む**
 
 UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定できる」状態にする。
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
@@ -998,8 +998,7 @@ P5 の実装で決めたこと・直したこと
 - `Save As` は P0 で作った(ポップアップでパス入力)。使われなければ後で外す
 - P1 のエディタ追従で Cond / Finish は enum 名(Manual / Bool / Trigger、Hold / Restore)のまま出している。§10.3 の「Play when」「Keep / Return」への言い換えは P3
 - `priority`(§6.2)を足す条件。serial で足りなくなった実例が出るまで足さない
-- **エディタの寸法(2026-09-17 ユーザー指摘、後で直す)**: UI Editor の既定サイズ(700x560)では Animation タブと Timeline で縦横が
-  足りず、TextStyle ポップアップも幅が足りない。既定サイズの拡大と、Timeline の高さを内容に合わせる(P4 以降の小改修)
+- ~~エディタの寸法(2026-09-17 ユーザー指摘)~~ → **P6 で対応済(§16.1)**
 
 ---
 
@@ -1088,21 +1087,22 @@ struct TimelineRow
 | P3 | 統合エディタ(Inspector タブ / Timeline / 検証赤字 / Save 停止 / TextStyle 入口) | 完了(Mac 評価済) | `100161b` |
 | P4 | プリセット(§14) | 完了(Mac 評価済) | `3d283eb` |
 | P5 | ベクタトラック(§15) | 完了(Mac 評価済) | `367b967` |
+| P6 | Windows 回帰 + エディタ寸法(§16.5) | ビルド完了(実機目視は未) | — |
 
-**全フェーズ共通で未消化のチェックが 1 つ**: 「Windows / D3D11 でビルドが通り、警告が増えていない」。
-評価はすべて Mac(Metal / Debug 構成)で行った。Windows 機で次を見る:
+**P0〜P5 で共通に残っていた「Windows / D3D11 でビルドが通り、警告が増えていない」は P6 で消化した。**
+`Game/DirectX.vcxproj` の Debug / x64 を `AqGraphicsApi=D3D11` / `D3D12` / `Vulkan` の 3 通りビルドして全部成功。
+新規の警告は `UIEditorDebugPanel.h` の C4099(`UITransformComponent` を `struct` で前方宣言していたが実体は `class`)1 件だけで、
+前方宣言を `class` に直して消した。残りの C4244(Bullet)・C4267(`RenderThread.cpp` 経由の `<memory>`)は P0 以前からある既存分。
 
-- `DirectX.sln` の D3D11 / D3D12 / Vulkan の Debug をビルドし、警告数が P0 前(`81c36e3`)と同じか
-- 特に MSVC で見たい箇所: `UIObject.h` の `if constexpr` + `assert`、`UIAnimationClip.h` の `aqHash32` を constexpr で使う定数、
-  `Core/Application.cpp/.h`(CRLF)から 2 エディタの登録を外した箇所、`Engine.vcxproj` から `UIClipTrack.h` を外し `UIEditorSession.h` を足した箇所
-- UI Editor を開き、Animation タブ・Timeline・TextStyle ポップアップが出ること。1920x1080 以外のウィンドウで UIButton の hover が当たること
-  (P2 で `UIInputSystem::HitTest` の `clientSize` 更新を直した)
+**Windows で未消化のチェック**(実機目視。ビルドだけでは埋まらない):
+
+- UI Editor を開き、Animation タブ・Timeline・TextStyle ポップアップが出ること
+- 1920x1080 以外のウィンドウで UIButton の hover が当たること(P2 で `UIInputSystem::HitTest` の `clientSize` 更新を直した)
+- UWP(DebugXbox)と Release はこの PC ではビルド不可(ツールセット未導入 / Bullet の Release lib 無し)。別環境で見る
 
 ### 16.2 残っている作業(この順で)
 
-1. **エディタの寸法(§13、ユーザー指摘)** — UI Editor の既定サイズ 700x560 を広げる(Animation タブ + Timeline が収まる高さ。
-   目安 1000x800)。TextStyle ポップアップの幅。Timeline 領域の割合(P5 で `max(260px, 45%)` の応急処置済み)。
-   同時に「`Play when` が Enter / Exit のときも Group 欄が出る」を §10.3 どおり Manual のときだけにする
+1. **P6 の実機目視** — Windows / Mac のどちらかで UI Editor を開き、§16.5 のチェックを埋める
 2. **§12 の続き** — オートキー → Ease 拡充 → 相対値 → Click 演出後の遷移 → Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
    新セクション(§14 / §15 と同じ形)として書いてから実装する
 3. **ゲーム側の実例** — `Play(group)` / `Stop()` を呼ぶコードと、クリックで遷移するボタン(§9.3 の実測)はまだ無い
@@ -1134,3 +1134,39 @@ struct TimelineRow
   Duration を伸ばすか連続撮影する
 - **エディタ操作の結果は保存 JSON で確認する**のが確実(キー追加・ドラッグ・プリセットは Save 後の JSON を見る)
 - Reload 後はゲーム側の一度きりの setter(`SetStageThumbnail` 等)が再実行されない(§3.3)。サムネイルが消えるのは仕様
+
+### 16.5 P6: Windows 回帰 + エディタ寸法
+
+§13 に「後で直す」と積んであったエディタの寸法と、Play when の Group 欄の出し方を直した。新しい設計判断は無く、
+§10.3 に書いてある挙動へ実装を寄せただけなので、独立した設計セクションは作らない。
+
+| 直したもの | 変更 | 場所 |
+| --- | --- | --- |
+| UI Editor の既定サイズ | 700x560 → **1000x800**(`ImGuiCond_FirstUseEver` なので既存の `imgui.ini` があるとそちらが勝つ) | `UIEditorDebugPanel.cpp` |
+| Timeline の高さ | `max(260px, 45%)` の固定比率 → **内容から算出**。`UIAnimationEditor::ComputeTimelineHeight()` が Track 本数と表示 Row 数から必要高さを出し、呼び出し側が残り高さの 60% で頭打ちにする | `UIAnimationEditor.cpp` / `UIEditorDebugPanel.cpp` |
+| TextStyle ポップアップの幅 | `ImGuiWindowFlags_AlwaysAutoResize` を外した(このフラグが付いていると `SetNextWindowSize` が無視され、480x720 の指定が効いていなかった)。初回 **720x760**、以後は手で広げられる | `TextStyleEditorPanel.cpp` |
+| Group 欄の出し方 | `clip.condition == Manual` で判定していたため Enter / Exit(内部は Manual + 予約 group)でも出ていた。`ComputePlayWhenIndex(clip) == PlayWhen_Manual` に変更し、§10.3 どおり Manual のときだけ出す | `UIAnimationEditor.cpp` |
+| C4099 | `UIEditorDebugPanel.h` の `RenderAnchorPicker(struct UITransformComponent*)` を、`class` の前方宣言 + `UITransformComponent*` に直した | `UIEditorDebugPanel.h` |
+
+**ComputeTimelineHeight() の内訳**(ImGui のスタイル値に依存するのでフレーム中に呼ぶ):
+
+```
+"Tracks" 行 + Track 本数 × FrameHeightWithSpacing + Separator + 操作ヒント 1 行
+  + RULER_H + 表示 Row 数 × ROW_H + 10
+  + WindowPadding.y × 4 + ItemSpacing.y × 2 + BOTTOM_PANE_H(120)
+→ 240〜560px にクランプ
+```
+
+Clip 未選択のときは右ペインが "Select a clip" だけなので可変分は 0 になり、下限の 240px が出る。
+
+**評価チェックリスト**
+
+- [x] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通る
+- [x] 新規の警告が 0(C4099 を潰した時点で、残るのは P0 以前からある既存分だけ)
+- [ ] UI Editor を初めて開いたウィンドウが 1000x800 で、Animation タブ + Timeline が縦に収まる
+- [ ] Track を増やすと Timeline が伸び、Clip 未選択では最小(240px)に縮む
+- [ ] TextStyle ポップアップでラベルの長い項目(`Font (atlas.json)`)が切れず、手で広げられる
+- [ ] Play when を Enter / Exit にしたとき Group 欄が消え、Manual に戻すと出る
+
+> 既定サイズは `ImGuiCond_FirstUseEver` なので、`Game/imgui.ini` に古い UI Editor のサイズが残っていると効かない。
+> 目視するときは ini 側の `[Window][UI Editor###uieditor]` を消してから開く(`imgui.ini` は tracked なので確認後に戻す)。

@@ -781,7 +781,7 @@ namespace aq
 				? "UI Editor *###uieditor"
 				: "UI Editor###uieditor";
 
-			ImGui::SetNextWindowSize(ImVec2(700, 560), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(1000, 800), ImGuiCond_FirstUseEver);
 			if (!ImGui::Begin(windowTitle))
 			{
 				ImGui::End();
@@ -862,9 +862,10 @@ namespace aq
 			const bool showTimeline = inspectorTab_ == InspectorTab::Animation &&
 			                          selectedObj && selectedObj->GetComponent<UIAnimationComponent>();
 
-			// Timeline は最低 260px、ウィンドウが高ければ 45% まで広げる (Track 一覧 + 行 + Keyframe 欄が収まるように)
+			// Timeline は内容 (Track 本数と表示行数) から必要な高さを求める。
+			// 上のツリー / プロパティが潰れないよう、残り高さの 60% で頭打ちにする
 			const ImVec2  avail   = ImGui::GetContentRegionAvail();
-			const float   TIMELINE_HEIGHT = std::max(260.f, avail.y * 0.45f);
+			const float   TIMELINE_HEIGHT = std::min(animationEditor_.ComputeTimelineHeight(selectedObj), avail.y * 0.6f);
 			const float   spacing = ImGui::GetStyle().ItemSpacing.y;
 			// Timeline を出さないときは 0.f = 残り全部 (BeginChild の既定挙動)
 			const float   paneH   = showTimeline ? (avail.y - TIMELINE_HEIGHT - spacing) : 0.f;

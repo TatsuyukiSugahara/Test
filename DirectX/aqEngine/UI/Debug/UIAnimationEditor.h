@@ -72,6 +72,10 @@ namespace aq
 			// 下部パネルの中身 (Timeline + Keyframe Inspector + Preview)。呼び出し側が BeginChild 済み
 			void DrawTimelinePanel(UIObject* obj, float dt);
 
+			// Timeline の表示に必要な高さ (px)。呼び出し側が下部パネルの高さを決めるのに使う。
+			// ImGui のフレーム中に呼ぶこと (スタイル値を参照するため)
+			float ComputeTimelineHeight(UIObject* obj) const;
+
 			// 選択が変わった / 選択オブジェクトが消えたときの後始末 (prevObj は null の場合あり)
 			void OnTargetChanged(UIObject* prevObj);
 

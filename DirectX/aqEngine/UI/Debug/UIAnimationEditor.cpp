@@ -22,6 +22,12 @@ namespace aq
 		static constexpr float MIN_ZOOM      = 40.f;
 		static constexpr float MAX_ZOOM      = 800.f;
 
+		// Timeline 下部 (Keyframe Inspector + Preview Controls) の固定高さと、
+		// ComputeTimelineHeight() が返す高さの上下限
+		static constexpr float BOTTOM_PANE_H  = 120.f;
+		static constexpr float TIMELINE_MIN_H = 240.f;
+		static constexpr float TIMELINE_MAX_H = 560.f;
+
 		// Exit 待機付き画面遷移 (P2B) は完了済みなので Play when: Exit は有効。
 		// false にすると Exit 項目を Disabled にできる仕組みだけ残す (設計書 §10.3)
 		static constexpr bool kExitTransitionReady = true;
@@ -627,8 +633,9 @@ namespace aq
 				}
 			}
 
-			// Group (Manual のときだけ。内部用語の condition / conditionParam は Advanced へ)
-			if (clip.condition == UIClipCondition::Manual)
+			// Group (Play when が Manual のときだけ)。Enter / Exit も内部は Manual + 予約 group なので、
+			// condition ではなく Play when の表示値で判定する。condition / conditionParam は Advanced へ
+			if (ComputePlayWhenIndex(clip) == PlayWhen_Manual)
 			{
 				ImGui::SetNextItemWidth(120.f);
 				if (ImGui::InputText("Group", clipGroupBuf_, sizeof(clipGroupBuf_), ImGuiInputTextFlags_EnterReturnsTrue))
@@ -809,7 +816,7 @@ namespace aq
 			}
 
 			const float leftW  = 260.f;
-			const float totalH = ImGui::GetContentRegionAvail().y - 120.f; // 下部パネル分を確保
+			const float totalH = ImGui::GetContentRegionAvail().y - BOTTOM_PANE_H; // 下部パネル分を確保
 
 			ImGui::BeginChild("##tlLeft", ImVec2(leftW, totalH), true);
 			DrawTimelineClipList(obj, anim);
@@ -850,6 +857,43 @@ namespace aq
 				}
 			}
 			ImGui::EndChild();
+		}
+
+
+		// UI Editor が下部 Timeline ペインの高さを決めるために呼ぶ。
+		// Track 一覧と Row の本数で伸びる分に、ヘッダ・ルーラ・下部パネルの固定分を足す
+		float UIAnimationEditor::ComputeTimelineHeight(UIObject* obj) const
+		{
+			const ImGuiStyle& style = ImGui::GetStyle();
+
+			// Clip 未選択なら右ペインは "Select a clip" だけなので可変分は 0
+			float contentH = 0.f;
+
+			if (obj)
+			{
+				if (const auto* anim = obj->GetComponent<UIAnimationComponent>())
+				{
+					const auto& clips = anim->GetClips();
+					if (selClipIdx_ >= 0 && selClipIdx_ < (int)clips.size())
+					{
+						const auto& clip      = clips[static_cast<size_t>(selClipIdx_)];
+						const int   trackRows = (int)clip.tracks.size();
+						const int   viewRows  = (int)BuildTimelineRows(clip).size();
+
+						contentH = ImGui::GetFrameHeightWithSpacing()             // "Tracks" + [+ Track]
+						         + trackRows * ImGui::GetFrameHeightWithSpacing() // Track 一覧
+						         + style.ItemSpacing.y * 2.f                      // Separator
+						         + ImGui::GetTextLineHeightWithSpacing()          // 操作ヒント
+						         + RULER_H + viewRows * ROW_H + 10.f;             // ルーラ + Row
+					}
+				}
+			}
+
+			// 上ペインの枠 (親と子の WindowPadding) と Separator、下部パネルの固定分
+			const float total = contentH + style.WindowPadding.y * 4.f
+			                  + style.ItemSpacing.y * 2.f + BOTTOM_PANE_H;
+
+			return std::clamp(total, TIMELINE_MIN_H, TIMELINE_MAX_H);
 		}
 
 

@@ -14,6 +14,7 @@ namespace aq
 	namespace ui
 	{
 		class UIObject;
+		class UITransformComponent;
 
 		// ============================================================
 		// UIEditorDebugPanel — ImGui による UIObject ツリーのリアルタイム編集
@@ -42,7 +43,7 @@ namespace aq
 			void RenderTree(UIObject* node);
 			void RenderProperties(UIObject* obj);
 			void RenderPropertiesTab(UIObject* obj);   // Inspector の Properties タブの中身
-			void RenderAnchorPicker(struct UITransformComponent* tc);
+			void RenderAnchorPicker(UITransformComponent* tc);
 			void RenderToolbar(UIObject* root);
 			void RenderTextOverlay();   // UITextComponent の内容を ImGui でスクリーンに仮描画
 			void ClearForReload();      // Reload 実行直前にエディタ側の状態を捨てる

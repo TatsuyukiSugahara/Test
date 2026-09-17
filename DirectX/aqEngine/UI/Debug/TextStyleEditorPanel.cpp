@@ -31,8 +31,10 @@ namespace aq
 				openRequested_ = false;
 			}
 
-			ImGui::SetNextWindowSize(ImVec2(480.f, 720.f), ImGuiCond_FirstUseEver);
-			if (!ImGui::BeginPopupModal("TextStyle Editor", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			// AlwaysAutoResize は SetNextWindowSize を無視してしまうので付けない。
+			// 初回サイズだけ与え、あとは手で広げられるようにする (ラベルの長い項目が切れていた)
+			ImGui::SetNextWindowSize(ImVec2(720.f, 760.f), ImGuiCond_FirstUseEver);
+			if (!ImGui::BeginPopupModal("TextStyle Editor", nullptr))
 				return;
 
 			RenderStyleList();

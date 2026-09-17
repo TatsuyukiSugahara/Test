@@ -85,6 +85,149 @@ namespace aq
 		}
 
 
+		// Timeline の表示行 (設計書 §15.1)。毎フレーム clip.tracks から組み立て直す。
+		// データ (UIAnimationTrack / JSON) は変えず、表示と操作だけをまとめる
+		namespace
+		{
+			struct TimelineRow
+			{
+				const char* label;       // "Position" / "PositionX" / "ColorA" ...
+				int         trackIdx[2]; // 組なら X, Y の Track index。単独なら { idx, -1 }
+				bool        isVector;
+			};
+
+			// X/Y に分かれたプロパティの組。両方の Track がクリップに揃ったときだけ 1 行にまとめる
+			struct VectorPropertyPair
+			{
+				const char*        label;
+				UIAnimatedProperty x;
+				UIAnimatedProperty y;
+			};
+
+			static constexpr VectorPropertyPair VECTOR_PROPERTY_PAIRS[] =
+			{
+				{ "Position",  UIAnimatedProperty::PositionX,  UIAnimatedProperty::PositionY },
+				{ "Scale",     UIAnimatedProperty::ScaleX,     UIAnimatedProperty::ScaleY },
+				{ "SizeDelta", UIAnimatedProperty::SizeDeltaX, UIAnimatedProperty::SizeDeltaY },
+			};
+
+
+			// clip.tracks を Row の列へ組み立てる (設計書 §15.1)。行の並びは X 側 Track index の
+			// 位置に従う (Y が先に並んでいても、組の行は X の位置で出る)
+			std::vector<TimelineRow> BuildTimelineRows(const UIAnimationClip& clip)
+			{
+				auto findTrack = [&clip](UIAnimatedProperty prop) -> int
+					{
+						for (int i = 0; i < (int)clip.tracks.size(); ++i)
+						{
+							if (clip.tracks[i].property == prop) return i;
+						}
+						return -1;
+					};
+
+				// Track index -> 組の相方 (Y) の index。組でなければ -1
+				std::vector<int>         pairYIdx(clip.tracks.size(), -1);
+				std::vector<const char*> pairLabel(clip.tracks.size(), nullptr);
+				// Y 側は X 側でまとめて出すので単独では出さない
+				std::vector<bool>        isYSide(clip.tracks.size(), false);
+
+				for (const auto& pair : VECTOR_PROPERTY_PAIRS)
+				{
+					const int xIdx = findTrack(pair.x);
+					const int yIdx = findTrack(pair.y);
+					if (xIdx < 0 || yIdx < 0) continue; // 片方だけなら単独行のまま
+
+					pairYIdx[xIdx]  = yIdx;
+					pairLabel[xIdx] = pair.label;
+					isYSide[yIdx]   = true;
+				}
+
+				std::vector<TimelineRow> rows;
+				rows.reserve(clip.tracks.size());
+				for (int i = 0; i < (int)clip.tracks.size(); ++i)
+				{
+					if (isYSide[i]) continue;
+
+					if (pairYIdx[i] >= 0)
+						rows.push_back(TimelineRow{ pairLabel[i], { i, pairYIdx[i] }, true });
+					else
+						rows.push_back(TimelineRow{ UIAnimationSerializer::PropertyToStr(clip.tracks[i].property), { i, -1 }, false });
+				}
+				return rows;
+			}
+
+
+			// 時刻順ソート (Sample / シリアライズは時刻昇順を前提にしている)
+			void SortKeyframes(std::vector<UIKeyframe>& keyframes)
+			{
+				std::sort(keyframes.begin(), keyframes.end(),
+				          [](const UIKeyframe& a, const UIKeyframe& b) { return a.time < b.time; });
+			}
+
+
+			// keyframes の中から時刻が一致するものを探す (許容差 1e-5f)。無ければ -1
+			int FindKeyIndexAtTime(const std::vector<UIKeyframe>& keyframes, float time)
+			{
+				for (int i = 0; i < (int)keyframes.size(); ++i)
+				{
+					if (std::abs(keyframes[i].time - time) < 1e-5f) return i;
+				}
+				return -1;
+			}
+
+
+			// time にあるキーを oldTime から newTime へ動かす。無ければ何もせず false
+			bool MoveKeyAtTime(UIAnimationTrack& track, float oldTime, float newTime)
+			{
+				const int idx = FindKeyIndexAtTime(track.keyframes, oldTime);
+				if (idx < 0) return false;
+				track.keyframes[idx].time = newTime;
+				return true;
+			}
+
+
+			// time にキーを追加する (既存の重複チェックはしない。従来の Add Key 系と同じ)。
+			// 値は Sample(time)。Track にキーが 1 本も無ければ現在値 (ReadFrom) を使う (設計書 §15.2)
+			void AddKeyAtTime(UIAnimationTrack& track, UIObject* obj, float time)
+			{
+				const float value = !track.keyframes.empty() ? track.Sample(time)
+				                                              : (obj ? track.ReadFrom(obj) : 0.f);
+				track.keyframes.push_back(UIKeyframe{ time, value, EaseType::Linear });
+				SortKeyframes(track.keyframes);
+			}
+
+
+			// Row の両 Track (単独行なら片方) に time のキーを追加する (設計書 §15.2)
+			void AddKeyToRow(UIAnimationClip& clip, UIObject* obj, const TimelineRow& row, float time)
+			{
+				for (const int idx : { row.trackIdx[0], row.trackIdx[1] })
+				{
+					if (idx < 0 || idx >= (int)clip.tracks.size()) continue;
+					AddKeyAtTime(clip.tracks[idx], obj, time);
+				}
+			}
+
+
+			// Row が time に持つキーを両 Track (単独行なら片方) から消す。1 本でも消せたら true
+			bool EraseSelectedKey(UIAnimationClip& clip, const TimelineRow& row, float time)
+			{
+				bool erased = false;
+				for (const int idx : { row.trackIdx[0], row.trackIdx[1] })
+				{
+					if (idx < 0 || idx >= (int)clip.tracks.size()) continue;
+					auto& keyframes = clip.tracks[idx].keyframes;
+					const int ki = FindKeyIndexAtTime(keyframes, time);
+					if (ki >= 0)
+					{
+						keyframes.erase(keyframes.begin() + ki);
+						erased = true;
+					}
+				}
+				return erased;
+			}
+		} // namespace
+
+
 		// "+ Preset" が生成するプリセットの一式 (設計書 §14)。生成後は普通の Clip として
 		// Timeline で自由に直せる。数値はここに定数として集約する
 		namespace
@@ -343,8 +486,9 @@ namespace aq
 				// AddClip は group を引き直さない (groupName 空 = 未解決のまま)。
 				// SetClipGroup("") で group = aqHash32(name) を確定させる (§4.3)
 				anim->SetClipGroup(newIdx, "");
-				selClipIdx_  = static_cast<int>(newIdx);
-				selTrackIdx_ = selKeyframeIdx_ = -1;
+				selClipIdx_ = static_cast<int>(newIdx);
+				selRowIdx_  = -1;
+				selKeyTime_ = -1.f;
 				UIEditorSession::Get().dirty = true;
 			}
 			ImGui::SameLine();
@@ -357,7 +501,8 @@ namespace aq
 					anim->RemoveClip(static_cast<size_t>(selClipIdx_));
 					selClipIdx_     = -1;
 					prevSelClipIdx_ = -1;
-					selTrackIdx_    = selKeyframeIdx_ = -1;
+					selRowIdx_      = -1;
+					selKeyTime_     = -1.f;
 					UIEditorSession::Get().dirty = true;
 				}
 				if (!canRemove) ImGui::EndDisabled();
@@ -379,8 +524,9 @@ namespace aq
 						auto& newClip = anim->EditClip(newIdx);
 						ApplyPlayWhenSelection(anim, static_cast<int>(newIdx), newClip, PresetPlayWhenOption(kind));
 
-						selClipIdx_  = static_cast<int>(newIdx);
-						selTrackIdx_ = selKeyframeIdx_ = -1;
+						selClipIdx_ = static_cast<int>(newIdx);
+						selRowIdx_  = -1;
+						selKeyTime_ = -1.f;
 						UIEditorSession::Get().dirty = true;
 					}
 				}
@@ -399,10 +545,11 @@ namespace aq
 				{
 					if (selClipIdx_ != i)
 					{
-						selClipIdx_     = i;
-						selTrackIdx_    = selKeyframeIdx_ = -1;
-						scrubTime_      = 0.f;
-						isPlaying_      = false;
+						selClipIdx_ = i;
+						selRowIdx_  = -1;
+						selKeyTime_ = -1.f;
+						scrubTime_  = 0.f;
+						isPlaying_  = false;
 						if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
 					}
 				}
@@ -714,8 +861,8 @@ namespace aq
 		{
 			selClipIdx_     = -1;
 			prevSelClipIdx_ = -1;
-			selTrackIdx_    = -1;
-			selKeyframeIdx_ = -1;
+			selRowIdx_      = -1;
+			selKeyTime_     = -1.f;
 			wantOpenAdvanced_ = false;
 			if (hasSnapshot_)
 			{
@@ -732,12 +879,13 @@ namespace aq
 		{
 			selClipIdx_       = -1;
 			prevSelClipIdx_   = -1;
-			selTrackIdx_      = -1;
-			selKeyframeIdx_   = -1;
+			selRowIdx_        = -1;
+			selKeyTime_       = -1.f;
 			wantOpenAdvanced_ = false;
 
-			isDraggingKf_   = false;
-			dragKfTrackIdx_ = dragKfKiIdx_ = -1;
+			isDraggingKf_ = false;
+			dragRowIdx_   = -1;
+			dragKeyTime_  = -1.f;
 
 			scrubTime_   = 0.f;
 			isPlaying_   = false;
@@ -821,7 +969,8 @@ namespace aq
 						if (selClipIdx_ != i)
 						{
 							selClipIdx_     = i;
-							selTrackIdx_    = selKeyframeIdx_ = -1;
+							selRowIdx_  = -1;
+							selKeyTime_ = -1.f;
 							scrubTime_      = 0.f;
 							isPlaying_      = false;
 							if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
@@ -847,14 +996,66 @@ namespace aq
 			ImGui::Text("Tracks");
 			ImGui::SameLine();
 			if (ImGui::SmallButton("+ Track"))
+				ImGui::OpenPopup("track_add_menu");
+
+			if (ImGui::BeginPopup("track_add_menu"))
 			{
-				UIAnimationTrack track;
-				track.property = UIAnimatedProperty::PositionX;
-				clip.tracks.push_back(std::move(track));
-				selTrackIdx_    = static_cast<int>(clip.tracks.size()) - 1;
-				selKeyframeIdx_ = -1;
-				UIEditorSession::Get().dirty = true;
+				if (ImGui::MenuItem("New Track"))
+				{
+					UIAnimationTrack track;
+					track.property = UIAnimatedProperty::PositionX;
+					clip.tracks.push_back(std::move(track));
+					UIEditorSession::Get().dirty = true;
+				}
+
+				ImGui::Separator();
+
+				// X/Y が揃った組を一度に足す (設計書 §15.1)。無い方の Track だけ追加する
+				struct VectorAddItem { const char* label; UIAnimatedProperty x; UIAnimatedProperty y; };
+				static constexpr VectorAddItem VECTOR_ADD_ITEMS[] =
+				{
+					{ "Position (X,Y)",  UIAnimatedProperty::PositionX,  UIAnimatedProperty::PositionY },
+					{ "Scale (X,Y)",     UIAnimatedProperty::ScaleX,     UIAnimatedProperty::ScaleY },
+					{ "SizeDelta (X,Y)", UIAnimatedProperty::SizeDeltaX, UIAnimatedProperty::SizeDeltaY },
+				};
+
+				auto hasProperty = [&clip](UIAnimatedProperty prop)
+					{
+						for (const auto& t : clip.tracks) { if (t.property == prop) return true; }
+						return false;
+					};
+
+				for (const auto& item : VECTOR_ADD_ITEMS)
+				{
+					const bool hasX = hasProperty(item.x);
+					const bool hasY = hasProperty(item.y);
+					const bool bothPresent = hasX && hasY;
+
+					if (bothPresent) ImGui::BeginDisabled();
+					if (ImGui::MenuItem(item.label))
+					{
+						if (!hasX) { UIAnimationTrack t; t.property = item.x; clip.tracks.push_back(std::move(t)); }
+						if (!hasY) { UIAnimationTrack t; t.property = item.y; clip.tracks.push_back(std::move(t)); }
+						UIEditorSession::Get().dirty = true;
+					}
+					if (bothPresent) ImGui::EndDisabled();
+				}
+
+				ImGui::EndPopup();
 			}
+
+			// Track 単位の一覧。選択は所属する Row (単独なら自分だけの Row、組の一部なら
+			// X/Y をまとめた Row) を選ぶ (設計書 §15.1 / §15.2)
+			const auto rows = BuildTimelineRows(clip);
+			auto findOwnerRow = [&rows](int trackIdx)
+				{
+					for (int r = 0; r < (int)rows.size(); ++r)
+					{
+						if (rows[r].trackIdx[0] == trackIdx || rows[r].trackIdx[1] == trackIdx)
+							return r;
+					}
+					return -1;
+				};
 
 			static const char* PROP_LABELS[] = {
 				"PositionX","PositionY","PositionZ",
@@ -887,15 +1088,16 @@ namespace aq
 				auto& track = clip.tracks[ti];
 				ImGui::PushID(ti);
 
-				const bool trackSel = (ti == selTrackIdx_);
+				const int  ownerRow = findOwnerRow(ti);
+				const bool trackSel = (ownerRow >= 0 && ownerRow == selRowIdx_);
 				char trackLabel[64];
 				std::snprintf(trackLabel, sizeof(trackLabel), "%s",
 				              UIAnimationSerializer::PropertyToStr(track.property));
 
 				if (ImGui::Selectable(trackLabel, trackSel, ImGuiSelectableFlags_AllowOverlap))
 				{
-					selTrackIdx_    = ti;
-					selKeyframeIdx_ = -1;
+					selRowIdx_  = ownerRow;
+					selKeyTime_ = -1.f;
 				}
 				ImGui::SameLine(120.f);
 
@@ -916,12 +1118,12 @@ namespace aq
 				if (ImGui::SmallButton("-##track"))
 				{
 					clip.tracks.erase(clip.tracks.begin() + ti);
-					if (selTrackIdx_ >= (int)clip.tracks.size())
-						selTrackIdx_ = (int)clip.tracks.size() - 1;
-					selKeyframeIdx_ = -1;
+					// 削除で Row 構成が変わるため、安全のため選択は解除する
+					selRowIdx_  = -1;
+					selKeyTime_ = -1.f;
 					UIEditorSession::Get().dirty = true;
 					ImGui::PopID();
-					continue;
+					break; // 残りは次フレームで描く (erase 後に ++ti すると 1 本飛ばすため continue にしない)
 				}
 
 				ImGui::PopID();
@@ -942,7 +1144,10 @@ namespace aq
 			const float totalDur = clip.duration;
 			const float totalW   = totalDur * zoomPxPerSec_;
 
-			const int totalRows = (int)clip.tracks.size();
+			// 表示行は毎フレーム clip.tracks から組み立てる。X/Y が揃った
+			// Position / Scale / SizeDelta は 1 行にまとめる (設計書 §15.1)
+			const auto rows      = BuildTimelineRows(clip);
+			const int  totalRows = (int)rows.size();
 
 			const float contentW = LABEL_W + totalW + 20.f;
 			const float contentH = RULER_H + totalRows * ROW_H + 10.f;
@@ -951,7 +1156,9 @@ namespace aq
 			ImGui::TextDisabled("Right click: add/remove key  |  Ctrl+Click: add key  |  Delete: remove  |  Drag: move  |  Wheel: zoom");
 
 			// 横スクロール可能な子ウィンドウ
-			ImGui::BeginChild("##tlscroll", ImVec2(0, 0), false,
+			// 高さは内容分を確保する (0 = 残り全部だと Track 一覧に押されて行が見えなくなる)。
+			// 親の ##tlRight 側がスクロールする
+			ImGui::BeginChild("##tlscroll", ImVec2(0, contentH + 20.f), false,
 			                  ImGuiWindowFlags_HorizontalScrollbar);
 
 			// マウスホイールでズーム (window hovered 時のみ)
@@ -983,11 +1190,13 @@ namespace aq
 			// ルーラー描画
 			DrawRuler(dl, tlX, tlY, totalW, totalDur);
 
-			// トラック行描画 (ClipTrack ヘッダは廃止。clip.tracks を直接並べる)
+			// Row 描画 (組の行は X/Y 2 本の Track をまとめて 1 行として描く。設計書 §15.1)
 			float rowY = tlY + RULER_H;
-			for (int ti = 0; ti < (int)clip.tracks.size(); ++ti)
+			for (int ri = 0; ri < totalRows; ++ri)
 			{
-				DrawTrackRow(dl, anim, clip, ti, tlX, rowY, ROW_H, totalDur);
+				const auto& row = rows[ri];
+				DrawTrackRow(dl, anim, clip, ri, row.label, row.trackIdx[0], row.trackIdx[1],
+				             tlX, rowY, ROW_H, totalDur);
 				rowY += ROW_H;
 			}
 
@@ -1018,90 +1227,95 @@ namespace aq
 				ApplyScrub(obj, clip);
 			}
 
-			// Ctrl+クリックで選択 Track にキーフレーム追加
+			// Ctrl+クリックで選択 Row にキーフレーム追加 (組なら両 Track に同時刻で。設計書 §15.2)
 			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0) &&
 			    ImGui::GetIO().KeyCtrl &&
-			    selTrackIdx_ >= 0 && selTrackIdx_ < (int)clip.tracks.size())
+			    selRowIdx_ >= 0 && selRowIdx_ < totalRows)
 			{
-				float t = std::clamp((mouse.x - tlX) / zoomPxPerSec_, 0.f, totalDur);
-				auto& track = clip.tracks[selTrackIdx_];
-				UIKeyframe kf{ t, track.ReadFrom(obj), EaseType::Linear };
-				track.keyframes.push_back(kf);
-				std::sort(track.keyframes.begin(), track.keyframes.end(),
-				          [](const UIKeyframe& a, const UIKeyframe& b)
-				          { return a.time < b.time; });
+				const float t = std::clamp((mouse.x - tlX) / zoomPxPerSec_, 0.f, totalDur);
+				AddKeyToRow(clip, obj, rows[selRowIdx_], t);
+				selKeyTime_ = t;
 				UIEditorSession::Get().dirty = true;
 			}
 
-			// キーフレームドラッグ処理 (クリック開始位置がキーフレーム上のときのみ動く)
-			if (dragKfTrackIdx_ >= 0 && dragKfKiIdx_ >= 0 &&
-			    dragKfTrackIdx_ < (int)clip.tracks.size())
+			// キーフレームドラッグ処理 (クリック開始位置がキーフレーム上のときのみ動く)。
+			// Row index + 掴んだ時刻で持ち、組なら両 Track のその時刻のキーを一緒に動かす
+			if (dragRowIdx_ >= 0 && dragRowIdx_ < totalRows)
 			{
-				auto& dtrack = clip.tracks[dragKfTrackIdx_];
-				if (dragKfKiIdx_ < (int)dtrack.keyframes.size())
+				const auto& dragRow = rows[dragRowIdx_];
+				if (ImGui::IsMouseDragging(0, 2.f))
 				{
-					auto& dkf = dtrack.keyframes[dragKfKiIdx_];
-					if (ImGui::IsMouseDragging(0, 2.f))
-					{
-						isDraggingKf_ = true;
-						const float dx = ImGui::GetIO().MouseDelta.x;
-						dkf.time = std::clamp(dkf.time + dx / zoomPxPerSec_, 0.f, totalDur);
-					}
-					if (isDraggingKf_ && ImGui::IsMouseReleased(0))
-					{
-						const float savedTime = dkf.time;
-						std::sort(dtrack.keyframes.begin(), dtrack.keyframes.end(),
-						          [](const UIKeyframe& a, const UIKeyframe& b)
-						          { return a.time < b.time; });
-						for (int ni = 0; ni < (int)dtrack.keyframes.size(); ++ni)
-						{
-							if (std::abs(dtrack.keyframes[ni].time - savedTime) < 1e-5f)
-							{ selKeyframeIdx_ = ni; break; }
-						}
-						UIEditorSession::Get().dirty = true;
-					}
+					isDraggingKf_ = true;
+					const float dx      = ImGui::GetIO().MouseDelta.x;
+					const float newTime = std::clamp(dragKeyTime_ + dx / zoomPxPerSec_, 0.f, totalDur);
+
+					bool moved = false;
+					if (dragRow.trackIdx[0] >= 0)
+						moved |= MoveKeyAtTime(clip.tracks[dragRow.trackIdx[0]], dragKeyTime_, newTime);
+					if (dragRow.trackIdx[1] >= 0)
+						moved |= MoveKeyAtTime(clip.tracks[dragRow.trackIdx[1]], dragKeyTime_, newTime);
+
+					if (moved)
+						dragKeyTime_ = newTime;
+				}
+				if (isDraggingKf_ && ImGui::IsMouseReleased(0))
+				{
+					if (dragRow.trackIdx[0] >= 0) SortKeyframes(clip.tracks[dragRow.trackIdx[0]].keyframes);
+					if (dragRow.trackIdx[1] >= 0) SortKeyframes(clip.tracks[dragRow.trackIdx[1]].keyframes);
+					selRowIdx_  = dragRowIdx_;
+					selKeyTime_ = dragKeyTime_;
+					UIEditorSession::Get().dirty = true;
 				}
 			}
 			if (ImGui::IsMouseReleased(0))
 			{
-				isDraggingKf_   = false;
-				dragKfTrackIdx_ = dragKfKiIdx_ = -1;
+				isDraggingKf_ = false;
+				dragRowIdx_   = -1;
+				dragKeyTime_  = -1.f;
 			}
 
-			// Deleteキー → 選択キーフレーム削除
+			// Deleteキー → 選択キーフレーム削除 (組なら両方)
 			if (ImGui::IsWindowHovered() && ImGui::IsKeyPressed(ImGuiKey_Delete) &&
-			    selTrackIdx_ >= 0 && selTrackIdx_ < (int)clip.tracks.size() && selKeyframeIdx_ >= 0)
+			    selRowIdx_ >= 0 && selRowIdx_ < totalRows && selKeyTime_ >= 0.f)
 			{
-				auto& track = clip.tracks[selTrackIdx_];
-				if (selKeyframeIdx_ < (int)track.keyframes.size())
+				if (EraseSelectedKey(clip, rows[selRowIdx_], selKeyTime_))
 				{
-					track.keyframes.erase(track.keyframes.begin() + selKeyframeIdx_);
-					selKeyframeIdx_ = -1;
+					selKeyTime_ = -1.f;
 					UIEditorSession::Get().dirty = true;
 				}
 			}
 
-			// キーフレームコンテキストメニュー
+			// キーフレームコンテキストメニュー (組なら両方に効く。設計書 §15.2)
 			if (ImGui::BeginPopup("kf_ctx"))
 			{
-				if (selTrackIdx_ >= 0 && selTrackIdx_ < (int)clip.tracks.size() && selKeyframeIdx_ >= 0)
+				if (selRowIdx_ >= 0 && selRowIdx_ < totalRows && selKeyTime_ >= 0.f)
 				{
-					auto& track = clip.tracks[selTrackIdx_];
-					if (selKeyframeIdx_ < (int)track.keyframes.size())
+					const auto& row     = rows[selRowIdx_];
+					auto&       trackX  = clip.tracks[row.trackIdx[0]];
+					auto* const trackY  = (row.trackIdx[1] >= 0) ? &clip.tracks[row.trackIdx[1]] : nullptr;
+					const int   xi      = FindKeyIndexAtTime(trackX.keyframes, selKeyTime_);
+					const int   yi      = trackY ? FindKeyIndexAtTime(trackY->keyframes, selKeyTime_) : -1;
+
+					if (xi >= 0 || yi >= 0)
 					{
-						auto& kf = track.keyframes[selKeyframeIdx_];
-						ImGui::TextDisabled("t=%.3f  v=%.3f", kf.time, kf.value);
+						if (trackY)
+							ImGui::TextDisabled("%s  t=%.3f", row.label, selKeyTime_);
+						else
+							ImGui::TextDisabled("%s  t=%.3f  v=%.3f", row.label, selKeyTime_, trackX.keyframes[xi].value);
 						ImGui::Separator();
+
 						static const char* EASE_MENU_LABELS[] =
 							{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
 						if (ImGui::BeginMenu("Ease"))
 						{
+							const EaseType curEase = (xi >= 0) ? trackX.keyframes[xi].ease : trackY->keyframes[yi].ease;
 							for (int ei = 0; ei < 5; ++ei)
 							{
-								bool isCur = (static_cast<int>(kf.ease) == ei);
+								bool isCur = (static_cast<int>(curEase) == ei);
 								if (ImGui::MenuItem(EASE_MENU_LABELS[ei], nullptr, isCur))
 								{
-									kf.ease = static_cast<EaseType>(ei);
+									if (xi >= 0) trackX.keyframes[xi].ease = static_cast<EaseType>(ei);
+									if (yi >= 0) trackY->keyframes[yi].ease = static_cast<EaseType>(ei);
 									UIEditorSession::Get().dirty = true;
 								}
 							}
@@ -1110,24 +1324,30 @@ namespace aq
 						ImGui::Separator();
 						if (ImGui::MenuItem("Duplicate Key"))
 						{
-							UIKeyframe dup = kf;
-							dup.time = std::min(dup.time + 0.1f, clip.duration);
-							track.keyframes.push_back(dup);
-							std::sort(track.keyframes.begin(), track.keyframes.end(),
-							          [](const UIKeyframe& a, const UIKeyframe& b)
-							          { return a.time < b.time; });
-							for (int ni = 0; ni < (int)track.keyframes.size(); ++ni)
+							const float dupTime = std::min(selKeyTime_ + 0.1f, clip.duration);
+							if (xi >= 0)
 							{
-								if (std::abs(track.keyframes[ni].time - dup.time) < 1e-5f)
-								{ selKeyframeIdx_ = ni; break; }
+								UIKeyframe dup = trackX.keyframes[xi];
+								dup.time = dupTime;
+								trackX.keyframes.push_back(dup);
+								SortKeyframes(trackX.keyframes);
 							}
+							if (yi >= 0)
+							{
+								UIKeyframe dup = trackY->keyframes[yi];
+								dup.time = dupTime;
+								trackY->keyframes.push_back(dup);
+								SortKeyframes(trackY->keyframes);
+							}
+							selKeyTime_ = dupTime;
 							UIEditorSession::Get().dirty = true;
 						}
 						ImGui::Separator();
 						if (ImGui::MenuItem("Delete Key"))
 						{
-							track.keyframes.erase(track.keyframes.begin() + selKeyframeIdx_);
-							selKeyframeIdx_ = -1;
+							if (xi >= 0) trackX.keyframes.erase(trackX.keyframes.begin() + xi);
+							if (yi >= 0) trackY->keyframes.erase(trackY->keyframes.begin() + yi);
+							selKeyTime_ = -1.f;
 							UIEditorSession::Get().dirty = true;
 						}
 					}
@@ -1135,41 +1355,24 @@ namespace aq
 				ImGui::EndPopup();
 			}
 
-			// トラック空領域コンテキストメニュー
+			// トラック空領域コンテキストメニュー (組なら両 Track に同時刻で追加。設計書 §15.2)
 			if (ImGui::BeginPopup("track_ctx"))
 			{
-				if (selTrackIdx_ >= 0 && selTrackIdx_ < (int)clip.tracks.size())
+				if (selRowIdx_ >= 0 && selRowIdx_ < totalRows)
 				{
-					auto& track = clip.tracks[selTrackIdx_];
-					ImGui::TextDisabled("%s  t=%.3f",
-					    UIAnimationSerializer::PropertyToStr(track.property), ctxClickTime_);
+					const auto& row = rows[selRowIdx_];
+					ImGui::TextDisabled("%s  t=%.3f", row.label, ctxClickTime_);
 					ImGui::Separator();
 					if (ImGui::MenuItem("Add Key here"))
 					{
-						UIKeyframe kf{ ctxClickTime_, track.Sample(ctxClickTime_), EaseType::Linear };
-						track.keyframes.push_back(kf);
-						std::sort(track.keyframes.begin(), track.keyframes.end(),
-						          [](const UIKeyframe& a, const UIKeyframe& b)
-						          { return a.time < b.time; });
-						for (int ni = 0; ni < (int)track.keyframes.size(); ++ni)
-						{
-							if (std::abs(track.keyframes[ni].time - ctxClickTime_) < 1e-5f)
-							{ selKeyframeIdx_ = ni; break; }
-						}
+						AddKeyToRow(clip, obj, row, ctxClickTime_);
+						selKeyTime_ = ctxClickTime_;
 						UIEditorSession::Get().dirty = true;
 					}
 					if (ImGui::MenuItem("Add Key at Scrub"))
 					{
-						UIKeyframe kf{ scrubTime_, track.Sample(scrubTime_), EaseType::Linear };
-						track.keyframes.push_back(kf);
-						std::sort(track.keyframes.begin(), track.keyframes.end(),
-						          [](const UIKeyframe& a, const UIKeyframe& b)
-						          { return a.time < b.time; });
-						for (int ni = 0; ni < (int)track.keyframes.size(); ++ni)
-						{
-							if (std::abs(track.keyframes[ni].time - scrubTime_) < 1e-5f)
-							{ selKeyframeIdx_ = ni; break; }
-						}
+						AddKeyToRow(clip, obj, row, scrubTime_);
+						selKeyTime_ = scrubTime_;
 						UIEditorSession::Get().dirty = true;
 					}
 				}
@@ -1210,27 +1413,29 @@ namespace aq
 
 		void UIAnimationEditor::DrawTrackRow(
 			ImDrawList* dl, UIAnimationComponent* anim, UIAnimationClip& clip,
-			int trackIdx,
+			int rowIdx, const char* label, int trackIdxX, int trackIdxY,
 			float ox, float rowY, float rowH, float duration)
 		{
-			if (trackIdx >= (int)clip.tracks.size()) return;
-			auto& track = clip.tracks[trackIdx];
+			if (trackIdxX < 0 || trackIdxX >= (int)clip.tracks.size()) return;
+			auto&       trackX = clip.tracks[trackIdxX];
+			auto* const trackY = (trackIdxY >= 0 && trackIdxY < (int)clip.tracks.size())
+				? &clip.tracks[trackIdxY] : nullptr;
 
-			const bool   rowSel = (trackIdx == selTrackIdx_);
+			const bool   rowSel = (rowIdx == selRowIdx_);
 			const ImVec2 mouse  = ImGui::GetMousePos();
 
-			// このプロパティの勝者がこのクリップなら先頭に "*" を出す (設計書 §10.4)
+			// このプロパティの勝者がこのクリップなら先頭に "*" を出す。組の行は X / Y の
+			// どちらかがこの Clip の勝者なら出す (設計書 §15.2)
 			const bool isWinner = anim && selClipIdx_ >= 0 &&
-			                      anim->FindWinnerClip(track.property) == selClipIdx_;
+			                      (anim->FindWinnerClip(trackX.property) == selClipIdx_ ||
+			                       (trackY && anim->FindWinnerClip(trackY->property) == selClipIdx_));
 
 			// ラベル列 (ox - LABEL_W .. ox) — content スクロールに乗る
 			const ImU32 lblBg = rowSel ? IM_COL32(50, 80, 120, 210) : IM_COL32(35, 38, 48, 210);
 			dl->AddRectFilled(ImVec2(ox - LABEL_W, rowY), ImVec2(ox, rowY + rowH), lblBg);
 			// ラベルテキストは window 左端固定 (スクロールしても読める)
 			char labelBuf[64];
-			std::snprintf(labelBuf, sizeof(labelBuf), "%s%s",
-			              isWinner ? "* " : "",
-			              UIAnimationSerializer::PropertyToStr(track.property));
+			std::snprintf(labelBuf, sizeof(labelBuf), "%s%s", isWinner ? "* " : "", label);
 			dl->AddText(ImVec2(ox - LABEL_W + 4.f, rowY + 4.f),
 			            IM_COL32(200, 215, 235, 255),
 			            labelBuf);
@@ -1248,36 +1453,60 @@ namespace aq
 			                     mouse.y >= rowY           && mouse.y < rowY + rowH;
 			if (inLabel && ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered())
 			{
-				selTrackIdx_    = trackIdx;
-				selKeyframeIdx_ = -1;
+				selRowIdx_  = rowIdx;
+				selKeyTime_ = -1.f;
 			}
+
+			// 両 Track の時刻の和集合を作る (組の行のみ Y 側も見る)。
+			// 両方に在る時刻は塗りつぶし、片方だけの時刻は枠だけの菱形 (設計書 §15.2)
+			struct UnionKey { float time; bool inX; bool inY; };
+			std::vector<UnionKey> unionKeys;
+			auto addUnion = [&unionKeys](float t, bool isX)
+				{
+					for (auto& u : unionKeys)
+					{
+						if (std::abs(u.time - t) < 1e-5f)
+						{
+							if (isX) u.inX = true; else u.inY = true;
+							return;
+						}
+					}
+					UnionKey u{ t, false, false };
+					if (isX) u.inX = true; else u.inY = true;
+					unionKeys.push_back(u);
+				};
+			for (const auto& kf : trackX.keyframes) addUnion(kf.time, true);
+			if (trackY) { for (const auto& kf : trackY->keyframes) addUnion(kf.time, false); }
 
 			// キーフレーム描画 & クリック
 			const float cy = rowY + rowH * 0.5f;
 			bool anyKfRightClicked = false;
 			bool anyKfHovered      = false;
-			for (int ki = 0; ki < (int)track.keyframes.size(); ++ki)
+			for (const auto& uk : unionKeys)
 			{
-				auto& kf = track.keyframes[ki];
-				const float kx  = ox + kf.time * zoomPxPerSec_;
-				const bool  kSel = (trackIdx == selTrackIdx_ && ki == selKeyframeIdx_);
+				const float kx     = ox + uk.time * zoomPxPerSec_;
+				const bool  kSel   = (rowIdx == selRowIdx_ && std::abs(uk.time - selKeyTime_) < 1e-5f);
+				const bool  filled = uk.inX && (!trackY || uk.inY);
 
-				// 菱形 (ドラッグ中は半透明)
+				// 菱形 (ドラッグ中は半透明。片方だけの時刻は枠だけ)
 				const ImU32 kCol = kSel
 					? (isDraggingKf_ ? IM_COL32(255, 220, 50, 140) : IM_COL32(255, 220, 50, 255))
 					: IM_COL32(120, 200, 120, 255);
-				dl->AddQuadFilled(
-					ImVec2(kx,              cy - DIAMOND_R),
-					ImVec2(kx + DIAMOND_R,  cy),
-					ImVec2(kx,              cy + DIAMOND_R),
-					ImVec2(kx - DIAMOND_R,  cy),
-					kCol);
+				if (filled)
+				{
+					dl->AddQuadFilled(
+						ImVec2(kx,              cy - DIAMOND_R),
+						ImVec2(kx + DIAMOND_R,  cy),
+						ImVec2(kx,              cy + DIAMOND_R),
+						ImVec2(kx - DIAMOND_R,  cy),
+						kCol);
+				}
 				dl->AddQuad(
 					ImVec2(kx,              cy - DIAMOND_R),
 					ImVec2(kx + DIAMOND_R,  cy),
 					ImVec2(kx,              cy + DIAMOND_R),
 					ImVec2(kx - DIAMOND_R,  cy),
-					IM_COL32(255, 255, 255, 100));
+					filled ? IM_COL32(255, 255, 255, 100) : kCol);
 
 				const float kHit = DIAMOND_R + 2.f;
 				const bool inKf = mouse.x >= kx - kHit && mouse.x <= kx + kHit &&
@@ -1286,17 +1515,17 @@ namespace aq
 				// 左クリックで選択 & ドラッグ開始ソース記録
 				if (inKf && ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered())
 				{
-					selTrackIdx_    = trackIdx;
-					selKeyframeIdx_ = ki;
-					dragKfTrackIdx_ = trackIdx;
-					dragKfKiIdx_    = ki;
+					selRowIdx_   = rowIdx;
+					selKeyTime_  = uk.time;
+					dragRowIdx_  = rowIdx;
+					dragKeyTime_ = uk.time;
 				}
 
 				// 右クリック → キーフレームコンテキストメニュー
 				if (inKf && ImGui::IsMouseClicked(1) && ImGui::IsWindowHovered() && !isDraggingKf_)
 				{
-					selTrackIdx_      = trackIdx;
-					selKeyframeIdx_   = ki;
+					selRowIdx_        = rowIdx;
+					selKeyTime_       = uk.time;
 					anyKfRightClicked = true;
 					ImGui::OpenPopup("kf_ctx");
 				}
@@ -1306,14 +1535,29 @@ namespace aq
 				{
 					anyKfHovered = true;
 					ImGui::BeginTooltip();
-					ImGui::Text("t=%.3f  v=%.3f  ease=%s",
-					            kf.time, kf.value,
-					            UIAnimationSerializer::EaseToStr(kf.ease));
+					if (trackY)
+					{
+						ImGui::Text("t=%.3f", uk.time);
+						if (uk.inX) ImGui::Text("X=%.3f", trackX.Sample(uk.time)); else ImGui::TextDisabled("X=-");
+						if (uk.inY) ImGui::Text("Y=%.3f", trackY->Sample(uk.time)); else ImGui::TextDisabled("Y=-");
+					}
+					else
+					{
+						const int ki = FindKeyIndexAtTime(trackX.keyframes, uk.time);
+						if (ki >= 0)
+						{
+							const auto& kf = trackX.keyframes[ki];
+							ImGui::Text("t=%.3f  v=%.3f  ease=%s",
+							            kf.time, kf.value,
+							            UIAnimationSerializer::EaseToStr(kf.ease));
+						}
+					}
 					ImGui::EndTooltip();
 				}
 			}
 
 			// 行ホバー時のツールチップ: active / time / serial / winner (設計書 §10.4)。
+			// 組の行は X / Y それぞれの勝者を出す (設計書 §15.2)。
 			// キーフレーム自体のツールチップが出ているときは重ねない
 			const bool inRow = mouse.y >= rowY && mouse.y < rowY + rowH &&
 			                   mouse.x >= ox - LABEL_W && mouse.x <= ox + trackW;
@@ -1321,11 +1565,24 @@ namespace aq
 			{
 				const auto selIdx = static_cast<size_t>(selClipIdx_);
 				ImGui::BeginTooltip();
-				ImGui::Text("active=%d time=%.2f serial=%u winner=#%d",
-				            anim->IsClipActive(selIdx) ? 1 : 0,
-				            anim->GetClipTime(selIdx),
-				            anim->GetClipSerial(selIdx),
-				            anim->FindWinnerClip(track.property));
+				if (trackY)
+				{
+					ImGui::Text("active=%d time=%.2f serial=%u",
+					            anim->IsClipActive(selIdx) ? 1 : 0,
+					            anim->GetClipTime(selIdx),
+					            anim->GetClipSerial(selIdx));
+					ImGui::Text("winner X=#%d Y=#%d",
+					            anim->FindWinnerClip(trackX.property),
+					            anim->FindWinnerClip(trackY->property));
+				}
+				else
+				{
+					ImGui::Text("active=%d time=%.2f serial=%u winner=#%d",
+					            anim->IsClipActive(selIdx) ? 1 : 0,
+					            anim->GetClipTime(selIdx),
+					            anim->GetClipSerial(selIdx),
+					            anim->FindWinnerClip(trackX.property));
+				}
 				ImGui::EndTooltip();
 			}
 
@@ -1335,9 +1592,9 @@ namespace aq
 			if (!anyKfRightClicked && inTrackArea &&
 			    ImGui::IsMouseClicked(1) && ImGui::IsWindowHovered())
 			{
-				selTrackIdx_    = trackIdx;
-				selKeyframeIdx_ = -1;
-				ctxClickTime_   = std::clamp((mouse.x - ox) / zoomPxPerSec_, 0.f, duration);
+				selRowIdx_    = rowIdx;
+				selKeyTime_   = -1.f;
+				ctxClickTime_ = std::clamp((mouse.x - ox) / zoomPxPerSec_, 0.f, duration);
 				ImGui::OpenPopup("track_ctx");
 			}
 		}
@@ -1345,39 +1602,96 @@ namespace aq
 
 		// ---- Keyframe Inspector ---------------------------------------------
 
+		// Row のキーを「時刻 + X 値 + Y 値 + Ease」で編集する (単独行は X 値を Value として出す。設計書 §15.2)
 		void UIAnimationEditor::DrawKeyframeInspector(UIAnimationClip& clip)
 		{
 			ImGui::Text("Keyframe");
 			ImGui::Separator();
 
-			if (selTrackIdx_ < 0 || selTrackIdx_ >= (int)clip.tracks.size() ||
-			    selKeyframeIdx_  < 0)
+			const auto rows = BuildTimelineRows(clip);
+			if (selRowIdx_ < 0 || selRowIdx_ >= (int)rows.size() || selKeyTime_ < 0.f)
 			{
 				ImGui::TextDisabled("Select a keyframe");
 				return;
 			}
 
-			auto& track = clip.tracks[selTrackIdx_];
-			if (selKeyframeIdx_ >= (int)track.keyframes.size()) return;
+			const auto& row    = rows[selRowIdx_];
+			auto&       trackX = clip.tracks[row.trackIdx[0]];
+			auto* const trackY = (row.trackIdx[1] >= 0) ? &clip.tracks[row.trackIdx[1]] : nullptr;
 
-			auto& kf = track.keyframes[selKeyframeIdx_];
+			const int xi = FindKeyIndexAtTime(trackX.keyframes, selKeyTime_);
+			const int yi = trackY ? FindKeyIndexAtTime(trackY->keyframes, selKeyTime_) : -1;
+			if (xi < 0 && yi < 0)
+			{
+				ImGui::TextDisabled("Select a keyframe");
+				return;
+			}
 
+			// Time (両方に効く)
+			float timeVal = selKeyTime_;
 			ImGui::SetNextItemWidth(100.f);
-			ImGui::DragFloat("Time",  &kf.time,  0.001f, 0.f, clip.duration, "%.3f");
+			ImGui::DragFloat("Time", &timeVal, 0.001f, 0.f, clip.duration, "%.3f");
 			if (ImGui::IsItemEdited())
+			{
+				timeVal = std::clamp(timeVal, 0.f, clip.duration);
+				if (xi >= 0) trackX.keyframes[xi].time = timeVal;
+				if (yi >= 0) trackY->keyframes[yi].time = timeVal;
+				selKeyTime_ = timeVal;
 				UIEditorSession::Get().dirty = true;
-			ImGui::SetNextItemWidth(100.f);
-			ImGui::DragFloat("Value", &kf.value, 0.01f,  -9999.f, 9999.f,  "%.3f");
-			if (ImGui::IsItemEdited())
-				UIEditorSession::Get().dirty = true;
+			}
+			if (ImGui::IsItemDeactivatedAfterEdit())
+			{
+				if (xi >= 0) SortKeyframes(trackX.keyframes);
+				if (yi >= 0) SortKeyframes(trackY->keyframes);
+			}
 
+			// X / Y (組の行) または Value (単独行)。片方だけの時刻では無い側を Disabled にする
+			if (trackY)
+			{
+				if (xi < 0) ImGui::BeginDisabled();
+				float xVal = (xi >= 0) ? trackX.keyframes[xi].value : trackX.Sample(selKeyTime_);
+				ImGui::SetNextItemWidth(100.f);
+				ImGui::DragFloat("X", &xVal, 0.01f, -9999.f, 9999.f, "%.3f");
+				if (xi >= 0 && ImGui::IsItemEdited())
+				{
+					trackX.keyframes[xi].value = xVal;
+					UIEditorSession::Get().dirty = true;
+				}
+				if (xi < 0) ImGui::EndDisabled();
+
+				if (yi < 0) ImGui::BeginDisabled();
+				float yVal = (yi >= 0) ? trackY->keyframes[yi].value : trackY->Sample(selKeyTime_);
+				ImGui::SetNextItemWidth(100.f);
+				ImGui::DragFloat("Y", &yVal, 0.01f, -9999.f, 9999.f, "%.3f");
+				if (yi >= 0 && ImGui::IsItemEdited())
+				{
+					trackY->keyframes[yi].value = yVal;
+					UIEditorSession::Get().dirty = true;
+				}
+				if (yi < 0) ImGui::EndDisabled();
+			}
+			else
+			{
+				float val = trackX.keyframes[xi].value;
+				ImGui::SetNextItemWidth(100.f);
+				ImGui::DragFloat("Value", &val, 0.01f, -9999.f, 9999.f, "%.3f");
+				if (ImGui::IsItemEdited())
+				{
+					trackX.keyframes[xi].value = val;
+					UIEditorSession::Get().dirty = true;
+				}
+			}
+
+			// Ease (両方に効く)
 			static const char* EASE_LABELS[] =
 				{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
-			int easeIdx = static_cast<int>(kf.ease);
+			const EaseType curEase = (xi >= 0) ? trackX.keyframes[xi].ease : trackY->keyframes[yi].ease;
+			int easeIdx = static_cast<int>(curEase);
 			ImGui::SetNextItemWidth(120.f);
 			if (ImGui::Combo("Ease", &easeIdx, EASE_LABELS, 5))
 			{
-				kf.ease = static_cast<EaseType>(easeIdx);
+				if (xi >= 0) trackX.keyframes[xi].ease = static_cast<EaseType>(easeIdx);
+				if (yi >= 0) trackY->keyframes[yi].ease = static_cast<EaseType>(easeIdx);
 				UIEditorSession::Get().dirty = true;
 			}
 
@@ -1389,20 +1703,18 @@ namespace aq
 
 			if (deletePressed)
 			{
-				track.keyframes.erase(track.keyframes.begin() + selKeyframeIdx_);
-				selKeyframeIdx_ = -1;
+				EraseSelectedKey(clip, row, selKeyTime_);
+				selKeyTime_ = -1.f;
 				UIEditorSession::Get().dirty = true;
 				return;
 			}
 
-			// 時刻順ソート (編集後)
+			// 時刻順ソート (編集後。時刻ベースの選択なのでソートしても選択は失われない)
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Sort"))
 			{
-				std::sort(track.keyframes.begin(), track.keyframes.end(),
-				          [](const UIKeyframe& a, const UIKeyframe& b)
-				          { return a.time < b.time; });
-				selKeyframeIdx_ = -1;
+				if (xi >= 0) SortKeyframes(trackX.keyframes);
+				if (yi >= 0) SortKeyframes(trackY->keyframes);
 			}
 		}
 
@@ -1502,28 +1814,19 @@ namespace aq
 			ImGui::SetNextItemWidth(60.f);
 			ImGui::DragFloat("x", &playSpeed_, 0.05f, 0.1f, 5.f, "%.1f");
 
-			// スクラブ時刻でキーフレーム追加
+			// スクラブ時刻でキーフレーム追加 (選択 Row の両 Track に同時刻で。設計書 §15.2)
 			ImGui::SameLine();
-			const bool canAddKey = selTrackIdx_ >= 0 && selTrackIdx_ < (int)clip.tracks.size();
+			const auto rows      = BuildTimelineRows(clip);
+			const bool canAddKey = selRowIdx_ >= 0 && selRowIdx_ < (int)rows.size();
 			if (!canAddKey) ImGui::BeginDisabled();
 			if (ImGui::Button("+ Key"))
 			{
-				auto& track = clip.tracks[selTrackIdx_];
-				float val = obj ? track.ReadFrom(obj) : track.Sample(scrubTime_);
-				UIKeyframe kf{ scrubTime_, val, EaseType::Linear };
-				track.keyframes.push_back(kf);
-				std::sort(track.keyframes.begin(), track.keyframes.end(),
-				          [](const UIKeyframe& a, const UIKeyframe& b)
-				          { return a.time < b.time; });
-				for (int ni = 0; ni < (int)track.keyframes.size(); ++ni)
-				{
-					if (std::abs(track.keyframes[ni].time - scrubTime_) < 1e-5f)
-					{ selKeyframeIdx_ = ni; break; }
-				}
+				AddKeyToRow(clip, obj, rows[selRowIdx_], scrubTime_);
+				selKeyTime_ = scrubTime_;
 				UIEditorSession::Get().dirty = true;
 			}
 			if (!canAddKey) ImGui::EndDisabled();
-			if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add a keyframe to the selected track at the scrub time");
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add a keyframe to the selected row at the scrub time");
 
 			// 復元ボタン
 			if (hasSnapshot_)

@@ -2,6 +2,7 @@
 #include "UIEditorDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
+#include <algorithm>
 #include "UIEditorSession.h"
 #include "UI/UIObject.h"
 #include "UI/Screen/UIScreen.h"
@@ -861,8 +862,9 @@ namespace aq
 			const bool showTimeline = inspectorTab_ == InspectorTab::Animation &&
 			                          selectedObj && selectedObj->GetComponent<UIAnimationComponent>();
 
-			constexpr float TIMELINE_HEIGHT = 260.f;
+			// Timeline は最低 260px、ウィンドウが高ければ 45% まで広げる (Track 一覧 + 行 + Keyframe 欄が収まるように)
 			const ImVec2  avail   = ImGui::GetContentRegionAvail();
+			const float   TIMELINE_HEIGHT = std::max(260.f, avail.y * 0.45f);
 			const float   spacing = ImGui::GetStyle().ItemSpacing.y;
 			// Timeline を出さないときは 0.f = 残り全部 (BeginChild の既定挙動)
 			const float   paneH   = showTimeline ? (avail.y - TIMELINE_HEIGHT - spacing) : 0.f;

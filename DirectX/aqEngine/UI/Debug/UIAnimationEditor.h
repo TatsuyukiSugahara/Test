@@ -29,8 +29,12 @@ namespace aq
 			// clipNameBuf_ / clipParamBuf_ / clipGroupBuf_ を同期する (prevSelClipIdx_ で検出)
 			int            selClipIdx_         = -1;
 			int            prevSelClipIdx_     = -1;
-			int            selTrackIdx_        = -1;
-			int            selKeyframeIdx_     = -1;
+
+			// Timeline の行選択 (設計書 §15.1 / §15.2)。行は毎フレーム clip.tracks から
+			// 組み立て直すため、Track index ではなく Row index + 時刻で持つ (時刻は 1e-5f 許容差で同一視)。
+			// selKeyTime_ < 0 はキーフレーム未選択 (Row のみ選択)
+			int            selRowIdx_          = -1;
+			float          selKeyTime_         = -1.f;
 
 			// Play when Combo で Advanced を選んだ直後、Advanced セクションを開かせるフラグ
 			bool           wantOpenAdvanced_   = false;
@@ -38,10 +42,10 @@ namespace aq
 			/** Timeline 表示 */
 			float          zoomPxPerSec_       = 150.f;
 
-			/** Drag / context-menu state */
+			/** Drag / context-menu state (掴んだ Row と時刻。ドラッグ中は毎フレーム更新する) */
 			bool           isDraggingKf_       = false;
-			int            dragKfTrackIdx_     = -1;
-			int            dragKfKiIdx_        = -1;
+			int            dragRowIdx_         = -1;
+			float          dragKeyTime_        = -1.f;
 			float          ctxClickTime_       = 0.f;
 
 			/** Preview (スクラブによる擬似再生。ランタイムには触らずスナップショットへ直書きする) */
@@ -101,8 +105,10 @@ namespace aq
 		private:
 			void DrawTimeline(UIObject* obj, UIAnimationClip& clip);
 			void DrawRuler(ImDrawList* dl, float ox, float oy, float w, float duration);
+			// Row 1 本を描く (label / trackIdxX / trackIdxY は無名 namespace の TimelineRow を
+			// 分解して渡す。trackIdxY < 0 なら単独行、それ以外は組の行)
 			void DrawTrackRow(ImDrawList* dl, UIAnimationComponent* anim, UIAnimationClip& clip,
-			                  int trackIdx,
+			                  int rowIdx, const char* label, int trackIdxX, int trackIdxY,
 			                  float ox, float rowY, float rowH, float duration);
 
 

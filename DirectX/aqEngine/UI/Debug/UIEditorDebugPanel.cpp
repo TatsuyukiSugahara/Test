@@ -319,21 +319,22 @@ namespace aq
 				ImGui::SameLine();
 				if (obj && ImGui::BeginMenu("+ Component"))
 				{
-					if (!obj->HasComponent<UIImageComponent>() &&
+					// 描画コンポーネント (Image / Nine Slice / Circle Gauge) は 1 つまで (設計書 §2.1)
+					if (!obj->HasComponent<UIImageComponent>() && !obj->HasRenderComponent() &&
 					    ImGui::MenuItem("Image"))
 					{
 						obj->AddComponent<UIImageComponent>();
 						session.dirty = true;
 					}
 
-					if (!obj->HasComponent<UINineSliceComponent>() &&
+					if (!obj->HasComponent<UINineSliceComponent>() && !obj->HasRenderComponent() &&
 					    ImGui::MenuItem("Nine Slice"))
 					{
 						obj->AddComponent<UINineSliceComponent>();
 						session.dirty = true;
 					}
 
-					if (!obj->HasComponent<UICircleGaugeComponent>() &&
+					if (!obj->HasComponent<UICircleGaugeComponent>() && !obj->HasRenderComponent() &&
 					    ImGui::MenuItem("Circle Gauge"))
 					{
 						obj->AddComponent<UICircleGaugeComponent>();

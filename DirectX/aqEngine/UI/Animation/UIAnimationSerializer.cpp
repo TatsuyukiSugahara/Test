@@ -1,6 +1,9 @@
 #include "aq.h"
 #include "UIAnimationSerializer.h"
 #include "UI/Component/UIAnimationComponent.h"
+#include <algorithm>
+#include <string>
+#include <unordered_map>
 
 namespace aq
 {
@@ -82,21 +85,36 @@ namespace aq
 			return EaseType::Linear;
 		}
 
-		const char* UIAnimationSerializer::ConditionToStr(UITrackCondition c)
+		const char* UIAnimationSerializer::ConditionToStr(UIClipCondition c)
 		{
 			switch (c)
 			{
-				case UITrackCondition::Bool:    return "Bool";
-				case UITrackCondition::Trigger: return "Trigger";
-				default:                        return "Default";
+				case UIClipCondition::Bool:    return "Bool";
+				case UIClipCondition::Trigger: return "Trigger";
+				default:                       return "Manual";
 			}
 		}
 
-		UITrackCondition UIAnimationSerializer::StrToCondition(std::string_view s)
+		UIClipCondition UIAnimationSerializer::StrToCondition(std::string_view s)
 		{
-			if (s == "Bool")    return UITrackCondition::Bool;
-			if (s == "Trigger") return UITrackCondition::Trigger;
-			return UITrackCondition::Default;
+			if (s == "Bool")    return UIClipCondition::Bool;
+			if (s == "Trigger") return UIClipCondition::Trigger;
+			return UIClipCondition::Manual;
+		}
+
+		const char* UIAnimationSerializer::FinishModeToStr(UIAnimationFinishMode m)
+		{
+			switch (m)
+			{
+				case UIAnimationFinishMode::Restore: return "Restore";
+				default:                              return "Hold";
+			}
+		}
+
+		UIAnimationFinishMode UIAnimationSerializer::StrToFinishMode(std::string_view s)
+		{
+			if (s == "Restore") return UIAnimationFinishMode::Restore;
+			return UIAnimationFinishMode::Hold;
 		}
 
 		// ---- Keyframe -------------------------------------------------------
@@ -145,77 +163,217 @@ namespace aq
 			return t;
 		}
 
-		// ---- UIClipTrack ----------------------------------------------------
-
-		JV UIAnimationSerializer::SaveClipTrack(const UIClipTrack& track)
-		{
-			JV j = JV::MakeObject();
-			j.Set("name",              JV(track.name));
-			j.Set("condition",         JV(std::string(ConditionToStr(track.condition))));
-			j.Set("conditionParam",    JV(track.conditionParam));
-			j.Set("loopFrom",          JV(static_cast<double>(track.loopFrom)));
-			j.Set("loopSkipFirst",     JV(track.loopSkipFirst));
-			j.Set("restoreOnComplete", JV(track.restoreOnComplete));
-			JV tracks = JV::MakeArray();
-			for (const auto& t : track.tracks)
-				tracks.PushBack(SavePropTrack(t));
-			j.Set("tracks", std::move(tracks));
-			return j;
-		}
-
-		UIClipTrack UIAnimationSerializer::LoadClipTrack(const JV& json)
-		{
-			UIClipTrack ct;
-			ct.name              = json["name"].AsString();
-			ct.condition         = StrToCondition(json["condition"].AsString());
-			ct.conditionParam    = json["conditionParam"].AsString();
-			ct.loopFrom          = json["loopFrom"].AsFloat(-1.f);
-			ct.loopSkipFirst     = json["loopSkipFirst"].AsBool();
-			ct.restoreOnComplete = json["restoreOnComplete"].AsBool();
-			const auto& tracks = json["tracks"];
-			if (tracks.IsArray())
-			{
-				for (size_t i = 0; i < tracks.Size(); ++i)
-					ct.tracks.push_back(LoadPropTrack(tracks[i]));
-			}
-			return ct;
-		}
-
-		// ---- UIAnimationClip ------------------------------------------------
+		// ---- UIAnimationClip (設計書 §4.4) -----------------------------------
 
 		JV UIAnimationSerializer::SaveClip(const UIAnimationClip& clip)
 		{
 			JV j = JV::MakeObject();
-			j.Set("name",     JV(clip.name));
-			j.Set("duration", JV(static_cast<double>(clip.duration)));
-			JV cts = JV::MakeArray();
-			for (const auto& ct : clip.clipTracks)
-				cts.PushBack(SaveClipTrack(ct));
-			j.Set("clipTracks", std::move(cts));
+			j.Set("name", JV(clip.name));
+			if (!clip.groupName.empty())
+				j.Set("group", JV(clip.groupName));
+			j.Set("duration",  JV(static_cast<double>(clip.duration)));
+			j.Set("condition", JV(std::string(ConditionToStr(clip.condition))));
+			if (clip.condition != UIClipCondition::Manual && !clip.conditionParamName.empty())
+				j.Set("conditionParam", JV(clip.conditionParamName));
+			if (clip.loopFrom >= 0.f)
+				j.Set("loopFrom", JV(static_cast<double>(clip.loopFrom)));
+			j.Set("finish", JV(std::string(FinishModeToStr(clip.finish))));
+
+			JV tracks = JV::MakeArray();
+			for (const auto& t : clip.tracks)
+				tracks.PushBack(SavePropTrack(t));
+			j.Set("tracks", std::move(tracks));
 			return j;
 		}
 
 		UIAnimationClip UIAnimationSerializer::LoadClip(const JV& json)
 		{
 			UIAnimationClip clip;
-			clip.name     = json["name"].AsString();
-			clip.duration = json["duration"].AsFloat();
-			const auto& cts = json["clipTracks"];
-			if (cts.IsArray())
+			clip.name               = json["name"].AsString();
+			clip.groupName          = json["group"].AsString();
+			clip.duration           = json["duration"].AsFloat();
+			clip.condition          = StrToCondition(json["condition"].AsString());
+			clip.conditionParamName = json["conditionParam"].AsString();
+			clip.loopFrom           = json["loopFrom"].AsFloat(-1.f);
+			clip.finish             = StrToFinishMode(json["finish"].AsString());
+
+			// group / conditionParam はロード時にハッシュ化する (設計書 §4.3)
+			clip.group          = clip.groupName.empty() ? aqHash32(clip.name.c_str()) : aqHash32(clip.groupName.c_str());
+			clip.conditionParam = clip.conditionParamName.empty() ? 0u : aqHash32(clip.conditionParamName.c_str());
+
+			const auto& tracks = json["tracks"];
+			if (tracks.IsArray())
 			{
-				for (size_t i = 0; i < cts.Size(); ++i)
-					clip.clipTracks.push_back(LoadClipTrack(cts[i]));
+				for (size_t i = 0; i < tracks.Size(); ++i)
+					clip.tracks.push_back(LoadPropTrack(tracks[i]));
 			}
 			return clip;
 		}
 
-		// ---- UIAnimationComponent 全体 --------------------------------------
+		// ---- authoring 検証 (設計書 §4.5) -------------------------------------
+
+		bool UIAnimationSerializer::ValidateDetailed(const std::vector<UIAnimationClip>& clips, std::vector<ValidationError>& errors)
+		{
+			errors.clear();
+			const size_t clipCount = clips.size();
+
+			for (size_t i = 0; i < clipCount; ++i)
+			{
+				const UIAnimationClip& clip = clips[i];
+
+				// クリップ名は非空、同一コンポーネント内で重複なし (先勝ちで後発を違反にする)
+				if (clip.name.empty())
+				{
+					errors.push_back({ i, "クリップ名が空です" });
+				}
+				else
+				{
+					for (size_t j = 0; j < i; ++j)
+					{
+						if (clips[j].name == clip.name)
+						{
+							errors.push_back({ i, "クリップ名が重複しています: '" + clip.name + "'" });
+							break;
+						}
+					}
+				}
+
+				// Bool / Trigger の conditionParam は非空
+				if (clip.condition != UIClipCondition::Manual && clip.conditionParamName.empty())
+					errors.push_back({ i, "クリップ '" + clip.name + "' の conditionParam が空です" });
+
+				// duration > 0
+				if (!(clip.duration > 0.f))
+					errors.push_back({ i, "クリップ '" + clip.name + "' の duration が 0 以下です" });
+
+				// 0 <= loopFrom < duration (loopFrom == -1 はループなしなので対象外)
+				if (clip.loopFrom >= 0.f && clip.loopFrom >= clip.duration)
+					errors.push_back({ i, "クリップ '" + clip.name + "' の loopFrom が duration の範囲外です" });
+
+				// 同一 Clip 内で同じ property の Track は 1 本
+				for (size_t a = 0; a < clip.tracks.size(); ++a)
+				{
+					for (size_t b = a + 1; b < clip.tracks.size(); ++b)
+					{
+						if (clip.tracks[a].property == clip.tracks[b].property)
+						{
+							errors.push_back({ i, "クリップ '" + clip.name + "' 内でプロパティ '"
+								+ PropertyToStr(clip.tracks[a].property) + "' の Track が重複しています" });
+							break;
+						}
+					}
+				}
+
+				// Exit グループの Manual クリップに loopFrom >= 0 を許さない (画面遷移が止まるため)
+				if (clip.condition == UIClipCondition::Manual && clip.group == kUIAnimGroupExit && clip.loopFrom >= 0.f)
+					errors.push_back({ i, "クリップ '" + clip.name + "' は Exit グループなのにループ設定 (loopFrom >= 0) です" });
+			}
+
+			// aqHash32() の結果が 0、または同一コンポーネント内で別文字列が同じハッシュ。
+			// group と conditionParam は別の照合先 (Play / SetCondition・Trigger) なので、別々に集計する
+			{
+				std::unordered_map<uint32_t, std::string> groupLabelByHash;
+				std::unordered_map<uint32_t, std::string> paramLabelByHash;
+
+				for (size_t i = 0; i < clipCount; ++i)
+				{
+					const UIAnimationClip& clip = clips[i];
+					const std::string groupLabel = clip.groupName.empty() ? clip.name : clip.groupName;
+
+					if (clip.group == 0u)
+					{
+						errors.push_back({ i, "クリップ '" + clip.name + "' の group ハッシュが 0 です (未解決)" });
+					}
+					else
+					{
+						auto it = groupLabelByHash.find(clip.group);
+						if (it == groupLabelByHash.end())
+							groupLabelByHash.emplace(clip.group, groupLabel);
+						else if (it->second != groupLabel)
+							errors.push_back({ i, "クリップ '" + clip.name + "' の group '" + groupLabel
+								+ "' が '" + it->second + "' と CRC32 衝突しています" });
+					}
+
+					if (clip.condition != UIClipCondition::Manual && !clip.conditionParamName.empty())
+					{
+						if (clip.conditionParam == 0u)
+						{
+							errors.push_back({ i, "クリップ '" + clip.name + "' の conditionParam ハッシュが 0 です (未解決)" });
+						}
+						else
+						{
+							auto it = paramLabelByHash.find(clip.conditionParam);
+							if (it == paramLabelByHash.end())
+								paramLabelByHash.emplace(clip.conditionParam, clip.conditionParamName);
+							else if (it->second != clip.conditionParamName)
+								errors.push_back({ i, "クリップ '" + clip.name + "' の conditionParam '" + clip.conditionParamName
+									+ "' が '" + it->second + "' と CRC32 衝突しています" });
+						}
+					}
+				}
+			}
+
+			// 同じ起動単位 (同 group の Manual 同士 / 同 param の Bool 同士 / 同 param の Trigger 同士) で
+			// 同じ property を使うクリップは 1 本 (§6.2 の serial 競合を作らないため)
+			{
+				struct UsedProperty
+				{
+					UIClipCondition    condition;
+					uint32_t           id; // Manual = group, Bool/Trigger = conditionParam
+					UIAnimatedProperty property;
+					size_t             ownerIndex;
+				};
+				std::vector<UsedProperty> used;
+
+				for (size_t i = 0; i < clipCount; ++i)
+				{
+					const UIAnimationClip& clip = clips[i];
+					const uint32_t id = (clip.condition == UIClipCondition::Manual) ? clip.group : clip.conditionParam;
+
+					for (const auto& track : clip.tracks)
+					{
+						bool conflict = false;
+						for (const auto& u : used)
+						{
+							if (u.condition == clip.condition && u.id == id && u.property == track.property)
+							{
+								errors.push_back({ i, "クリップ '" + clip.name + "' はクリップ index " + std::to_string(u.ownerIndex)
+									+ " と同じ起動単位でプロパティ '" + PropertyToStr(track.property) + "' が重複しています" });
+								conflict = true;
+								break;
+							}
+						}
+						if (!conflict)
+							used.push_back({ clip.condition, id, track.property, i });
+					}
+				}
+			}
+
+			std::stable_sort(errors.begin(), errors.end(),
+				[](const ValidationError& a, const ValidationError& b) { return a.clipIndex < b.clipIndex; });
+
+			return errors.empty();
+		}
+
+		bool UIAnimationSerializer::Validate(const std::vector<UIAnimationClip>& clips, std::vector<std::string>& errors)
+		{
+			std::vector<ValidationError> detailed;
+			const bool ok = ValidateDetailed(clips, detailed);
+
+			errors.clear();
+			errors.reserve(detailed.size());
+			for (const auto& e : detailed)
+				errors.push_back(e.message);
+			return ok;
+		}
+
+		// ---- UIAnimationComponent 全体 ----------------------------------------
 
 		JV UIAnimationSerializer::SaveAll(const UIAnimationComponent& comp)
 		{
 			JV j = JV::MakeObject();
 			JV clips = JV::MakeArray();
-			for (const auto& [name, clip] : comp.clips)
+			for (const auto& clip : comp.GetClips())
 				clips.PushBack(SaveClip(clip));
 			j.Set("clips", std::move(clips));
 			return j;
@@ -223,14 +381,54 @@ namespace aq
 
 		void UIAnimationSerializer::LoadAll(const JV& json, UIAnimationComponent& comp)
 		{
-			const auto& clips = json["clips"];
-			if (!clips.IsArray()) return;
-			for (size_t i = 0; i < clips.Size(); ++i)
+			std::vector<UIAnimationClip> clips;
+			const auto& clipsJson = json["clips"];
+			if (clipsJson.IsArray())
 			{
-				UIAnimationClip clip = LoadClip(clips[i]);
-				if (!clip.name.empty())
-					comp.clips[clip.name] = std::move(clip);
+				clips.reserve(clipsJson.Size());
+				for (size_t i = 0; i < clipsJson.Size(); ++i)
+					clips.push_back(LoadClip(clipsJson[i]));
 			}
+
+			// キーフレーム時刻を duration へ clamp する (設計書 §4.5。エラー扱いにはしない)
+			for (auto& clip : clips)
+			{
+				for (auto& track : clip.tracks)
+				{
+					for (auto& kf : track.keyframes)
+					{
+						if (kf.time > clip.duration)
+						{
+							EnginePrintf("[UIAnim] clip '%s': keyframe time %.3f clamped to duration %.3f\n",
+								clip.name.c_str(), kf.time, clip.duration);
+							kf.time = clip.duration;
+						}
+					}
+				}
+			}
+
+			// 検証違反のクリップは警告して捨てる
+			std::vector<ValidationError> errors;
+			ValidateDetailed(clips, errors);
+
+			std::vector<bool> invalid(clips.size(), false);
+			for (const auto& e : errors)
+			{
+				if (e.clipIndex >= invalid.size()) continue;
+				if (!invalid[e.clipIndex])
+					EnginePrintf("[UIAnim] clip discarded: %s\n", e.message.c_str());
+				invalid[e.clipIndex] = true;
+			}
+
+			std::vector<UIAnimationClip> valid;
+			valid.reserve(clips.size());
+			for (size_t i = 0; i < clips.size(); ++i)
+			{
+				if (!invalid[i])
+					valid.push_back(std::move(clips[i]));
+			}
+
+			comp.ReplaceAllClips(std::move(valid));
 		}
 
 	} // namespace ui

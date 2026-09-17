@@ -1645,9 +1645,6 @@
     <ClInclude Include="UI\Animation\UIAnimationTrack.h">
       <Filter>UI\Animation</Filter>
     </ClInclude>
-    <ClInclude Include="UI\Animation\UIClipTrack.h">
-      <Filter>UI\Animation</Filter>
-    </ClInclude>
     <ClInclude Include="UI\Animation\UIAnimationClip.h">
       <Filter>UI\Animation</Filter>
     </ClInclude>

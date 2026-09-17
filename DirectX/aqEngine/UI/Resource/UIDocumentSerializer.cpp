@@ -212,12 +212,25 @@ namespace aq
 					comps.Set("transform",  SerializeTransform(t));
 				if (auto* c = obj->GetComponent<UICanvasComponent>())
 					comps.Set("canvas",     SerializeCanvas(c));
-				if (auto* img = obj->GetComponent<UIImageComponent>())
+
+				// 描画コンポーネントは 1 つまで (設計書 §2.1)。複数持つノードは
+				// Image → NineSlice → CircleGauge の順で先頭 1 つだけ保存する
+				auto* img = obj->GetComponent<UIImageComponent>();
+				auto* ns  = obj->GetComponent<UINineSliceComponent>();
+				auto* cg  = obj->GetComponent<UICircleGaugeComponent>();
+				const int renderComponentCount = (img ? 1 : 0) + (ns ? 1 : 0) + (cg ? 1 : 0);
+				if (renderComponentCount > 1)
+				{
+					EnginePrintf("[UIDocument] node '%s': has multiple render components; only the first is saved\n",
+					             std::string(obj->GetName()).c_str());
+				}
+				if (img)
 					comps.Set("image",      SerializeImage(img));
-				if (auto* ns = obj->GetComponent<UINineSliceComponent>())
+				else if (ns)
 					comps.Set("nineSlice",  SerializeNineSlice(ns));
-				if (auto* cg = obj->GetComponent<UICircleGaugeComponent>())
+				else if (cg)
 					comps.Set("circleGauge", SerializeCircleGauge(cg));
+
 				if (auto* btn = obj->GetComponent<UIButtonComponent>())
 					comps.Set("button",     SerializeButton(btn));
 				if (auto* txt = obj->GetComponent<UITextComponent>())
@@ -228,7 +241,7 @@ namespace aq
 
 				if (auto* anim = obj->GetComponent<UIAnimationComponent>())
 				{
-					if (!anim->clips.empty())
+					if (!anim->GetClips().empty())
 						node.Set("animation", UIAnimationSerializer::SaveAll(*anim));
 				}
 

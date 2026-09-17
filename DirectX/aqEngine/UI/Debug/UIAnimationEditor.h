@@ -13,14 +13,14 @@ namespace aq
 	namespace ui
 	{
 		class UIObject;
-		class UIAnimationClip;
-		struct UIClipTrack;
+		struct UIAnimationClip;
 		struct UIAnimationTrack;
 
 		// ImGui ベースの UIAnimation Timeline エディタ。
 		// DebugUI::Get().Register() で登録するとメニューから開ける。
 		// 対象 UIObject は UIEditorSession の選択(UI Editor の Hierarchy)を参照するだけで、
 		// 独自の Object Picker や保存先は持たない。
+		// クリップは Clip -> Track -> Keyframe の 3 階層 (ClipTrack は廃止済み)。
 		class UIAnimationEditor : public IDebugRenderable
 		{
 		public:
@@ -31,13 +31,13 @@ namespace aq
 		private:
 			// ---- Left panel ----
 			void DrawClipPanel(UIObject* obj);
-			void DrawClipTrackTree(UIAnimationClip& clip);
+			void DrawTrackList(UIAnimationClip& clip);
 
 			// ---- Timeline (right panel) ----
 			void DrawTimeline(UIObject* obj, UIAnimationClip& clip);
 			void DrawRuler(ImDrawList* dl, float ox, float oy, float w, float duration);
 			void DrawTrackRow(ImDrawList* dl, UIAnimationClip& clip,
-			                  int ctIdx, int ptIdx,
+			                  int trackIdx,
 			                  float ox, float rowY, float rowH, float duration);
 
 			// ---- Bottom panels ----
@@ -57,10 +57,11 @@ namespace aq
 			bool           windowPinned_       = false;
 			UIObjectHandle prevTargetHandle_;   // UIEditorSession の選択変化検出用
 
-			// 選択
-			std::string    selectedClip_;
-			int            selClipTrackIdx_    = -1;
-			int            selPropTrackIdx_    = -1;
+			// 選択 (名前ではなくインデックス)。selClipIdx_ が変わったときだけ
+			// clipNameBuf_ / clipParamBuf_ / clipGroupBuf_ を同期する (prevSelClipIdx_ で検出)
+			int            selClipIdx_         = -1;
+			int            prevSelClipIdx_     = -1;
+			int            selTrackIdx_        = -1;
 			int            selKeyframeIdx_     = -1;
 
 			// Timeline 表示
@@ -69,8 +70,7 @@ namespace aq
 
 			// Drag / context-menu state
 			bool           isDraggingKf_       = false;
-			int            dragKfCtIdx_        = -1;
-			int            dragKfPtIdx_        = -1;
+			int            dragKfTrackIdx_     = -1;
 			int            dragKfKiIdx_        = -1;
 			float          ctxClickTime_       = 0.f;
 
@@ -81,10 +81,11 @@ namespace aq
 			bool           hasSnapshot_        = false;
 			std::unordered_map<UIAnimatedProperty, float> snapshot_;
 
-			// 名前バッファ (ImGui InputText 用)
+			// 選択中クリップの Name / Param / Group 用バッファ (ImGui InputText 用)。
+			// 全トラック共有の static バッファは持たない
 			char           clipNameBuf_[64]    = {};
-			char           ctNameBuf_[64]      = {};
-			char           condParamBuf_[64]   = {};
+			char           clipParamBuf_[64]   = {};
+			char           clipGroupBuf_[64]   = {};
 		};
 
 	} // namespace ui

@@ -1,12 +1,12 @@
 # UIアニメーション統合設計
 
-> 対象コミット: 81c36e3 / 最終更新: 2026-09-17
+> 対象コミット: b88b5fe(P0)/ 最終更新: 2026-09-17
 
 UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定できる」状態にする。
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
 `Clip → Track → Keyframe` の 3 階層へ)だけを対象に初版を書き、
 2026-09-17 の 5 回のレビューで **プロパティ競合規則・状態遷移・エディタ統合・画面遷移** まで
-範囲を広げた。P0 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P1 以降は未着手。
+範囲を広げた。P0 / P1 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P2 以降は未着手。
 
 本書の構成は実施順に並べてある。
 
@@ -689,14 +689,48 @@ Text Style: Assets/Styles/UI.textstyle.json  [Edit]
 - `UIAnimationTrack::Apply` / `ReadFrom` を「持っている 1 つ」へ統一
 - `.vcxproj` の更新
 
+P1 着手時に確定した補足(2026-09-17)
+
+- **ランタイムは暫定版。** 本命は P2 で書くが、P1 の間もエンジンはビルド・動作する必要がある。
+  `UIAnimationComponent::Update()` は旧ロジックを新構造へ写す(クリップ単位で条件評価・ループ・完了。
+  各クリップが自分の `duration` を使う。`finish == Restore` は起動時スナップショットへ戻す。
+  レイヤー / serial / 基準値は持たない)。公開 API は §5.2 の署名にし、`runtimes_` は §5.1 の
+  並列 vector と再構築契約で持つ(`activationSerial` は 0 のまま)。`conditions_` のキーは `uint32_t`
+- **Animation Editor は 3 階層へ最小限追従させる。** P3 で UI Editor に統合するが、P2 の評価に
+  エディタが要る。ClipTrack の層を消し、condition / group / loopFrom / finish をクリップ側の UI に出す。
+  選択はインデックス(`selClipIdx_` / `selTrackIdx_` / `selKeyframeIdx_`)。`selClipTrackIdx_` /
+  `ctNameBuf_` / `condParamBuf_` の共有バッファは削除する。見た目や配置は変えない。
+  condition / group の変更は必ず `SetClipCondition()` / `SetClipGroup()` を通す
+- **§4.5 の検証は `UIAnimationSerializer::Validate()` に置く**(新規ファイルは作らない)。
+  `static bool Validate(const std::vector<UIAnimationClip>& clips, std::vector<std::string>& errors)`。
+  `LoadAll()` は全クリップを読んでから `Validate()` にかけ、違反したクリップを捨てて残りを
+  `ReplaceAllClips()` で渡す。エディタからは P3 で呼ぶ。`Exit` グループの判定は `aqHash32("Exit")`
+  との比較(§8.1 のグループ名を `UIAnimationClip.h` に定数として置く: `kUIAnimGroupEnter` / `kUIAnimGroupExit`)
+- **描画コンポーネント排他の判定方法。** `IUIComponent` に仮想関数は足さない。`UIObject.h` に
+  `template<class T> inline constexpr bool kIsUIRenderComponent = false;` を置き、Image / NineSlice /
+  CircleGauge を前方宣言して特殊化で `true` にする。`UIObject::HasRenderComponent()`(非テンプレート、
+  `UIObject.cpp` で 3 種を見る)を足し、`AddComponent<T>()` は `if constexpr (kIsUIRenderComponent<T>)`
+  でデバッグビルドの `assert(!HasRenderComponent())` を通す。ローダ・シリアライザ・`+ Component` も
+  `HasRenderComponent()` で判定する
+- **警告は `EnginePrintf()`** で `[UIAnim]` / `[UIDocument]` のタグを付けて出す(エンジンに他のログ手段が無い)
+
 評価
 
-- [ ] `groupName` が空のとき `group == aqHash32(name)` になる
-- [ ] `conditionParam` が空の Bool クリップをロードすると警告が出て捨てられる
-- [ ] 同一 Clip 内の `property` 重複、同一 group 内の `property` 重複が検証で止まる
-- [ ] `Game/Assets/UI/` 配下に描画コンポーネントを 2 種以上持つノードが 0 件
-- [ ] 手書き JSON で 2 種以上を付けたノードをロードすると 2 つ目が拒否され、警告が出る
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない
+- [x] `groupName` が空のとき `group == aqHash32(name)` になる(`LoadClip` / `SetClipGroup` / 改名時。エディタは `(= name)` と表示。Mac 2026-09-17)
+- [x] `conditionParam` が空の Bool クリップをロードすると警告が出て捨てられる(`[UIAnim] clip discarded: ...` を確認)
+- [x] 同一 Clip 内の `property` 重複、同一 group 内の `property` 重複が検証で止まる(後発側が捨てられる)
+- [x] `Game/Assets/UI/` 配下に描画コンポーネントを 2 種以上持つノードが 0 件(63 ノード走査、ref 展開後も 0 件)
+- [x] 手書き JSON で 2 種以上を付けたノードをロードすると 2 つ目が拒否され、警告が出る(`[UIDocument] node 'DupRender': ... rejected`)
+- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題。Mac の Metal は Debug / Release とも警告増なし。`UIAnimationClip` の struct/class 不一致警告が 1 件減った)
+
+P1 の実装で決めたこと(設計書に無かった判断)
+
+- Clip 名の重複は **先に出現した方を残し、後発を違反にする**。同じ起動単位の `property` 重複も後発側が違反
+- ハッシュ衝突の検証は `group` と `conditionParam` を **別の名前空間**として集計する(照合先が `Play()` と `SetCondition()` / `Trigger()` で別)
+- キーフレーム時刻が `duration` を超えるものは検証エラーにせず、`LoadAll()` が警告して clamp する
+- `Validate()` に加えて、違反クリップの index を返す `ValidateDetailed()` を用意した(`LoadAll` が捨てる対象を決めるのに使う)
+- 暫定 `Update()` は非ループの Bool クリップが真の間 0 秒から再スタートする旧不具合(§1.4)を **意図的に残している**。P2 のレイヤー評価で消す
+- `UIDocumentSerializer` の `"animation"` 出力条件は `GetClips().empty()` に追従した
 
 ### P2: レイヤー評価と基本自動フック(第 2 部)
 
@@ -781,4 +815,5 @@ Text Style: Assets/Styles/UI.textstyle.json  [Edit]
 
 - Exit 待機のタイムアウト既定値(§9.2 は 2.0 秒と仮置き)
 - `Save As` は P0 で作った(ポップアップでパス入力)。使われなければ後で外す
+- P1 のエディタ追従で Cond / Finish は enum 名(Manual / Bool / Trigger、Hold / Restore)のまま出している。§10.3 の「Play when」「Keep / Return」への言い換えは P3
 - `priority`(§6.2)を足す条件。serial で足りなくなった実例が出るまで足さない

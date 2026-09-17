@@ -139,6 +139,13 @@ namespace aq
 
 			void ApplyImage(UIObject& obj, const util::JsonValue& j)
 			{
+				if (!obj.HasComponent<UIImageComponent>() && obj.HasRenderComponent())
+				{
+					EnginePrintf("[UIDocument] node '%s': render component 'image' rejected (already has another render component)\n",
+					             std::string(obj.GetName()).c_str());
+					return;
+				}
+
 				auto* img = obj.HasComponent<UIImageComponent>()
 				            ? obj.GetComponent<UIImageComponent>()
 				            : obj.AddComponent<UIImageComponent>();
@@ -169,6 +176,13 @@ namespace aq
 
 			void ApplyNineSlice(UIObject& obj, const util::JsonValue& j)
 			{
+				if (!obj.HasComponent<UINineSliceComponent>() && obj.HasRenderComponent())
+				{
+					EnginePrintf("[UIDocument] node '%s': render component 'nineSlice' rejected (already has another render component)\n",
+					             std::string(obj.GetName()).c_str());
+					return;
+				}
+
 				auto* ns = obj.HasComponent<UINineSliceComponent>()
 				           ? obj.GetComponent<UINineSliceComponent>()
 				           : obj.AddComponent<UINineSliceComponent>();
@@ -202,6 +216,13 @@ namespace aq
 
 			void ApplyCircleGauge(UIObject& obj, const util::JsonValue& j)
 			{
+				if (!obj.HasComponent<UICircleGaugeComponent>() && obj.HasRenderComponent())
+				{
+					EnginePrintf("[UIDocument] node '%s': render component 'circleGauge' rejected (already has another render component)\n",
+					             std::string(obj.GetName()).c_str());
+					return;
+				}
+
 				auto* cg = obj.HasComponent<UICircleGaugeComponent>()
 				           ? obj.GetComponent<UICircleGaugeComponent>()
 				           : obj.AddComponent<UICircleGaugeComponent>();

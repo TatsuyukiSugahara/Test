@@ -718,7 +718,6 @@
     <ClInclude Include="UI\Rendering\UIBatchRenderer.h" />
     <ClInclude Include="UI\Animation\UIAnimatedProperty.h" />
     <ClInclude Include="UI\Animation\UIAnimationTrack.h" />
-    <ClInclude Include="UI\Animation\UIClipTrack.h" />
     <ClInclude Include="UI\Animation\UIAnimationClip.h" />
     <ClInclude Include="UI\Animation\UIAnimationSystem.h" />
     <ClInclude Include="UI\Resource\UIDocumentLoader.h" />

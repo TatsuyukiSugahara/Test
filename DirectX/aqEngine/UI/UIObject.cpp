@@ -1,5 +1,8 @@
 #include "aq.h"
 #include "UIObject.h"
+#include "Component/UIImageComponent.h"
+#include "Component/UINineSliceComponent.h"
+#include "Component/UICircleGaugeComponent.h"
 #include <cassert>
 
 namespace aq
@@ -10,6 +13,14 @@ namespace aq
 		{
 			// デストラクタは UIContext::DestroyObject() からのみ呼ばれる。
 			// UIContext が Unregister を管理するため、ここでは何もしない。
+		}
+
+
+		bool UIObject::HasRenderComponent() const
+		{
+			return HasComponent<UIImageComponent>()
+			       || HasComponent<UINineSliceComponent>()
+			       || HasComponent<UICircleGaugeComponent>();
 		}
 
 

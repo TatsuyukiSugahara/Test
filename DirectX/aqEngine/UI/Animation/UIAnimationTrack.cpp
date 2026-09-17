@@ -88,33 +88,33 @@ namespace aq
 					if (auto* t = obj->GetComponent<UITransformComponent>()) t->active = (v > 0.5f);
 					break;
 
-				// ---- Color (Image / NineSlice / CircleGauge 共通) ----
+				// ---- Color (Image / NineSlice / CircleGauge は排他。持っている 1 つに書く) ----
 				case UIAnimatedProperty::ColorR:
-					if (auto* c = obj->GetComponent<UIImageComponent>())      c->color.x = v;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>())  c->color.x = v;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.x = v;
+					if (auto* c = obj->GetComponent<UIImageComponent>())            c->color.x = v;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>())   c->color.x = v;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.x = v;
 					break;
 				case UIAnimatedProperty::ColorG:
-					if (auto* c = obj->GetComponent<UIImageComponent>())      c->color.y = v;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>())  c->color.y = v;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.y = v;
+					if (auto* c = obj->GetComponent<UIImageComponent>())            c->color.y = v;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>())   c->color.y = v;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.y = v;
 					break;
 				case UIAnimatedProperty::ColorB:
-					if (auto* c = obj->GetComponent<UIImageComponent>())      c->color.z = v;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>())  c->color.z = v;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.z = v;
+					if (auto* c = obj->GetComponent<UIImageComponent>())            c->color.z = v;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>())   c->color.z = v;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.z = v;
 					break;
 				case UIAnimatedProperty::ColorA:
-					if (auto* c = obj->GetComponent<UIImageComponent>())      c->color.w = v;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>())  c->color.w = v;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.w = v;
+					if (auto* c = obj->GetComponent<UIImageComponent>())            c->color.w = v;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>())   c->color.w = v;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->color.w = v;
 					break;
 
-				// ---- FillAmount ----
+				// ---- FillAmount (排他。持っている 1 つに書く) ----
 				case UIAnimatedProperty::FillAmount:
-					if (auto* c = obj->GetComponent<UIImageComponent>())       c->fillAmount = v;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>())   c->fillAmount = v;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->fillAmount = v;
+					if (auto* c = obj->GetComponent<UIImageComponent>())            c->fillAmount = v;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>())   c->fillAmount = v;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) c->fillAmount = v;
 					break;
 
 				// ---- NineSlice border ----
@@ -174,28 +174,28 @@ namespace aq
 					break;
 				case UIAnimatedProperty::ColorR:
 					if (auto* c = obj->GetComponent<UIImageComponent>()) return c->color.x;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.x;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.x;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.x;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.x;
 					break;
 				case UIAnimatedProperty::ColorG:
 					if (auto* c = obj->GetComponent<UIImageComponent>()) return c->color.y;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.y;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.y;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.y;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.y;
 					break;
 				case UIAnimatedProperty::ColorB:
 					if (auto* c = obj->GetComponent<UIImageComponent>()) return c->color.z;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.z;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.z;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.z;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.z;
 					break;
 				case UIAnimatedProperty::ColorA:
 					if (auto* c = obj->GetComponent<UIImageComponent>()) return c->color.w;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.w;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.w;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->color.w;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->color.w;
 					break;
 				case UIAnimatedProperty::FillAmount:
 					if (auto* c = obj->GetComponent<UIImageComponent>()) return c->fillAmount;
-					if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->fillAmount;
-					if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->fillAmount;
+					else if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->fillAmount;
+					else if (auto* c = obj->GetComponent<UICircleGaugeComponent>()) return c->fillAmount;
 					break;
 				case UIAnimatedProperty::NineSliceBorderLeft:
 					if (auto* c = obj->GetComponent<UINineSliceComponent>()) return c->border.left;

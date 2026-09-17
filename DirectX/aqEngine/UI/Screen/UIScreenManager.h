@@ -55,8 +55,12 @@ namespace aq
 
 			// ---- 更新 (Application::OnUpdate() から呼ぶ) ----
 
-			// 1. 全スタック画面のアニメーション更新
-			// 2. FlushPendingOps() (pending 処理 + 画面変化時に UIInputSystem::ClearState())
+			// 1. exiting_ でない画面だけ OnUpdate(dt)
+			// 2. UIAnimationSystem::Update()
+			// 3. Exit 待機中なら経過時間を進め、Exit グループの再生が終わるかタイムアウトしたら
+			//    ExitDone (破棄・次画面生成) を実行する
+			// 4. FlushPendingOps() (pending 処理 + 画面変化時に UIInputSystem::ClearState())
+			// 5. 画面変化があれば UIInputSystem::ClearState()
 			void Update(float dt);
 
 			// ---- スタックアクセス ----
@@ -71,14 +75,15 @@ namespace aq
 			std::string_view GetDocumentPath(std::string_view screenName) const;
 
 			// 先頭画面を同名で即時再生成する (エディタ用)。
-			// 内部で Replace(Top()->GetName()) と同じ pending op を積むだけ。
+			// 内部で Reload 種別の pending op を積むだけ。Replace とは異なり
+			// OnExit → OnDestroy → 破棄 → CreateScreen → OnCreate → OnEnter を同じ Flush で連続実行する。
 			// 画面遷移用の Exit 待機 (設計書 9 章) はこの経路を通さない。
 			void ReloadTopDocument();
 
 		private:
 			struct PendingOp
 			{
-				enum class Type { Push, Pop, Replace, Back } type;
+				enum class Type { Push, Pop, Replace, Back, Reload } type;
 				std::string screenName;
 			};
 
@@ -92,10 +97,25 @@ namespace aq
 			std::unique_ptr<UIScreen> CreateScreen(std::string_view name);
 			void InstantiateRoot(UIScreen& screen, std::string_view docPath); // JSON からルート UIObject を生成
 
+			// Pop/Replace の先頭画面に Exit 演出を開始する (§9.2)。呼び出し前にスタックが非空であること。
+			// Exit グループのクリップが無ければその場で CompleteExit() まで進めて true (完了) を返す。
+			// クリップがあれば exitWaiting_ に入って false (待機) を返す。
+			bool BeginExit(const PendingOp& op);
+
+			// Exit 待機を終え、先頭画面を破棄して次画面 (Pop: 新しい先頭 / Replace: 新規生成) へ進める (§9.2)
+			void CompleteExit();
+
 			std::vector<std::unique_ptr<UIScreen>>          stack_;
 			std::vector<PendingOp>                          pendingOps_;
 			std::unordered_map<std::string, ScreenEntry>    registry_;
 			bool                                            backNavigationEnabled_ = false;
+
+			// ---- Exit 待機 (§9.2) ----
+			bool      exitWaiting_ = false; // 先頭画面が Exit グループの再生待ち
+			float     exitElapsed_ = 0.f;   // 待機開始からの経過時間
+			PendingOp exitOp_;              // 待機完了後に実行する Pop / Replace
+
+			static constexpr float kExitTimeoutSec = 2.0f; // Exit 待機のタイムアウト (§13)
 		};
 
 	} // namespace ui

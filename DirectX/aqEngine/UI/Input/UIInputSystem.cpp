@@ -93,6 +93,7 @@ namespace aq
 
 			UIScreen* target = GetFocusTargetScreen(screens);
 			if (!target) return;
+			if (target->IsExiting()) return; // Exit 待機中は Submit/Cancel/方向キーを送らない (§9.2)
 
 			// Submit
 			if (IsSubmit() && m_focusedButton.IsValid())
@@ -124,6 +125,14 @@ namespace aq
 			{
 				UIScreen* screen = screens.GetScreen(i);
 				if (!screen || !screen->GetRoot()) continue;
+
+				// Exit 待機中の画面はヒット判定を行わない (§9.2)。ただし blocksRaycast は従来どおり効かせ、
+				// 下の画面へもヒットを通さない
+				if (screen->IsExiting())
+				{
+					if (screen->blocksRaycast) break;
+					continue;
+				}
 
 				math::Vector2 canvasPos = clientPos;
 				if (auto* canvas = screen->GetRoot()->GetComponent<UICanvasComponent>())

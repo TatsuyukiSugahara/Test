@@ -6,7 +6,7 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
 `Clip → Track → Keyframe` の 3 階層へ)だけを対象に初版を書き、
 2026-09-17 の 5 回のレビューで **プロパティ競合規則・状態遷移・エディタ統合・画面遷移** まで
-範囲を広げた。P0 / P1 / P2 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P2B 以降は未着手。
+範囲を広げた。P0 / P1 / P2 / P2B は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P3 は未着手。
 
 本書の構成は実施順に並べてある。
 
@@ -811,16 +811,50 @@ P2 の実装で決めたこと・直したこと
 - Exit グループが無い画面は即時遷移
 - `ReloadTopDocument()` が状態機械を通らないことを確認
 
+P2B 着手時に確定した補足(2026-09-17)
+
+- **状態は `UIScreenManager` のメンバ 3 つ。** `bool exitWaiting_`、`float exitElapsed_`、`PendingOp exitOp_`(待機中の Pop / Replace)。
+  待機対象は常に先頭画面(Pop / Replace は先頭にしか作用しない)
+- **`PendingOp::Type` に `Reload` を足す。** `ReloadTopDocument()` は `Replace` ではなく `Reload` を積み、
+  従来どおり同じ Flush で `OnExit → OnDestroy → 破棄 → 生成 → OnCreate → OnEnter → Enter 起動` を行う(Exit 待機を通さない)
+- **`FlushPendingOps()` の流れ。** `exitWaiting_` の間は何もしない(op は `pendingOps_` に残す)。Pop / Replace を処理するとき:
+  1. `ExitStart`: `screen->exiting_ = true` → `UIContext::Get().GetInputSystem().ClearState()`(Hover / Pressed / Focused を落とし、
+     Bool 条件を false にする)→ `OnExit()` → `UIAnimationSystem::PlayGroup(root, kUIAnimGroupExit)`
+  2. `IsAnimationGroupPlaying(root, kUIAnimGroupExit)` が false(Exit クリップ無し)なら、その場で `ExitDone` へ
+  3. true なら `exitWaiting_ = true`、`exitOp_` に op を保存し、**残りの op を `pendingOps_` の先頭へ戻して** Flush を抜ける
+- **`ExitDone`**: `OnDestroy()` → ルート破棄 → `stack_.pop_back()` → Pop なら新しい先頭に `OnResume()`、Replace なら次画面を
+  `CreateScreen → OnCreate → OnEnter → Enter 起動`。そのあと同じフレームで `FlushPendingOps()` を続け、待機中に積まれた op を順に処理する
+- **`Update()` の流れ。** (1) `exiting_` でない画面だけ `OnUpdate(dt)`(2) `UIAnimationSystem::Update`(3) `exitWaiting_` なら
+  `exitElapsed_ += dt` し、Exit グループが止まったか `exitElapsed_ >= kExitTimeoutSec` なら `ExitDone`(タイムアウト時は
+  `EnginePrintf("[UIScreen] ...")` で警告)(4) `FlushPendingOps()`(5) 画面変化があれば `ClearState()`
+- **タイムアウトは `static constexpr float kExitTimeoutSec = 2.0f;`**(`UIScreenManager.h`)。§13 の未決を 2.0 秒で確定する
+- **`UIScreen` に `bool IsExiting() const`** を足す(private `exiting_`、`UIScreenManager` が friend で書く)。
+  `UIInputSystem::HitTest()` は `IsExiting()` の画面ではヒットを返さず(`blocksRaycast` なら走査を止める)、
+  `UpdateFocus()` は対象画面が `IsExiting()` なら何もしない。これで Exit 中の Hover / Click が割り込まない
+- **`Push` は待機の対象外**(Enter 側の演出は Push 先が持つ)。`Back` は従来どおり `OnBack()` の結果で Pop に変換され、その Pop が状態機械を通る
+
 評価
 
-- [ ] Exit クリップのある画面を Pop → Exit が最後まで描画されてから破棄される
-- [ ] Exit クリップの無い画面を Pop → 従来と同じフレームで破棄される
-- [ ] Exit 中にマウスを動かしても Hover が割り込まない
-- [ ] Exit 中に画面の `OnUpdate()` が呼ばれない
-- [ ] Exit 中に Push を積む → Exit 完了後に順に処理される
-- [ ] ループする Exit クリップを置くと検証で止まる。検証を迂回した場合はタイムアウトで進む
-- [ ] クリックで遷移するボタンの Click 演出が見える
-- [ ] エディタの Reload に Exit 演出が挟まらない
+- [x] Exit クリップのある画面を Pop → Exit が最後まで描画されてから破棄される(タイトルの `Replace("Loading")` で 1.5 秒の
+  フェードを画素計測: +0.4s で alpha 0.69、+0.9s で 0.21、+1.8s で Loading。Mac 2026-09-17)
+- [x] Exit クリップの無い画面を Pop → 従来と同じフレームで破棄される(+0.3s で Loading)
+- [x] Exit 中にマウスを動かしても Hover が割り込まない(Exit 中にホバーしても Hover クリップの ColorB が出ない)
+- [x] Exit 中に画面の `OnUpdate()` が呼ばれない(コード確認: `exiting_` の画面はスキップ)
+- [x] Exit 中に Push を積む → Exit 完了後に順に処理される(コード確認: 待機中は Flush が op を残し、`CompleteExit()` 直後の
+  同フレームで残りを処理する)
+- [x] ループする Exit クリップを置くと検証で止まる(P1 の `Validate`)。検証を迂回した場合はタイムアウトで進む
+  (エディタで Loop を付けて Space → `[UIScreen] exit animation timed out (2.0s): 'AquaDashTitle'` が出て遷移)
+- [x] クリックで遷移するボタンの Click 演出が見える(コード確認: `FireClick` は callback より前に Trigger し、callback が積んだ
+  Replace は同フレームの `BeginExit` で Exit 待機に入るので画面が残る。Exit クリップが無い画面では従来どおり同フレームで消える。
+  ゲーム側にクリックで遷移するボタンがまだ無いため実測なし)
+- [x] エディタの Reload に Exit 演出が挟まらない(Exit クリップがある画面で Reload → +0.3s で白のまま)
+- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+
+P2B の実装で決めたこと
+
+- `BeginExit()` はスタック非空を呼び出し元が保証する。Exit 待機の開始も「画面変化あり」として扱い `ClearState()` を呼ぶ(冪等)
+- ゲーム側の状態機械(AquaDash の `TitleState`)は `Replace("Loading")` を積んだ直後に自分の状態も進める。UI の Exit 待機中も
+  ゲーム側はロードを始めるので、Loading 画面が出る頃にはロードが進んでいる(待機が体感を悪くしない)
 
 ### P3: 統合エディタ(第 3 部)
 
@@ -861,7 +895,7 @@ P2 の実装で決めたこと・直したこと
 
 ## 13. 決めていないこと
 
-- Exit 待機のタイムアウト既定値(§9.2 は 2.0 秒と仮置き)
+- Exit 待機のタイムアウトは 2.0 秒で確定(P2B、`kExitTimeoutSec`)。変える要求が出たら setter を足す
 - `Save As` は P0 で作った(ポップアップでパス入力)。使われなければ後で外す
 - P1 のエディタ追従で Cond / Finish は enum 名(Manual / Bool / Trigger、Hold / Restore)のまま出している。§10.3 の「Play when」「Keep / Return」への言い換えは P3
 - `priority`(§6.2)を足す条件。serial で足りなくなった実例が出るまで足さない

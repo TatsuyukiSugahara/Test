@@ -24,7 +24,8 @@ namespace aq
 			// OnEnter  : 表示開始のたびに呼ばれる。入場アニメ開始・フォーカス設定はここ。
 			// OnPause  : 上に別画面が積まれたとき。
 			// OnResume : 上の画面が閉じて戻ったとき。
-			// OnExit   : Pop/Replace で閉じ始めたとき。
+			// OnExit   : Pop/Replace で閉じ始めたとき。この後、Exit グループのアニメーション再生が
+			//            終わるまで OnUpdate() は呼ばれない (§9)。
 			// OnDestroy: 完全に破棄されたとき。
 			// OnBack   : 戻る操作。true を返すと処理済みとみなし Pop しない。
 			virtual void OnCreate()          {}
@@ -45,6 +46,9 @@ namespace aq
 			UIObject*        GetRoot()   const { return root_; }
 			std::string_view GetName()   const { return name_; }
 
+			// Exit グループの再生待ちで、破棄待機中かどうか (§9)
+			bool IsExiting() const { return exiting_; }
+
 			// ルート以下から名前で UIObject を検索 (再帰)
 			UIObjectHandle FindHandle(std::string_view name) const;
 
@@ -56,7 +60,8 @@ namespace aq
 			friend class UIScreenManager;
 
 			std::string name_;
-			UIObject*   root_ = nullptr; // UIContext が所有; UIScreen は非所有参照
+			UIObject*   root_    = nullptr; // UIContext が所有; UIScreen は非所有参照
+			bool        exiting_ = false;   // OnExit 済みで Exit グループの再生待ち (§9)
 		};
 
 	} // namespace ui

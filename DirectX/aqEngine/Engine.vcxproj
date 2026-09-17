@@ -670,6 +670,7 @@
     <ClInclude Include="UI\Debug\UIEditorDebugPanel.h" />
     <ClInclude Include="UI\Debug\TextStyleEditorPanel.h" />
     <ClInclude Include="UI\Debug\UIAnimationEditor.h" />
+    <ClInclude Include="UI\Debug\UIEditorSession.h" />
     <ClInclude Include="UI\Animation\UIAnimationSerializer.h" />
     <ClInclude Include="UI\Font\TextStyle.h" />
     <ClInclude Include="UI\Font\TextStyleCache.h" />

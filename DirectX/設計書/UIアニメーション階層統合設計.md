@@ -1,18 +1,40 @@
-# UIアニメーション 階層統合設計
+# UIアニメーション統合設計
 
-UI アニメーションのデータ構造を `Clip → ClipTrack → PropTrack → Keyframe` の 4 階層から
-`Clip → Track → Keyframe` の 3 階層へ畳む。2026-09-16 設計、実装未着手。
+> 対象コミット: 81c36e3 / 最終更新: 2026-09-17
 
-「UI の設定がやりづらい / 特にアニメーションが設定しづらい」への対応のうち、
-**データ構造そのものに手を入れる部分**だけをここに置く。
-エディタ UX の改善(プリセット、オートキー、自動フック)は本書の構造変更の上に乗るため、
-順序としてこちらが先になる(§5)。
+UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定できる」状態にする。
+2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
+`Clip → Track → Keyframe` の 3 階層へ)だけを対象に初版を書き、
+2026-09-17 の 5 回のレビューで **プロパティ競合規則・状態遷移・エディタ統合・画面遷移** まで
+範囲を広げた。P0 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P1 以降は未着手。
+
+本書の構成は実施順に並べてある。
+
+| 部 | フェーズ | 内容 |
+| --- | --- | --- |
+| 第 1 部 | P0 | 編集・保存基盤(共通選択 / 保存 / Reload / texturePath) |
+| 第 2 部 | P1 / P2 / P2B | データ構造・排他モデル / レイヤー評価と基本自動フック / Exit 待機遷移 |
+| 第 3 部 | P3 | 統合エディタ(Animation タブ / タイムライン / プレビュー) |
+| 後続 | — | プリセット / オートキー / ベクタトラック / Ease / 相対値 |
 
 ---
 
-## 0. 調査で分かったこと
+## 0. 目的と UX 原則
 
-### 0.1 ClipTrack は自前の長さを持っていない
+「UI の設定がやりづらい / 特にアニメーションが設定しづらい」への対応。
+以下を原則とし、以降の決定はすべてこれに従う。
+
+1. **入口は UI Editor 1 つ。** 選択は Hierarchy だけが持つ。別エディタを探させない
+2. **設定できるものは必ず動く。** 実装が無い選択肢はエディタに出さない(出すなら Disabled と理由)
+3. **内部用語を通常画面に出さない。** condition / conditionParam / ハッシュ / serial は Advanced とデバッグ表示だけ
+4. **挙動は決定的。** 暗黙の上書き順・後勝ちを作らない。競合は規則で解決する
+5. **1 UIObject の表示責務は 1 種類。** 複数の表示要素は子 UIObject に分ける
+
+---
+
+## 1. 調査で分かったこと
+
+### 1.1 ClipTrack は自前の長さを持っていない
 
 | 型 | 持っているもの |
 | --- | --- |
@@ -23,255 +45,740 @@ UI アニメーションのデータ構造を `Clip → ClipTrack → PropTrack 
 
 `UIClipTrack` に `duration` はなく、[UIAnimationComponent.cpp](../aqEngine/UI/Component/UIAnimationComponent.cpp) の
 `Update()` は全 ClipTrack を `currentClip_->duration` で評価している。
-結果、**同一クリップ内のイントロとホバーループが強制的に同じ秒数になる**。
+同一クリップ内のイントロとホバーループが強制的に同じ秒数になる。
 
-### 0.2 ClipTrack が存在する理由は「同時実行の受け皿」
+### 1.2 ClipTrack が存在する理由は「同時実行の受け皿」
 
-`currentClip_` は単数で、`Play()` は `runtimes_` を毎回クリアする。
-つまりクリップは同時に 1 本しか走らない。
-「出現アニメを流しつつ、ホバー中は光らせる」を書ける場所が他になく、
-その受け皿として Clip の内側にもう 1 層が必要だった。これが ClipTrack の正体。
+`currentClip_` は単数で、`Play()` は `runtimes_` を毎回クリアする。クリップは同時に 1 本しか走らない。
+「出現アニメを流しつつ、ホバー中は光らせる」の受け皿として Clip の内側にもう 1 層が要った。
+同時実行を Clip 側へ移せば、この層は役目を失う。
 
-同時実行の受け皿を Clip 側へ移せば、この層は役目を失う。
-
-### 0.3 移行対象が存在しない
+### 1.3 移行対象が存在しない
 
 - `UIAnimationComponent::Play()` / `TriggerTrack()` / `SetCondition()` の呼び出しはリポジトリ内に 0 件
 - `"animation"` セクションを持つ UI アセットも 0 件(`Game/Assets/UI/` 配下)
+- Image / NineSlice / CircleGauge を同じノードに 2 種以上付けたアセットも 0 件
 
 現在のゲーム UI の演出は [AquaDashScreens.cpp](../Game/Application/UI/AquaDashScreens.cpp) の
 `OnUpdate()` で `elapsed_` を自前で回す手書きで、アニメ機構は使われていない。
-**JSON 互換を壊すコストが 0 なのは今だけ**で、これが本書を先にやる根拠になる。
+**JSON 互換と UIObject モデルを変えるコストが 0 なのは今だけ**で、これが本書を先にやる根拠になる。
 
-### 0.4 その他、統合ついでに消える暗黙ルール
+### 1.4 統合で消す既存の不具合と暗黙ルール
 
-- クリップの完了判定を `condition == Default` のトラックだけが担っている。
-  Default トラックを作り忘れたクリップは永久に終わらない
-- エディタが `selClipTrackIdx_` / `selPropTrackIdx_` の二重インデックスで選択を持っている
+ランタイム([UIAnimationComponent.cpp](../aqEngine/UI/Component/UIAnimationComponent.cpp))
+
+- クリップの完了判定を `condition == Default` のトラックだけが担う。Default を作り忘れたクリップは永久に終わらない
+- 同一プロパティを複数トラックが動かすと `runtimes_` の順で後勝ち。Restore も他のトラックを見ずに書き戻す
+- Bool の判定が `finished` を見ないため、非ループの Bool トラックは条件が真の間 **0 秒から永久に再スタート**する。
+  そのたびに Snapshot を取り直すので Restore も意味を失う
+- Trigger は `finished` になると再発火できない(`finished` を戻す経路が `Play()` しかない)
+- Bool 解除時は時刻だけ戻し、値は戻さない
+- `loopSkipFirst` はヘッダ / シリアライザ / エディタのチェックボックスにあるが、ランタイムで一度も参照されない
+
+エディタ・保存([UIAnimationEditor.cpp](../aqEngine/UI/Debug/UIAnimationEditor.cpp) / [UIEditorDebugPanel.cpp](../aqEngine/UI/Debug/UIEditorDebugPanel.cpp))
+
+- Animation Editor の `Save` が選択オブジェクトのクリップを JSON の**ルートノード**に書く。子を選んで保存すると別ノードに付く
+- UI Editor と Animation Editor が別々の選択ハンドルと Object Picker と保存パスを持つ
+- `UIAnimationSerializer::LoadAll()` が既存クリップをクリアせず上書き追加する。削除済みクリップが残る
+- `texturePaths_` は UI Editor で Load Tex したときだけ埋まり、ドキュメントロード時のパスは引き継がれない。
+  **ロード直後に Save JSON すると全ノードの `texture` キーが落ちる**
+- NineSlice のテクスチャパスは `objId + 0x01000000` でキーをずらして Image との共存に備えている
+- UI Editor に Load は無い(Save JSON だけ)
+- エディタが `selClipTrackIdx_` / `selPropTrackIdx_` の二重インデックスで選択を持つ
+
+フレーム順と画面遷移([Application.cpp](../aqEngine/Core/Application.cpp) / [UIScreenManager.cpp](../aqEngine/UI/Screen/UIScreenManager.cpp))
+
+- 1 フレームの順は **入力更新 → 各画面 OnUpdate → UIAnimationSystem::Update → FlushPendingOps → CollectRenderItems**
+- `Pop` / `Replace` は `OnExit()` → `OnDestroy()` → ルート破棄を同じ Flush で連続して行う。Exit 演出を入れる場所が無い
+- クリック callback が `Pop()` を積むと同フレームの Flush でルートが消え、その後の描画収集は対象を持たない。
+  **クリック演出は 0 フレームも描画されない**
+- `Push` は Flush 内で `OnCreate()` → `OnEnter()` を呼ぶ。Flush はアニメ更新の後・描画収集の前なので、
+  Enter 演出を OnEnter 直後に起動しても最初のサンプルは次フレーム。**1 フレームだけ素の姿が描画される**
+- ゲーム側の画面は `OnEnter()` で子 UIObject を名前で探し、**生ポインタ**をメンバに持つ
+  ([AquaDashScreens.cpp](../Game/Application/UI/AquaDashScreens.cpp))。ルートだけ差し替えると全部ダングリングになる
+- 登録済みの `documentPath` は `UIScreenManager::ScreenEntry` の中で private。エディタから取れない
 
 ---
 
-## 1. 方式決定
+# 第 1 部: 編集・保存基盤
 
-### 1.1 Clip と ClipTrack を統合する
+## 2. UIObject モデル
 
-`UIClipTrack` を廃止し、条件・ループ・復帰設定を `UIAnimationClip` が直接持つ。
-`runtimes_` を **ClipTrack 単位から Clip 単位へ**変え、複数クリップの並走を許す。
+### 2.1 描画コンポーネントの排他
+
+> **UIObject の表示責務を 1 種類に限定し、プロパティ名と基準値を一意にする。
+> 複数の表示要素が必要な場合は子 UIObject へ分割する。**
+
+`UIImageComponent` / `UINineSliceComponent` / `UICircleGaugeComponent` は 1 UIObject に 1 つまで。
+`UITextComponent` / `UIButtonComponent` / `UICanvasComponent` は対象外(共存可)。
+
+これはアニメーション都合の変更ではなく **UIObject モデルの決定**である。
+現状はレンダラ([UIBatchRenderer.cpp](../aqEngine/UI/Rendering/UIBatchRenderer.cpp))が 3 種を独立に描画し、
+UI Editor も共存を前提にキーをずらしている。意図的に許していた共存を、§0 の原則 5 で閉じる。
+共存アセットは 0 件なので移行コストは無い。
+
+排他を成立させる検証箇所(**5 つすべて**に入れる):
+
+| 箇所 | 動作 |
+| --- | --- |
+| UI Editor の `+ Component` メニュー | 描画コンポーネントを 1 つ持っていたら他 2 種を出さない |
+| `UIDocumentLoader` | 2 つ目以降の描画コンポーネントを拒否し、警告ログを出す |
+| `UIDocumentSerializer` | 2 つ以上持つノードを検出したら警告ログ(保存は先頭 1 つ) |
+| デバッグビルド | `UIObject::AddComponent` で 2 つ目の描画コンポーネント追加を `assert` |
+| 既存アセット検査 | P1 のチェック項目として `Game/Assets/UI/` を走査する |
+
+排他が決まると、`UIAnimationTrack::Apply()` の 3 連 `if` と `ReadFrom()` の「最初の 1 つ」の非対称も消える。
+両方とも「持っている 1 つに読み書きする」に統一する。
+
+### 2.2 texturePath はコンポーネントが持つ
+
+`UIImageComponent` / `UINineSliceComponent` / `UICircleGaugeComponent` に authoring 用の文字列を 1 本足す。
 
 ```cpp
+class UIImageComponent : public IUIComponent
+{
+public:
+    std::string                                     texturePath; // 保存・編集用の正本
+    std::shared_ptr<graphics::IShaderResourceView>  texture;
+};
+```
+
+規則:
+
+- `texturePath` が authoring 上の正本
+- `UIDocumentLoader` は `texturePath` を保存してから `texture` をロードする
+- UI Editor で変更したときは両方を更新する
+- `UIDocumentSerializer` は `texturePath` を保存する
+- ゲームコードが `texture` ポインタだけを直接差し替えても、保存パスは自動更新されない(仕様として明記)
+
+これで `UIEditorDebugPanel::texturePaths_`、`objId + 0x01000000` のキー生成、
+`UIDocumentSerializer::Save()` の `texturePaths` 引数を削除できる。
+**§2.1 の排他とは独立に有効**で、排他化しなくてもキーずらしは不要になる。
+
+## 3. 共通選択・保存・再ロード
+
+### 3.1 UIEditorSession
+
+UI Editor と Animation 編集が共有する状態を 1 つにまとめる。
+
+```cpp
+struct UIEditorSession
+{
+    UIObjectHandle selectedObject;   // 選択元は Hierarchy だけ
+    std::string    screenName;       // 先頭画面の名前
+    std::string    documentPath;     // 登録済みドキュメントパス(保存先)
+    bool           dirty = false;    // 未保存の編集あり
+};
+```
+
+- `UIEditorDebugPanel::selectedHandle_` を Session へ移す
+- Animation Editor 独自の Object Picker(`targetHandle_` / `objList_`)を削除する。Animation は選択中の UIObject だけを編集する
+- 選択変更・削除・Reload 時は Session の選択を一度クリアし、Animation 側の選択(Clip / Keyframe)とプレビューも同時に捨てる
+
+### 3.2 保存
+
+保存操作は UI Editor 上部の 1 か所だけ。
+
+| 操作 | 動作 |
+| --- | --- |
+| Save | `Session.documentPath` へ UI ツリー全体を `UIDocumentSerializer::Save()` で保存する。パスは登録済みで固定 |
+| Save As | 明示的な別操作。パスを入力して保存する。`documentPath` は変えない |
+| Reload | 未保存確認のあと、先頭画面を `ReloadTopDocument()` で即時再生成する |
+
+- Animation Editor 独自の `JSON Path` / `Save` / `Load` は削除する
+- ノード単位の `"animation"` 出力は `UIDocumentSerializer::SerializeNode()` に既にあるため、
+  名前パスで JSON ノードを探す実装は書かない(同名兄弟の問題ごと消える)
+- `ref` はロード時に展開され UIObject に元ファイル情報が残らないため、**保存は展開済みの形で書く**。
+  再利用構造が失われることを、Save ボタン付近に常時表示する(「ref は展開して保存されます」)
+- `dirty` が真のとき、ウィンドウタイトルに `*` を出し、Reload と画面遷移前に確認する
+
+### 3.3 再ロード
+
+再ロードは**画面まるごと再生成の一択**。ルートだけ差し替える経路は作らない(§1.4 の生ポインタ)。
+
+`UIScreenManager` に 2 つ足す。
+
+```cpp
+std::string_view GetDocumentPath(std::string_view screenName) const; // 登録済みパス。無ければ空
+void             ReloadTopDocument();                                // 先頭画面を同名で即時再生成
+```
+
+- `ReloadTopDocument()` は内部で同名の `Replace` を積む。`OnExit → OnDestroy → ルート破棄 → CreateScreen → OnCreate → OnEnter` が一通り走る
+- **§9 の Exit 待機は通さない**(エディタの再ロードに演出は要らない)。画面遷移用 `Replace()` とは別 API にする理由がこれ
+- Replace は pending なので、Reload ボタンを押した時点で以下を即座にクリアする:
+  Session の選択 Handle / 選択 Clip / Keyframe 選択 / プレビュー状態 / 基準値キャッシュ / エディタが持つ生ポインタ。
+  `dirty` も同時に落とす(再生成後のドキュメントは保存済み状態)
+- **ゲーム側が `OnEnter()` の後に一度だけ呼ぶ setter は再実行されない。** AquaDash のタイトルは
+  `SetStageThumbnail()` を状態機械から 1 回だけ呼ぶため、Reload 後はサムネイルが `OnEnter()` の
+  初期値(非表示)に戻る。エディタの仕様であり、画面側が再実行を望むなら `OnEnter()` で自前の値を
+  引き直す(P0 評価で確認)
+
+---
+
+# 第 2 部: データとランタイム
+
+## 4. データ構造
+
+### 4.1 Clip と ClipTrack を統合する
+
+`UIClipTrack` を廃止し、条件・ループ・完了時動作を `UIAnimationClip` が直接持つ。
+
+```cpp
+enum class UIClipCondition : uint8_t { Manual, Bool, Trigger };
+
+enum class UIAnimationFinishMode : uint8_t
+{
+    Hold,     // 完了時の最終値を基準値へ確定する
+    Restore,  // 基準値を変えずにレイヤーを外す(起動前の値へ戻る)
+};
+
 struct UIAnimationClip
 {
-    std::string      name;                       // 表示・保存用
-    std::string      groupName;                  // 表示・保存用。空 = name と同じ
-    uint32_t         group             = 0u;     // 実行時の識別子。0 = 未解決
-    float            duration          = 0.f;    // クリップごとに持つ
-    UIClipCondition  condition         = UIClipCondition::Manual;
-    uint32_t         conditionParam    = 0u;
-    std::string      conditionParamName;         // 表示・保存用
-    float            loopFrom          = -1.f;
-    bool             loopSkipFirst     = false;
-    bool             restoreOnComplete = false;
+    std::string            name;                  // 表示・保存用。非空・重複禁止
+    std::string            groupName;             // 表示・保存用。空 = name と同じ
+    uint32_t               group          = 0u;   // 実行時の識別子。0 = 未解決
+    float                  duration       = 0.f;  // クリップごとに持つ
+    UIClipCondition        condition      = UIClipCondition::Manual;
+    uint32_t               conditionParam = 0u;   // Bool / Trigger の識別子(ハッシュ)
+    std::string            conditionParamName;    // 表示・保存用
+    float                  loopFrom       = -1.f; // -1 = ループなし
+    UIAnimationFinishMode  finish         = UIAnimationFinishMode::Hold;
 
     std::vector<UIAnimationTrack> tracks;
 };
 ```
 
-`UIAnimationTrack` と `UIKeyframe` は変更しない。
+- `UIAnimationTrack` と `UIKeyframe` は変更しない
+- `loopSkipFirst` は**削除**する(§1.4。`loopFrom` が「初回は 0 から、2 周目以降は途中から」を表現している)
+- `restoreOnComplete` は `finish` に置き換える。意味が伝わる名前にするため
+- 旧 `UITrackCondition::Default` は `Manual` に置き換わる
 
-### 1.2 起動条件は Clip が持ち、Bool / Trigger は常時評価
+### 4.2 起動条件
 
 | condition | 起動 | 用途 |
 | --- | --- | --- |
 | `Manual` | `Play(group)` を呼んだとき | 画面の出現・退場など、ゲーム側が任意のタイミングで出すもの |
 | `Bool` | `GetCondition(param)` が真の間 | ホバー、フォーカス、押下中の継続演出 |
-| `Trigger` | `TriggerTrack(param)` で 1 回 | クリック、被弾などの単発演出 |
+| `Trigger` | `Trigger(param)` で 1 回 | クリック、被弾などの単発演出 |
 
-`Bool` / `Trigger` のクリップは**常駐して毎フレーム評価される**。
-`Play()` を呼ばなくても動くので、ボタンの hover / press は JSON だけで組めるようになる
-(この性質を使って UIScreen / UIButton へ自動フックするのが次の作業。§5)。
+`Bool` / `Trigger` のクリップは**常駐して毎フレーム評価される**。`Play()` を呼ばなくても動く。
+`group` は `Manual` だけで意味を持つ。**`Bool` / `Trigger` クリップの group はエディタに表示も編集もさせない。**
 
-旧 `UITrackCondition::Default` は `Manual` に置き換わる。
+### 4.3 識別子は 32bit ハッシュ
 
-### 1.3 グループ起動は 32bit ハッシュで持つ
-
-複数の `Manual` クリップをまとめて起動する手段を、クリップ側のデータとして持たせる。
-呼び出し側(C++)にグループを書かせない — 演出にクリップを 1 本足すたびに
-C++ を書き換えに行く状態を避けるため。
-
-**規則は 1 本だけにする。**
+**規則は 1 本だけ。**
 
 ```
 groupName を省略したクリップは group = aqHash32(name)
 Play(x) = group == x の Manual クリップを全部起動する
 ```
 
-グループを使わない単発クリップは今までどおり `Play(aqHash32("Open"))` で動く。
-「クリップ名かグループ名か」の曖昧さが生まれない。
-
-識別子は `std::string` ではなく `uint32_t` で持つ。
-スケルタルアニメの [AnimationComponent](../aqEngine/Component/AnimationComponentSystem.h) が
-`std::map<uint32_t, AnimationSlot>` / `Play(uint32_t nameHash)` / `0 = なし` を既に採っており、
-UI 側だけ文字列比較を毎フレーム回す理由がない。ハッシュは `aqHash32()`
-([Util/CRC32.h](../aqEngine/Util/CRC32.h)、constexpr CRC32)を使う。
-
-**文字列は authoring 用、ハッシュは実行時用**と役割を分ける。
-
-- JSON には `"group": "Open"` と**文字列で書く**(手編集できる形を維持する)
-- ロード時に `aqHash32()` で `group` を埋める。`groupName` が空なら `name` をハッシュする
+- JSON には `"group": "Open"` / `"conditionParam": "Hover"` と**文字列で書く**(手編集できる形を維持する)
+- ロード時に `aqHash32()`([Util/CRC32.h](../aqEngine/Util/CRC32.h))で `group` / `conditionParam` を埋める
 - 保存とエディタ表示は `groupName` / `conditionParamName` を使う
 - `Update()` が触るのは `uint32_t` だけ。文字列比較は 1 回も走らない
 
-`conditionParam` も同じ理由でハッシュにする。
-`SetCondition()` / `TriggerTrack()` / 毎フレームの条件評価がすべて文字列比較になっているため、
-`group` だけハッシュ化しても片手落ちになる。
-**これは「group をハッシュに」の指示を条件パラメータへ広げた判断なので、不要なら 1.3 のこの段落だけ落とす。**
+スケルタルアニメの [AnimationComponent](../aqEngine/Component/AnimationComponentSystem.h) が
+`Play(uint32_t nameHash)` / `0 = なし` を既に採っており、UI 側だけ文字列比較を回す理由がない。
 
-### 1.4 完了判定はグループ単位
-
-「グループ内の `Manual` クリップが全部終わったら完了」とする。
-`condition == Default` のトラックだけが完了を担う特例(§0.4)は廃止。
-
-`Stop()` は引数ありでグループ停止、引数なしで全 `Manual` 停止。
-`Bool` / `Trigger` のクリップは常駐なので `Stop()` の対象外。
-
-### 1.5 失うものと代替
-
-`Play()` 1 回で複数の条件付きトラックをまとめて起動する原子性を失う。
-
-代替は §1.3 のグループで足りる。
-そもそも `Bool` / `Trigger` は常駐になって `Play()` を必要としないため、
-まとめて起動したいのは `Manual` クリップ同士だけになる。
-
----
-
-## 2. JSON フォーマット
-
-### 現在
-
-```json
-{
-  "animation": {
-    "clips": [{
-      "name": "Open",
-      "duration": 0.4,
-      "clipTracks": [
-        { "name": "Intro", "condition": "Default",
-          "tracks": [ { "property": "ColorA", "keyframes": [] } ] },
-        { "name": "Hover", "condition": "Bool", "conditionParam": "Hover", "loopFrom": 0.0,
-          "tracks": [ { "property": "ColorA", "keyframes": [] } ] }
-      ]
-    }]
-  }
-}
-```
-
-### 統合後
+### 4.4 JSON フォーマット(統合後)
 
 ```json
 {
   "animation": {
     "clips": [
-      { "name": "OpenSlide", "group": "Open", "duration": 0.4, "condition": "Manual",
+      { "name": "OpenSlide", "group": "Open", "duration": 0.4,  "condition": "Manual", "finish": "Hold",
         "tracks": [ { "property": "PositionY", "keyframes": [] } ] },
-      { "name": "OpenFade",  "group": "Open", "duration": 0.25, "condition": "Manual",
+      { "name": "OpenFade",  "group": "Open", "duration": 0.25, "condition": "Manual", "finish": "Hold",
         "tracks": [ { "property": "ColorA", "keyframes": [] } ] },
       { "name": "Hover", "duration": 0.8, "condition": "Bool", "conditionParam": "Hover",
-        "loopFrom": 0.0,
+        "loopFrom": 0.0, "finish": "Restore",
         "tracks": [ { "property": "ColorA", "keyframes": [] } ] }
     ]
   }
 }
 ```
 
-`Play(aqHash32("Open"))` で 2 本が**それぞれの長さ**で走る。
-`Hover` は `Play` を呼ばずに条件だけで動く。
-`"group"` を省略したクリップは自分の名前がグループになる。
+- `Play(aqHash32("Open"))` で 2 本が**それぞれの長さ**で走る
+- `Hover` は `Play` を呼ばずに条件だけで動く。`OpenFade` と同じ `ColorA` を動かすが、
+  起動要求が別なので §6 の serial で決着する(禁止されるのは**同じ起動単位の中**の重複だけ)
+- `"group"` を省略したクリップは自分の名前がグループになる
+- 旧キー `clipTracks` / `restoreOnComplete` / `loopSkipFirst` は読み捨てる(移行対象が 0 件なので互換コードは書かない)
 
-`clipTracks` キーは読み捨てる(移行対象が 0 件なので互換コードは書かない)。
+### 4.5 authoring 検証
+
+エディタは保存前に、ローダはロード時に、以下を検証する。エディタは違反箇所を赤字で示し保存を止める。ローダは警告して該当クリップを捨てる。
+
+| 規則 | 理由 |
+| --- | --- |
+| Clip 名は非空、同一コンポーネント内で重複なし | vector 化で名前がキーでなくなるため、明示的に検証する |
+| `Bool` / `Trigger` の `conditionParam` は非空 | ハッシュ 0 は「未解決」と衝突する |
+| `aqHash32()` の結果が 0、または同一コンポーネント内で別文字列が同じハッシュ | CRC32 衝突。名前を変えさせる |
+| `duration > 0` | 0 除算とゼロ長ループ防止 |
+| `0 <= loopFrom < duration` | 範囲外はループ長が負になる |
+| キーフレーム時刻は `duration` 以下。エディタは `duration` へ clamp、ローダは警告して clamp | 到達しないキーを黙って持たせない |
+| 同一 Clip 内で同じ `property` の Track は 1 本 | 同一クリップ内の後勝ちを作らない |
+| **同じ起動単位**(同 group の Manual 同士 / 同 param の Bool 同士 / 同 param の Trigger 同士)で同じ `property` を使うクリップは 1 本 | 同 serial の競合を作らない(§6.2) |
+| `Exit` グループの Manual クリップに `loopFrom >= 0` を許さない | グループ完了が来ず、画面遷移が止まる(§9) |
+
+## 5. ランタイム構造
+
+### 5.1 runtime は clips と 1:1 の並列 vector
+
+```cpp
+struct ClipRuntime
+{
+    float    time             = 0.f;
+    bool     active           = false;
+    uint32_t activationSerial = 0u;   // 0 = 未起動
+};
+std::vector<UIAnimationClip> clips_;     // private
+std::vector<ClipRuntime>     runtimes_;  // clips_[i] に対応。ポインタは持たない
+```
+
+runtime はクリップの中身へのポインタを持たない。毎フレーム `clips_[i].tracks` を読み直す。
+そのため **Track / Keyframe / duration / loop / finish の編集に再構築は要らない。**
+
+再構築契約:
+
+| 変更 | 必要な処理 |
+| --- | --- |
+| Clip 追加 / 削除 / 並べ替え、JSON Load | `StopAll()` + 全 runtime 再構築 |
+| condition / group の変更 | 対象 runtime だけ初期化(`ResetClipRuntime(i)`) |
+| Track 追加・削除、Keyframe 編集、duration / loopFrom / finish 変更 | 不要 |
+
+契約を通さずに壊せないよう、`clips` を private にし、構造変更は次の API に限定する。
+
+```cpp
+const std::vector<UIAnimationClip>& GetClips() const;
+
+size_t AddClip(UIAnimationClip clip);
+void   RemoveClip(size_t index);
+void   MoveClip(size_t from, size_t to);
+void   ReplaceAllClips(std::vector<UIAnimationClip> clips);   // JSON Load 用。既存を全部捨てる
+
+void   SetClipCondition(size_t index, UIClipCondition condition, uint32_t param, std::string_view paramName);
+void   SetClipGroup(size_t index, std::string_view groupName);
+
+UIAnimationClip& EditClip(size_t index);  // Track / Keyframe / duration / loop / finish の編集用。
+                                          // condition / group はここから触らない(setter を使う)
+```
+
+mutable 参照を返す `EditClip()` は構造を動かさない編集に限る。
+condition / group は setter を通さないと runtime 初期化が抜けるため、エディタはこの 2 つを必ず setter で変える。
+
+### 5.2 公開 API
+
+```cpp
+void Play(uint32_t group);                     // group の Manual クリップを全部起動
+void Stop(uint32_t group);                     // group の Manual クリップを停止
+void StopAll();                                // 全 Manual クリップを停止(Bool / Trigger は対象外)
+void SetCondition(uint32_t condition, bool v);
+void Trigger(uint32_t trigger);
+bool IsGroupPlaying(uint32_t group) const;     // group の Manual クリップが 1 本でも active
+bool IsPlaying() const;                        // Manual クリップが 1 本でも active
+```
+
+- `TriggerTrack()` は廃止する。階層を消した後に ClipTrack を連想させる名前を残さない
+- `currentClip_` は廃止する
+- 画面単位の完了判定はツリーを歩く自由関数を `UIAnimationSystem` に置く:
+  `bool IsAnimationGroupPlaying(const UIObject* root, uint32_t group);`
+- グループ完了の通知はポーリング(`IsGroupPlaying`)で足りる。コールバックは足さない
+
+### 5.3 状態遷移
+
+**起動時は共通で「時刻 0 のサンプルをその場で適用する」。** 次フレームまで素の姿が見える 1 フレーム(§1.4)を消すため。
+
+Manual
+
+| イベント | 動作 |
+| --- | --- |
+| `Play(group)`(非再生中) | 先頭から再生。新しい serial を発行 |
+| `Play(group)`(再生中) | 時刻を 0 に戻し、新しい serial を発行 |
+| 自然完了(`finish == Hold`) | 最終値を基準値へ確定し、レイヤーを外す |
+| 自然完了(`finish == Restore`) | 基準値を変えずにレイヤーを外す |
+| `Stop(group)` / `StopAll()` | 途中値を確定せずレイヤーを外す(Restore 相当) |
+| ループ中 | 自然完了しない。`Stop` でだけ終わる |
+
+Bool
+
+| イベント | 動作 |
+| --- | --- |
+| false → true | 先頭から再生。新しい serial を発行 |
+| true のまま継続(非ループ) | 再生し終えたら**最終値を保持したままレイヤーに残る**。再スタートしない |
+| true のまま継続(ループ) | ループを続ける |
+| `SetCondition(true)` の重複呼び出し | 何もしない |
+| true → false | `finish` に関係なくレイヤーを外す。下位のレイヤーか基準値が見える |
+| `Stop` | 対象外 |
+
+Trigger
+
+| イベント | 動作 |
+| --- | --- |
+| `Trigger(param)`(非再生中) | 先頭から再生。新しい serial を発行 |
+| `Trigger(param)`(再生中) | 時刻を 0 に戻し、新しい serial を発行 |
+| 自然完了 | `finish` に従う(Hold: 基準値確定 / Restore: レイヤーを外す) |
+| 完了後の再発火 | 可(現行の「`finished` で二度と鳴らない」を廃止) |
+| `Stop` | 対象外 |
+
+途中値を保持したまま止めたい要求が出たら `Pause()` を別途足す。通常の `Stop` は Restore 相当で固定する。
+
+## 6. プロパティ競合の解決(レイヤー方式)
+
+### 6.1 なぜ直接 Apply / Restore しないか
+
+runtime ごとにプロパティへ直接書き、Restore で snapshot を書き戻す方式は、以下で破綻する。
+
+- 並走時は `runtimes_` の順で後勝ちになる(暗黙の順序)
+- condition で固定順を付けても「Hover 中に Exit を開始したら Exit を見せたい」と
+  「Enter 中に Hover したら Hover を見せたい」を同時に満たせない。**condition は起動方法であって描画優先度ではない**
+- snapshot は「起動時点の値」であって「下のクリップが確定した値」ではない。
+  Open が Alpha 0 → 1 を流している途中(0.4)で Hover が起動し、Open が 1 で完了したあと Hover を離すと 0.4 に戻る
+
+したがって「最後に起動したクリップを優先」を **activationSerial** で表し、プロパティごとに勝者を 1 本選ぶ。
+
+### 6.2 activationSerial
+
+- コンポーネントごとに単調増加の `uint32_t` カウンタを持つ
+- **1 回の起動要求に 1 つの serial** を割り当てる。単位は次の 3 つ:
+  - 1 回の `Play(group)`(グループ内の全 Manual クリップが同じ serial)
+  - 1 回の `Trigger(param)`
+  - 1 つの Bool 条件の false → true
+- 同じプロパティでは、active なレイヤーのうち **serial が最大のクリップ**を採用する
+- 同じ serial で同じプロパティを持つクリップは §4.5 で authoring エラーにする。
+  万一ロード時に残った場合は `clips` の並び順で後勝ちとし、警告ログを出す
+- 上位のクリップが終了すると、下にある active なクリップが再び見える
+- 将来必要なら詳細設定として `priority` を足せる。今は足さない
+
+`Exit` などの名前をコアで特別扱いしない。serial 上は Exit 開始後に起きた Hover が勝つのが正しい。
+Exit に割り込ませたくない場合は自動フック側で入力を止める(§9)。
+
+### 6.3 1 フレームの 2 段階処理
+
+```
+1. 状態更新   全 runtime の起動判定・時刻・ループ・完了を更新する。プロパティには触らない
+2. 適用       プロパティごとに勝者を 1 本選び、その値を 1 回だけ書く。勝者が無ければ基準値
+```
+
+### 6.4 基準値のライフサイクル(プロパティ単位)
+
+1. そのプロパティのレイヤーが **0 本から 1 本になった瞬間**に、UIObject の現在値を基準値として取得する
+2. レイヤーが存在する間、ゲームコードの直接書き込みは次回の適用で上書きされる(仕様)
+3. 隠れている下位のクリップが `Hold` で完了した場合も、基準値への確定は行う(上に別レイヤーがあっても)
+4. 最後のレイヤーが外れたら基準値を適用する
+5. レイヤーが 0 本になった後は基準値キャッシュを破棄する
+6. 次回起動時は、その時点の UIObject の値を改めて取得する(アニメ外でゲームコードが変えた値が新しい基準値になる)
+
+3 により §6.1 の「0.4 に戻る」は解決する。Open が 1 で完了した時点で基準値が 1 に確定し、Hover を離すと 1 が見える。
+
+### 6.5 動作例(P2 の評価項目)
+
+| 手順 | 期待 |
+| --- | --- |
+| Open(Manual, Alpha 0→1)の途中で Hover 開始 → Open 完了 → Hover 解除 | Open の最終値 1 |
+| Hover 中に Manual グループを `Play` | Manual が Hover より上に載る |
+| Click(Trigger, Restore)が終わる | Hover が active なら Hover の表示に戻る |
+| Bool を true のまま維持 | 非ループは最終値で止まり、再スタートしない |
+| Trigger を再生中と完了後に再発火 | どちらも先頭から再生する |
+| Enter で Play 後の起動フレーム | 素の姿が 1 フレームも出ない |
 
 ---
 
-## 3. 責務表
+## 7. 責務表
 
 ### 変更ファイル
 
 | ファイル | 変更 |
 | --- | --- |
-| [UI/Animation/UIClipTrack.h](../aqEngine/UI/Animation/UIClipTrack.h) | **削除**。`UITrackCondition` は `UIClipCondition`(`Manual` / `Bool` / `Trigger`)として `UIAnimationClip.h` へ移す |
-| [UI/Animation/UIAnimationClip.h](../aqEngine/UI/Animation/UIAnimationClip.h) | 条件・ループ・復帰設定と `group` / `conditionParam`(ハッシュ)を持つ。`clipTracks` を `tracks` に置換 |
-| [UI/Component/UIAnimationComponent.h](../aqEngine/UI/Component/UIAnimationComponent.h) / [.cpp](../aqEngine/UI/Component/UIAnimationComponent.cpp) | `clips` を `std::vector<UIAnimationClip>` へ(名前順の不定を解消)。`TrackRuntime` を Clip 単位に。`Play(uint32_t)` / `Stop(uint32_t)` / `SetCondition(uint32_t, bool)` / `TriggerTrack(uint32_t)`。`currentClip_` を廃止し、条件付きクリップは常駐 |
-| [UI/Animation/UIAnimationSerializer.h](../aqEngine/UI/Animation/UIAnimationSerializer.h) / [.cpp](../aqEngine/UI/Animation/UIAnimationSerializer.cpp) | `SaveClipTrack` / `LoadClipTrack` を削除。`group` / `conditionParam` を文字列で入出力し、ロード時に `aqHash32()`。`ConditionToStr` の `Default` を `Manual` へ |
-| [UI/Debug/UIAnimationEditor.h](../aqEngine/UI/Debug/UIAnimationEditor.h) / [.cpp](../aqEngine/UI/Debug/UIAnimationEditor.cpp) | `selClipTrackIdx_` を廃止し選択を 1 本化。左パネルは `groupName` 見出しの下にクリップを並べる(見た目の 2 段グループは維持、データは平ら)。クリップ行に条件 / ループ / duration を出す |
-| [UI/Resource/UIDocumentLoader.cpp](../aqEngine/UI/Resource/UIDocumentLoader.cpp) | 変更なし(`UIAnimationSerializer::LoadAll` に委譲しているため) |
+| [UI/Animation/UIClipTrack.h](../aqEngine/UI/Animation/UIClipTrack.h) | **削除**。`UIClipCondition` は `UIAnimationClip.h` へ |
+| [UI/Animation/UIAnimationClip.h](../aqEngine/UI/Animation/UIAnimationClip.h) | §4.1 の構造。`UIAnimationFinishMode` を追加 |
+| [UI/Animation/UIAnimationTrack.cpp](../aqEngine/UI/Animation/UIAnimationTrack.cpp) | `Apply` / `ReadFrom` を「持っている 1 つに読み書き」へ統一(§2.1) |
+| [UI/Component/UIAnimationComponent.h](../aqEngine/UI/Component/UIAnimationComponent.h) / [.cpp](../aqEngine/UI/Component/UIAnimationComponent.cpp) | `clips` を private の `std::vector` へ。§5.1 の並列 runtime と編集 API、§5.2 の公開 API、§5.3 の遷移、§6 のレイヤー評価と基準値。`currentClip_` / `TriggerTrack` 廃止 |
+| [UI/Animation/UIAnimationSystem.h](../aqEngine/UI/Animation/UIAnimationSystem.h) / .cpp | `IsAnimationGroupPlaying(root, group)` を追加 |
+| [UI/Animation/UIAnimationSerializer.h](../aqEngine/UI/Animation/UIAnimationSerializer.h) / [.cpp](../aqEngine/UI/Animation/UIAnimationSerializer.cpp) | `SaveClipTrack` / `LoadClipTrack` を削除。`group` / `conditionParam` を文字列で入出力しロード時にハッシュ。`finish` の入出力。`LoadAll` は `ReplaceAllClips` で全置換。§4.5 の検証 |
+| [UI/Component/UIImageComponent.h](../aqEngine/UI/Component/UIImageComponent.h) / NineSlice / CircleGauge | `texturePath` を追加(§2.2) |
+| [UI/UIObject.h](../aqEngine/UI/UIObject.h) / .cpp | デバッグビルドで描画コンポーネント排他を `assert`(§2.1) |
+| [UI/Resource/UIDocumentLoader.cpp](../aqEngine/UI/Resource/UIDocumentLoader.cpp) | `texturePath` を埋めてからロード。描画コンポーネント排他の検証 |
+| [UI/Resource/UIDocumentSerializer.h](../aqEngine/UI/Resource/UIDocumentSerializer.h) / [.cpp](../aqEngine/UI/Resource/UIDocumentSerializer.cpp) | `texturePaths` 引数を削除し、コンポーネントの `texturePath` を書く。排他違反の警告 |
+| [UI/Screen/UIScreenManager.h](../aqEngine/UI/Screen/UIScreenManager.h) / [.cpp](../aqEngine/UI/Screen/UIScreenManager.cpp) | `GetDocumentPath()` / `ReloadTopDocument()`(§3.3)。Exit 待機の状態機械(§9) |
+| [UI/Screen/UIScreen.h](../aqEngine/UI/Screen/UIScreen.h) | Enter / Exit グループの自動再生を `UIScreenManager` から呼ぶための入口(§8.1) |
+| [UI/Input/UIInputSystem.cpp](../aqEngine/UI/Input/UIInputSystem.cpp) | Hover / Pressed / Focused / Click を同じ UIObject の `UIAnimationComponent` へ橋渡し(§8.1)。Exit 待機中の入力停止(§9) |
+| [UI/Debug/UIEditorDebugPanel.h](../aqEngine/UI/Debug/UIEditorDebugPanel.h) / [.cpp](../aqEngine/UI/Debug/UIEditorDebugPanel.cpp) | `UIEditorSession` を持つ。上部に Save / Save As / Reload。Inspector に `[Properties] [Animation]` タブ。下部に Timeline。`texturePaths_` 削除。`+ Component` の排他 |
+| [UI/Debug/UIAnimationEditor.h](../aqEngine/UI/Debug/UIAnimationEditor.h) / [.cpp](../aqEngine/UI/Debug/UIAnimationEditor.cpp) | 独立パネル(`IDebugRenderable`)をやめ、UI Editor から呼ばれる Animation タブ / Timeline の描画関数群にする。Object Picker / Save / Load / `selClipTrackIdx_` / `ctNameBuf_` 共有バッファを削除 |
+| [UI/Debug/TextStyleEditorPanel.h](../aqEngine/UI/Debug/TextStyleEditorPanel.h) / .cpp | Text Inspector の `[Edit]` から同じウィンドウ内のタブ / ポップアップとして開く。トップメニューの入口は残さない |
+| UI/Debug/UIEditorSession.h | **新規**。§3.1 |
 
-新規ファイルなし。`.vcxproj` からは `UIClipTrack.h` の登録を外す。
+`.vcxproj` からは `UIClipTrack.h` の登録を外し、`UIEditorSession.h` を足す(`vs-project-files` スキルに従う)。
 
 ---
 
-## 4. フェーズ計画
+## 8. 自動フック(P2)
 
-### P0: 保存先のバグを止める(本書の前に入れる)
+「JSON だけで動く」を成立させる部分。エディタの `Play when` に出す選択肢は、ここで動くものだけにする(§10.3)。
 
-[UIAnimationEditor.cpp:1092](../aqEngine/UI/Debug/UIAnimationEditor.cpp#L1092) の `Save` が、
-選択オブジェクトのクリップを JSON の**ルートノード**の `"animation"` に書いている。
-`UIDocumentLoader` は `"animation"` をノードごとに読むため、
-子オブジェクトを選んで保存すると別ノードにアニメが付く。
+### 8.1 UIButton と画面 Enter の橋渡し
 
-- [ ] 選択オブジェクトのルートからの名前パスを辿り、該当ノードへ書く
-- [ ] 保存パスの既定値をドキュメントのロード元にする(512 バイトの手入力をやめる)
-- [ ] 子オブジェクトを選んで保存 → 再ロードで同じ子に付くことを確認
+| 発生元 | 呼び出し | 備考 |
+| --- | --- | --- |
+| `UIScreenManager` の Push / Replace で `OnEnter()` が返った直後 | ルート以下の全 `UIAnimationComponent` に `Play(aqHash32("Enter"))` | **OnEnter 完了後**に起動する。ゲーム側が OnEnter で初期値を変えた後に基準値を取るため |
+| `UIButtonComponent::isHovered` の変化 | 同じ UIObject の `SetCondition(aqHash32("Hover"), v)` | 入力更新がアニメ更新より先なので同フレームで反映される |
+| `isPressed` の変化 | `SetCondition(aqHash32("Pressed"), v)` | |
+| `isFocused` の変化 | `SetCondition(aqHash32("Focused"), v)` | |
+| `FireClick` | `Trigger(aqHash32("Click"))` | callback が遷移を積んだ場合の扱いは §9 |
 
-### P1: データ構造とシリアライザ
+橋渡し先は「同じ UIObject に `UIAnimationComponent` があれば」に限る。無ければ何もしない。
+`UIButtonComponent` に新しいフィールドは足さない。`UIInputSystem` が状態変化を検出して呼ぶ。
 
-- [ ] `UIClipTrack.h` を削除し、`UIClipCondition` を `UIAnimationClip.h` へ移す
-- [ ] `UIAnimationClip` に `groupName` / `group` / `condition` / `conditionParam` / `conditionParamName` / ループ設定を持たせる
-- [ ] `UIAnimationSerializer` を新フォーマットに合わせ、`group` / `conditionParam` をロード時にハッシュ化する
-- [ ] `groupName` が空のとき `group == aqHash32(name)` になることを確認
+---
+
+## 9. Exit 待機付き画面遷移(P2B)
+
+### 9.1 なぜ必要か
+
+§1.4 のとおり、現行の `Pop` / `Replace` は `OnExit()` と同じ Flush でルートを破棄する。
+Exit 演出と、クリック後に遷移する演出は 1 フレームも描画されない。
+`Play when: Exit` / `Click` をエディタに出す以上、**グループ完了判定と遅延 Pop / Replace は必須要件**である。
+
+### 9.2 状態機械
+
+```
+Pending(op が積まれた)
+  ↓
+ExitStart   : 入力停止 → OnExit() → ルート以下に Play(aqHash32("Exit"))
+  ↓          Exit グループのクリップが 1 本も無ければ ExitDone へ直行
+ExitPlaying : 画面の OnUpdate() は止め、UIAnimationSystem だけ更新する
+  ↓          IsAnimationGroupPlaying(root, Exit) が false になるまで待つ
+ExitDone    : OnDestroy() → ルート破棄 → 次画面生成(Push / Replace のとき) → OnCreate() → OnEnter() → Enter 起動
+```
+
+- 入力停止: `ExitStart` で `UIInputSystem` がその画面への Hover / Pressed / Focused / Click を止め、
+  Bool 条件をすべて false にする。以後、破棄まで新しい Bool 条件を送らない(これで Exit 中に Hover が割り込まない)
+- `OnUpdate()` を止める理由: Exit 中にゲーム状態を動かし続けないため。アニメーションだけ進める
+- タイムアウト: `ExitPlaying` が既定 2.0 秒を超えたら警告ログを出して `ExitDone` へ進む(ループ Exit の保険。§4.5 で検証もする)
+- **ExitPlaying 中に積まれた新しい op は pending 列に残し、ExitDone 後に順に処理する。** 待機中の遷移は捨てない、打ち切らない
+- `Back` は従来どおり `OnBack()` の結果で Pop に変換され、その Pop が上の状態機械を通る
+- `ReloadTopDocument()`(§3.3)はこの状態機械を**通さない**
+
+### 9.3 Click 演出後の遷移
+
+クリック callback が `Pop()` / `Replace()` を積むと、同フレームの `ExitStart` で Exit が始まる。
+Click の Trigger は Exit と別 serial で先に起動しているので、Exit グループが ColorA を持たなければ Click 演出はそのまま最後まで見える。
+「Click 演出が終わってから Exit を始める」は今回作らない。必要なら Click クリップの長さ分だけ遷移を遅らせる仕組みを後続で足す。
+
+---
+
+# 第 3 部: 統合エディタ
+
+## 10. UI Editor
+
+### 10.1 完成形
+
+```
+┌ UI Editor ──────────────────────────────────────────┐
+│ Screen: Title   Assets/UI/Title.json   Save  Save As  Reload │
+├──────────────┬──────────────────────────────────────┤
+│ Hierarchy    │ Inspector                            │
+│ Canvas       │ [Properties] [Animation]             │
+│ ├ Background │                                      │
+│ └ StartButton│ 選択 UIObject の設定だけを表示         │
+├──────────────┴──────────────────────────────────────┤
+│ Animation Timeline / Preview(Animation タブ選択時)   │
+└─────────────────────────────────────────────────────┘
+```
+
+Animation Editor は独立したエディタとして残さない。選択共有だけでは「どのエディタで何を設定するのか」が残るため。
+
+### 10.2 選択
+
+- 選択元は左の Hierarchy だけ(§3.1 の Session)
+- Animation は選択中の UIObject の `UIAnimationComponent` だけを編集する。無ければ「Add Animation」ボタンを出す
+- 選択変更時はプレビューを停止し、基準値へ戻す
+
+### 10.3 Animation タブの通常表示
+
+内部用語を見せない。
+
+```
+Animation: HoverGlow
+Play when: Hover
+Duration:  0.20 sec
+After finish: Return
+Loop: On
+```
+
+`Play when` から内部設定を自動で埋める。
+
+| 表示 | 内部設定 | 表示できる時期 |
+| --- | --- | --- |
+| Enter | Manual / group = `Enter` | P2 完了後 |
+| Exit | Manual / group = `Exit` | **P2B 完了後**。それまでは Disabled と「画面遷移対応後に利用可能」 |
+| Hover | Bool / param = `Hover` | P2 完了後 |
+| Pressed | Bool / param = `Pressed` | P2 完了後 |
+| Focused | Bool / param = `Focused` | P2 完了後 |
+| Click | Trigger / param = `Click` | P2 完了後 |
+| Manual | Manual / カスタム group | P2 完了後 |
+
+- `After finish` は `Hold` を「Keep」、`Restore` を「Return」と表示する
+- condition / conditionParam / group 名の自由入力とハッシュ値は **Advanced** に畳む
+- Bool / Trigger のクリップでは group を表示しない(§4.2)
+- §4.5 の検証違反はその場で赤字にし、Save を止める
+
+### 10.4 タイムライン
+
+- 左 = Clip 一覧、右 = プロパティ行。ClipTrack 階層は存在しない
+- 左パネルは `groupName` 見出しごとに Manual クリップをまとめる(見た目の 2 段、データは平ら)。Bool / Trigger は `Play when` 見出しの下
+- Clip 行に `Play when` / Duration / Loop を出す
+- 同じ起動単位で同じプロパティを使ったら、その場で警告(§4.5)
+- プレビューは `ApplyScrub` 直書きではなく `Play()` / `Trigger()` / `SetCondition()` 経由にし、
+  ループ・条件・`finish` を実挙動で確認できるようにする。プレビュー中の勝者 Clip を色またはアイコンで示す
+- activationSerial は通常 UI に出さない。デバッグ用ツールチップに現在の勝者と serial を出す程度
+- 選択インデックスは 1 本(`selClipIdx_` / `selTrackIdx_` / `selKeyframeIdx_`)。`selClipTrackIdx_` は廃止
+- Clip の追加 / 削除 / 並べ替えは §5.1 の API を通す。編集中の Keyframe ドラッグで再生が止まらないことを確認する
+
+### 10.5 TextStyle の入口
+
+TextStyle は共有アセットなので編集機能は別のままでよい。入口だけ Text Inspector に置く。
+
+```
+Text Style: Assets/Styles/UI.textstyle.json  [Edit]
+```
+
+`[Edit]` で同じウィンドウ内のタブまたはポップアップを開く。トップメニューから別エディタを探させない。
+
+---
+
+## 11. フェーズ計画
+
+### P0: 編集・保存基盤(第 1 部)
+
+実装
+
+- `UIEditorSession` を新設し、`UIEditorDebugPanel::selectedHandle_` を移す
+- Animation Editor の Object Picker / JSON Path / Save / Load を削除し、選択は Session から取る
+- `texturePath` をコンポーネントへ(§2.2)。ローダ・シリアライザ・UI Editor を追従させ、`texturePaths_` とキーずらしを削除
+- `UIScreenManager::GetDocumentPath()` / `ReloadTopDocument()`(§3.3)
+- UI Editor 上部に Save(固定パス)/ Save As / Reload。`dirty` 表示と未保存確認。ref 展開の注記
+
+評価
+
+- [x] 子オブジェクトを選んでクリップを保存 → 再ロードで同じ子に付く(`Sub` に `NewClip`。Mac 2026-09-17)
+- [x] ドキュメントをロード → 何も触らず Save → `texture` キーが全ノードで保持される(AquaDash Title の 11 ノードで一致)
+- [x] Image と NineSlice を別ノードに持つ画面で保存 → 両方のパスが正しい(NineSlice ノードを一時追加して確認)
+- [x] Reload 後に UI Editor と Animation の選択が空で、ゲーム側の `OnEnter()` が再実行されて生ポインタが有効
+- [x] Reload に Exit 演出が挟まらない(P2B 実装後に再確認)
+- [x] 未保存状態で Reload を押すと確認が出る
+- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題。Mac の Metal は Debug / Release とも警告増なし)
+
+評価で直したもの
+
+- ImGui の既定フォントに日本語グリフが無く、注記と確認文が `???` になった → エディタ内の文言は英語に統一
+- Reload 後も `*` が残っていた → `ClearForReload()` で `dirty` を落とす
+- Text の `Content` / `Style Path` が別オブジェクトの値を表示していた(移行前からの不具合。`static` バッファの同期条件が
+  `prevSelectedHandle_` 更新後に評価され一度も成立しない)→ メンババッファにして `DebugRender()` の選択変更検出で同期
+- `UIEditorSession.h` のフィルターが `UI` になっていた → `UI\Debug`
+
+### P1: データ構造と排他モデル(第 2 部)
+
+実装
+
+- `UIClipTrack.h` を削除し、`UIClipCondition` / `UIAnimationFinishMode` を `UIAnimationClip.h` へ
+- `UIAnimationClip` を §4.1 の形に。`loopSkipFirst` / `restoreOnComplete` を削除
+- `UIAnimationComponent::clips` を private の `std::vector` にし、§5.1 の編集 API を用意する(runtime は P2)
+- `UIAnimationSerializer` を §4.4 に合わせ、`group` / `conditionParam` をロード時にハッシュ化。`LoadAll` は全置換。§4.5 の検証
+- 描画コンポーネント排他を §2.1 の 5 箇所へ
+- `UIAnimationTrack::Apply` / `ReadFrom` を「持っている 1 つ」へ統一
+- `.vcxproj` の更新
+
+評価
+
+- [ ] `groupName` が空のとき `group == aqHash32(name)` になる
+- [ ] `conditionParam` が空の Bool クリップをロードすると警告が出て捨てられる
+- [ ] 同一 Clip 内の `property` 重複、同一 group 内の `property` 重複が検証で止まる
+- [ ] `Game/Assets/UI/` 配下に描画コンポーネントを 2 種以上持つノードが 0 件
+- [ ] 手書き JSON で 2 種以上を付けたノードをロードすると 2 つ目が拒否され、警告が出る
 - [ ] Windows / D3D11 でビルドが通り、警告が増えていない
 
-### P2: ランタイム
+### P2: レイヤー評価と基本自動フック(第 2 部)
 
-- [ ] `runtimes_` を Clip 単位にし、複数クリップの並走を許す
-- [ ] `Bool` / `Trigger` クリップを常駐評価にする(`Play()` 不要)
-- [ ] `Play(uint32_t)` がグループ内の `Manual` クリップを全部起動する
-- [ ] 完了判定をグループ単位にし、`Default` トラック特例を消す
-- [ ] `Stop(uint32_t)` / `Stop()` を実装する
-- [ ] `Update()` から文字列比較が消えていること(`std::string` の比較が 0 箇所)
-- [ ] 手書き JSON 1 枚で「出現 + ホバー光り」が動くことを実機で確認
+実装
 
-### P3: エディタ
+- §5.1 の並列 runtime と再構築契約、§5.2 の公開 API(`TriggerTrack` / `currentClip_` 廃止)
+- §5.3 の状態遷移。起動時の時刻 0 サンプル適用
+- §6 の activationSerial / 2 段階処理 / 基準値ライフサイクル
+- `IsGroupPlaying()` / `IsAnimationGroupPlaying(root, group)`
+- §8.1 の自動フック(Enter / Hover / Pressed / Focused / Click)
 
-- [ ] 選択インデックスを 1 本化し、タイムラインを「左 = クリップ一覧、右 = プロパティ行」にする
-- [ ] クリップ行に条件 / グループ / ループ / duration を出す
-- [ ] 左パネルで `groupName` 見出しごとにクリップをまとめる
-- [ ] ClipTrack 名の入力バッファ共有(`ctNameBuf_` / `condParamBuf_` を全トラックで使い回し、毎フレーム上書き)が
-      構造変更で消えることを確認する
-- [ ] プレビューを `ApplyScrub` 直書きではなく `Play()` / `TriggerTrack()` 経由にし、
-      ループ・条件・`restoreOnComplete` を実挙動で確認できるようにする
+評価
+
+- [ ] §6.5 の 6 項目が実機で期待どおり
+- [ ] Bool / Trigger クリップが `Play()` なしで動く。手書き JSON 1 枚で「出現 + ホバー光り」が動く
+- [ ] `Play(group)` でグループ内の Manual クリップが全部、それぞれの長さで走る
+- [ ] 完了判定がグループ単位で、Default トラック特例が消えている
+- [ ] `Stop(group)` / `StopAll()` で途中値が捨てられ、基準値に戻る
+- [ ] `Update()` から `std::string` の比較が消えている(0 箇所)
+- [ ] エディタで Clip を追加・削除・並べ替えた直後に再生しても runtime 参照が壊れない
+- [ ] Keyframe ドラッグ中に再生が止まらない
+- [ ] `UIButtonComponent` の hover / press / click が JSON だけでアニメになる(C++ 0 行)
+- [ ] Enter が `OnEnter()` の後に起動し、ゲーム側の初期値を基準値に取っている
+
+### P2B: Exit 待機付き画面遷移(第 2 部)
+
+実装
+
+- §9.2 の状態機械を `UIScreenManager` に。入力停止、`OnUpdate` 停止、タイムアウト、op 列の保持
+- Exit グループが無い画面は即時遷移
+- `ReloadTopDocument()` が状態機械を通らないことを確認
+
+評価
+
+- [ ] Exit クリップのある画面を Pop → Exit が最後まで描画されてから破棄される
+- [ ] Exit クリップの無い画面を Pop → 従来と同じフレームで破棄される
+- [ ] Exit 中にマウスを動かしても Hover が割り込まない
+- [ ] Exit 中に画面の `OnUpdate()` が呼ばれない
+- [ ] Exit 中に Push を積む → Exit 完了後に順に処理される
+- [ ] ループする Exit クリップを置くと検証で止まる。検証を迂回した場合はタイムアウトで進む
+- [ ] クリックで遷移するボタンの Click 演出が見える
+- [ ] エディタの Reload に Exit 演出が挟まらない
+
+### P3: 統合エディタ(第 3 部)
+
+実装
+
+- Inspector に `[Properties] [Animation]` タブ。§10.3 の通常表示と Advanced
+- 下部 Timeline を §10.4 の形に。選択インデックス 1 本化。プレビューを `Play()` 経由に
+- `Play when` の表示範囲を §10.3 の表に従って制御(Exit は P2B 完了まで Disabled)
+- Animation Editor を独立パネルから UI Editor の一部へ。`IDebugRenderable` 登録を外す
+- TextStyle の入口を Text Inspector へ(§10.5)
+
+評価
+
+- [ ] UI Editor だけで、ボタンに Hover / Click アニメを付けて保存し、再起動後に動く
+- [ ] condition / conditionParam / ハッシュ値が通常表示に出ない
+- [ ] `Play when: Exit` が P2B 未完了時は Disabled で理由が出る
+- [ ] 同じ起動単位で同じプロパティを使うと赤字になり Save が止まる
+- [ ] プレビューでループ・条件・`finish` の実挙動が確認できる。勝者 Clip が見える
+- [ ] `ctNameBuf_` / `condParamBuf_` の全トラック共有が構造変更で消えている
+- [ ] トップメニューに UI Animation Editor / TextStyle Editor の独立項目が無い
 
 ---
 
-## 5. 本書の範囲外(この順で続ける)
+## 12. 後続改善(本書の範囲外。この順で続ける)
 
-本書(P0 → P1 → P3)が入ってから着手する。逆順にすると全部書き直しになる。
+本書が入ってから着手する。逆順にすると全部書き直しになる。
 
-1. **自動フック** — `UIScreen` の Enter / Exit で `"Enter"` / `"Exit"` グループを再生し、
-   `UIButtonComponent` の `isHovered` / `isPressed` / `isFocused` を `SetCondition()` へ橋渡しする。
-   クリックで `TriggerTrack()`。これで C++ を書かずに UI が動く状態になる
-2. **プリセット** — `FadeIn` / `FadeOut` / `PopIn` / `SlideIn` / `Blink` / `Shake` をワンクリック挿入。
-   必要なトラックとキーを裏で生成する
-3. **ベクタトラック** — `PositionX` / `PositionY` を 1 行の `Position` として扱い、
-   タイムラインの行数を減らす
-4. **オートキー** — 録画中に値をいじった瞬間、現在のスクラブ時刻へキーを自動追加する
-5. **Ease 拡充** — `Back` / `Elastic` / `Bounce` と曲線プレビュー。
-   現状 5 種のみ、`Bezier` の実体は smoothstep。イージングは左キーが右への区間を支配することを UI に出す
-6. **相対値モード** — キー値に「絶対 / 初期値からの差分」を選べるようにし、
-   レイアウト変更でアニメがズレないようにする
+1. **プリセット** — `FadeIn` / `FadeOut` / `PopIn` / `SlideIn` / `Blink` / `Shake` をワンクリック挿入。必要なトラックとキーを裏で生成する
+2. **ベクタトラック** — `PositionX` / `PositionY` を 1 行の `Position` として扱い、タイムラインの行数を減らす
+3. **オートキー** — 録画中に値をいじった瞬間、現在のスクラブ時刻へキーを自動追加する
+4. **Ease 拡充** — `Back` / `Elastic` / `Bounce` と曲線プレビュー。現状 5 種のみ、`Bezier` の実体は smoothstep。
+   イージングは左キーが右への区間を支配することを UI に出す
+5. **相対値モード** — キー値に「絶対 / 初期値からの差分」を選べるようにし、レイアウト変更でアニメがズレないようにする
+6. **Click 演出完了後の遷移** — §9.3 で見送った「Click クリップが終わってから Exit を始める」
+7. **`Pause()`** — 途中値を保持したまま止める要求が出たら
 
 ---
 
-## 6. 決めていないこと
+## 13. 決めていないこと
 
-- `conditionParam` のハッシュ化(§1.3 末尾)を P1 で同時にやるか、後続にするか
-- グループの完了を通知する口(コールバック / ポーリング)が要るか。
-  現状は誰も完了を見ていないため、必要になってから足す
+- Exit 待機のタイムアウト既定値(§9.2 は 2.0 秒と仮置き)
+- `Save As` は P0 で作った(ポップアップでパス入力)。使われなければ後で外す
+- `priority`(§6.2)を足す条件。serial で足りなくなった実例が出るまで足さない

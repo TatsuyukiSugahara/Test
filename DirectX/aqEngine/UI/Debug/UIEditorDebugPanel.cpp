@@ -2,8 +2,10 @@
 #include "UIEditorDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
+#include "UIEditorSession.h"
 #include "UI/UIObject.h"
 #include "UI/Screen/UIScreen.h"
+#include "UI/Screen/UIScreenManager.h"
 #include "UI/Component/UITransformComponent.h"
 #include "UI/Component/UIImageComponent.h"
 #include "UI/Component/UICanvasComponent.h"
@@ -43,6 +45,13 @@ namespace aq
 				auto gpuRes = res::ResourceManager::Get().Load<res::GPUResource>(path);
 				if (!gpuRes) return nullptr;
 				return std::make_shared<DeferredSRV>(std::move(gpuRes));
+			}
+
+			// ImGui ウィジェット編集直後に呼ぶと dirty を立てる
+			void MarkDirtyIfEdited()
+			{
+				if (ImGui::IsItemEdited())
+					UIEditorSession::Get().dirty = true;
 			}
 		} // anonymous namespace
 
@@ -84,6 +93,7 @@ namespace aq
 				{
 					tc->anchor.min = {GRID[i].minX, GRID[i].minY};
 					tc->anchor.max = {GRID[i].maxX, GRID[i].maxY};
+					UIEditorSession::Get().dirty = true;
 				}
 				if (active) ImGui::PopStyleColor();
 				ImGui::PopID();
@@ -104,6 +114,7 @@ namespace aq
 				{
 					tc->anchor.min = {STRETCH[i].minX, STRETCH[i].minY};
 					tc->anchor.max = {STRETCH[i].maxX, STRETCH[i].maxY};
+					UIEditorSession::Get().dirty = true;
 				}
 				if (active) ImGui::PopStyleColor();
 				ImGui::PopID();
@@ -116,11 +127,10 @@ namespace aq
 		{
 			void RenderTexturePicker(
 				const char* id,
-				UIObjectID objId,
 				char* pathBuf,
 				size_t pathBufSize,
 				std::vector<std::shared_ptr<graphics::IShaderResourceView>>& loadedTextures,
-				std::unordered_map<UIObjectID, std::string>& texturePaths,
+				std::string& texturePath,
 				std::shared_ptr<graphics::IShaderResourceView>& outTexture)
 			{
 				ImGui::PushID(id);
@@ -132,8 +142,9 @@ namespace aq
 					if (srv)
 					{
 						loadedTextures.push_back(srv);
-						outTexture = srv;
-						texturePaths[objId] = pathBuf;
+						outTexture  = srv;
+						texturePath = pathBuf;
+						UIEditorSession::Get().dirty = true;
 					}
 				}
 				ImGui::TextDisabled("ex) Assets/UI/xxx.png");
@@ -147,12 +158,14 @@ namespace aq
 		{
 			if (!node) return;
 
+			auto& session = UIEditorSession::Get();
+
 			const bool isLeaf = node->GetChildren().empty();
 			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow
 			                        | ImGuiTreeNodeFlags_SpanAvailWidth
 			                        | ImGuiTreeNodeFlags_DefaultOpen;
 			if (isLeaf)   flags |= ImGuiTreeNodeFlags_Leaf;
-			if (selectedHandle_ == node->GetHandle()) flags |= ImGuiTreeNodeFlags_Selected;
+			if (session.selectedObject == node->GetHandle()) flags |= ImGuiTreeNodeFlags_Selected;
 
 			const bool nameEmpty = node->GetName().empty();
 			const char* label = nameEmpty ? "(no name)" : node->GetName().data();
@@ -160,7 +173,7 @@ namespace aq
 			ImGui::PushID(node);
 			const bool open = ImGui::TreeNodeEx(label, flags);
 			if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-				selectedHandle_ = node->GetHandle();
+				session.selectedObject = node->GetHandle();
 			if (open)
 			{
 				for (UIObject* child : node->GetChildren())
@@ -171,42 +184,109 @@ namespace aq
 		}
 
 
-		// ---- Save/Load JSON パネル ------------------------------------------
-		void UIEditorDebugPanel::RenderSaveLoad(UIObject* root)
+		// ---- ツールバー (Save / Save As / Reload) ----------------------------
+		void UIEditorDebugPanel::RenderToolbar(UIObject* root)
 		{
-			ImGui::Separator();
-			ImGui::TextDisabled("--- JSON Save / Load ---");
+			auto& session = UIEditorSession::Get();
 
-			ImGui::SetNextItemWidth(-1.f);
-			ImGui::InputText("##savepath", savePathBuf_, sizeof(savePathBuf_));
-			ImGui::TextDisabled("ex) Assets/UI/screen.json");
+			ImGui::Text("Screen: %s", session.screenName.empty() ? "(none)" : session.screenName.c_str());
+			ImGui::SameLine();
+			ImGui::TextDisabled("%s", session.documentPath.empty() ? "(unregistered)" : session.documentPath.c_str());
 
-			ImGui::BeginDisabled(root == nullptr);
-
-			if (ImGui::Button("Save JSON", {100.f, 0.f}))
+			ImGui::SameLine();
+			ImGui::BeginDisabled(root == nullptr || session.documentPath.empty());
+			if (ImGui::Button("Save"))
 			{
-				if (root && savePathBuf_[0] != '\0')
-				{
-					const bool ok = UIDocumentSerializer::Save(root, savePathBuf_, texturePaths_);
-					std::snprintf(statusMsg_, sizeof(statusMsg_),
-					    ok ? "Saved: %s" : "Save FAILED: %s", savePathBuf_);
-				}
-				else
-				{
-					std::snprintf(statusMsg_, sizeof(statusMsg_), "Enter a path");
-				}
+				const bool ok = UIDocumentSerializer::Save(root, session.documentPath);
+				if (ok) session.dirty = false;
+				std::snprintf(statusMsg_, sizeof(statusMsg_),
+				    ok ? "Saved: %s" : "Save FAILED: %s", session.documentPath.c_str());
 			}
 			ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			ImGui::BeginDisabled(root == nullptr);
+			if (ImGui::Button("Save As"))
+			{
+				std::snprintf(saveAsPathBuf_, sizeof(saveAsPathBuf_), "%s", session.documentPath.c_str());
+				ImGui::OpenPopup("Save As##uieditor");
+			}
+			ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			if (ImGui::Button("Reload"))
+			{
+				if (session.dirty)
+					ImGui::OpenPopup("Reload Confirm##uieditor");
+				else
+				{
+					ClearForReload();
+					UIContext::Get().Screens().ReloadTopDocument();
+				}
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(ref nodes are expanded on save)");
+
+			// --- Save As ポップアップ ---
+			if (ImGui::BeginPopup("Save As##uieditor"))
+			{
+				ImGui::SetNextItemWidth(360.f);
+				ImGui::InputText("##saveaspath", saveAsPathBuf_, sizeof(saveAsPathBuf_));
+				ImGui::SameLine();
+				if (ImGui::Button("Save##saveas") && root && saveAsPathBuf_[0] != '\0')
+				{
+					const bool ok = UIDocumentSerializer::Save(root, saveAsPathBuf_);
+					std::snprintf(statusMsg_, sizeof(statusMsg_),
+					    ok ? "Saved: %s" : "Save FAILED: %s", saveAsPathBuf_);
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
+			}
+
+			// --- Reload 未保存確認モーダル ---
+			if (ImGui::BeginPopupModal("Reload Confirm##uieditor", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::Text("Unsaved changes will be lost. Reload anyway?");
+				if (ImGui::Button("Reload", {120.f, 0.f}))
+				{
+					ClearForReload();
+					UIContext::Get().Screens().ReloadTopDocument();
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel", {120.f, 0.f}))
+					ImGui::CloseCurrentPopup();
+				ImGui::EndPopup();
+			}
 
 			if (statusMsg_[0] != '\0')
 				ImGui::TextDisabled("%s", statusMsg_);
 		}
 
 
+		// ---- Reload 直前のエディタ状態クリア ---------------------------------
+		void UIEditorDebugPanel::ClearForReload()
+		{
+			auto& session = UIEditorSession::Get();
+			session.ClearSelection();
+			session.dirty = false;   // 再生成後のドキュメントは保存済み状態から始める
+
+			prevSelectedHandle_          = UIObjectHandle::Invalid();
+			imageTexPathBuf_[0]          = '\0';
+			nineSliceTexPathBuf_[0]      = '\0';
+			circleGaugeTexPathBuf_[0]    = '\0';
+			textContentBuf_[0]           = '\0';
+			textStyleBuf_[0]             = '\0';
+			nameBuf_[0]                  = '\0';
+			statusMsg_[0]                = '\0';
+		}
+
+
 		// ---- プロパティペイン -----------------------------------------------
 		void UIEditorDebugPanel::RenderProperties(UIObject* obj)
 		{
-			auto& ctx = UIContext::Get();
+			auto& ctx     = UIContext::Get();
+			auto& session = UIEditorSession::Get();
 
 			// --- ツールバー (Add / Delete) ---
 			{
@@ -220,6 +300,7 @@ namespace aq
 					UIObject* attachTo = obj ? obj : root;
 					if (attachTo)
 						attachTo->AddChild(newObj);
+					session.dirty = true;
 				}
 				ImGui::SameLine();
 
@@ -227,8 +308,9 @@ namespace aq
 				if (!canDelete) ImGui::BeginDisabled();
 				if (ImGui::Button("Delete"))
 				{
-					ctx.DestroyObject(selectedHandle_);
-					selectedHandle_ = UIObjectHandle::Invalid();
+					ctx.DestroyObject(session.selectedObject);
+					session.ClearSelection();
+					session.dirty = true;
 					obj = nullptr;
 				}
 				if (!canDelete) ImGui::EndDisabled();
@@ -239,27 +321,45 @@ namespace aq
 				{
 					if (!obj->HasComponent<UIImageComponent>() &&
 					    ImGui::MenuItem("Image"))
+					{
 						obj->AddComponent<UIImageComponent>();
+						session.dirty = true;
+					}
 
 					if (!obj->HasComponent<UINineSliceComponent>() &&
 					    ImGui::MenuItem("Nine Slice"))
+					{
 						obj->AddComponent<UINineSliceComponent>();
+						session.dirty = true;
+					}
 
 					if (!obj->HasComponent<UICircleGaugeComponent>() &&
 					    ImGui::MenuItem("Circle Gauge"))
+					{
 						obj->AddComponent<UICircleGaugeComponent>();
+						session.dirty = true;
+					}
 
 					if (!obj->HasComponent<UIButtonComponent>() &&
 					    ImGui::MenuItem("Button"))
+					{
 						obj->AddComponent<UIButtonComponent>();
+						session.dirty = true;
+					}
 
 					if (!obj->HasComponent<UITextComponent>() &&
 					    ImGui::MenuItem("Text"))
+					{
 						obj->AddComponent<UITextComponent>();
+						session.dirty = true;
+					}
 
 					if (!obj->HasComponent<UICanvasComponent>() &&
 					    ImGui::MenuItem("Canvas"))
+					{
 						obj->AddComponent<UICanvasComponent>();
+						session.dirty = true;
+					}
 
 					ImGui::EndMenu();
 				}
@@ -277,9 +377,10 @@ namespace aq
 			// --- 名前 ---
 			if (ImGui::InputText("Name", nameBuf_, sizeof(nameBuf_),
 				ImGuiInputTextFlags_EnterReturnsTrue))
+			{
 				obj->SetName(nameBuf_);
-
-			const UIObjectID objId = obj->GetHandle().id;
+				session.dirty = true;
+			}
 
 			// --- UITransformComponent ---
 			if (auto* tc = obj->GetComponent<UITransformComponent>())
@@ -287,12 +388,18 @@ namespace aq
 				if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::DragFloat3("Position", &tc->localPosition.x, 1.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat2("Size",      &tc->sizeDelta.x,    1.f, 0.f, 4096.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Rotation",   &tc->rotation,       0.5f, -360.f, 360.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat2("Scale",     &tc->localScale.x,   0.01f, 0.f, 10.f);
+					MarkDirtyIfEdited();
 					RenderAnchorPicker(tc);
 					ImGui::DragFloat2("Pivot",     &tc->pivot.pivot.x,  0.01f, 0.f, 1.f);
+					MarkDirtyIfEdited();
 					ImGui::Checkbox("Active",      &tc->active);
+					MarkDirtyIfEdited();
 				}
 			}
 
@@ -302,15 +409,20 @@ namespace aq
 				if (ImGui::CollapsingHeader("Image", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::ColorEdit4("Color##img",      &ic->color.x);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Fill Amount##img", &ic->fillAmount, 0.01f, 0.f, 1.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat4("UV Rect",         &ic->uvRect.x,   0.005f, -1.f, 2.f);
+					MarkDirtyIfEdited();
 					ImGui::Checkbox("Flip H",            &ic->flipH);
+					MarkDirtyIfEdited();
 					ImGui::SameLine();
 					ImGui::Checkbox("Flip V",            &ic->flipV);
+					MarkDirtyIfEdited();
 
 					ImGui::Separator();
-					RenderTexturePicker("img", objId, texPathBuf_, sizeof(texPathBuf_),
-					    loadedTextures_, texturePaths_, ic->texture);
+					RenderTexturePicker("img", imageTexPathBuf_, sizeof(imageTexPathBuf_),
+					    loadedTextures_, ic->texturePath, ic->texture);
 				}
 			}
 
@@ -320,26 +432,21 @@ namespace aq
 				if (ImGui::CollapsingHeader("Nine Slice", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::ColorEdit4("Color##ns",        &ns->color.x);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Fill Amount##ns",   &ns->fillAmount, 0.01f, 0.f, 1.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Border Left",       &ns->border.left,   0.5f, 0.f, 512.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Border Right",      &ns->border.right,  0.5f, 0.f, 512.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Border Top",        &ns->border.top,    0.5f, 0.f, 512.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Border Bottom",     &ns->border.bottom, 0.5f, 0.f, 512.f);
+					MarkDirtyIfEdited();
 
 					ImGui::Separator();
-					// NineSlice はテクスチャパスを独立したキーで管理 (Image と共存する場合に備え id をずらす)
-					const UIObjectID nsId = objId + 0x01000000u;
-					auto nsIt = texturePaths_.find(nsId);
-					static char nsTexBuf[256] = {};
-					if (nsIt != texturePaths_.end())
-					{
-						auto& p = nsIt->second;
-						auto len = p.size() < sizeof(nsTexBuf) - 1 ? p.size() : sizeof(nsTexBuf) - 1;
-						std::copy(p.begin(), p.begin() + len, nsTexBuf);
-						nsTexBuf[len] = '\0';
-					}
-					RenderTexturePicker("ns", nsId, nsTexBuf, sizeof(nsTexBuf),
-					    loadedTextures_, texturePaths_, ns->texture);
+					RenderTexturePicker("ns", nineSliceTexPathBuf_, sizeof(nineSliceTexPathBuf_),
+					    loadedTextures_, ns->texturePath, ns->texture);
 				}
 			}
 
@@ -349,25 +456,21 @@ namespace aq
 				if (ImGui::CollapsingHeader("Circle Gauge", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::ColorEdit4("Color##cg",         &cg->color.x);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Fill Amount##cg",    &cg->fillAmount, 0.01f, 0.f, 1.f);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Start Angle (rad)",  &cg->startAngle, 0.01f, -6.28f, 6.28f);
+					MarkDirtyIfEdited();
 					bool cwBool = cg->clockwise > 0.f;
 					if (ImGui::Checkbox("Clockwise",       &cwBool))
+					{
 						cg->clockwise = cwBool ? 1.f : -1.f;
+						session.dirty = true;
+					}
 
 					ImGui::Separator();
-					const UIObjectID cgId = objId + 0x02000000u;
-					auto cgIt = texturePaths_.find(cgId);
-					static char cgTexBuf[256] = {};
-					if (cgIt != texturePaths_.end())
-					{
-						auto& p = cgIt->second;
-						auto len = p.size() < sizeof(cgTexBuf) - 1 ? p.size() : sizeof(cgTexBuf) - 1;
-						std::copy(p.begin(), p.begin() + len, cgTexBuf);
-						cgTexBuf[len] = '\0';
-					}
-					RenderTexturePicker("cg", cgId, cgTexBuf, sizeof(cgTexBuf),
-					    loadedTextures_, texturePaths_, cg->texture);
+					RenderTexturePicker("cg", circleGaugeTexPathBuf_, sizeof(circleGaugeTexPathBuf_),
+					    loadedTextures_, cg->texturePath, cg->texture);
 				}
 			}
 
@@ -377,6 +480,7 @@ namespace aq
 				if (ImGui::CollapsingHeader("Button", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::Checkbox("Interactable", &btn->interactable);
+					MarkDirtyIfEdited();
 
 					// 状態表示 (ReadOnly)
 					ImGui::BeginDisabled();
@@ -395,31 +499,22 @@ namespace aq
 			{
 				if (ImGui::CollapsingHeader("Text", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					static char contentBuf[512] = {};
-					static char styleBuf[512]   = {};
-
-					// 選択が変わった時だけバッファ同期 (毎フレーム上書き防止)
-					if (selectedHandle_ != prevSelectedHandle_)
+					// textContentBuf_ / textStyleBuf_ は DebugRender() の選択変更検出で同期する
+					// --- テキスト内容 ---
+					if (ImGui::InputText("Content##txt", textContentBuf_, sizeof(textContentBuf_),
+					    ImGuiInputTextFlags_EnterReturnsTrue))
 					{
-						auto copyTo = [](const std::string& src, char* dst, size_t dstSz)
-						{
-							auto n = src.size() < dstSz - 1 ? src.size() : dstSz - 1;
-							std::copy(src.begin(), src.begin() + n, dst);
-							dst[n] = '\0';
-						};
-						copyTo(txt->content,       contentBuf, sizeof(contentBuf));
-						copyTo(txt->textStylePath, styleBuf,   sizeof(styleBuf));
+						txt->content = textContentBuf_;
+						session.dirty = true;
 					}
 
-					// --- テキスト内容 ---
-					if (ImGui::InputText("Content##txt", contentBuf, sizeof(contentBuf),
-					    ImGuiInputTextFlags_EnterReturnsTrue))
-						txt->content = contentBuf;
-
 					// --- スタイル参照 ---
-					if (ImGui::InputText("Style Path##txt", styleBuf, sizeof(styleBuf),
+					if (ImGui::InputText("Style Path##txt", textStyleBuf_, sizeof(textStyleBuf_),
 					    ImGuiInputTextFlags_EnterReturnsTrue))
-						txt->textStylePath = styleBuf;
+					{
+						txt->textStylePath = textStyleBuf_;
+						session.dirty = true;
+					}
 					ImGui::TextDisabled("  ex) Assets/Styles/Default.textstyle.json");
 
 					ImGui::Separator();
@@ -427,26 +522,37 @@ namespace aq
 					// --- インスタンスオーバーライド ---
 					ImGui::DragFloat("Font Size##txt", &txt->fontSize, 0.5f, 0.f, 512.f,
 					                 txt->fontSize <= 0.f ? "(style)" : "%.1f px");
+					MarkDirtyIfEdited();
 					ImGui::DragFloat("Scale##txt",     &txt->scale,    0.01f, 0.01f, 8.f, "x%.3f");
+					MarkDirtyIfEdited();
 					ImGui::DragFloat2("Offset##txt",   &txt->offset.x, 0.5f, -2000.f, 2000.f, "%.1f px");
+					MarkDirtyIfEdited();
 					ImGui::ColorEdit4("Color##txt",    &txt->color.x);
+					MarkDirtyIfEdited();
 					ImGui::TextDisabled("  alpha=0 uses the Style fillColor");
 
 					ImGui::Separator();
 
 					// --- レイアウト ---
 					ImGui::Checkbox("Word Wrap", &txt->wordWrap);
+					MarkDirtyIfEdited();
 					{
 						static const char* ALIGN_H[] = { "Left", "Center", "Right" };
 						int idx = static_cast<int>(txt->alignH);
 						if (ImGui::Combo("Align H", &idx, ALIGN_H, 3))
+						{
 							txt->alignH = static_cast<TextAlignH>(idx);
+							session.dirty = true;
+						}
 					}
 					{
 						static const char* ALIGN_V[] = { "Top", "Middle", "Bottom" };
 						int idx = static_cast<int>(txt->alignV);
 						if (ImGui::Combo("Align V", &idx, ALIGN_V, 3))
+						{
 							txt->alignV = static_cast<TextAlignV>(idx);
+							session.dirty = true;
+						}
 					}
 				}
 			}
@@ -457,7 +563,9 @@ namespace aq
 				if (ImGui::CollapsingHeader("Canvas"))
 				{
 					ImGui::DragInt("Sort Order",    &cc->sortOrder);
+					MarkDirtyIfEdited();
 					ImGui::DragFloat2("Resolution", &cc->resolution.x, 1.f, 1.f, 7680.f);
+					MarkDirtyIfEdited();
 				}
 			}
 		}
@@ -589,27 +697,43 @@ namespace aq
 
 			if (!show_) return;
 
+			auto& session = UIEditorSession::Get();
+
+			// 先頭画面の screenName / documentPath を毎フレーム同期する。
+			// screenName が前フレームから変わっていたら選択を捨てる。
+			UIScreen* top  = UIContext::Get().Screens().Top();
+			UIObject* root = top ? top->GetRoot() : nullptr;
+			const std::string currentScreenName(top ? top->GetName() : std::string_view{});
+			if (currentScreenName != session.screenName)
+				session.ClearSelection();
+			session.screenName    = currentScreenName;
+			session.documentPath  = std::string(UIContext::Get().Screens().GetDocumentPath(session.screenName));
+
+			const char* windowTitle = session.dirty
+				? "UI Editor *###uieditor"
+				: "UI Editor###uieditor";
+
 			ImGui::SetNextWindowSize(ImVec2(700, 560), ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("UI Editor"))
+			if (!ImGui::Begin(windowTitle))
 			{
 				ImGui::End();
 				return;
 			}
+
+			RenderToolbar(root);
+			ImGui::Separator();
 
 			ImGui::Checkbox("Text Overlay", &showTextOverlay_);
 			ImGui::SameLine();
 			ImGui::TextDisabled("(UIText placeholder)");
 			ImGui::Separator();
 
-			UIScreen* top  = UIContext::Get().Screens().Top();
-			UIObject* root = top ? top->GetRoot() : nullptr;
-
-			UIObject* selectedObj = UIContext::Get().Resolve(selectedHandle_);
+			UIObject* selectedObj = UIContext::Get().Resolve(session.selectedObject);
 
 			// 選択が変わったとき各バッファを同期
-			if (selectedHandle_ != prevSelectedHandle_)
+			if (session.selectedObject != prevSelectedHandle_)
 			{
-				prevSelectedHandle_ = selectedHandle_;
+				prevSelectedHandle_ = session.selectedObject;
 				if (selectedObj)
 				{
 					auto n   = selectedObj->GetName();
@@ -617,35 +741,57 @@ namespace aq
 					std::copy(n.begin(), n.begin() + len, nameBuf_);
 					nameBuf_[len] = '\0';
 
-					auto it = texturePaths_.find(selectedHandle_.id);
-					if (it != texturePaths_.end())
+					auto copyStr = [](const std::string& src, char* dst, size_t dstSz)
 					{
-						auto& p   = it->second;
-						auto plen = p.size() < sizeof(texPathBuf_) - 1 ? p.size() : sizeof(texPathBuf_) - 1;
-						std::copy(p.begin(), p.begin() + plen, texPathBuf_);
-						texPathBuf_[plen] = '\0';
+						auto n2 = src.size() < dstSz - 1 ? src.size() : dstSz - 1;
+						std::copy(src.begin(), src.begin() + n2, dst);
+						dst[n2] = '\0';
+					};
+
+					if (auto* ic = selectedObj->GetComponent<UIImageComponent>())
+						copyStr(ic->texturePath, imageTexPathBuf_, sizeof(imageTexPathBuf_));
+					else
+						imageTexPathBuf_[0] = '\0';
+
+					if (auto* ns = selectedObj->GetComponent<UINineSliceComponent>())
+						copyStr(ns->texturePath, nineSliceTexPathBuf_, sizeof(nineSliceTexPathBuf_));
+					else
+						nineSliceTexPathBuf_[0] = '\0';
+
+					if (auto* cg = selectedObj->GetComponent<UICircleGaugeComponent>())
+						copyStr(cg->texturePath, circleGaugeTexPathBuf_, sizeof(circleGaugeTexPathBuf_));
+					else
+						circleGaugeTexPathBuf_[0] = '\0';
+
+					if (auto* txt = selectedObj->GetComponent<UITextComponent>())
+					{
+						copyStr(txt->content,       textContentBuf_, sizeof(textContentBuf_));
+						copyStr(txt->textStylePath, textStyleBuf_,   sizeof(textStyleBuf_));
 					}
 					else
 					{
-						texPathBuf_[0] = '\0';
+						textContentBuf_[0] = '\0';
+						textStyleBuf_[0]   = '\0';
 					}
 				}
 				else
 				{
-					nameBuf_[0]    = '\0';
-					texPathBuf_[0] = '\0';
+					nameBuf_[0]                  = '\0';
+					imageTexPathBuf_[0]          = '\0';
+					nineSliceTexPathBuf_[0]      = '\0';
+					circleGaugeTexPathBuf_[0]    = '\0';
+					textContentBuf_[0]           = '\0';
+					textStyleBuf_[0]             = '\0';
 				}
 			}
 
-			// 左ペイン: オブジェクトツリー + Save/Load
+			// 左ペイン: オブジェクトツリー
 			const float treeW = ImGui::GetContentRegionAvail().x * 0.38f;
 			ImGui::BeginChild("##tree", ImVec2(treeW, 0.f), true);
 			if (root)
 				RenderTree(root);
 			else
 				ImGui::TextDisabled("No UIScreen");
-
-			RenderSaveLoad(root);
 			ImGui::EndChild();
 
 			ImGui::SameLine();

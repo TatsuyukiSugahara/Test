@@ -84,6 +84,22 @@ namespace aq
 		}
 
 
+		// ---- エディタ用 -----------------------------------------------------------
+
+		std::string_view UIScreenManager::GetDocumentPath(std::string_view screenName) const
+		{
+			auto it = registry_.find(std::string(screenName));
+			if (it == registry_.end()) return {};
+			return it->second.documentPath;
+		}
+
+		void UIScreenManager::ReloadTopDocument()
+		{
+			if (stack_.empty()) return;
+			Replace(Top()->GetName());
+		}
+
+
 		// ---- 内部 ---------------------------------------------------------------
 
 		bool UIScreenManager::FlushPendingOps()

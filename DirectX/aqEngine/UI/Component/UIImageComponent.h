@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <string>
 #include "IUIComponent.h"
 #include "UI/UITypes.h"
 #include "Math/Vector.h"
@@ -13,7 +14,8 @@ namespace aq
 		class UIImageComponent : public IUIComponent
 		{
 		public:
-			std::shared_ptr<graphics::IShaderResourceView> texture;
+			std::string                                     texturePath; // 保存・編集用の正本。ゲームコードが texture を直接差し替えても自動更新されない
+			std::shared_ptr<graphics::IShaderResourceView>  texture;
 
 			math::Vector4 color      = { 1.f, 1.f, 1.f, 1.f }; // RGBA tint (アニメ可)
 			RectF         uvRect     = { 0.f, 0.f, 1.f, 1.f }; // UV 矩形 (0-1)

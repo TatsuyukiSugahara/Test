@@ -1501,6 +1501,9 @@
     <ClInclude Include="UI\Debug\UIAnimationEditor.h">
       <Filter>UI\Debug</Filter>
     </ClInclude>
+    <ClInclude Include="UI\Debug\UIEditorSession.h">
+      <Filter>UI\Debug</Filter>
+    </ClInclude>
     <ClInclude Include="UI\Animation\UIAnimationSerializer.h">
       <Filter>UI\Animation</Filter>
     </ClInclude>

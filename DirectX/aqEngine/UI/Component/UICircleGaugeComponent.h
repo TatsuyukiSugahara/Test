@@ -2,6 +2,7 @@
 #include "IUIComponent.h"
 #include "Math/Vector.h"
 #include <memory>
+#include <string>
 
 namespace aq
 {
@@ -14,7 +15,8 @@ namespace aq
 		class UICircleGaugeComponent : public IUIComponent
 		{
 		public:
-			std::shared_ptr<graphics::IShaderResourceView> texture;
+			std::string                                     texturePath; // 保存・編集用の正本。ゲームコードが texture を直接差し替えても自動更新されない
+			std::shared_ptr<graphics::IShaderResourceView>  texture;
 			math::Vector4 color      = { 1.f, 1.f, 1.f, 1.f };
 			float         fillAmount = 1.f;   // 0=空, 1=満タン
 			float         startAngle = 0.f;   // ラジアン (0=上)

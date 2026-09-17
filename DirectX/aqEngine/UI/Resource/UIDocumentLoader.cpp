@@ -144,7 +144,10 @@ namespace aq
 				            : obj.AddComponent<UIImageComponent>();
 
 				if (!j["texture"].IsNull())
-					img->texture = LoadTex(j["texture"].AsString());
+				{
+					img->texturePath = j["texture"].AsString();
+					img->texture     = LoadTex(img->texturePath);
+				}
 				if (!j["color"].IsNull())
 					img->color = ToVec4(j["color"]);
 				if (!j["uvRect"].IsNull())
@@ -171,7 +174,10 @@ namespace aq
 				           : obj.AddComponent<UINineSliceComponent>();
 
 				if (!j["texture"].IsNull())
-					ns->texture = LoadTex(j["texture"].AsString());
+				{
+					ns->texturePath = j["texture"].AsString();
+					ns->texture     = LoadTex(ns->texturePath);
+				}
 				if (!j["color"].IsNull())
 					ns->color = ToVec4(j["color"]);
 				if (!j["border"].IsNull())
@@ -201,7 +207,10 @@ namespace aq
 				           : obj.AddComponent<UICircleGaugeComponent>();
 
 				if (!j["texture"].IsNull())
-					cg->texture = LoadTex(j["texture"].AsString());
+				{
+					cg->texturePath = j["texture"].AsString();
+					cg->texture     = LoadTex(cg->texturePath);
+				}
 				if (!j["color"].IsNull())
 					cg->color = ToVec4(j["color"]);
 				if (!j["fillAmount"].IsNull())

@@ -5,7 +5,6 @@
 #include "UI/Animation/UIAnimatedProperty.h"
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 struct ImDrawList;
 
@@ -20,8 +19,8 @@ namespace aq
 
 		// ImGui ベースの UIAnimation Timeline エディタ。
 		// DebugUI::Get().Register() で登録するとメニューから開ける。
-		// 対象 UIObject を選択し、クリップ / トラック / キーフレームを
-		// タイムライン上で編集・保存できる。
+		// 対象 UIObject は UIEditorSession の選択(UI Editor の Hierarchy)を参照するだけで、
+		// 独自の Object Picker や保存先は持たない。
 		class UIAnimationEditor : public IDebugRenderable
 		{
 		public:
@@ -30,10 +29,6 @@ namespace aq
 			const char* GetDebugCategory() const override { return "UI"; }
 
 		private:
-			// ---- Object picker ----
-			void DrawObjectPicker();
-			void CollectObjects(UIObject* obj, int depth);
-
 			// ---- Left panel ----
 			void DrawClipPanel(UIObject* obj);
 			void DrawClipTrackTree(UIAnimationClip& clip);
@@ -54,13 +49,13 @@ namespace aq
 			void RestoreSnapshot(UIObject* obj);
 			void ApplyScrub(UIObject* obj, const UIAnimationClip& clip);
 
-			// ---- Save / Load ----
-			void DrawSaveLoad(UIObject* obj);
+			// ---- Selection ----
+			void OnTargetChanged(UIObject* prevObj);   // 選択オブジェクトが変わった時の後始末
 
 			// ---- State ----
 			bool           show_               = false;
 			bool           windowPinned_       = false;
-			UIObjectHandle targetHandle_;
+			UIObjectHandle prevTargetHandle_;   // UIEditorSession の選択変化検出用
 
 			// 選択
 			std::string    selectedClip_;
@@ -90,14 +85,6 @@ namespace aq
 			char           clipNameBuf_[64]    = {};
 			char           ctNameBuf_[64]      = {};
 			char           condParamBuf_[64]   = {};
-			char           savePathBuf_[512]   = {};
-			char           statusMsg_[256]     = {};
-
-			// Object picker キャッシュ
-			struct ObjEntry { UIObjectHandle handle; std::string displayName; };
-			std::vector<ObjEntry> objList_;
-			char           objFilterBuf_[64]   = {};
-			bool           objPickerOpen_      = false;
 		};
 
 	} // namespace ui

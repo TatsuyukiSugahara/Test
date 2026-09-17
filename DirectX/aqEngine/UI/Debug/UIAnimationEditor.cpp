@@ -2,14 +2,13 @@
 #include "UIAnimationEditor.h"
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
+#include "UIEditorSession.h"
 #include "UI/UIObject.h"
-#include "UI/Screen/UIScreen.h"
 #include "UI/Component/UIAnimationComponent.h"
 #include "UI/Animation/UIAnimationSerializer.h"
 #include "UI/Animation/UIAnimationClip.h"
 #include "UI/Animation/UIClipTrack.h"
 #include "UI/Animation/UIAnimationTrack.h"
-#include "Util/SimpleJson.h"
 #include <cstdio>
 #include <cmath>
 
@@ -62,13 +61,24 @@ namespace aq
 				windowPinned_ = !windowPinned_;
 			ImGui::SameLine();
 
-			DrawObjectPicker();
+			auto& session = UIEditorSession::Get();
+
+			// UI Editor の Hierarchy 選択が変わったら Clip / Keyframe 選択とプレビューを捨てる
+			if (session.selectedObject != prevTargetHandle_)
+			{
+				UIObject* prevTarget = UIContext::Get().Resolve(prevTargetHandle_);
+				OnTargetChanged(prevTarget);
+				prevTargetHandle_ = session.selectedObject;
+			}
+
+			UIObject* target = UIContext::Get().Resolve(session.selectedObject);
+
+			ImGui::Text("Target: %s", target ? target->GetName().data() : "(none)");
 			ImGui::Separator();
 
-			UIObject* target = UIContext::Get().Resolve(targetHandle_);
 			if (!target)
 			{
-				ImGui::TextDisabled("Select a target UIObject");
+				ImGui::TextDisabled("Select an object in UI Editor");
 				ImGui::End();
 				return;
 			}
@@ -110,32 +120,25 @@ namespace aq
 
 			ImGui::Separator();
 
-			// 下部: キーフレーム Inspector + Preview Controls + Save/Load
+			// 下部: キーフレーム Inspector + Preview Controls
 			ImGui::BeginChild("##bottom", ImVec2(0, 0));
 			{
 				if (!selectedClip_.empty())
 				{
 					auto& clip = anim->clips[selectedClip_];
 
-					// キーフレーム Inspector (左半分)
+					// キーフレーム Inspector (左)
 					ImGui::BeginChild("##kfinspector", ImVec2(300, 0), false);
 					DrawKeyframeInspector(clip);
 					ImGui::EndChild();
 
 					ImGui::SameLine();
 
-					// Preview Controls (中央)
-					ImGui::BeginChild("##preview", ImVec2(320, 0), false);
+					// Preview Controls (残り全部)
+					ImGui::BeginChild("##preview", ImVec2(0, 0), false);
 					DrawPreviewControls(target, clip, dt);
 					ImGui::EndChild();
-
-					ImGui::SameLine();
 				}
-
-				// Save / Load (右)
-				ImGui::BeginChild("##saveload", ImVec2(0, 0), false);
-				DrawSaveLoad(target);
-				ImGui::EndChild();
 			}
 			ImGui::EndChild();
 
@@ -143,79 +146,21 @@ namespace aq
 		}
 
 
-		// ---- Object Picker --------------------------------------------------
+		// ---- Selection --------------------------------------------------------
 
-		void UIAnimationEditor::DrawObjectPicker()
+		// UI Editor の Hierarchy 選択が変わった時の後始末。
+		// 旧オブジェクトのプレビュースナップショットを戻し、Clip / Keyframe 選択を捨てる。
+		void UIAnimationEditor::OnTargetChanged(UIObject* prevObj)
 		{
-			UIObject* cur = UIContext::Get().Resolve(targetHandle_);
-			const char* label = cur ? cur->GetName().data() : "(none)";
-
-			ImGui::Text("Target: ");
-			ImGui::SameLine();
-			if (ImGui::Button(label))
+			selectedClip_.clear();
+			selClipTrackIdx_ = selPropTrackIdx_ = selKeyframeIdx_ = -1;
+			if (hasSnapshot_)
 			{
-				objPickerOpen_ = true;
-				objList_.clear();
-				objFilterBuf_[0] = '\0';
-
-				// 現在の全スクリーンから UIObject を列挙
-				auto& screens = UIContext::Get().Screens();
-				for (int si = 0; si < screens.StackSize(); ++si)
-				{
-					UIScreen* s = screens.GetScreen(si);
-					if (s && s->GetRoot())
-						CollectObjects(s->GetRoot(), 0);
-				}
+				if (prevObj)
+					RestoreSnapshot(prevObj);
+				hasSnapshot_ = false;
 			}
-
-			if (objPickerOpen_)
-			{
-				ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_Always);
-				if (ImGui::Begin("Object Picker", &objPickerOpen_))
-				{
-					ImGui::InputText("Filter", objFilterBuf_, sizeof(objFilterBuf_));
-					ImGui::Separator();
-
-					std::string filterStr(objFilterBuf_);
-					for (auto& e : objList_)
-					{
-						if (!filterStr.empty())
-						{
-							if (e.displayName.find(filterStr) == std::string::npos)
-								continue;
-						}
-						bool sel = (e.handle == targetHandle_);
-						if (ImGui::Selectable(e.displayName.c_str(), sel))
-						{
-							targetHandle_    = e.handle;
-							selectedClip_.clear();
-							selClipTrackIdx_ = -1;
-							selPropTrackIdx_ = -1;
-							selKeyframeIdx_  = -1;
-							if (hasSnapshot_)
-							{
-								if (auto* obj = UIContext::Get().Resolve(targetHandle_))
-									RestoreSnapshot(obj);
-								hasSnapshot_ = false;
-							}
-							objPickerOpen_ = false;
-						}
-					}
-				}
-				ImGui::End();
-			}
-		}
-
-		void UIAnimationEditor::CollectObjects(UIObject* obj, int depth)
-		{
-			if (!obj) return;
-			std::string indent(depth * 2, ' ');
-			ObjEntry e;
-			e.handle      = obj->GetHandle();
-			e.displayName = indent + std::string(obj->GetName());
-			objList_.push_back(e);
-			for (UIObject* child : obj->GetChildren())
-				CollectObjects(child, depth + 1);
+			isPlaying_ = false;
 		}
 
 
@@ -241,6 +186,7 @@ namespace aq
 				selectedClip_ = nc.name;
 				anim->clips[nc.name] = std::move(nc);
 				selClipTrackIdx_ = selPropTrackIdx_ = selKeyframeIdx_ = -1;
+				UIEditorSession::Get().dirty = true;
 			}
 
 			ImGui::Separator();
@@ -283,11 +229,14 @@ namespace aq
 					node.mapped().name = newName;
 					anim->clips.insert(std::move(node));
 					selectedClip_ = newName;
+					UIEditorSession::Get().dirty = true;
 				}
 			}
 
 			ImGui::SetNextItemWidth(80.f);
 			ImGui::DragFloat("Duration", &clip.duration, 0.01f, 0.01f, 60.f, "%.2fs");
+			if (ImGui::IsItemEdited())
+				UIEditorSession::Get().dirty = true;
 			clip.duration = std::max(clip.duration, 0.01f);
 
 			if (ImGui::SmallButton("- Clip"))
@@ -296,6 +245,7 @@ namespace aq
 				anim->clips.erase(selectedClip_);
 				selectedClip_.clear();
 				selClipTrackIdx_ = selPropTrackIdx_ = selKeyframeIdx_ = -1;
+				UIEditorSession::Get().dirty = true;
 				return;
 			}
 
@@ -315,6 +265,7 @@ namespace aq
 				clip.clipTracks.push_back(std::move(ct));
 				selClipTrackIdx_ = static_cast<int>(clip.clipTracks.size()) - 1;
 				selPropTrackIdx_ = selKeyframeIdx_ = -1;
+				UIEditorSession::Get().dirty = true;
 			}
 
 			static const char* COND_LABELS[] = { "Default", "Bool", "Trigger" };
@@ -347,12 +298,18 @@ namespace aq
 					std::snprintf(ctNameBuf_, sizeof(ctNameBuf_), "%s", ct.name.c_str());
 					if (ImGui::InputText("Name##ct", ctNameBuf_, sizeof(ctNameBuf_),
 					                     ImGuiInputTextFlags_EnterReturnsTrue))
+					{
 						ct.name = ctNameBuf_;
+						UIEditorSession::Get().dirty = true;
+					}
 
 					int condIdx = static_cast<int>(ct.condition);
 					ImGui::SetNextItemWidth(80.f);
 					if (ImGui::Combo("Cond", &condIdx, COND_LABELS, 3))
+					{
 						ct.condition = static_cast<UITrackCondition>(condIdx);
+						UIEditorSession::Get().dirty = true;
+					}
 
 					if (ct.condition != UITrackCondition::Default)
 					{
@@ -360,20 +317,32 @@ namespace aq
 						ImGui::SetNextItemWidth(100.f);
 						if (ImGui::InputText("Param##ct", condParamBuf_, sizeof(condParamBuf_),
 						                     ImGuiInputTextFlags_EnterReturnsTrue))
+						{
 							ct.conditionParam = condParamBuf_;
+							UIEditorSession::Get().dirty = true;
+						}
 					}
 
 					ImGui::Checkbox("Restore", &ct.restoreOnComplete);
+					if (ImGui::IsItemEdited())
+						UIEditorSession::Get().dirty = true;
 					ImGui::SameLine();
 					bool loop = (ct.loopFrom >= 0.f);
 					if (ImGui::Checkbox("Loop", &loop))
+					{
 						ct.loopFrom = loop ? 0.f : -1.f;
+						UIEditorSession::Get().dirty = true;
+					}
 					if (loop)
 					{
 						ImGui::SetNextItemWidth(60.f);
 						ImGui::DragFloat("LoopFrom", &ct.loopFrom, 0.01f, 0.f, 60.f, "%.2f");
+						if (ImGui::IsItemEdited())
+							UIEditorSession::Get().dirty = true;
 						ImGui::SameLine();
 						ImGui::Checkbox("SkipFirst", &ct.loopSkipFirst);
+						if (ImGui::IsItemEdited())
+							UIEditorSession::Get().dirty = true;
 					}
 
 					// PropTrack リスト
@@ -411,6 +380,7 @@ namespace aq
 						selClipTrackIdx_ = ci;
 						selPropTrackIdx_ = static_cast<int>(ct.tracks.size()) - 1;
 						selKeyframeIdx_  = -1;
+						UIEditorSession::Get().dirty = true;
 					}
 					ImGui::SameLine();
 					if (ImGui::SmallButton("- ClipTrack"))
@@ -419,6 +389,7 @@ namespace aq
 						if (selClipTrackIdx_ >= (int)clip.clipTracks.size())
 							selClipTrackIdx_ = (int)clip.clipTracks.size() - 1;
 						selPropTrackIdx_ = selKeyframeIdx_ = -1;
+						UIEditorSession::Get().dirty = true;
 						ImGui::TreePop();
 						ImGui::PopID();
 						return;
@@ -450,7 +421,10 @@ namespace aq
 						}
 						ImGui::SetNextItemWidth(140.f);
 						if (ImGui::Combo("##prop", &propIdx, PROP_LABELS, PROP_COUNT))
+						{
 							pt.property = PROP_VALUES[propIdx];
+							UIEditorSession::Get().dirty = true;
+						}
 
 						ImGui::SameLine();
 						if (ImGui::SmallButton("-##pt"))
@@ -459,6 +433,7 @@ namespace aq
 							if (selPropTrackIdx_ >= (int)ct.tracks.size())
 								selPropTrackIdx_ = (int)ct.tracks.size() - 1;
 							selKeyframeIdx_ = -1;
+							UIEditorSession::Get().dirty = true;
 							ImGui::PopID();
 							continue;
 						}
@@ -598,6 +573,7 @@ namespace aq
 						std::sort(pt.keyframes.begin(), pt.keyframes.end(),
 						          [](const UIKeyframe& a, const UIKeyframe& b)
 						          { return a.time < b.time; });
+						UIEditorSession::Get().dirty = true;
 					}
 				}
 			}
@@ -630,6 +606,7 @@ namespace aq
 								if (std::abs(dpt.keyframes[ni].time - savedTime) < 1e-5f)
 								{ selKeyframeIdx_ = ni; break; }
 							}
+							UIEditorSession::Get().dirty = true;
 						}
 					}
 				}
@@ -653,6 +630,7 @@ namespace aq
 					{
 						pt.keyframes.erase(pt.keyframes.begin() + selKeyframeIdx_);
 						selKeyframeIdx_ = -1;
+						UIEditorSession::Get().dirty = true;
 					}
 				}
 			}
@@ -680,7 +658,10 @@ namespace aq
 								{
 									bool isCur = (static_cast<int>(kf.ease) == ei);
 									if (ImGui::MenuItem(EASE_MENU_LABELS[ei], nullptr, isCur))
+									{
 										kf.ease = static_cast<EaseType>(ei);
+										UIEditorSession::Get().dirty = true;
+									}
 								}
 								ImGui::EndMenu();
 							}
@@ -698,12 +679,14 @@ namespace aq
 									if (std::abs(pt.keyframes[ni].time - dup.time) < 1e-5f)
 									{ selKeyframeIdx_ = ni; break; }
 								}
+								UIEditorSession::Get().dirty = true;
 							}
 							ImGui::Separator();
 							if (ImGui::MenuItem("Delete Key"))
 							{
 								pt.keyframes.erase(pt.keyframes.begin() + selKeyframeIdx_);
 								selKeyframeIdx_ = -1;
+								UIEditorSession::Get().dirty = true;
 							}
 						}
 					}
@@ -736,6 +719,7 @@ namespace aq
 								if (std::abs(pt.keyframes[ni].time - ctxClickTime_) < 1e-5f)
 								{ selKeyframeIdx_ = ni; break; }
 							}
+							UIEditorSession::Get().dirty = true;
 						}
 						if (ImGui::MenuItem("Add Key at Scrub"))
 						{
@@ -749,6 +733,7 @@ namespace aq
 								if (std::abs(pt.keyframes[ni].time - scrubTime_) < 1e-5f)
 								{ selKeyframeIdx_ = ni; break; }
 							}
+							UIEditorSession::Get().dirty = true;
 						}
 					}
 				}
@@ -929,15 +914,22 @@ namespace aq
 
 			ImGui::SetNextItemWidth(100.f);
 			ImGui::DragFloat("Time",  &kf.time,  0.001f, 0.f, clip.duration, "%.3f");
+			if (ImGui::IsItemEdited())
+				UIEditorSession::Get().dirty = true;
 			ImGui::SetNextItemWidth(100.f);
 			ImGui::DragFloat("Value", &kf.value, 0.01f,  -9999.f, 9999.f,  "%.3f");
+			if (ImGui::IsItemEdited())
+				UIEditorSession::Get().dirty = true;
 
 			static const char* EASE_LABELS[] =
 				{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
 			int easeIdx = static_cast<int>(kf.ease);
 			ImGui::SetNextItemWidth(120.f);
 			if (ImGui::Combo("Ease", &easeIdx, EASE_LABELS, 5))
+			{
 				kf.ease = static_cast<EaseType>(easeIdx);
+				UIEditorSession::Get().dirty = true;
+			}
 
 			// Delete ボタン or Delete キー
 			const bool deletePressed =
@@ -949,6 +941,7 @@ namespace aq
 			{
 				pt.keyframes.erase(pt.keyframes.begin() + selKeyframeIdx_);
 				selKeyframeIdx_ = -1;
+				UIEditorSession::Get().dirty = true;
 				return;
 			}
 
@@ -1050,6 +1043,7 @@ namespace aq
 					if (std::abs(pt.keyframes[ni].time - scrubTime_) < 1e-5f)
 					{ selKeyframeIdx_ = ni; break; }
 				}
+				UIEditorSession::Get().dirty = true;
 			}
 			if (!canAddKey) ImGui::EndDisabled();
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add a keyframe to the selected track at the scrub time");
@@ -1066,55 +1060,6 @@ namespace aq
 					scrubTime_   = 0.f;
 				}
 			}
-		}
-
-
-		// ---- Save / Load ----------------------------------------------------
-
-		void UIAnimationEditor::DrawSaveLoad(UIObject* obj)
-		{
-			ImGui::Text("Save / Load");
-			ImGui::Separator();
-
-			ImGui::SetNextItemWidth(260.f);
-			ImGui::InputText("JSON Path", savePathBuf_, sizeof(savePathBuf_));
-
-			auto* anim = obj->GetComponent<UIAnimationComponent>();
-
-			ImGui::SameLine();
-			if (ImGui::Button("Save") && anim)
-			{
-				// 既存 JSON をロードしてマージ後に書き直す
-				const std::string path(savePathBuf_);
-				util::JsonValue root = util::JsonParser::ParseFile(path.c_str());
-				if (root.IsNull()) root = util::JsonValue::MakeObject();
-
-				root.Set("animation", UIAnimationSerializer::SaveAll(*anim));
-
-				if (util::JsonSerializer::WriteFile(path.c_str(), root))
-					std::snprintf(statusMsg_, sizeof(statusMsg_), "Saved: %s", path.c_str());
-				else
-					std::snprintf(statusMsg_, sizeof(statusMsg_), "Save FAILED: %s", path.c_str());
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Load") && anim)
-			{
-				const std::string path(savePathBuf_);
-				util::JsonValue root = util::JsonParser::ParseFile(path.c_str());
-				if (!root.IsNull() && !root["animation"].IsNull())
-				{
-					UIAnimationSerializer::LoadAll(root["animation"], *anim);
-					std::snprintf(statusMsg_, sizeof(statusMsg_), "Loaded: %s", path.c_str());
-				}
-				else
-				{
-					std::snprintf(statusMsg_, sizeof(statusMsg_), "Load FAILED: %s", path.c_str());
-				}
-			}
-
-			if (statusMsg_[0] != '\0')
-				ImGui::TextColored(ImVec4(0.5f, 1.f, 0.5f, 1.f), "%s", statusMsg_);
 		}
 
 

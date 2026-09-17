@@ -113,16 +113,12 @@ namespace aq
 				return j;
 			}
 
-			JV SerializeImage(
-				const UIImageComponent* img,
-				UIObjectID id,
-				const std::unordered_map<UIObjectID, std::string>& texPaths)
+			JV SerializeImage(const UIImageComponent* img)
 			{
 				JV j = JV::MakeObject();
 
-				auto it = texPaths.find(id);
-				if (it != texPaths.end())
-					j.Set("texture", JV(it->second));
+				if (!img->texturePath.empty())
+					j.Set("texture", JV(img->texturePath));
 
 				j.Set("color",      FromVec4(img->color));
 
@@ -140,16 +136,12 @@ namespace aq
 				return j;
 			}
 
-			JV SerializeNineSlice(
-				const UINineSliceComponent* ns,
-				UIObjectID id,
-				const std::unordered_map<UIObjectID, std::string>& texPaths)
+			JV SerializeNineSlice(const UINineSliceComponent* ns)
 			{
 				JV j = JV::MakeObject();
 
-				auto it = texPaths.find(id);
-				if (it != texPaths.end())
-					j.Set("texture", JV(it->second));
+				if (!ns->texturePath.empty())
+					j.Set("texture", JV(ns->texturePath));
 
 				j.Set("color",       FromVec4(ns->color));
 				j.Set("textureSize", FromVec2(ns->textureSize));
@@ -166,16 +158,12 @@ namespace aq
 				return j;
 			}
 
-			JV SerializeCircleGauge(
-				const UICircleGaugeComponent* cg,
-				UIObjectID id,
-				const std::unordered_map<UIObjectID, std::string>& texPaths)
+			JV SerializeCircleGauge(const UICircleGaugeComponent* cg)
 			{
 				JV j = JV::MakeObject();
 
-				auto it = texPaths.find(id);
-				if (it != texPaths.end())
-					j.Set("texture", JV(it->second));
+				if (!cg->texturePath.empty())
+					j.Set("texture", JV(cg->texturePath));
 
 				j.Set("color",      FromVec4(cg->color));
 				j.Set("fillAmount", JV(static_cast<double>(cg->fillAmount)));
@@ -213,26 +201,23 @@ namespace aq
 
 		namespace
 		{
-			JV SerializeNode(
-				const UIObject* obj,
-				const std::unordered_map<UIObjectID, std::string>& texPaths)
+			JV SerializeNode(const UIObject* obj)
 			{
 				JV node = JV::MakeObject();
 				node.Set("name", JV(std::string(obj->GetName())));
 
 				JV comps = JV::MakeObject();
-				const UIObjectID id = obj->GetHandle().id;
 
 				if (auto* t = obj->GetComponent<UITransformComponent>())
 					comps.Set("transform",  SerializeTransform(t));
 				if (auto* c = obj->GetComponent<UICanvasComponent>())
 					comps.Set("canvas",     SerializeCanvas(c));
 				if (auto* img = obj->GetComponent<UIImageComponent>())
-					comps.Set("image",      SerializeImage(img, id, texPaths));
+					comps.Set("image",      SerializeImage(img));
 				if (auto* ns = obj->GetComponent<UINineSliceComponent>())
-					comps.Set("nineSlice",  SerializeNineSlice(ns, id, texPaths));
+					comps.Set("nineSlice",  SerializeNineSlice(ns));
 				if (auto* cg = obj->GetComponent<UICircleGaugeComponent>())
-					comps.Set("circleGauge", SerializeCircleGauge(cg, id, texPaths));
+					comps.Set("circleGauge", SerializeCircleGauge(cg));
 				if (auto* btn = obj->GetComponent<UIButtonComponent>())
 					comps.Set("button",     SerializeButton(btn));
 				if (auto* txt = obj->GetComponent<UITextComponent>())
@@ -252,7 +237,7 @@ namespace aq
 				{
 					JV childArr = JV::MakeArray();
 					for (const UIObject* child : children)
-						childArr.PushBack(SerializeNode(child, texPaths));
+						childArr.PushBack(SerializeNode(child));
 					node.Set("children", std::move(childArr));
 				}
 
@@ -264,14 +249,11 @@ namespace aq
 
 		// ---- 公開 API -----------------------------------------------------------
 
-		bool UIDocumentSerializer::Save(
-			const UIObject*                                   root,
-			std::string_view                                  filePath,
-			const std::unordered_map<UIObjectID, std::string>& texturePaths)
+		bool UIDocumentSerializer::Save(const UIObject* root, std::string_view filePath)
 		{
 			if (!root || filePath.empty()) return false;
 
-			const JV rootJson = SerializeNode(root, texturePaths);
+			const JV rootJson = SerializeNode(root);
 			return util::JsonSerializer::WriteFile(std::string(filePath).c_str(), rootJson);
 		}
 

@@ -6,7 +6,6 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <unordered_map>
 
 namespace aq
 {
@@ -21,6 +20,8 @@ namespace aq
 		// 現在の最前面 UIScreen のオブジェクト階層を表示し、
 		// 選択した UIObject の Transform / Image / Canvas プロパティを編集、
 		// UIObject の追加・削除・コンポーネント追加ができる。
+		// 選択・保存先・未保存フラグは UIEditorSession を通じて
+		// Animation Editor と共有する。
 		// ============================================================
 		class UIEditorDebugPanel : public IDebugRenderable
 		{
@@ -33,24 +34,30 @@ namespace aq
 			void RenderTree(UIObject* node);
 			void RenderProperties(UIObject* obj);
 			void RenderAnchorPicker(struct UITransformComponent* tc);
-			void RenderSaveLoad(UIObject* root);
+			void RenderToolbar(UIObject* root);
 			void RenderTextOverlay();   // UITextComponent の内容を ImGui でスクリーンに仮描画
+			void ClearForReload();      // Reload 実行直前にエディタ側の状態を捨てる
 
 			bool            show_              = false;
 			bool            showTextOverlay_   = false;  // テキスト仮描画オーバーレイ (SDF 未整備時のみ使用)
-			UIObjectHandle  selectedHandle_;
-			UIObjectHandle  prevSelectedHandle_;   // 名前バッファ更新タイミング検出用
+			UIObjectHandle  prevSelectedHandle_;   // バッファ同期タイミング検出用
 			char            nameBuf_[128]      = {};
 
 			// ロードしたテクスチャ SRV を生存保持
 			std::vector<std::shared_ptr<graphics::IShaderResourceView>> loadedTextures_;
-			// オブジェクト ID ごとのテクスチャパス (選択変更時に texPathBuf_ へ同期)
-			std::unordered_map<UIObjectID, std::string> texturePaths_;
-			char texPathBuf_[256] = {};
 
-			// JSON 保存/ロード用パスバッファ
-			char savePathBuf_[512] = {};
-			char statusMsg_[256]   = {};  // 保存/ロード結果メッセージ
+			// テクスチャパス入力バッファ (選択変更時にコンポーネントの texturePath から同期)
+			char imageTexPathBuf_[256]       = {};
+			char nineSliceTexPathBuf_[256]   = {};
+			char circleGaugeTexPathBuf_[256] = {};
+
+			// Text 入力バッファ (選択変更時にコンポーネントの content / textStylePath から同期)
+			char textContentBuf_[512]        = {};
+			char textStyleBuf_[512]          = {};
+
+			// 保存関連
+			char saveAsPathBuf_[512] = {};  // Save As ポップアップ用パス入力
+			char statusMsg_[256]     = {};  // 保存結果メッセージ
 		};
 	}
 }

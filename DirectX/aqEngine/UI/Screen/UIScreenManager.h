@@ -65,6 +65,16 @@ namespace aq
 			UIScreen* GetScreen(int index) const; // 0 = 底, StackSize()-1 = 頂上
 			int       StackSize()          const { return static_cast<int>(stack_.size()); }
 
+			// ---- エディタ用 ----
+
+			// 登録済みドキュメントパスを返す。未登録なら空。UI Editor の保存先に使う
+			std::string_view GetDocumentPath(std::string_view screenName) const;
+
+			// 先頭画面を同名で即時再生成する (エディタ用)。
+			// 内部で Replace(Top()->GetName()) と同じ pending op を積むだけ。
+			// 画面遷移用の Exit 待機 (設計書 9 章) はこの経路を通さない。
+			void ReloadTopDocument();
+
 		private:
 			struct PendingOp
 			{

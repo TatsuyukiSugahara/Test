@@ -1,6 +1,6 @@
 # UIアニメーション統合設計
 
-> 対象コミット: b88b5fe(P0)/ 最終更新: 2026-09-17
+> 対象コミット: 367b967(P5 まで)/ 最終更新: 2026-09-17 / **再開するときは §16 から読む**
 
 UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定できる」状態にする。
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
@@ -8,7 +8,7 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 2026-09-17 の 5 回のレビューで **プロパティ競合規則・状態遷移・エディタ統合・画面遷移** まで
 範囲を広げた。P0〜P5 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。§12 の後続改善は P4(プリセット)から順に本書へ取り込む(P5 = ベクタトラック)。
 
-本書の構成は実施順に並べてある。
+本書の構成は実施順に並べてある。**途中から再開する人は先に §16(到達点と再開手順)を読む。**
 
 | 部 | フェーズ | 内容 |
 | --- | --- | --- |
@@ -1070,3 +1070,67 @@ struct TimelineRow
 - 選択は `selRowIdx_` + `selKeyTime_`(時刻)で持つ。単独行でも同じ仕組みで扱い、旧 `selTrackIdx_` / `selKeyframeIdx_` は Row 化に合わせて置き換える
 - `+ Track` の組の項目は、既に片方がある場合は無い方だけ足す
 - 勝者マーク `*` は組の行では「X か Y のどちらかがこの Clip の勝者」で出す
+
+---
+
+# 第 5 部: 到達点と再開手順
+
+## 16. 到達点と再開手順(2026-09-17 時点)
+
+### 16.1 何がどこまで終わっているか
+
+| フェーズ | 内容 | 状態 | コミット |
+| --- | --- | --- | --- |
+| P0 | 編集・保存基盤(Session / texturePath / Save / Reload) | 完了(Mac 評価済) | `b88b5fe` |
+| P1 | 3 階層化・ハッシュ化・検証・描画コンポーネント排他 | 完了(Mac 評価済) | `4a04c3a` |
+| P2 | レイヤー評価(serial / 基準値)・自動フック(Enter / Hover / Pressed / Focused / Click) | 完了(Mac 評価済) | `733f120` |
+| P2B | Exit 待機付き画面遷移(タイムアウト 2.0 秒) | 完了(Mac 評価済) | `0412284` |
+| P3 | 統合エディタ(Inspector タブ / Timeline / 検証赤字 / Save 停止 / TextStyle 入口) | 完了(Mac 評価済) | `100161b` |
+| P4 | プリセット(§14) | 完了(Mac 評価済) | `3d283eb` |
+| P5 | ベクタトラック(§15) | 完了(Mac 評価済) | `367b967` |
+
+**全フェーズ共通で未消化のチェックが 1 つ**: 「Windows / D3D11 でビルドが通り、警告が増えていない」。
+評価はすべて Mac(Metal / Debug 構成)で行った。Windows 機で次を見る:
+
+- `DirectX.sln` の D3D11 / D3D12 / Vulkan の Debug をビルドし、警告数が P0 前(`81c36e3`)と同じか
+- 特に MSVC で見たい箇所: `UIObject.h` の `if constexpr` + `assert`、`UIAnimationClip.h` の `aqHash32` を constexpr で使う定数、
+  `Core/Application.cpp/.h`(CRLF)から 2 エディタの登録を外した箇所、`Engine.vcxproj` から `UIClipTrack.h` を外し `UIEditorSession.h` を足した箇所
+- UI Editor を開き、Animation タブ・Timeline・TextStyle ポップアップが出ること。1920x1080 以外のウィンドウで UIButton の hover が当たること
+  (P2 で `UIInputSystem::HitTest` の `clientSize` 更新を直した)
+
+### 16.2 残っている作業(この順で)
+
+1. **エディタの寸法(§13、ユーザー指摘)** — UI Editor の既定サイズ 700x560 を広げる(Animation タブ + Timeline が収まる高さ。
+   目安 1000x800)。TextStyle ポップアップの幅。Timeline 領域の割合(P5 で `max(260px, 45%)` の応急処置済み)。
+   同時に「`Play when` が Enter / Exit のときも Group 欄が出る」を §10.3 どおり Manual のときだけにする
+2. **§12 の続き** — オートキー → Ease 拡充 → 相対値 → Click 演出後の遷移 → Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
+   新セクション(§14 / §15 と同じ形)として書いてから実装する
+3. **ゲーム側の実例** — `Play(group)` / `Stop()` を呼ぶコードと、クリックで遷移するボタン(§9.3 の実測)はまだ無い
+
+### 16.3 再開手順
+
+1. 本書 §11 で次のフェーズを決め、「Pn 着手時に確定した補足」を書く(P1〜P5 が例。判断が要る点を先に潰しておくと実装の差し戻しが減る)
+2. 実装は設計書のパスと「設計書どおりに実装せよ。設計変更は行わず食い違いは報告せよ」を付けて委譲する。触ってよいファイルと
+   触ってはいけないファイルを明示し、共有ファイルは 1 人に集約する。ビルドは委譲先で行わず本体でまとめて行う
+3. 差分を本体でレビューし、規約逸脱・設計との食い違いを直す
+4. ビルド(Mac: `source ~/.local/aq-mac-env.sh` のあと `cmake --build --preset macos-ninja-metal-debug` と `-release`。
+   エディタは `AQ_DEBUG_IMGUI` が Debug 構成にしか付かないので **Debug で確認する**)
+5. 評価は §11 のチェックリストを 1 つずつ。埋まらない項目は理由を書いて残す
+6. 設計書のチェックを埋め、「Pn の実装で決めたこと」を書き、`対象コミット` を更新してコミット(`<Engine>` タグ、1 フェーズ 1 コミット)
+
+### 16.4 Mac での評価の段取り(P0〜P5 で使った方法)
+
+- **起動**: `cd DirectX/Game && nohup ../build/macos-ninja-metal/bin/Debug/Game.app/Contents/MacOS/Game &`(cwd が Game でないとアセットが出ない)。
+  Debug は起動に約 45 秒。ウィンドウは別 Space にいることがあるので `CGWindowListOptionAll` で探し、`screencapture -x -o -l<id>` で撮る
+- **テストデータ**: `Game/Assets/UI/AquaDash/Title.screen.json` に一時的にノードを足す(例: 位置 (-600, 300) / 200x100 の `white.png` + `button` を持つ `Btn`
+  と、確認したい `animation`)。確認後は `git checkout` で戻す。起動中のアプリは `Game/imgui.ini`(tracked)も書き換えるので同様に戻す
+- **UI Editor を開く**: デバッグメニュー `UI > UI Editor`。左上の FPS オーバーレイがメニューを覆ってクリックを吸うことがあるので、
+  右端の `Profiling` をクリックしてから左へホバーで移る
+- **合成入力の注意**: ImGui は「移動 → 同フレームでクリック」を拾わないことがある。近く → 対象へ 2 段階で移動し、0.3 秒待ってからクリック。
+  Combo の項目位置は開いた直後の撮影で決める。DragFloat への数値入力は Mac の自前 ImGui バックエンドでは文字が入らないので、
+  値は JSON 側で用意するか横ドラッグで動かす
+- **計測**: 撮影画像の領域平均 RGBA を読む(2x なので座標は原寸)。「白 × alpha + 背景 × (1 − alpha)」で期待値を手計算する。
+  Enter の再生を見直すときは UI Editor の `Reload`、Exit は Space でのタイトル→ローディング遷移。0.3 秒級の演出は撮影の遅延(約 0.2 秒)を超えるので
+  Duration を伸ばすか連続撮影する
+- **エディタ操作の結果は保存 JSON で確認する**のが確実(キー追加・ドラッグ・プリセットは Save 後の JSON を見る)
+- Reload 後はゲーム側の一度きりの setter(`SetStageThumbnail` 等)が再実行されない(§3.3)。サムネイルが消えるのは仕様

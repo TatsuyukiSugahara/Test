@@ -1,6 +1,7 @@
 #pragma once
 #ifdef AQ_DEBUG_IMGUI
 #include "UI/Animation/UIAnimatedProperty.h"
+#include <initializer_list>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -55,6 +56,12 @@ namespace aq
 			bool           hasSnapshot_        = false;
 			std::unordered_map<UIAnimatedProperty, float> snapshot_;
 
+			/** オートキー録画。ON の間、Properties タブでの編集がスクラブ時刻のキーになる */
+			bool           isRecording_        = false;
+			// 録画を開始した瞬間の録画対象プロパティの値。新規 Track に置く 0 秒キーの値に使う。
+			// 録画中に値が変わっても動かさない (途中から始めたキーが開始時の見た目から動くように)
+			std::unordered_map<UIAnimatedProperty, float> recBaseline_;
+
 			// 選択中クリップの Name / Param / Group 用バッファ (ImGui InputText 用)。
 			// 全トラック共有の static バッファは持たない
 			char           clipNameBuf_[64]    = {};
@@ -81,6 +88,15 @@ namespace aq
 
 			// Reload 直前。選択・スナップショット・プレビュー状態を全部捨てる (オブジェクトには触らない)
 			void Reset();
+
+			// 録画中か (UI Editor が Timeline を出すかの判定にも使う)
+			inline bool IsRecording() const { return isRecording_; }
+
+			// 録画中なら props のキーをスクラブ時刻へ入れる。録画していなければ何もしない
+			void RecordEdit(UIObject* obj, std::initializer_list<UIAnimatedProperty> props);
+
+			// 録画中に Properties タブの先頭へ出す赤帯の文字列。録画していなければ空
+			std::string GetRecordingLabel(const UIObject* obj) const;
 
 			// root 以下の全 UIAnimationComponent を ValidateDetailed にかけ、
 			// "<ObjectName>: <message>" の形で errors に積む。0 件なら true
@@ -131,6 +147,13 @@ namespace aq
 			void TakeSnapshot(UIObject* obj, const UIAnimationClip& clip);
 			void RestoreSnapshot(UIObject* obj);
 			void ApplyScrub(UIObject* obj, const UIAnimationClip& clip);
+
+
+			/**
+			 * オートキー録画
+			 */
+		private:
+			void TakeRecordingBaseline(UIObject* obj);
 		};
 
 	} // namespace ui

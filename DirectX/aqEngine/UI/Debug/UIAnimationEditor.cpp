@@ -203,6 +203,50 @@ namespace aq
 			}
 
 
+			// オートキーの録画対象プロパティ。Rec を ON にした瞬間に、この全部の現在値を
+			// 録画基準値として控える。TextCharCount は Properties タブに編集欄が無いので入れない
+			static constexpr UIAnimatedProperty RECORDABLE_PROPERTIES[] =
+			{
+				UIAnimatedProperty::PositionX,
+				UIAnimatedProperty::PositionY,
+				UIAnimatedProperty::PositionZ,
+				UIAnimatedProperty::SizeDeltaX,
+				UIAnimatedProperty::SizeDeltaY,
+				UIAnimatedProperty::Rotation,
+				UIAnimatedProperty::ScaleX,
+				UIAnimatedProperty::ScaleY,
+				UIAnimatedProperty::Active,
+				UIAnimatedProperty::ColorR,
+				UIAnimatedProperty::ColorG,
+				UIAnimatedProperty::ColorB,
+				UIAnimatedProperty::ColorA,
+				UIAnimatedProperty::FillAmount,
+				UIAnimatedProperty::NineSliceBorderLeft,
+				UIAnimatedProperty::NineSliceBorderRight,
+				UIAnimatedProperty::NineSliceBorderTop,
+				UIAnimatedProperty::NineSliceBorderBottom,
+			};
+
+
+			// オートキー用。time に「編集後の現在値」のキーを置く。AddKeyAtTime() と違い
+			// Sample() は使わない (録画は曲線を現在の見た目へ合わせる操作なので)。
+			// 同時刻にキーがあれば value だけ上書きし ease は保つ (1 回のドラッグで増えるキーは 1 本)
+			void SetKeyAtTime(UIAnimationTrack& track, UIObject* obj, float time)
+			{
+				const float value = obj ? track.ReadFrom(obj) : 0.f;
+
+				const int idx = FindKeyIndexAtTime(track.keyframes, time);
+				if (idx >= 0)
+				{
+					track.keyframes[idx].value = value;
+					return;
+				}
+
+				track.keyframes.push_back(UIKeyframe{ time, value, EaseType::Linear });
+				SortKeyframes(track.keyframes);
+			}
+
+
 			// Row の両 Track (単独行なら片方) に time のキーを追加する (設計書 §15.2)
 			void AddKeyToRow(UIAnimationClip& clip, UIObject* obj, const TimelineRow& row, float time)
 			{
@@ -915,6 +959,10 @@ namespace aq
 				hasSnapshot_ = false;
 			}
 			isPlaying_ = false;
+
+			// 録画は選択オブジェクトに紐づくので落とす
+			isRecording_ = false;
+			recBaseline_.clear();
 		}
 
 
@@ -935,6 +983,9 @@ namespace aq
 			isPlaying_   = false;
 			hasSnapshot_ = false;
 			snapshot_.clear();
+
+			isRecording_ = false;
+			recBaseline_.clear();
 		}
 
 
@@ -1872,6 +1923,36 @@ namespace aq
 			if (!canAddKey) ImGui::EndDisabled();
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add a keyframe to the selected row at the scrub time");
 
+			// オートキー録画のトグル。ここは Clip 選択中しか描かれないので Disabled は要らない
+			ImGui::SameLine();
+			{
+				bool recording = isRecording_;
+				if (ImGui::Checkbox("Rec", &recording))
+				{
+					isRecording_ = recording;
+					if (isRecording_)
+					{
+						// スクラブ再生中のまま録画を始めるとキーを打つ時刻が動いてしまうので止める
+						isPlaying_ = false;
+
+						// 0 秒キーの値をここで固定し、同時に Reset で録画開始前へ戻せるようにする
+						TakeRecordingBaseline(obj);
+						if (!hasSnapshot_) { TakeSnapshot(obj, clip); hasSnapshot_ = true; }
+					}
+					else
+					{
+						recBaseline_.clear();
+					}
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Record: edits in the Properties tab drop keys at the scrub time");
+			}
+			if (isRecording_)
+			{
+				ImGui::SameLine();
+				ImGui::TextColored(ImVec4(1.f, 0.25f, 0.25f, 1.f), "\xe2\x97\x8f" " REC");
+			}
+
 			// 復元ボタン
 			if (hasSnapshot_)
 			{
@@ -1926,6 +2007,98 @@ namespace aq
 				float v = track.Sample(scrubTime_);
 				track.Apply(obj, v);
 			}
+		}
+
+
+		// ---- オートキー録画 --------------------------------------------------
+
+		// Rec を ON にした瞬間の値を録画対象プロパティぶん控える。
+		// 対応するコンポーネントが無いプロパティは ReadFrom() が 0 を返すが、
+		// その場合は Track も作られないので使われない
+		void UIAnimationEditor::TakeRecordingBaseline(UIObject* obj)
+		{
+			recBaseline_.clear();
+			if (!obj) return;
+
+			for (const UIAnimatedProperty prop : RECORDABLE_PROPERTIES)
+			{
+				UIAnimationTrack tmp;
+				tmp.property = prop;
+				recBaseline_[prop] = tmp.ReadFrom(obj);
+			}
+		}
+
+
+		// Properties タブのウィジェットが編集された直後に UIEditorDebugPanel から呼ばれる。
+		// 実再生 (Play) の時刻ではなくスクラブ時刻に対してだけ効く
+		void UIAnimationEditor::RecordEdit(UIObject* obj, std::initializer_list<UIAnimatedProperty> props)
+		{
+			if (!isRecording_ || !obj) return;
+
+			auto* anim = obj->GetComponent<UIAnimationComponent>();
+			if (!anim) return;
+			if (selClipIdx_ < 0 || selClipIdx_ >= (int)anim->GetClips().size()) return;
+
+			auto& clip = anim->EditClip(static_cast<size_t>(selClipIdx_));
+
+			bool touched = false;
+			for (const UIAnimatedProperty prop : props)
+			{
+				int trackIdx = -1;
+				for (int i = 0; i < (int)clip.tracks.size(); ++i)
+				{
+					if (clip.tracks[i].property == prop) { trackIdx = i; break; }
+				}
+
+				// PositionZ は深度ソート用なので自動では Track を作らない。既にあるときだけ打つ
+				if (trackIdx < 0 && prop == UIAnimatedProperty::PositionZ) continue;
+
+				if (trackIdx < 0)
+				{
+					UIAnimationTrack track;
+					track.property = prop;
+
+					// キー 1 本だけの Track は「0 秒から動く」ではなく「常にその値」になってしまうため、
+					// 新規 Track に限り 0 秒へ録画開始時の値を置く (既存 Track の曲線は変えない)
+					if (scrubTime_ > 0.f)
+					{
+						const auto  it   = recBaseline_.find(prop);
+						const float base = (it != recBaseline_.end()) ? it->second : track.ReadFrom(obj);
+						track.keyframes.push_back(UIKeyframe{ 0.f, base, EaseType::Linear });
+					}
+
+					trackIdx = (int)clip.tracks.size();
+					clip.tracks.push_back(std::move(track));
+				}
+
+				SetKeyAtTime(clip.tracks[trackIdx], obj, scrubTime_);
+				touched = true;
+			}
+
+			if (touched)
+				UIEditorSession::Get().dirty = true;
+		}
+
+
+		// Properties タブ先頭の赤帯。選択 Clip 名とスクラブ時刻を出す
+		std::string UIAnimationEditor::GetRecordingLabel(const UIObject* obj) const
+		{
+			if (!isRecording_) return std::string();
+
+			const char* clipName = "(no clip)";
+			if (obj)
+			{
+				if (const auto* anim = obj->GetComponent<UIAnimationComponent>())
+				{
+					const auto& clips = anim->GetClips();
+					if (selClipIdx_ >= 0 && selClipIdx_ < (int)clips.size())
+						clipName = clips[static_cast<size_t>(selClipIdx_)].name.c_str();
+				}
+			}
+
+			char buf[192];
+			std::snprintf(buf, sizeof(buf), "\xe2\x97\x8f" " REC  %s  @ %.2fs", clipName, scrubTime_);
+			return std::string(buf);
 		}
 
 	} // namespace ui

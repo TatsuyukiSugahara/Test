@@ -5,6 +5,7 @@
 #include "UI/Debug/UIAnimationEditor.h"
 #include "UI/Debug/TextStyleEditorPanel.h"
 #include "Graphics/IShaderResourceView.h"
+#include <initializer_list>
 #include <memory>
 #include <vector>
 #include <string>
@@ -43,6 +44,12 @@ namespace aq
 			void RenderTree(UIObject* node);
 			void RenderProperties(UIObject* obj);
 			void RenderPropertiesTab(UIObject* obj);   // Inspector の Properties タブの中身
+
+			// 録画対象ウィジェットの直後に呼ぶ。編集されていたら dirty を立て、
+			// オートキー録画中なら props のキーをスクラブ時刻へ入れる。
+			// 対応する UIAnimatedProperty が無いウィジェットは MarkDirtyIfEdited() のまま
+			void MarkEdited(UIObject* obj, std::initializer_list<UIAnimatedProperty> props);
+
 			void RenderAnchorPicker(UITransformComponent* tc);
 			void RenderToolbar(UIObject* root);
 			void RenderTextOverlay();   // UITextComponent の内容を ImGui でスクリーンに仮描画

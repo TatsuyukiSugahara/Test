@@ -442,10 +442,33 @@ namespace aq
 		}
 
 
+		// 録画対象ウィジェット (対応する UIAnimatedProperty があるもの) の直後に呼ぶ。
+		// dirty を立てたうえで、録画中なら同じ編集をキーフレームとして書き込む
+		void UIEditorDebugPanel::MarkEdited(UIObject* obj, std::initializer_list<UIAnimatedProperty> props)
+		{
+			if (!ImGui::IsItemEdited()) return;
+
+			UIEditorSession::Get().dirty = true;
+			animationEditor_.RecordEdit(obj, props);
+		}
+
+
 		// ---- Inspector: Properties タブの中身 --------------------------------
+
 		void UIEditorDebugPanel::RenderPropertiesTab(UIObject* obj)
 		{
 			auto& session = UIEditorSession::Get();
+
+			// 録画対象プロパティの列挙が長くなるので短い別名を使う
+			using Prop = UIAnimatedProperty;
+
+			// 録画中は Properties タブの先頭に赤帯を出す (値をいじるとキーが入ることの明示)
+			if (animationEditor_.IsRecording())
+			{
+				ImGui::TextColored(ImVec4(1.f, 0.25f, 0.25f, 1.f), "%s",
+				                   animationEditor_.GetRecordingLabel(obj).c_str());
+				ImGui::Separator();
+			}
 
 			// --- UITransformComponent ---
 			if (auto* tc = obj->GetComponent<UITransformComponent>())
@@ -453,18 +476,18 @@ namespace aq
 				if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::DragFloat3("Position", &tc->localPosition.x, 1.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::PositionX, Prop::PositionY, Prop::PositionZ });
 					ImGui::DragFloat2("Size",      &tc->sizeDelta.x,    1.f, 0.f, 4096.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::SizeDeltaX, Prop::SizeDeltaY });
 					ImGui::DragFloat("Rotation",   &tc->rotation,       0.5f, -360.f, 360.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::Rotation });
 					ImGui::DragFloat2("Scale",     &tc->localScale.x,   0.01f, 0.f, 10.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::ScaleX, Prop::ScaleY });
 					RenderAnchorPicker(tc);
 					ImGui::DragFloat2("Pivot",     &tc->pivot.pivot.x,  0.01f, 0.f, 1.f);
 					MarkDirtyIfEdited();
 					ImGui::Checkbox("Active",      &tc->active);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::Active });
 				}
 			}
 
@@ -474,9 +497,9 @@ namespace aq
 				if (ImGui::CollapsingHeader("Image", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::ColorEdit4("Color##img",      &ic->color.x);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::ColorR, Prop::ColorG, Prop::ColorB, Prop::ColorA });
 					ImGui::DragFloat("Fill Amount##img", &ic->fillAmount, 0.01f, 0.f, 1.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::FillAmount });
 					ImGui::DragFloat4("UV Rect",         &ic->uvRect.x,   0.005f, -1.f, 2.f);
 					MarkDirtyIfEdited();
 					ImGui::Checkbox("Flip H",            &ic->flipH);
@@ -497,17 +520,17 @@ namespace aq
 				if (ImGui::CollapsingHeader("Nine Slice", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::ColorEdit4("Color##ns",        &ns->color.x);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::ColorR, Prop::ColorG, Prop::ColorB, Prop::ColorA });
 					ImGui::DragFloat("Fill Amount##ns",   &ns->fillAmount, 0.01f, 0.f, 1.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::FillAmount });
 					ImGui::DragFloat("Border Left",       &ns->border.left,   0.5f, 0.f, 512.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::NineSliceBorderLeft });
 					ImGui::DragFloat("Border Right",      &ns->border.right,  0.5f, 0.f, 512.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::NineSliceBorderRight });
 					ImGui::DragFloat("Border Top",        &ns->border.top,    0.5f, 0.f, 512.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::NineSliceBorderTop });
 					ImGui::DragFloat("Border Bottom",     &ns->border.bottom, 0.5f, 0.f, 512.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::NineSliceBorderBottom });
 
 					ImGui::Separator();
 					RenderTexturePicker("ns", nineSliceTexPathBuf_, sizeof(nineSliceTexPathBuf_),
@@ -521,9 +544,9 @@ namespace aq
 				if (ImGui::CollapsingHeader("Circle Gauge", ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					ImGui::ColorEdit4("Color##cg",         &cg->color.x);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::ColorR, Prop::ColorG, Prop::ColorB, Prop::ColorA });
 					ImGui::DragFloat("Fill Amount##cg",    &cg->fillAmount, 0.01f, 0.f, 1.f);
-					MarkDirtyIfEdited();
+					MarkEdited(obj, { Prop::FillAmount });
 					ImGui::DragFloat("Start Angle (rad)",  &cg->startAngle, 0.01f, -6.28f, 6.28f);
 					MarkDirtyIfEdited();
 					bool cwBool = cg->clockwise > 0.f;
@@ -857,9 +880,10 @@ namespace aq
 				}
 			}
 
-			// Animation タブを選んでいて、かつ選択オブジェクトが UIAnimationComponent を
-			// 持つときだけ下部に Timeline を出す (設計書 §11 P3)
-			const bool showTimeline = inspectorTab_ == InspectorTab::Animation &&
+			// Animation タブを選んでいるとき、および録画中は下部に Timeline を出す。
+			// 録画中は Properties タブで値をいじるので、打ったキーがその場で見えないと意味がない。
+			// どちらの場合も選択オブジェクトが UIAnimationComponent を持つことが条件
+			const bool showTimeline = (inspectorTab_ == InspectorTab::Animation || animationEditor_.IsRecording()) &&
 			                          selectedObj && selectedObj->GetComponent<UIAnimationComponent>();
 
 			// Timeline は内容 (Track 本数と表示行数) から必要な高さを求める。

@@ -991,15 +991,25 @@ P5 の実装で決めたこと・直したこと
 
 評価
 
-- [ ] Clip 未選択では `Rec` が Disabled で、理由がツールチップに出る
+- [ ] Clip 未選択では Timeline 下部に `Rec` が出ない(Preview Controls ごと描かれない)
 - [ ] Rec ON → スクラブを 0.5 秒へ → Position をドラッグ → PositionX / PositionY に 0 秒と 0.5 秒のキーが入る
 - [ ] ドラッグし続けてもキーは 1 本のまま(同時刻は値の上書き)
 - [ ] 既に Track があるプロパティでは 0 秒キーが勝手に増えない
 - [ ] Rec ON のまま Properties タブへ移っても Timeline が出たままで、打ったキーがその場で見える
 - [ ] Rec OFF にしても値は戻らず、`Reset` を押すと録画開始前の値へ戻る
 - [ ] 選択オブジェクトを変えると Rec が落ちる
+- [ ] スクラブ再生中に Rec を ON にすると再生が止まる
 - [ ] 録画対象外のウィジェット(Pivot / UV Rect / Flip / texturePath)ではキーが増えない
-- [ ] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通り、警告が増えていない
+- [x] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通り、警告が増えていない(新規警告 0。残りは Bullet と RenderThread 経由の既存分)
+
+P7 の実装で決めたこと・直したこと
+
+- `Rec` の Disabled 分岐は到達しないので入れない。Preview Controls は `selClipIdx_ >= 0` のときしか描かれない
+- `Rec` を ON にしたらスクラブ再生を止める(打つ時刻が動かないように)
+- 赤帯の `●` は `"â"` のバイトエスケープで書く。ソースは UTF-8 / BOM 無しで、
+  MSVC が narrow リテラルを実行時コードページで解釈するため。フォントのグリフ範囲に Geometric Shapes が要る
+- 録画基準値は Rec OFF で捨てる(次の ON で取り直す)
+- Color は R / G / B / A の 4 プロパティをまとめて渡す。描画コンポーネントは排他なので解決先は一意
 
 ---
 
@@ -1264,10 +1274,12 @@ DragFloat への数値入力はプラットフォームによっては通らな�
 
 ### 17.5 録画の開始と終了
 
-- `Rec` を ON にできるのは **Clip 選択中だけ**。それ以外は Disabled にし、ツールチップで理由を出す(原則 2)
+- `Rec` は Timeline 下部の Preview Controls に置く。**この領域は Clip 選択中しか描かれない**ので、
+  Clip が無いときは Rec そのものが出ない(Disabled 分岐は要らない)
 - ON の瞬間に**録画基準値**を取る。スクラブ用の `snapshot_`(Clip の Track ぶんだけ)とは別に、
   §17.3 の全プロパティの現在値を `recBaseline_` に持つ。17.4-5 の 0 秒キーはここから取る
 - 同時に既存の `TakeSnapshot()` も取り、`Reset` で録画開始前へ戻せるようにする
+- **ON の瞬間にスクラブ再生を止める**(`isPlaying_ = false`)。再生したままだとキーを打つ時刻が動く
 - **OFF にしても値は戻さない。**戻したいときは既存の `Reset` ボタン
 - 選択オブジェクトの変更(`OnTargetChanged()`)と Reload(`Reset()`)で録画は落ちる
 
@@ -1280,7 +1292,7 @@ DragFloat への数値入力はプラットフォームによっては通らな�
 | `UI/Debug/UIEditorDebugPanel.h` | `MarkEdited()` の宣言 |
 | `UI/Debug/UIEditorDebugPanel.cpp` | §17.3 のウィジェットの `MarkDirtyIfEdited()` を `MarkEdited(obj, { ... })` へ差し替え。録画中は Timeline を常時表示。Properties タブ先頭の REC 帯 |
 
-公開 API は 2 本だけ足す。
+公開 API は 3 本。
 
 ```cpp
 // 録画中か (UI Editor が Timeline を出すかの判定にも使う)
@@ -1288,6 +1300,9 @@ bool IsRecording() const;
 
 // 録画中なら props のキーをスクラブ時刻へ入れる。録画していなければ何もしない
 void RecordEdit(UIObject* obj, std::initializer_list<UIAnimatedProperty> props);
+
+// Properties タブ先頭の赤帯の文字列 (Clip 名 + スクラブ時刻)。録画していなければ空
+std::string GetRecordingLabel(const UIObject* obj) const;
 ```
 
 `UIAnimationClip` / `UIAnimationTrack` / JSON・ローダ・シリアライザ・ランタイムには触らない。
@@ -1295,7 +1310,8 @@ void RecordEdit(UIObject* obj, std::initializer_list<UIAnimatedProperty> props);
 
 ### 17.7 やらないこと
 
-- **Play(実再生)中の録画**。録画はスクラブ時刻に対してだけ効く。実再生は時刻がランタイム側にあり、
-  どのフレームの値を採るかが決まらない
+- **実再生(`Play`)の時刻に対する録画**。キーを打つ時刻は常にスクラブ時刻で、実再生の時刻は使わない。
+  実再生は時刻がランタイム側にあり、どのフレームの値を採るかが決まらないため。
+  実再生中に Properties をいじること自体は止めない(止めるにはランタイムの再生状態を見る必要があり、エディタの外へ出る)
 - **Timeline からの録画**(Keyframe インスペクタの値編集)。あれは既にキーを直接いじる操作なので対象外
 - **新規 Clip の自動生成**。Clip は先に作っておく

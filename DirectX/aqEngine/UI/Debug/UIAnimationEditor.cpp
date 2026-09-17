@@ -1937,7 +1937,14 @@ namespace aq
 
 						// 0 秒キーの値をここで固定し、同時に Reset で録画開始前へ戻せるようにする
 						TakeRecordingBaseline(obj);
-						if (!hasSnapshot_) { TakeSnapshot(obj, clip); hasSnapshot_ = true; }
+						if (!hasSnapshot_) TakeSnapshot(obj, clip);
+
+						// 録画で新しく作る Track のプロパティは TakeSnapshot() の対象外 (まだ Clip に無い) なので、
+						// 録画基準値を足しておかないと Reset で戻らない。既にある分は先の値を優先する
+						for (const auto& [prop, value] : recBaseline_)
+							snapshot_.emplace(prop, value);
+
+						hasSnapshot_ = true;
 					}
 					else
 					{

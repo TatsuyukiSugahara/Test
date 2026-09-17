@@ -991,16 +991,28 @@ P5 の実装で決めたこと・直したこと
 
 評価
 
-- [ ] Clip 未選択では Timeline 下部に `Rec` が出ない(Preview Controls ごと描かれない)
-- [ ] Rec ON → スクラブを 0.5 秒へ → Position をドラッグ → PositionX / PositionY に 0 秒と 0.5 秒のキーが入る
-- [ ] ドラッグし続けてもキーは 1 本のまま(同時刻は値の上書き)
-- [ ] 既に Track があるプロパティでは 0 秒キーが勝手に増えない
-- [ ] Rec ON のまま Properties タブへ移っても Timeline が出たままで、打ったキーがその場で見える
-- [ ] Rec OFF にしても値は戻らず、`Reset` を押すと録画開始前の値へ戻る
-- [ ] 選択オブジェクトを変えると Rec が落ちる
-- [ ] スクラブ再生中に Rec を ON にすると再生が止まる
-- [ ] 録画対象外のウィジェット(Pivot / UV Rect / Flip / texturePath)ではキーが増えない
+- [x] Clip 未選択では Timeline 下部に `Rec` が出ない(Preview Controls ごと描かれない)
+- [x] Rec ON → スクラブを 0.5 秒へ → Position をドラッグ → PositionX / PositionY に 0 秒と 0.5 秒のキーが入る
+      (保存 JSON で `PositionX [(0, -600), (0.5, -530)]` / `PositionY [(0, 300), (0.5, 300)]`。0 秒が録画開始時の値)
+- [x] ドラッグし続けてもキーは 1 本のまま(14 ステップのドラッグで 0.5 秒に 1 本)
+- [x] 既に Track があるプロパティでは 0 秒キーが勝手に増えない
+      (Color をいじると既存の `ColorA` は `[(0, 1), (0.5, 0.588), (1, 0.2)]` で 0 秒は元のまま。
+       新規の `ColorR` / `ColorG` / `ColorB` は 0 秒 + 0.5 秒の 2 本)
+- [x] Rec ON のまま Properties タブへ移っても Timeline が出たままで、打ったキーがその場で見える
+      (Properties タブ先頭に `● REC  RecClip  @ 0.50s` の赤帯)
+- [x] Rec OFF にしても値は戻らず、`Reset` を押すと録画開始前の値へ戻る(下の「評価で直したもの」を参照)
+- [x] 選択オブジェクトを変えると Rec が落ちる(Timeline も消え、戻ると Rec は OFF・スナップショットも無い)
+- [x] スクラブ再生中に Rec を ON にすると再生が止まる(0.422 → 0.572 で停止し、1.2 秒後も 0.572)
+- [x] 録画対象外のウィジェット(Pivot / UV Rect / Flip / texturePath)ではキーが増えない(Track 一覧が 6 本のまま)
 - [x] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通り、警告が増えていない(新規警告 0。残りは Bullet と RenderThread 経由の既存分)
+
+評価は Windows / D3D11 / Debug で実施(2026-09-17)。段取りは §16.6。
+
+P7 の評価で直したもの
+
+- **`Reset` が録画で作った Track のプロパティを戻さなかった。** `TakeSnapshot()` は「その時点で Clip にある Track」しか
+  控えないため、録画中に新しくできた `PositionX` / `PositionY` は復元対象から漏れていた(Color は元から Track があるので戻った)。
+  Rec を ON にした時点で録画基準値を `snapshot_` へ足すようにして直した。既に入っている分は先の値を優先する
 
 P7 の実装で決めたこと・直したこと
 
@@ -1123,26 +1135,29 @@ struct TimelineRow
 | P3 | 統合エディタ(Inspector タブ / Timeline / 検証赤字 / Save 停止 / TextStyle 入口) | 完了(Mac 評価済) | `100161b` |
 | P4 | プリセット(§14) | 完了(Mac 評価済) | `3d283eb` |
 | P5 | ベクタトラック(§15) | 完了(Mac 評価済) | `367b967` |
-| P6 | Windows 回帰 + エディタ寸法(§16.5) | ビルド完了(実機目視は未) | `3ff20bf` |
+| P6 | Windows 回帰 + エディタ寸法(§16.5) | 完了(Windows / D3D11 で評価済) | `3ff20bf` |
+| P7 | オートキー(§17) | 完了(Windows / D3D11 で評価済) | `7bf1bc7` + 追従 |
 
 **P0〜P5 で共通に残っていた「Windows / D3D11 でビルドが通り、警告が増えていない」は P6 で消化した。**
 `Game/DirectX.vcxproj` の Debug / x64 を `AqGraphicsApi=D3D11` / `D3D12` / `Vulkan` の 3 通りビルドして全部成功。
 新規の警告は `UIEditorDebugPanel.h` の C4099(`UITransformComponent` を `struct` で前方宣言していたが実体は `class`)1 件だけで、
 前方宣言を `class` に直して消した。残りの C4244(Bullet)・C4267(`RenderThread.cpp` 経由の `<memory>`)は P0 以前からある既存分。
 
-**Windows で未消化のチェック**(実機目視。ビルドだけでは埋まらない):
+**Windows での目視も 2026-09-17 に実施した**(D3D11 / Debug、1280x720)。UI Editor・Animation タブ・Timeline・
+TextStyle ポップアップがいずれも出ることを確認済み。段取りは §16.6。
 
-- UI Editor を開き、Animation タブ・Timeline・TextStyle ポップアップが出ること
-- 1920x1080 以外のウィンドウで UIButton の hover が当たること(P2 で `UIInputSystem::HitTest` の `clientSize` 更新を直した)
+残っているもの:
+
+- 1920x1080 以外のウィンドウで UIButton の hover が当たること(P2 で `UIInputSystem::HitTest` の `clientSize` 更新を直した)。
+  UI Editor は出したが、ボタンの hover 自体はまだ触っていない
 - UWP(DebugXbox)と Release はこの PC ではビルド不可(ツールセット未導入 / Bullet の Release lib 無し)。別環境で見る
+- **ゲーム窓のリサイズに ImGui が追従しない**(§16.6)。UI Editor とは別件だが、目視のたびに引っかかる
 
 ### 16.2 残っている作業(この順で)
 
-1. **P6 の実機目視** — Windows / Mac のどちらかで UI Editor を開き、§16.5 のチェックを埋める
-2. **P7: オートキー(§17)** — 設計済み。実装はこれから
-3. **§12 の続き** — Ease 拡充 → 相対値 → Click 演出後の遷移 → Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
+1. **§12 の続き** — Ease 拡充 → 相対値 → Click 演出後の遷移 → Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
    新セクション(§14 / §15 と同じ形)として書いてから実装する
-4. **ゲーム側の実例** — `Play(group)` / `Stop()` を呼ぶコードと、クリックで遷移するボタン(§9.3 の実測)はまだ無い
+2. **ゲーム側の実例** — `Play(group)` / `Stop()` を呼ぶコードと、クリックで遷移するボタン(§9.3 の実測)はまだ無い
 
 ### 16.3 再開手順
 
@@ -1200,13 +1215,18 @@ Clip 未選択のときは右ペインが "Select a clip" だけなので可変�
 
 - [x] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通る
 - [x] 新規の警告が 0(C4099 を潰した時点で、残るのは P0 以前からある既存分だけ)
-- [ ] UI Editor を初めて開いたウィンドウが 1000x800 で、Animation タブ + Timeline が縦に収まる
-- [ ] Track を増やすと Timeline が伸び、Clip 未選択では最小(240px)に縮む
-- [ ] TextStyle ポップアップでラベルの長い項目(`Font (atlas.json)`)が切れず、手で広げられる
-- [ ] Play when を Enter / Exit にしたとき Group 欄が消え、Manual に戻すと出る
+- [x] UI Editor を初めて開いたウィンドウが 1000x800(Windows / D3D11 で実測 995x800)。
+      **ただし 1280x720 のゲーム窓には縦が入らない**。この窓で使うなら 1000x690 程度まで縮める必要がある
+- [x] Track を増やすと Timeline が伸び、Clip 未選択では最小(240px)に縮む
+      (Clip 未選択で約 245px、Track 1 本で約 300px、6 本で頭打ち)
+- [x] TextStyle ポップアップでラベルの長い項目(`Font (atlas.json)`)が切れず、手で広げられる
+      (グリップを引いて 477 → 637px。`AlwaysAutoResize` があった頃はリサイズできなかった)
+- [x] Play when を Enter / Exit にしたとき Group 欄が消え、Manual に戻すと出る
 
-> 既定サイズは `ImGuiCond_FirstUseEver` なので、`Game/imgui.ini` に古い UI Editor のサイズが残っていると効かない。
-> 目視するときは ini 側の `[Window][UI Editor###uieditor]` を消してから開く(`imgui.ini` は tracked なので確認後に戻す)。
+> 既定サイズは `ImGuiCond_FirstUseEver` なので、`Game/imgui.ini` にそのウィンドウのサイズが残っていると効かない。
+> UI Editor は `###uieditor` を付けた P0 以降キーが `[Window][UI Editor###uieditor]` に変わったため古い `[Window][UI Editor]` は当たらないが、
+> TextStyle ポップアップは `[Window][TextStyle Editor]` がそのまま残っており、**720x760 ではなく ini の値(480x620)で開く**。
+> 既定サイズを確かめるときは ini の該当ブロックを消してから開く(`imgui.ini` は tracked なので確認後に戻す)。
 
 ---
 
@@ -1315,3 +1335,30 @@ std::string GetRecordingLabel(const UIObject* obj) const;
   実再生中に Properties をいじること自体は止めない(止めるにはランタイムの再生状態を見る必要があり、エディタの外へ出る)
 - **Timeline からの録画**(Keyframe インスペクタの値編集)。あれは既にキーを直接いじる操作なので対象外
 - **新規 Clip の自動生成**。Clip は先に作っておく
+
+---
+
+### 16.6 Windows での評価の段取り(P6 / P7 で使った方法)
+
+Mac 側は §16.4。Windows は PowerShell から画面キャプチャと合成入力で操作した。引っかかった点だけ残す。
+
+- **起動**: `Start-Process Game.exe -WorkingDirectory DirectX\Game`(cwd が `Game` でないとアセットが出ない)。
+  終了は `CloseMainWindow()`。ビルドと構成は [project-windows-build-env] の memory が正本
+- **キャプチャ**: `GetClientRect` + `System.Drawing` の `CopyFromScreen`。撮った画像の座標が
+  そのままクライアント座標になるので、クリック位置は画像から直接読める
+- **入力**: `SetCursorPos` + `mouse_event`。ImGui は「移動 + 同フレームのクリック」を拾わないことがあるので、
+  近く → 対象の 2 段階で移動して 0.25 秒待ってから押す(Mac と同じ)
+- **ゲーム窓をリサイズしても ImGui は追従しない。** バックバッファだけ広がって ImGui の `DisplaySize` は
+  元のままなので、描画が引き伸ばされるだけで入力座標もずれる。エディタウィンドウを大きく見たいときは
+  **`imgui.ini` に `[Window][UI Editor###uieditor]` の `Pos` / `Size` を書いてから起動する**
+- **PowerShell 5.1 は BOM 無し UTF-8 の `.ps1` を ANSI として読む。** 日本語コメントを書くならヘルパスクリプトは
+  **BOM 付き UTF-8** で保存する(壊れた文字が改行を飲み込んでパースエラーになる)
+- **PowerShell の関数引数は型を書く。** `function DragX($x, $y, $dx)` だと `$dx` が文字列のままで、
+  `$dx * $i` が文字列の繰り返しになりドラッグ量が壊れる。`[int]$dx` と書く
+- **Preview Controls はボタン列の幅が再生中と停止中で変わる。** 停止中は `|< > >|` の 3 個、再生中は `||` の 1 個なので、
+  その右にある `+ Key` / `Rec` / `Reset` の x 座標が 50px 以上ずれる。座標は毎回撮り直して決める
+- **テストノードの `animation` は `components` の中ではなくノード直下**(`name` / `components` / `animation` / `children` が同列)。
+  `components` の中に書くと黙って無視され、Animation タブが「This object has no UIAnimationComponent.」になる
+- **エディタ操作の結果は保存 JSON で確認する**のが確実(Mac と同じ)。`Save` を押してから
+  `Assets/UI/AquaDash/Title.screen.json` の該当ノードを読む
+- `Title.screen.json` と `imgui.ini` は tracked。確認前にコピーを取り、終わったら戻す

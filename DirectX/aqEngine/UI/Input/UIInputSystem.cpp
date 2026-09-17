@@ -5,6 +5,8 @@
 #include "UI/Component/UIButtonComponent.h"
 #include "UI/Component/UITransformComponent.h"
 #include "UI/Component/UICanvasComponent.h"
+#include "UI/Component/UIAnimationComponent.h"
+#include "UI/Animation/UIAnimationClip.h"
 #include "HID/Input.h"
 #include <cfloat>
 
@@ -66,7 +68,10 @@ namespace aq
 			if (UIObject* hov = UIContext::Get().Resolve(m_hoveredButton))
 			{
 				if (auto* btn = hov->GetComponent<UIButtonComponent>())
+				{
 					btn->isPressed = hid::IsMousePressed(hid::MouseButton::Left);
+					BridgeCondition(hov, kUIAnimCondPressed, btn->isPressed);
+				}
 			}
 
 			// ポインタ Submit: ホバー中に左クリックトリガー
@@ -122,7 +127,13 @@ namespace aq
 
 				math::Vector2 canvasPos = clientPos;
 				if (auto* canvas = screen->GetRoot()->GetComponent<UICanvasComponent>())
+				{
+					// 描画側 (UIBatchRenderer) は canvas.resolution をウィンドウ全体へ引き伸ばすので、
+					// 入力側も実クライアントサイズで割る。clientSize はここで毎フレーム更新する
+					canvas->clientSize = { static_cast<float>(Engine::Get().GetScreenWidth()),
+					                       static_cast<float>(Engine::Get().GetScreenHeight()) };
 					canvasPos = ScaleClientToCanvas(clientPos, canvas->clientSize, canvas->resolution);
+				}
 
 				UIObject* hit = HitTestObject(screen->GetRoot(), canvasPos);
 				if (hit)
@@ -228,6 +239,9 @@ namespace aq
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp || !comp->interactable || !screen) return;
 
+			// callback (画面遷移を積みうる) より前に Trigger する
+			BridgeTrigger(btn, kUIAnimTriggerClick);
+
 			UIClickEvent e{ *btn, *screen, screens };
 			if (comp->onClick) comp->onClick(e);
 		}
@@ -237,6 +251,7 @@ namespace aq
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp) return;
 			comp->isHovered = true;
+			BridgeCondition(btn, kUIAnimCondHover, true);
 
 			if (!screen) return;
 			UIClickEvent e{ *btn, *screen, screens };
@@ -249,6 +264,8 @@ namespace aq
 			if (!comp) return;
 			comp->isHovered = false;
 			comp->isPressed = false;
+			BridgeCondition(btn, kUIAnimCondHover, false);
+			BridgeCondition(btn, kUIAnimCondPressed, false);
 
 			if (!screen) return;
 			UIClickEvent e{ *btn, *screen, screens };
@@ -260,6 +277,7 @@ namespace aq
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp) return;
 			comp->isFocused = true;
+			BridgeCondition(btn, kUIAnimCondFocused, true);
 
 			if (!screen) return;
 			UIClickEvent e{ *btn, *screen, screens };
@@ -271,6 +289,7 @@ namespace aq
 			auto* comp = btn->GetComponent<UIButtonComponent>();
 			if (!comp) return;
 			comp->isFocused = false;
+			BridgeCondition(btn, kUIAnimCondFocused, false);
 
 			if (!screen) return;
 			UIClickEvent e{ *btn, *screen, screens };
@@ -286,6 +305,29 @@ namespace aq
 			btn->isHovered = false;
 			btn->isFocused = false;
 			btn->isPressed = false;
+
+			BridgeCondition(obj, kUIAnimCondHover, false);
+			BridgeCondition(obj, kUIAnimCondPressed, false);
+			BridgeCondition(obj, kUIAnimCondFocused, false);
+		}
+
+
+		// =========================================================================
+		// UIAnimationComponent への橋渡し (設計書 §8.1)
+		// =========================================================================
+
+		void UIInputSystem::BridgeCondition(UIObject* obj, uint32_t condition, bool value)
+		{
+			if (!obj) return;
+			if (auto* anim = obj->GetComponent<UIAnimationComponent>())
+				anim->SetCondition(condition, value);
+		}
+
+		void UIInputSystem::BridgeTrigger(UIObject* obj, uint32_t trigger)
+		{
+			if (!obj) return;
+			if (auto* anim = obj->GetComponent<UIAnimationComponent>())
+				anim->Trigger(trigger);
 		}
 
 	} // namespace ui

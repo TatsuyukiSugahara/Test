@@ -6,7 +6,7 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
 `Clip → Track → Keyframe` の 3 階層へ)だけを対象に初版を書き、
 2026-09-17 の 5 回のレビューで **プロパティ競合規則・状態遷移・エディタ統合・画面遷移** まで
-範囲を広げた。P0 / P1 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P2 以降は未着手。
+範囲を広げた。P0 / P1 / P2 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P2B 以降は未着手。
 
 本書の構成は実施順に並べてある。
 
@@ -742,18 +742,66 @@ P1 の実装で決めたこと(設計書に無かった判断)
 - `IsGroupPlaying()` / `IsAnimationGroupPlaying(root, group)`
 - §8.1 の自動フック(Enter / Hover / Pressed / Focused / Click)
 
+P2 着手時に確定した補足(2026-09-17)
+
+- **runtime の状態。** `ClipRuntime { float time; bool active; bool completed; uint32_t activationSerial; }`。
+  `active` = レイヤーが載っている、`completed` = 非ループで終端に達した(Bool の「最終値を保持したまま残る」用。
+  Manual / Trigger は完了と同時に `active = false` になるので `completed` は Bool 専用)。P1 の `snapshot` / `triggered` は削除
+- **serial の発行。** コンポーネントに `uint32_t nextSerial_ = 0`。`Play(group)` / `Trigger(param)` /
+  Bool の false → true でそれぞれ `++nextSerial_` を 1 回。同じ `Play(group)` の全クリップは同じ serial
+- **基準値。** `std::unordered_map<UIAnimatedProperty, float> baseValues_`。§6.4 のとおり、適用段階で
+  「active なレイヤーが 1 本以上あるプロパティ」を集め、初めて現れたプロパティは UIObject の現在値を取り、
+  レイヤーが消えたプロパティは基準値を書いてから捨てる。勝者は serial 最大(同 serial は `clips_` の後ろが勝つ。
+  ロード時に §4.5 が弾いているので実行時のログは出さない)
+- **Hold の確定。** 非ループ Manual / Trigger が `finish == Hold` で完了したら、そのクリップの各 Track について
+  `baseValues_[p] = track.Sample(duration)` を書いてから `active = false`(上に別レイヤーがあっても行う。§6.4-3)。
+  Restore と `Stop()` は基準値に触らず `active = false` だけ
+- **2 段階処理の入口は 1 つ。** `Update(dt)` = 状態更新(`AdvanceRuntimes(dt)`)+ 適用(`ApplyLayers()`)。
+  **`Play()` / `Trigger()` / `SetCondition()` は状態を変えた直後に `ApplyLayers()` を呼ぶ**(§5.3 の
+  「時刻 0 のサンプルをその場で適用」。Push の Flush が OnEnter 後に Play する経路でも、そのフレームの描画に間に合う)。
+  `SetCondition()` は値が変わらなければ何もしない(毎フレーム呼ばれても無駄がない)
+- **Bool の遷移は `SetCondition()` の中で起こす**(false → true で起動、true → false で解除)。加えて
+  `AdvanceRuntimes()` でも「条件が真なのに非 active」を拾って起動する(クリップの追加やロード後に条件が既に真の場合)
+- **Trigger は再生中でも即座に先頭から**(`time = 0`、新 serial)。pending フラグは持たない
+- **構造変更(AddClip / RemoveClip / MoveClip / ReplaceAllClips)** は StopAll + 全 runtime 再構築のあと
+  `ApplyLayers()` を呼び、Bool / Trigger のレイヤーも外れた状態で基準値を書き戻す
+- **定数**(`UIAnimationClip.h`): `kUIAnimGroupEnter` / `kUIAnimGroupExit`(P1 済)に加えて
+  `kUIAnimCondHover = aqHash32("Hover")` / `kUIAnimCondPressed` / `kUIAnimCondFocused` / `kUIAnimTriggerClick = aqHash32("Click")`
+- **`UIAnimationSystem`** に `static void PlayGroup(UIObject* root, uint32_t group)`(ルート以下の全コンポーネントに `Play`)と
+  `static bool IsAnimationGroupPlaying(const UIObject* root, uint32_t group)` を足す
+- **フック点。** `UIScreenManager::FlushPendingOps()` の Push / Replace で `OnEnter()` が返った直後に
+  `UIAnimationSystem::PlayGroup(root, kUIAnimGroupEnter)`。`UIInputSystem` は `FireHoverEnter / Exit` で
+  `SetCondition(kUIAnimCondHover, v)`、`isPressed` の代入箇所で `SetCondition(kUIAnimCondPressed, v)`、
+  `FireFocusEnter / Exit` で `SetCondition(kUIAnimCondFocused, v)`、`FireClick` で **callback より前に**
+  `Trigger(kUIAnimTriggerClick)`。`ResetButtonState()` は 3 条件を false にする。橋渡し先は同じ UIObject の
+  `UIAnimationComponent` があるときだけ。`UIButtonComponent` にフィールドは足さない
+- **エディタとの関係。** Animation Editor のプレビューは引き続き独自スナップショットで直接書く。runtime の
+  レイヤーが載っているプロパティはフレームごとに runtime が先に書き、プレビューが後から上書きする(描画順)。
+  P3 で統合するまでは、プレビュー中は Enter などのクリップを再生しない運用にする
+
 評価
 
-- [ ] §6.5 の 6 項目が実機で期待どおり
-- [ ] Bool / Trigger クリップが `Play()` なしで動く。手書き JSON 1 枚で「出現 + ホバー光り」が動く
-- [ ] `Play(group)` でグループ内の Manual クリップが全部、それぞれの長さで走る
-- [ ] 完了判定がグループ単位で、Default トラック特例が消えている
-- [ ] `Stop(group)` / `StopAll()` で途中値が捨てられ、基準値に戻る
-- [ ] `Update()` から `std::string` の比較が消えている(0 箇所)
-- [ ] エディタで Clip を追加・削除・並べ替えた直後に再生しても runtime 参照が壊れない
-- [ ] Keyframe ドラッグ中に再生が止まらない
-- [ ] `UIButtonComponent` の hover / press / click が JSON だけでアニメになる(C++ 0 行)
-- [ ] Enter が `OnEnter()` の後に起動し、ゲーム側の初期値を基準値に取っている
+- [x] §6.5 の 6 項目が実機で期待どおり(1・3・4・5 は Mac で画素計測。2 は `Play()` の呼び手が無いため、6 は 1 フレームの撮影が不能なためコードで確認。2026-09-17)
+- [x] Bool / Trigger クリップが `Play()` なしで動く。手書き JSON 1 枚で「出現 + ホバー光り」が動く(Open + Hover + Pressed + Click の 4 本を JSON だけで)
+- [x] `Play(group)` でグループ内の Manual クリップが全部、それぞれの長さで走る(コード確認: `Play` は group 一致を全部起動し、`AdvanceRuntimes` は各クリップの `duration` を見る)
+- [x] 完了判定がグループ単位で、Default トラック特例が消えている(`IsGroupPlaying` = group の Manual が 1 本でも active)
+- [x] `Stop(group)` / `StopAll()` で途中値が捨てられ、基準値に戻る(コード確認: `active = false` のあと `ApplyLayers()` が基準値を書く。呼び手はまだ無い)
+- [x] `Update()` から `std::string` の比較が消えている(0 箇所)
+- [x] エディタで Clip を追加・削除・並べ替えた直後に再生しても runtime 参照が壊れない(Click 再生中に + Clip × 2、- Clip × 2。落ちず、直後の Hover も効く)
+- [x] Keyframe ドラッグ中に再生が止まらない(`isPlaying_ = false` は対象変更 / 終端 / スクラブ / 一時停止 / Reset だけ)
+- [x] `UIButtonComponent` の hover / press / click が JSON だけでアニメになる(C++ 0 行)
+- [x] Enter が `OnEnter()` の後に起動し、ゲーム側の初期値を基準値に取っている(`PlayGroup` は `OnEnter()` の直後。基準値は最初の `ApplyLayers()` で `ReadFrom`)
+- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+
+P2 の実装で決めたこと・直したこと
+
+- `Play()` / `Trigger()` は対象が 0 本でも `ApplyLayers()` を呼ぶ。`Stop()` / `StopAll()` / `SetCondition()` は状態が変わったときだけ呼ぶ
+- `AdvanceRuntimes()` の Bool 追随(条件が真なのに非 active)は runtime ごとに serial を発行する(`SetCondition()` 経由の通常経路は起動単位で 1 つ)
+- 最後のレイヤーが外れたプロパティの基準値は、そのプロパティの Track を持つクリップが残っていなくても書き戻す(一時 Track で `Apply`。`RemoveClip` 直後に途中値が残らない)
+- **`UICanvasComponent::clientSize` が一度も更新されていなかった**(コメントは「毎フレーム更新」)。既定 1920x1080 のままなので
+  ウィンドウが 1920x1080 以外だとマウスの HitTest がずれ、Mac(1280x752)では UIButton の hover が一度も当たらない。
+  `UIInputSystem::HitTest()` で `Engine` の画面サイズを毎フレーム入れるようにした(描画側は `resolution` をウィンドウ全体へ
+  引き伸ばすだけなので、これで一致する)。P2 の範囲外だが自動フックの評価に必須だった
 
 ### P2B: Exit 待機付き画面遷移(第 2 部)
 

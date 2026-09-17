@@ -18,6 +18,33 @@ namespace aq
 			}
 		}
 
+		void UIAnimationSystem::PlayGroup(UIObject* root, uint32_t group)
+		{
+			if (!root) return;
+
+			if (auto* anim = root->GetComponent<UIAnimationComponent>())
+				anim->Play(group);
+
+			for (UIObject* child : root->GetChildren())
+				PlayGroup(child, group);
+		}
+
+		bool UIAnimationSystem::IsAnimationGroupPlaying(const UIObject* root, uint32_t group)
+		{
+			if (!root) return false;
+
+			if (auto* anim = root->GetComponent<UIAnimationComponent>())
+			{
+				if (anim->IsGroupPlaying(group)) return true;
+			}
+
+			for (const UIObject* child : root->GetChildren())
+			{
+				if (IsAnimationGroupPlaying(child, group)) return true;
+			}
+			return false;
+		}
+
 		void UIAnimationSystem::UpdateObject(UIObject* obj, float dt)
 		{
 			if (!obj || !obj->IsActiveInHierarchy()) return;

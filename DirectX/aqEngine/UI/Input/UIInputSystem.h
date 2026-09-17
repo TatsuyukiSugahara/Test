@@ -72,6 +72,13 @@ namespace aq
 			UIObjectHandle m_hoveredButton;
 			UIObjectHandle m_focusedButton;
 			UIScreen*      m_hoveredScreen = nullptr;
+
+
+			// ---- UIAnimationComponent への橋渡し (設計書 §8.1) ----
+			// 同じ UIObject に UIAnimationComponent があるときだけ反映する
+		private:
+			static void BridgeCondition(UIObject* obj, uint32_t condition, bool value);
+			static void BridgeTrigger(UIObject* obj, uint32_t trigger);
 		};
 
 	} // namespace ui

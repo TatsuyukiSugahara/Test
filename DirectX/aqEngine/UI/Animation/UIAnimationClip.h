@@ -45,5 +45,11 @@ namespace aq
 		inline constexpr uint32_t kUIAnimGroupEnter = aqHash32("Enter");
 		inline constexpr uint32_t kUIAnimGroupExit  = aqHash32("Exit");
 
+		// UIButton の状態を橋渡しする条件名 / トリガー名のハッシュ (§8.1)。UIInputSystem が使う。
+		inline constexpr uint32_t kUIAnimCondHover    = aqHash32("Hover");
+		inline constexpr uint32_t kUIAnimCondPressed  = aqHash32("Pressed");
+		inline constexpr uint32_t kUIAnimCondFocused  = aqHash32("Focused");
+		inline constexpr uint32_t kUIAnimTriggerClick = aqHash32("Click");
+
 	} // namespace ui
 } // namespace aq

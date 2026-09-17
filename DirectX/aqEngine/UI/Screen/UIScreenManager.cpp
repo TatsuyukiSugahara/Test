@@ -4,6 +4,7 @@
 #include "UI/UIObject.h"
 #include "UI/Input/UIInputSystem.h"
 #include "UI/Animation/UIAnimationSystem.h"
+#include "UI/Animation/UIAnimationClip.h"
 #include "UI/Resource/UIDocumentLoader.h"
 #include <cassert>
 
@@ -122,6 +123,7 @@ namespace aq
 					{
 						screen->OnCreate();
 						screen->OnEnter();
+						UIAnimationSystem::PlayGroup(screen->root_, kUIAnimGroupEnter); // OnEnter 完了後に起動 (§8.1)
 						stack_.push_back(std::move(screen));
 						changed = true;
 					}
@@ -160,6 +162,7 @@ namespace aq
 					{
 						screen->OnCreate();
 						screen->OnEnter();
+						UIAnimationSystem::PlayGroup(screen->root_, kUIAnimGroupEnter); // OnEnter 完了後に起動 (§8.1)
 						stack_.push_back(std::move(screen));
 					}
 					break;

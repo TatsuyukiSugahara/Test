@@ -20,24 +20,26 @@ namespace aq
 		 * 構造を変える操作 (追加 / 削除 / 並べ替え / 全置換) は StopAll() + 全 runtime 再構築、
 		 * condition / group の変更は対象 runtime だけの初期化で済ませる (再構築契約)。
 		 * clips_ は直接編集させず、構造変更は下記の編集 API に限定する。
+		 *
+		 * 同じプロパティを複数のクリップが動かす場合は activationSerial が最大のクリップを
+		 * レイヤーの勝者として選び、その 1 本だけを適用する (設計書 §6)。基準値 (baseValues_) は
+		 * レイヤーが載っていないときの UIObject の値を保持し、最後のレイヤーが外れたら書き戻す。
 		 */
 		class UIAnimationComponent : public IUIComponent
 		{
 		private:
 			/**
 			 * クリップ 1 本分のランタイム状態。clips_[i] と対になる (ポインタは持たない)。
-			 * 本命は P2 のレイヤー評価 (activationSerial の運用 / 基準値ライフサイクル) で書き直す。
-			 * snapshot / triggered は P1 の暫定 Update() 専用のメンバで、P2 で削除する前提
+			 * active はレイヤーが載っていること、completed は非ループの Bool クリップが
+			 * 終端に達し最終値を保持したまま残っていることを表す (Manual / Trigger は完了と
+			 * 同時に active が false になるため completed を使わない)
 			 */
 			struct ClipRuntime
 			{
 				float    time             = 0.f;
 				bool     active           = false;
-				uint32_t activationSerial = 0u; // P1 では発行しない (常に 0)
-
-				/** P1 暫定 Update() 専用 (P2 で削除予定) */
-				std::unordered_map<UIAnimatedProperty, float> snapshot;          // finish == Restore 用の起動時スナップショット
-				bool                                           triggered = false; // Trigger: 起動リクエスト
+				bool     completed        = false;
+				uint32_t activationSerial = 0u; // 0 = 未起動
 			};
 
 
@@ -47,6 +49,12 @@ namespace aq
 
 			/** Bool 条件の現在値 (キーは conditionParam のハッシュ) */
 			std::unordered_map<uint32_t, bool> conditions_;
+
+			/** レイヤーが載っていないときにプロパティへ書き戻す基準値 (設計書 §6.4) */
+			std::unordered_map<UIAnimatedProperty, float> baseValues_;
+
+			/** 起動単位ごとに 1 つ発行する連番。Play() 1 回 / Trigger() 1 回 / Bool の false→true 1 回で 1 つ進む */
+			uint32_t nextSerial_ = 0u;
 
 
 			/**
@@ -84,13 +92,23 @@ namespace aq
 			bool IsPlaying() const;                          // Manual クリップが 1 本でも active
 
 			// UIAnimationSystem から毎フレーム呼ばれる。GetOwner() 経由で UIObject を取得する。
-			// P1 時点は暫定ロジック (設計書 §11 の P1 補足)。レイヤー / serial / 基準値は未実装
+			// AdvanceRuntimes(dt) で状態を進め、ApplyLayers() でプロパティへ反映する (設計書 §6.3)
 			void Update(const float dt);
 
 		private:
 			void ResetClipRuntime(const size_t index); // 対象 runtime だけ初期化 (condition / group 変更用)
-			void TakeSnapshot(const size_t index);
-			void RestoreSnapshot(const size_t index);
+
+			// 状態更新 (§6.3 の 1 段階目)。起動判定・時刻・ループ・完了を進める。プロパティには触らない
+			void AdvanceRuntimes(const float dt);
+
+			// 適用 (§6.3 の 2 段階目)。プロパティごとに勝者を 1 本選び、基準値を管理しながら書き込む
+			void ApplyLayers();
+
+			// 非ループの Manual / Trigger クリップが finish == Hold で完了したときの確定処理 (§6.4-3)。
+			// clip.duration 時点の値を基準値へ書く
+			void CommitHold(const size_t index);
+
+			// property を持つ Track を全クリップから 1 つ探す (基準値の読み書きはどの Track でもよい)
 		};
 
 	} // namespace ui

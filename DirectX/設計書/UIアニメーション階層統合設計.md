@@ -1,6 +1,6 @@
 # UIアニメーション統合設計
 
-> 対象コミット: P6(Windows 回帰 + エディタ寸法)まで / 最終更新: 2026-09-17 / **再開するときは §16 から読む**
+> 対象コミット: 3ff20bf(P6 まで)/ 最終更新: 2026-09-17 / **再開するときは §16 から読む**
 
 UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定できる」状態にする。
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
@@ -16,7 +16,9 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 | 第 2 部 | P1 / P2 / P2B | データ構造・排他モデル / レイヤー評価と基本自動フック / Exit 待機遷移 |
 | 第 3 部 | P3 | 統合エディタ(Animation タブ / タイムライン / プレビュー) |
 | 第 4 部 | P4 / P5 | プリセット(§14)/ ベクタトラック(§15) |
-| 後続 | — | オートキー / Ease / 相対値 |
+| 第 5 部 | — | 到達点と再開手順(§16) |
+| 第 6 部 | P7 | オートキー(§17) |
+| 後続 | — | Ease / 相対値 / Click 演出後の遷移 / Pause |
 
 ---
 
@@ -668,7 +670,7 @@ Text Style: Assets/Styles/UI.textstyle.json  [Edit]
 - [x] Reload 後に UI Editor と Animation の選択が空で、ゲーム側の `OnEnter()` が再実行されて生ポインタが有効
 - [x] Reload に Exit 演出が挟まらない(P2B 実装後に再確認)
 - [x] 未保存状態で Reload を押すと確認が出る
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題。Mac の Metal は Debug / Release とも警告増なし)
+- [x] Windows / D3D11 でビルドが通り、警告が増えていない(P6 で消化。D3D11 / D3D12 / Vulkan の Debug が通り、C4099 を潰して新規警告 0)
 
 評価で直したもの
 
@@ -722,7 +724,7 @@ P1 着手時に確定した補足(2026-09-17)
 - [x] 同一 Clip 内の `property` 重複、同一 group 内の `property` 重複が検証で止まる(後発側が捨てられる)
 - [x] `Game/Assets/UI/` 配下に描画コンポーネントを 2 種以上持つノードが 0 件(63 ノード走査、ref 展開後も 0 件)
 - [x] 手書き JSON で 2 種以上を付けたノードをロードすると 2 つ目が拒否され、警告が出る(`[UIDocument] node 'DupRender': ... rejected`)
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題。Mac の Metal は Debug / Release とも警告増なし。`UIAnimationClip` の struct/class 不一致警告が 1 件減った)
+- [x] Windows / D3D11 でビルドが通り、警告が増えていない(P6 で消化。D3D11 / D3D12 / Vulkan の Debug が通り、C4099 を潰して新規警告 0)
 
 P1 の実装で決めたこと(設計書に無かった判断)
 
@@ -792,7 +794,7 @@ P2 着手時に確定した補足(2026-09-17)
 - [x] Keyframe ドラッグ中に再生が止まらない(`isPlaying_ = false` は対象変更 / 終端 / スクラブ / 一時停止 / Reset だけ)
 - [x] `UIButtonComponent` の hover / press / click が JSON だけでアニメになる(C++ 0 行)
 - [x] Enter が `OnEnter()` の後に起動し、ゲーム側の初期値を基準値に取っている(`PlayGroup` は `OnEnter()` の直後。基準値は最初の `ApplyLayers()` で `ReadFrom`)
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+- [x] Windows / D3D11 でビルドが通り、警告が増えていない(P6 で消化。D3D11 / D3D12 / Vulkan の Debug が通り、C4099 を潰して新規警告 0)
 
 P2 の実装で決めたこと・直したこと
 
@@ -849,7 +851,7 @@ P2B 着手時に確定した補足(2026-09-17)
   Replace は同フレームの `BeginExit` で Exit 待機に入るので画面が残る。Exit クリップが無い画面では従来どおり同フレームで消える。
   ゲーム側にクリックで遷移するボタンがまだ無いため実測なし)
 - [x] エディタの Reload に Exit 演出が挟まらない(Exit クリップがある画面で Reload → +0.3s で白のまま)
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+- [x] Windows / D3D11 でビルドが通り、警告が増えていない(P6 で消化。D3D11 / D3D12 / Vulkan の Debug が通り、C4099 を潰して新規警告 0)
 
 P2B の実装で決めたこと
 
@@ -908,7 +910,7 @@ P3 着手時に確定した補足(2026-09-17)
 - [x] プレビューでループ・条件・`finish` の実挙動が確認できる。勝者 Clip が見える(Play / Stop はランタイム経由。Track 行の `*` が勝者)
 - [x] `ctNameBuf_` / `condParamBuf_` の全トラック共有が構造変更で消えている(static バッファ 0 件)
 - [x] トップメニューに UI Animation Editor / TextStyle Editor の独立項目が無い(`UI` メニューは `UI Editor` だけ)
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+- [x] Windows / D3D11 でビルドが通り、警告が増えていない(P6 で消化。D3D11 / D3D12 / Vulkan の Debug が通り、C4099 を潰して新規警告 0)
 
 P3 の実装で決めたこと・直したこと
 
@@ -938,12 +940,12 @@ P3 の実装で決めたこと・直したこと
 - [x] Shake を挿入 → クリックで揺れ、終わると元の位置に戻る(左端の白の量が揺れて静止時の値に戻る)
 - [x] 現在値を基準に生成される(Position X が -600 の Shake のキーが -600 / -592 / -608 …)
 - [x] 同名クリップがあれば連番になる(`FadeIn1`)
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+- [x] Windows / D3D11 でビルドが通り、警告が増えていない(P6 で消化。D3D11 / D3D12 / Vulkan の Debug が通り、C4099 を潰して新規警告 0)
 
 P4 の実装で気づいたこと
 
 - Duration を伸ばしてもキーの時刻は動かない(0.3 秒のキーのまま末尾でホールド)。キーの時間を Duration に比例して伸ばす操作は §12 の後続
-- Play when が Enter / Exit のときも Group 欄が出る(§10.3 は Manual のときだけ)。エディタ寸法の修正と一緒に直す(§13)
+- ~~Play when が Enter / Exit のときも Group 欄が出る(§10.3 は Manual のときだけ)~~ → **P6 で修正(§16.5)**
 
 ---
 
@@ -965,7 +967,7 @@ P4 の実装で気づいたこと
 - [x] Keyframe インスペクタに X / Y の値が並び、Ease は両方に効く(Time / X / Y / Ease。ツールチップにも t / X / Y)
 - [x] 片方しか無いクリップ(SlideIn プリセット)は従来どおり `PositionX` の単独行
 - [x] 既存の JSON がそのままロードできる(形式不変。フィクスチャをそのまま読んでいる)
-- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+- [x] Windows / D3D11 でビルドが通り、警告が増えていない(P6 で消化。D3D11 / D3D12 / Vulkan の Debug が通り、C4099 を潰して新規警告 0)
 
 P5 の実装で決めたこと・直したこと
 
@@ -977,13 +979,37 @@ P5 の実装で決めたこと・直したこと
 
 ---
 
+### P7: オートキー(第 6 部、§17)
+
+実装
+
+- Preview Controls に `Rec` トグル(§17.5)。ON の瞬間に録画基準値を取る
+- 録画中は Inspector のタブに関わらず Timeline を出す(Properties タブで値をいじりながら行を見られるように)
+- Properties タブの録画対象ウィジェット(§17.3)の編集で、選択 Clip のスクラブ時刻へキーを入れる
+- 対象 Track が無ければ作り、スクラブ時刻 > 0 なら 0 秒にも基準値のキーを置く(§17.4)
+- データ(`UIAnimationClip` / `UIAnimationTrack` / JSON)は変えない
+
+評価
+
+- [ ] Clip 未選択では `Rec` が Disabled で、理由がツールチップに出る
+- [ ] Rec ON → スクラブを 0.5 秒へ → Position をドラッグ → PositionX / PositionY に 0 秒と 0.5 秒のキーが入る
+- [ ] ドラッグし続けてもキーは 1 本のまま(同時刻は値の上書き)
+- [ ] 既に Track があるプロパティでは 0 秒キーが勝手に増えない
+- [ ] Rec ON のまま Properties タブへ移っても Timeline が出たままで、打ったキーがその場で見える
+- [ ] Rec OFF にしても値は戻らず、`Reset` を押すと録画開始前の値へ戻る
+- [ ] 選択オブジェクトを変えると Rec が落ちる
+- [ ] 録画対象外のウィジェット(Pivot / UV Rect / Flip / texturePath)ではキーが増えない
+- [ ] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通り、警告が増えていない
+
+---
+
 ## 12. 後続改善(本書の範囲外。この順で続ける)
 
 本書が入ってから着手する。逆順にすると全部書き直しになる。
 
 1. ~~**プリセット**~~ → **P4 として本書に取り込んだ(§14)**
 2. ~~**ベクタトラック**~~ → **P5 として本書に取り込んだ(§15)**
-3. **オートキー** — 録画中に値をいじった瞬間、現在のスクラブ時刻へキーを自動追加する
+3. ~~**オートキー**~~ → **P7 として本書に取り込んだ(§17)**
 4. **Ease 拡充** — `Back` / `Elastic` / `Bounce` と曲線プレビュー。現状 5 種のみ、`Bezier` の実体は smoothstep。
    イージングは左キーが右への区間を支配することを UI に出す
 5. **相対値モード** — キー値に「絶対 / 初期値からの差分」を選べるようにし、レイアウト変更でアニメがズレないようにする
@@ -1087,7 +1113,7 @@ struct TimelineRow
 | P3 | 統合エディタ(Inspector タブ / Timeline / 検証赤字 / Save 停止 / TextStyle 入口) | 完了(Mac 評価済) | `100161b` |
 | P4 | プリセット(§14) | 完了(Mac 評価済) | `3d283eb` |
 | P5 | ベクタトラック(§15) | 完了(Mac 評価済) | `367b967` |
-| P6 | Windows 回帰 + エディタ寸法(§16.5) | ビルド完了(実機目視は未) | — |
+| P6 | Windows 回帰 + エディタ寸法(§16.5) | ビルド完了(実機目視は未) | `3ff20bf` |
 
 **P0〜P5 で共通に残っていた「Windows / D3D11 でビルドが通り、警告が増えていない」は P6 で消化した。**
 `Game/DirectX.vcxproj` の Debug / x64 を `AqGraphicsApi=D3D11` / `D3D12` / `Vulkan` の 3 通りビルドして全部成功。
@@ -1103,9 +1129,10 @@ struct TimelineRow
 ### 16.2 残っている作業(この順で)
 
 1. **P6 の実機目視** — Windows / Mac のどちらかで UI Editor を開き、§16.5 のチェックを埋める
-2. **§12 の続き** — オートキー → Ease 拡充 → 相対値 → Click 演出後の遷移 → Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
+2. **P7: オートキー(§17)** — 設計済み。実装はこれから
+3. **§12 の続き** — Ease 拡充 → 相対値 → Click 演出後の遷移 → Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
    新セクション(§14 / §15 と同じ形)として書いてから実装する
-3. **ゲーム側の実例** — `Play(group)` / `Stop()` を呼ぶコードと、クリックで遷移するボタン(§9.3 の実測)はまだ無い
+4. **ゲーム側の実例** — `Play(group)` / `Stop()` を呼ぶコードと、クリックで遷移するボタン(§9.3 の実測)はまだ無い
 
 ### 16.3 再開手順
 
@@ -1170,3 +1197,105 @@ Clip 未選択のときは右ペインが "Select a clip" だけなので可変�
 
 > 既定サイズは `ImGuiCond_FirstUseEver` なので、`Game/imgui.ini` に古い UI Editor のサイズが残っていると効かない。
 > 目視するときは ini 側の `[Window][UI Editor###uieditor]` を消してから開く(`imgui.ini` は tracked なので確認後に戻す)。
+
+---
+
+# 第 6 部: オートキー
+
+## 17. オートキー(P7)
+
+### 17.1 やること
+
+**録画(Rec)中に Properties タブの値をいじると、その場でキーが入る。**
+今はキーを 1 本入れるのに「Row を選ぶ → `+ Key` → Keyframe インスペクタで値を打ち直す」の 3 手が要る。
+DragFloat への数値入力はプラットフォームによっては通らない(§16.4)ので、値は実質ドラッグでしか入れられない。
+録画中は「見た目を合わせる操作」がそのままキーになる。
+
+### 17.2 どこで操作するか
+
+`Rec` トグルは Timeline 下部の Preview Controls、スクラブの並び。値をいじるのは Inspector の **Properties タブ**。
+この 2 つは通常は同時に見えない(Timeline は Animation タブのときだけ出る)ため、
+**録画中は Inspector のタブに関わらず Timeline を出す**。打ったキーがその場で行に出ないと、録画の意味がない。
+
+```
+┌ Inspector ───────────────┐
+│ [Properties] [Animation]  │
+│ ● REC  Enter  @ 0.35s     │ ← 録画中だけ Properties タブの先頭に赤帯
+│ Transform                 │
+│  Position [-500][ 250][0] │ ← ここをドラッグするとキーが入る
+├───────────────────────────┤
+│ Timeline(録画中は常時)   │
+│  Position ◇────◇          │
+└───────────────────────────┘
+```
+
+### 17.3 録画対象のプロパティ
+
+| Properties タブのウィジェット | 打つプロパティ |
+| --- | --- |
+| Transform / Position | `PositionX` `PositionY`(`PositionZ` は既に Track があるときだけ) |
+| Transform / Size | `SizeDeltaX` `SizeDeltaY` |
+| Transform / Rotation | `Rotation` |
+| Transform / Scale | `ScaleX` `ScaleY` |
+| Transform / Active | `Active` |
+| Image / NineSlice / CircleGauge の Color | `ColorR` `ColorG` `ColorB` `ColorA` |
+| 同 Fill Amount | `FillAmount` |
+| NineSlice の Border Left / Right / Top / Bottom | `NineSliceBorderLeft` ほか 3 つ |
+
+- 表に無いウィジェット(Pivot / Anchor / UV Rect / Flip / texturePath / Text の各項目 / Canvas)は
+  対応する `UIAnimatedProperty` が無い。従来どおり `dirty` を立てるだけで、キーは入らない
+- `PositionZ` は深度ソート用なので**自動では Track を作らない**。既に Track があるときだけ打つ
+- `TextCharCount` は Properties タブに編集欄が無いので対象外(タイプライター演出は Timeline から手で打つ)
+
+### 17.4 キーの入り方
+
+原則 4「挙動は決定的」に従い、後勝ちや暗黙の上書きを作らない。
+
+1. **時刻**はスクラブ時刻 `scrubTime_`。実再生(`Play`)の時刻は使わない
+2. **値**は編集後の現在値(`UIAnimationTrack::ReadFrom(obj)`)。
+   `+ Key` が使う `Sample(時刻)` とは違う — `+ Key` は「曲線を変えずにキーを挿す」ためのもので、録画はその逆
+3. **同時刻(許容差 `1e-5`)にキーがあれば値だけ上書きし、`ease` は保つ。**
+   ドラッグ中は毎フレーム同じ時刻へ書くので、1 回のドラッグで増えるキーは 1 本
+4. 対象 Track が Clip に無ければ**作る**。作るのは §17.3 の表にあるプロパティだけ
+5. **新規 Track で、かつスクラブ時刻 > 0 のときは、0 秒にも「録画開始時の値」でキーを置く。**
+   これが無いと Track がキー 1 本だけになり、「0 秒から動く」ではなく「常にその値」になってしまう。
+   既に Track があるプロパティには 0 秒キーを足さない(既存の曲線を勝手に変えない)
+6. §4.5 の検証(同じ起動単位でのプロパティ重複)は変えない。引っかかれば従来どおり赤字が出る
+
+### 17.5 録画の開始と終了
+
+- `Rec` を ON にできるのは **Clip 選択中だけ**。それ以外は Disabled にし、ツールチップで理由を出す(原則 2)
+- ON の瞬間に**録画基準値**を取る。スクラブ用の `snapshot_`(Clip の Track ぶんだけ)とは別に、
+  §17.3 の全プロパティの現在値を `recBaseline_` に持つ。17.4-5 の 0 秒キーはここから取る
+- 同時に既存の `TakeSnapshot()` も取り、`Reset` で録画開始前へ戻せるようにする
+- **OFF にしても値は戻さない。**戻したいときは既存の `Reset` ボタン
+- 選択オブジェクトの変更(`OnTargetChanged()`)と Reload(`Reset()`)で録画は落ちる
+
+### 17.6 責務
+
+| ファイル | 追加・変更 |
+| --- | --- |
+| `UI/Debug/UIAnimationEditor.h` | `isRecording_` / `recBaseline_` を追加。公開 API に `IsRecording()` と `RecordEdit()` |
+| `UI/Debug/UIAnimationEditor.cpp` | Preview Controls に `Rec` トグル。`RecordEdit()` の実装。無名 namespace に「同時刻上書き」の `SetKeyAtTime()` |
+| `UI/Debug/UIEditorDebugPanel.h` | `MarkEdited()` の宣言 |
+| `UI/Debug/UIEditorDebugPanel.cpp` | §17.3 のウィジェットの `MarkDirtyIfEdited()` を `MarkEdited(obj, { ... })` へ差し替え。録画中は Timeline を常時表示。Properties タブ先頭の REC 帯 |
+
+公開 API は 2 本だけ足す。
+
+```cpp
+// 録画中か (UI Editor が Timeline を出すかの判定にも使う)
+bool IsRecording() const;
+
+// 録画中なら props のキーをスクラブ時刻へ入れる。録画していなければ何もしない
+void RecordEdit(UIObject* obj, std::initializer_list<UIAnimatedProperty> props);
+```
+
+`UIAnimationClip` / `UIAnimationTrack` / JSON・ローダ・シリアライザ・ランタイムには触らない。
+**エディタの中だけで閉じる変更**であり、データ形式の互換は保たれる。
+
+### 17.7 やらないこと
+
+- **Play(実再生)中の録画**。録画はスクラブ時刻に対してだけ効く。実再生は時刻がランタイム側にあり、
+  どのフレームの値を採るかが決まらない
+- **Timeline からの録画**(Keyframe インスペクタの値編集)。あれは既にキーを直接いじる操作なので対象外
+- **新規 Clip の自動生成**。Clip は先に作っておく

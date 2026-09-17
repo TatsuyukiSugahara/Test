@@ -6,7 +6,7 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
 `Clip → Track → Keyframe` の 3 階層へ)だけを対象に初版を書き、
 2026-09-17 の 5 回のレビューで **プロパティ競合規則・状態遷移・エディタ統合・画面遷移** まで
-範囲を広げた。P0 / P1 / P2 / P2B は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。P3 は未着手。
+範囲を広げた。P0〜P3 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み(本書の全フェーズ)。残るは Windows / D3D11 でのビルド確認と §12 の後続改善。
 
 本書の構成は実施順に並べてある。
 
@@ -866,15 +866,56 @@ P2B の実装で決めたこと
 - Animation Editor を独立パネルから UI Editor の一部へ。`IDebugRenderable` 登録を外す
 - TextStyle の入口を Text Inspector へ(§10.5)
 
+P3 着手時に確定した補足(2026-09-17)
+
+- **`UIAnimationEditor` は `IDebugRenderable` をやめ、`UIEditorDebugPanel` が値で持つ部品にする**(ファイル名は変えない)。公開 API:
+  `void DrawAnimationTab(UIObject* obj)`(Inspector の Animation タブの中身: Clip 一覧 + 選択 Clip の設定 + Advanced + 検証エラー)/
+  `void DrawTimelinePanel(UIObject* obj, float dt)`(下部: タイムライン + Keyframe Inspector + プレビュー)/
+  `void OnTargetChanged(UIObject* prevObj)` / `void Reset()`(Reload 直前)/
+  `static bool ValidateTree(const UIObject* root, std::vector<std::string>& errors)`(Save 前の検証。ツリーの全 `UIAnimationComponent`)
+- **Inspector は `ImGui::BeginTabBar` の `[Properties] [Animation]`。** Animation タブで `UIAnimationComponent` が無ければ「Add Animation」ボタン。
+  下部 Timeline は Animation タブが選ばれていて、かつコンポーネントがあるときだけ、固定高さ(260px)の子ウィンドウで出す
+- **`Play when` の選択肢と内部設定**(§10.3 の表)。`Enter` / `Exit` = Manual + group 固定、`Hover` / `Pressed` / `Focused` = Bool + param 固定、
+  `Click` = Trigger + param 固定、`Manual` = Manual + 自由 group(Group 欄を出す)、どれにも当てはまらない組み合わせは `Advanced` と表示する。
+  変更は必ず `SetClipCondition()` / `SetClipGroup()` を通す。`Exit` は P2B 済みなので有効。**Disabled にする仕組みは残す**
+  (`kExitTransitionReady = true` の定数と、false のときの `(available after screen transition support)` の理由表示)
+- **Advanced(既定で畳む)**: condition の Combo(Manual / Bool / Trigger)、conditionParam と group の自由入力、ハッシュ値の読み取り専用表示(`0x%08X`)
+- **`After finish` の表示は `Keep`(Hold)/ `Return`(Restore)。** Duration は `%.2f sec`
+- **検証。** `UIAnimationSerializer::ValidateDetailed()` を選択コンポーネントに対して毎フレーム掛け、違反クリップは一覧で赤字、
+  選択中クリップの違反はタブ内に赤字で列挙する。UI Editor の Save は `ValidateTree()` が false なら保存せず
+  `Save blocked: N animation error(s)` を status に出す。**`Validate` のメッセージは英語に改める**(ImGui の既定フォントに日本語グリフが無い)
+- **Timeline 左の一覧は 2 段**: Manual は `groupName`(空なら name)の見出しごと、Bool / Trigger は `Play when` の見出しごと。データは平ら。
+  Clip 行に Play when / Duration / Loop を出す
+- **プレビューはランタイム経由。** `Play`(Manual: `Play(group)`、Trigger: `Trigger(param)`、Bool: `SetCondition(param, true)`)/
+  `Stop`(Manual: `Stop(group)`、Bool: `SetCondition(param, false)`、Trigger: 何もしない)。スクラブ(時刻を指定して値を直書き)は
+  キー編集の補助として残し、`ApplyScrub` は従来どおり編集側のスナップショットで戻す。プレビュー中の勝者は
+  `UIAnimationComponent::FindWinnerClip(property)` で引き、Track 行の先頭に `*` を出す。ツールチップに `serial` と `time`
+  (`IsClipActive` / `GetClipTime` / `GetClipSerial`。この 4 つの問い合わせ API を P3 で足す)
+- **TextStyle の入口。** `TextStyleEditorPanel` も `IDebugRenderable` をやめ、`UIEditorDebugPanel` が値で持つ。Text Inspector の
+  `Style Path` の横に `[Edit]`。押すと `Open(path)` → `ImGui::BeginPopupModal("TextStyle Editor")` の中に既存の一覧 / プロパティ /
+  プレビューを描く(`RenderPopup()` を UI Editor が毎フレーム呼ぶ)。Close ボタンで閉じる
+- **`Core/Application`** から `uiAnimationEditor_` / `textStyleEditorPanel_` のメンバと登録を外す。トップメニューの `UI` には `UI Editor` だけ残る
+- `.vcxproj` / `.filters` は変更なし(ファイルの増減が無い)
+
 評価
 
-- [ ] UI Editor だけで、ボタンに Hover / Click アニメを付けて保存し、再起動後に動く
-- [ ] condition / conditionParam / ハッシュ値が通常表示に出ない
-- [ ] `Play when: Exit` が P2B 未完了時は Disabled で理由が出る
-- [ ] 同じ起動単位で同じプロパティを使うと赤字になり Save が止まる
-- [ ] プレビューでループ・条件・`finish` の実挙動が確認できる。勝者 Clip が見える
-- [ ] `ctNameBuf_` / `condParamBuf_` の全トラック共有が構造変更で消えている
-- [ ] トップメニューに UI Animation Editor / TextStyle Editor の独立項目が無い
+- [x] UI Editor だけで、ボタンに Hover / Click アニメを付けて保存し、再起動後に動く(Mac 2026-09-17: Add Animation → + Clip →
+  Play when: Hover → + Track → ColorA → 右クリックでキー追加 → Save。再起動後にホバーで alpha 0 になるのを画素計測。Click も同じ経路)
+- [x] condition / conditionParam / ハッシュ値が通常表示に出ない(Name / Play when / Duration / Loop / After finish / Advanced(畳み)だけ)
+- [x] `Play when: Exit` が P2B 未完了時は Disabled で理由が出る(`kExitTransitionReady` を false にしたときの経路。P2B 済みなので今は有効)
+- [x] 同じ起動単位で同じプロパティを使うと赤字になり Save が止まる(Clip 名と行が赤字、`Save blocked: 2 animation error(s)`)
+- [x] プレビューでループ・条件・`finish` の実挙動が確認できる。勝者 Clip が見える(Play / Stop はランタイム経由。Track 行の `*` が勝者)
+- [x] `ctNameBuf_` / `condParamBuf_` の全トラック共有が構造変更で消えている(static バッファ 0 件)
+- [x] トップメニューに UI Animation Editor / TextStyle Editor の独立項目が無い(`UI` メニューは `UI Editor` だけ)
+- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+
+P3 の実装で決めたこと・直したこと
+
+- `UIAnimationComponent::AddClip()` が `group == 0` のクリップを受けたら §4.3 の規則で埋める(エディタの `+ Clip` が即エラーにならないように)
+- `Validate()` のメッセージは英語(ImGui にそのまま出す)
+- `+ Track` / `-` / property の Combo はタイムライン右ペインの先頭に置いた(Track を編集する場所に寄せた)
+- TextStyle の `[Edit]` はモーダルポップアップ。既存の一覧 / プロパティ / プレビューをそのまま中に描く
+- UI Editor の既定サイズ(700x560)では Animation タブ + Timeline で縦が足りない。ウィンドウを広げれば使える。既定サイズの拡大は後続で
 
 ---
 

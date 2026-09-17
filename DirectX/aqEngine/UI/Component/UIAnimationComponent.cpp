@@ -16,6 +16,10 @@ namespace aq
 
 		size_t UIAnimationComponent::AddClip(UIAnimationClip clip)
 		{
+			// group が未解決 (0) なら §4.3 の規則で埋める (groupName が空なら name のハッシュ)
+			if (clip.group == 0u)
+				clip.group = aqHash32(clip.groupName.empty() ? clip.name.c_str() : clip.groupName.c_str());
+
 			StopAll();
 			clips_.push_back(std::move(clip));
 			runtimes_.assign(clips_.size(), ClipRuntime{});
@@ -236,6 +240,44 @@ namespace aq
 					return true;
 			}
 			return false;
+		}
+
+
+		// ---- エディタ用の問い合わせ (設計書 §10.4) --------------------------------------
+
+		bool UIAnimationComponent::IsClipActive(const size_t index) const
+		{
+			return index < runtimes_.size() && runtimes_[index].active;
+		}
+
+		float UIAnimationComponent::GetClipTime(const size_t index) const
+		{
+			if (index >= runtimes_.size()) return 0.f;
+			return runtimes_[index].completed ? clips_[index].duration : runtimes_[index].time;
+		}
+
+		uint32_t UIAnimationComponent::GetClipSerial(const size_t index) const
+		{
+			return index < runtimes_.size() ? runtimes_[index].activationSerial : 0u;
+		}
+
+		int UIAnimationComponent::FindWinnerClip(const UIAnimatedProperty property) const
+		{
+			// ApplyLayers() の勝者選択と同じ規則 (serial 最大。同 serial は clips_ の後ろが勝つ)
+			int winner = -1;
+			for (size_t i = 0; i < clips_.size(); ++i)
+			{
+				if (!runtimes_[i].active) continue;
+				bool hasProperty = false;
+				for (const auto& track : clips_[i].tracks)
+				{
+					if (track.property == property) { hasProperty = true; break; }
+				}
+				if (!hasProperty) continue;
+				if (winner < 0 || runtimes_[i].activationSerial >= runtimes_[static_cast<size_t>(winner)].activationSerial)
+					winner = static_cast<int>(i);
+			}
+			return winner;
 		}
 
 

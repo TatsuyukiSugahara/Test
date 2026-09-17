@@ -13,6 +13,7 @@
 #include "UI/Component/UICircleGaugeComponent.h"
 #include "UI/Component/UIButtonComponent.h"
 #include "UI/Component/UITextComponent.h"
+#include "UI/Component/UIAnimationComponent.h"
 #include "UI/Font/TextStyleCache.h"
 #include "UI/Resource/UIDocumentSerializer.h"
 #include <cstdio>
@@ -197,10 +198,19 @@ namespace aq
 			ImGui::BeginDisabled(root == nullptr || session.documentPath.empty());
 			if (ImGui::Button("Save"))
 			{
-				const bool ok = UIDocumentSerializer::Save(root, session.documentPath);
-				if (ok) session.dirty = false;
-				std::snprintf(statusMsg_, sizeof(statusMsg_),
-				    ok ? "Saved: %s" : "Save FAILED: %s", session.documentPath.c_str());
+				std::vector<std::string> errors;
+				if (!UIAnimationEditor::ValidateTree(root, errors))
+				{
+					std::snprintf(statusMsg_, sizeof(statusMsg_),
+					    "Save blocked: %zu animation error(s) (see Animation tab)", errors.size());
+				}
+				else
+				{
+					const bool ok = UIDocumentSerializer::Save(root, session.documentPath);
+					if (ok) session.dirty = false;
+					std::snprintf(statusMsg_, sizeof(statusMsg_),
+					    ok ? "Saved: %s" : "Save FAILED: %s", session.documentPath.c_str());
+				}
 			}
 			ImGui::EndDisabled();
 
@@ -235,9 +245,18 @@ namespace aq
 				ImGui::SameLine();
 				if (ImGui::Button("Save##saveas") && root && saveAsPathBuf_[0] != '\0')
 				{
-					const bool ok = UIDocumentSerializer::Save(root, saveAsPathBuf_);
-					std::snprintf(statusMsg_, sizeof(statusMsg_),
-					    ok ? "Saved: %s" : "Save FAILED: %s", saveAsPathBuf_);
+					std::vector<std::string> errors;
+					if (!UIAnimationEditor::ValidateTree(root, errors))
+					{
+						std::snprintf(statusMsg_, sizeof(statusMsg_),
+						    "Save blocked: %zu animation error(s) (see Animation tab)", errors.size());
+					}
+					else
+					{
+						const bool ok = UIDocumentSerializer::Save(root, saveAsPathBuf_);
+						std::snprintf(statusMsg_, sizeof(statusMsg_),
+						    ok ? "Saved: %s" : "Save FAILED: %s", saveAsPathBuf_);
+					}
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::EndPopup();
@@ -270,6 +289,8 @@ namespace aq
 			auto& session = UIEditorSession::Get();
 			session.ClearSelection();
 			session.dirty = false;   // 再生成後のドキュメントは保存済み状態から始める
+
+			animationEditor_.Reset();
 
 			prevSelectedHandle_          = UIObjectHandle::Invalid();
 			imageTexPathBuf_[0]          = '\0';
@@ -308,6 +329,8 @@ namespace aq
 				if (!canDelete) ImGui::BeginDisabled();
 				if (ImGui::Button("Delete"))
 				{
+					// 破棄する前に Animation Editor 側の参照 (プレビュー等) を後始末させる
+					animationEditor_.OnTargetChanged(obj);
 					ctx.DestroyObject(session.selectedObject);
 					session.ClearSelection();
 					session.dirty = true;
@@ -382,6 +405,46 @@ namespace aq
 				obj->SetName(nameBuf_);
 				session.dirty = true;
 			}
+
+			// --- Inspector タブ (Properties / Animation) ---
+			if (ImGui::BeginTabBar("##inspector"))
+			{
+				if (ImGui::BeginTabItem("Properties"))
+				{
+					inspectorTab_ = InspectorTab::Properties;
+					RenderPropertiesTab(obj);
+					ImGui::EndTabItem();
+				}
+
+				if (ImGui::BeginTabItem("Animation"))
+				{
+					inspectorTab_ = InspectorTab::Animation;
+
+					if (obj->GetComponent<UIAnimationComponent>())
+					{
+						animationEditor_.DrawAnimationTab(obj);
+					}
+					else
+					{
+						ImGui::TextDisabled("This object has no UIAnimationComponent.");
+						if (ImGui::Button("Add Animation"))
+						{
+							obj->AddComponent<UIAnimationComponent>();
+							session.dirty = true;
+						}
+					}
+					ImGui::EndTabItem();
+				}
+
+				ImGui::EndTabBar();
+			}
+		}
+
+
+		// ---- Inspector: Properties タブの中身 --------------------------------
+		void UIEditorDebugPanel::RenderPropertiesTab(UIObject* obj)
+		{
+			auto& session = UIEditorSession::Get();
 
 			// --- UITransformComponent ---
 			if (auto* tc = obj->GetComponent<UITransformComponent>())
@@ -516,6 +579,9 @@ namespace aq
 						txt->textStylePath = textStyleBuf_;
 						session.dirty = true;
 					}
+					ImGui::SameLine();
+					if (ImGui::Button("Edit##textstyle"))
+						textStyleEditor_.Open(textStyleBuf_);
 					ImGui::TextDisabled("  ex) Assets/Styles/Default.textstyle.json");
 
 					ImGui::Separator();
@@ -731,10 +797,14 @@ namespace aq
 
 			UIObject* selectedObj = UIContext::Get().Resolve(session.selectedObject);
 
-			// 選択が変わったとき各バッファを同期
+			// 選択が変わったとき各バッファを同期し、Animation Editor 側にも後始末させる
 			if (session.selectedObject != prevSelectedHandle_)
 			{
+				// 旧ハンドルを解決した結果 (消えていれば null) を渡す
+				UIObject* prevObj = UIContext::Get().Resolve(prevSelectedHandle_);
 				prevSelectedHandle_ = session.selectedObject;
+				animationEditor_.OnTargetChanged(prevObj);
+
 				if (selectedObj)
 				{
 					auto n   = selectedObj->GetName();
@@ -786,9 +856,20 @@ namespace aq
 				}
 			}
 
+			// Animation タブを選んでいて、かつ選択オブジェクトが UIAnimationComponent を
+			// 持つときだけ下部に Timeline を出す (設計書 §11 P3)
+			const bool showTimeline = inspectorTab_ == InspectorTab::Animation &&
+			                          selectedObj && selectedObj->GetComponent<UIAnimationComponent>();
+
+			constexpr float TIMELINE_HEIGHT = 260.f;
+			const ImVec2  avail   = ImGui::GetContentRegionAvail();
+			const float   spacing = ImGui::GetStyle().ItemSpacing.y;
+			// Timeline を出さないときは 0.f = 残り全部 (BeginChild の既定挙動)
+			const float   paneH   = showTimeline ? (avail.y - TIMELINE_HEIGHT - spacing) : 0.f;
+
 			// 左ペイン: オブジェクトツリー
-			const float treeW = ImGui::GetContentRegionAvail().x * 0.38f;
-			ImGui::BeginChild("##tree", ImVec2(treeW, 0.f), true);
+			const float treeW = avail.x * 0.38f;
+			ImGui::BeginChild("##tree", ImVec2(treeW, paneH), true);
 			if (root)
 				RenderTree(root);
 			else
@@ -798,9 +879,20 @@ namespace aq
 			ImGui::SameLine();
 
 			// 右ペイン: プロパティ
-			ImGui::BeginChild("##props", ImVec2(0.f, 0.f), true);
+			ImGui::BeginChild("##props", ImVec2(0.f, paneH), true);
 			RenderProperties(selectedObj);
 			ImGui::EndChild();
+
+			// 下部ペイン: Animation Timeline
+			if (showTimeline)
+			{
+				ImGui::BeginChild("##timeline", ImVec2(0.f, TIMELINE_HEIGHT), true);
+				animationEditor_.DrawTimelinePanel(selectedObj, ImGui::GetIO().DeltaTime);
+				ImGui::EndChild();
+			}
+
+			// TextStyle 編集ポップアップ (毎フレーム呼ぶ。openRequested_ のときだけ表示される)
+			textStyleEditor_.RenderPopup();
 
 			ImGui::End();
 		}

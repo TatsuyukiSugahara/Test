@@ -9,8 +9,6 @@
 #include "Rendering/Debug/LightingDebugPanel.h"
 #include "Ocean/Debug/OceanDebugPanel.h"
 #include "UI/Debug/UIEditorDebugPanel.h"
-#include "UI/Debug/TextStyleEditorPanel.h"
-#include "UI/Debug/UIAnimationEditor.h"
 #include "Util/Debug/ProfilerDebugPanel.h"
 #include "ECS/PrefabEditor.h"
 #include "Level/LevelEditor.h"
@@ -153,8 +151,6 @@ namespace aq
 		std::unique_ptr<aq::ocean::OceanDebugPanel>         oceanDebugPanel_;
 		std::unique_ptr<aq::rendering::RenderingDebugPanel> renderingDebugPanel_;
 		std::unique_ptr<aq::ui::UIEditorDebugPanel>         uiEditorDebugPanel_;
-		std::unique_ptr<aq::ui::TextStyleEditorPanel>       textStyleEditorPanel_;
-		std::unique_ptr<aq::ui::UIAnimationEditor>          uiAnimationEditor_;
 		std::unique_ptr<aq::profile::ProfilerDebugPanel>    profilerDebugPanel_;
 		std::unique_ptr<aq::ecs::PrefabEditorPanel>         prefabEditorPanel_;   // 全シーン共通の Prefab エディタ
 		std::unique_ptr<aq::level::LevelEditorPanel>        levelEditorPanel_;    // 全シーン共通の Level エディタ

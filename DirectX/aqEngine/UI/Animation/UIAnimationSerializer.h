@@ -21,7 +21,7 @@ namespace aq
 			struct ValidationError
 			{
 				size_t      clipIndex; // 違反したクリップの index
-				std::string message;   // 日本語メッセージ (クリップ名と規則が分かる文言)
+				std::string message;   // 英語メッセージ (クリップ名と規則が分かる文言。ImGui にそのまま出す)
 			};
 
 

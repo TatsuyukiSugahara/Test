@@ -224,7 +224,7 @@ namespace aq
 				// クリップ名は非空、同一コンポーネント内で重複なし (先勝ちで後発を違反にする)
 				if (clip.name.empty())
 				{
-					errors.push_back({ i, "クリップ名が空です" });
+					errors.push_back({ i, "clip name is empty" });
 				}
 				else
 				{
@@ -232,7 +232,7 @@ namespace aq
 					{
 						if (clips[j].name == clip.name)
 						{
-							errors.push_back({ i, "クリップ名が重複しています: '" + clip.name + "'" });
+							errors.push_back({ i, "duplicate clip name: '" + clip.name + "'" });
 							break;
 						}
 					}
@@ -240,15 +240,15 @@ namespace aq
 
 				// Bool / Trigger の conditionParam は非空
 				if (clip.condition != UIClipCondition::Manual && clip.conditionParamName.empty())
-					errors.push_back({ i, "クリップ '" + clip.name + "' の conditionParam が空です" });
+					errors.push_back({ i, "clip '" + clip.name + "': conditionParam is empty (Bool / Trigger)" });
 
 				// duration > 0
 				if (!(clip.duration > 0.f))
-					errors.push_back({ i, "クリップ '" + clip.name + "' の duration が 0 以下です" });
+					errors.push_back({ i, "clip '" + clip.name + "': duration must be > 0" });
 
 				// 0 <= loopFrom < duration (loopFrom == -1 はループなしなので対象外)
 				if (clip.loopFrom >= 0.f && clip.loopFrom >= clip.duration)
-					errors.push_back({ i, "クリップ '" + clip.name + "' の loopFrom が duration の範囲外です" });
+					errors.push_back({ i, "clip '" + clip.name + "': loopFrom is outside [0, duration)" });
 
 				// 同一 Clip 内で同じ property の Track は 1 本
 				for (size_t a = 0; a < clip.tracks.size(); ++a)
@@ -257,8 +257,8 @@ namespace aq
 					{
 						if (clip.tracks[a].property == clip.tracks[b].property)
 						{
-							errors.push_back({ i, "クリップ '" + clip.name + "' 内でプロパティ '"
-								+ PropertyToStr(clip.tracks[a].property) + "' の Track が重複しています" });
+							errors.push_back({ i, "clip '" + clip.name + "': property '"
+								+ PropertyToStr(clip.tracks[a].property) + "' has more than one track" });
 							break;
 						}
 					}
@@ -266,7 +266,7 @@ namespace aq
 
 				// Exit グループの Manual クリップに loopFrom >= 0 を許さない (画面遷移が止まるため)
 				if (clip.condition == UIClipCondition::Manual && clip.group == kUIAnimGroupExit && clip.loopFrom >= 0.f)
-					errors.push_back({ i, "クリップ '" + clip.name + "' は Exit グループなのにループ設定 (loopFrom >= 0) です" });
+					errors.push_back({ i, "clip '" + clip.name + "': Exit group clips must not loop" });
 			}
 
 			// aqHash32() の結果が 0、または同一コンポーネント内で別文字列が同じハッシュ。
@@ -282,7 +282,7 @@ namespace aq
 
 					if (clip.group == 0u)
 					{
-						errors.push_back({ i, "クリップ '" + clip.name + "' の group ハッシュが 0 です (未解決)" });
+						errors.push_back({ i, "clip '" + clip.name + "': group hash is 0 (unresolved)" });
 					}
 					else
 					{
@@ -290,15 +290,15 @@ namespace aq
 						if (it == groupLabelByHash.end())
 							groupLabelByHash.emplace(clip.group, groupLabel);
 						else if (it->second != groupLabel)
-							errors.push_back({ i, "クリップ '" + clip.name + "' の group '" + groupLabel
-								+ "' が '" + it->second + "' と CRC32 衝突しています" });
+							errors.push_back({ i, "clip '" + clip.name + "': group '" + groupLabel
+								+ "' collides with '" + it->second + "' (CRC32 collision)" });
 					}
 
 					if (clip.condition != UIClipCondition::Manual && !clip.conditionParamName.empty())
 					{
 						if (clip.conditionParam == 0u)
 						{
-							errors.push_back({ i, "クリップ '" + clip.name + "' の conditionParam ハッシュが 0 です (未解決)" });
+							errors.push_back({ i, "clip '" + clip.name + "': conditionParam hash is 0 (unresolved)" });
 						}
 						else
 						{
@@ -306,8 +306,8 @@ namespace aq
 							if (it == paramLabelByHash.end())
 								paramLabelByHash.emplace(clip.conditionParam, clip.conditionParamName);
 							else if (it->second != clip.conditionParamName)
-								errors.push_back({ i, "クリップ '" + clip.name + "' の conditionParam '" + clip.conditionParamName
-									+ "' が '" + it->second + "' と CRC32 衝突しています" });
+								errors.push_back({ i, "clip '" + clip.name + "': conditionParam '" + clip.conditionParamName
+									+ "' collides with '" + it->second + "' (CRC32 collision)" });
 						}
 					}
 				}
@@ -337,8 +337,8 @@ namespace aq
 						{
 							if (u.condition == clip.condition && u.id == id && u.property == track.property)
 							{
-								errors.push_back({ i, "クリップ '" + clip.name + "' はクリップ index " + std::to_string(u.ownerIndex)
-									+ " と同じ起動単位でプロパティ '" + PropertyToStr(track.property) + "' が重複しています" });
+								errors.push_back({ i, "clip '" + clip.name + "': same activation unit as clip #" + std::to_string(u.ownerIndex)
+									+ " uses property '" + PropertyToStr(track.property) + "' too" });
 								conflict = true;
 								break;
 							}

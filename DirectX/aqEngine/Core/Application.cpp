@@ -63,8 +63,6 @@
 #include "Rendering/Debug/RenderingDebugPanel.h"
 #include "ECS/SceneHierarchySystem.h"
 #include "UI/Debug/UIEditorDebugPanel.h"
-#include "UI/Debug/TextStyleEditorPanel.h"
-#include "UI/Debug/UIAnimationEditor.h"
 #endif
 
 
@@ -471,14 +469,6 @@ namespace aq
 			// UI エディタパネル
 			uiEditorDebugPanel_ = std::make_unique<aq::ui::UIEditorDebugPanel>();
 			aq::DebugUI::Get().Register(uiEditorDebugPanel_.get());
-
-			// TextStyle エディタパネル
-			textStyleEditorPanel_ = std::make_unique<aq::ui::TextStyleEditorPanel>();
-			aq::DebugUI::Get().Register(textStyleEditorPanel_.get());
-
-			// UI Animation Editor
-			uiAnimationEditor_ = std::make_unique<aq::ui::UIAnimationEditor>();
-			aq::DebugUI::Get().Register(uiAnimationEditor_.get());
 
 			// Profiler パネル
 			profilerDebugPanel_ = std::make_unique<aq::profile::ProfilerDebugPanel>();

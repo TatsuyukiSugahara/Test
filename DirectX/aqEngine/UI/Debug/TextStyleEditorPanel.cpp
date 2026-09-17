@@ -10,29 +10,30 @@ namespace aq
 	namespace ui
 	{
 		// =========================================================================
-		// メニュー
+		// 開閉
 		// =========================================================================
 
-		void TextStyleEditorPanel::DebugRenderMenu()
+		// Text Inspector の [Edit] から呼ばれる。パスを読み込んでポップアップ表示を予約する
+		void TextStyleEditorPanel::Open(std::string_view path)
 		{
-			if (ImGui::MenuItem("TextStyle Editor")) show_ = !show_;
+			std::snprintf(pathBuf_, sizeof(pathBuf_), "%.*s", static_cast<int>(path.size()), path.data());
+			LoadStyle(pathBuf_);
+			openRequested_ = true;
 		}
 
 
-		// =========================================================================
-		// スタイルリスト & プロパティ
-		// =========================================================================
-
-		void TextStyleEditorPanel::DebugRender()
+		// UIEditorDebugPanel::DebugRender() の末尾から毎フレーム呼ばれる
+		void TextStyleEditorPanel::RenderPopup()
 		{
-			if (!show_) return;
+			if (openRequested_)
+			{
+				ImGui::OpenPopup("TextStyle Editor");
+				openRequested_ = false;
+			}
 
 			ImGui::SetNextWindowSize(ImVec2(480.f, 720.f), ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("TextStyle Editor", &show_))
-			{
-				ImGui::End();
+			if (!ImGui::BeginPopupModal("TextStyle Editor", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 				return;
-			}
 
 			RenderStyleList();
 			ImGui::Separator();
@@ -40,9 +41,17 @@ namespace aq
 			ImGui::Separator();
 			RenderPreview();
 
-			ImGui::End();
+			ImGui::Separator();
+			if (ImGui::Button("Close"))
+				ImGui::CloseCurrentPopup();
+
+			ImGui::EndPopup();
 		}
 
+
+		// =========================================================================
+		// スタイルリスト & プロパティ
+		// =========================================================================
 
 		void TextStyleEditorPanel::RenderStyleList()
 		{

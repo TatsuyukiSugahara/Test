@@ -95,6 +95,16 @@ namespace aq
 			// AdvanceRuntimes(dt) で状態を進め、ApplyLayers() でプロパティへ反映する (設計書 §6.3)
 			void Update(const float dt);
 
+
+			/**
+			 * エディタ用の問い合わせ (設計書 §10.4)。ランタイムの状態を読むだけで変更しない
+			 */
+		public:
+			bool     IsClipActive(const size_t index) const;   // レイヤーが載っているか
+			float    GetClipTime(const size_t index) const;    // 現在の再生時刻 (completed なら duration)
+			uint32_t GetClipSerial(const size_t index) const;  // activationSerial (0 = 未起動)
+			int      FindWinnerClip(const UIAnimatedProperty property) const; // そのプロパティの勝者 Clip の index。-1 = レイヤー無し
+
 		private:
 			void ResetClipRuntime(const size_t index); // 対象 runtime だけ初期化 (condition / group 変更用)
 

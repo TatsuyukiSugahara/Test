@@ -2,6 +2,8 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/IDebugRenderable.h"
 #include "UI/UITypes.h"
+#include "UI/Debug/UIAnimationEditor.h"
+#include "UI/Debug/TextStyleEditorPanel.h"
 #include "Graphics/IShaderResourceView.h"
 #include <memory>
 #include <vector>
@@ -20,8 +22,11 @@ namespace aq
 		// 現在の最前面 UIScreen のオブジェクト階層を表示し、
 		// 選択した UIObject の Transform / Image / Canvas プロパティを編集、
 		// UIObject の追加・削除・コンポーネント追加ができる。
-		// 選択・保存先・未保存フラグは UIEditorSession を通じて
-		// Animation Editor と共有する。
+		// 選択・保存先・未保存フラグは UIEditorSession を通じて共有する。
+		// Inspector は [Properties] / [Animation] のタブに分かれ、Animation タブは
+		// UIAnimationEditor を組み込み部品として呼び出す(独立パネルではない)。
+		// Animation タブ選択中は下部に Timeline を出す。TextStyle の編集は
+		// Text Inspector の [Edit] から開くポップアップとして TextStyleEditorPanel を呼ぶ。
 		// ============================================================
 		class UIEditorDebugPanel : public IDebugRenderable
 		{
@@ -31,8 +36,12 @@ namespace aq
 			const char* GetDebugCategory() const override { return "UI"; }
 
 		private:
+			// Inspector が今どちらのタブを表示しているか (下部 Timeline の表示判定に使う)
+			enum class InspectorTab { Properties, Animation };
+
 			void RenderTree(UIObject* node);
 			void RenderProperties(UIObject* obj);
+			void RenderPropertiesTab(UIObject* obj);   // Inspector の Properties タブの中身
 			void RenderAnchorPicker(struct UITransformComponent* tc);
 			void RenderToolbar(UIObject* root);
 			void RenderTextOverlay();   // UITextComponent の内容を ImGui でスクリーンに仮描画
@@ -41,7 +50,13 @@ namespace aq
 			bool            show_              = false;
 			bool            showTextOverlay_   = false;  // テキスト仮描画オーバーレイ (SDF 未整備時のみ使用)
 			UIObjectHandle  prevSelectedHandle_;   // バッファ同期タイミング検出用
+			InspectorTab    inspectorTab_      = InspectorTab::Properties;
 			char            nameBuf_[128]      = {};
+
+			// Inspector の Animation タブ / 下部 Timeline に組み込む部品 (設計書 §11 P3)
+			UIAnimationEditor    animationEditor_;
+			// Text Inspector の [Edit] から開く TextStyle 編集ポップアップ (設計書 §10.5)
+			TextStyleEditorPanel textStyleEditor_;
 
 			// ロードしたテクスチャ SRV を生存保持
 			std::vector<std::shared_ptr<graphics::IShaderResourceView>> loadedTextures_;

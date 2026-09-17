@@ -22,161 +22,100 @@ namespace aq
 		static constexpr float MIN_ZOOM      = 40.f;
 		static constexpr float MAX_ZOOM      = 800.f;
 
+		// Exit 待機付き画面遷移 (P2B) は完了済みなので Play when: Exit は有効。
+		// false にすると Exit 項目を Disabled にできる仕組みだけ残す (設計書 §10.3)
+		static constexpr bool kExitTransitionReady = true;
 
-		// ---- メニュー登録 -------------------------------------------------------
-
-		void UIAnimationEditor::DebugRenderMenu()
+		// "Play when" Combo の選択肢。表示順はそのままインデックスに使う
+		enum PlayWhenOption
 		{
-			if (ImGui::BeginMenu("UI"))
+			PlayWhen_Enter = 0,
+			PlayWhen_Exit,
+			PlayWhen_Hover,
+			PlayWhen_Pressed,
+			PlayWhen_Focused,
+			PlayWhen_Click,
+			PlayWhen_Manual,
+			PlayWhen_Advanced,
+			PlayWhen_Count,
+		};
+
+		static const char* PLAY_WHEN_LABELS[PlayWhen_Count] =
+		{
+			"Enter", "Exit", "Hover", "Pressed", "Focused", "Click", "Manual", "Advanced",
+		};
+
+
+		// クリップの現在の condition / group / conditionParam から "Play when" の表示値を導く (設計書 §10.3)
+		static int ComputePlayWhenIndex(const UIAnimationClip& clip)
+		{
+			if (clip.condition == UIClipCondition::Manual)
 			{
-				ImGui::MenuItem("Animation Editor", nullptr, &show_);
-				ImGui::EndMenu();
+				if (clip.groupName == "Enter") return PlayWhen_Enter;
+				if (clip.groupName == "Exit")  return PlayWhen_Exit;
+				return PlayWhen_Manual;
 			}
+			if (clip.condition == UIClipCondition::Bool)
+			{
+				if (clip.conditionParamName == "Hover")   return PlayWhen_Hover;
+				if (clip.conditionParamName == "Pressed") return PlayWhen_Pressed;
+				if (clip.conditionParamName == "Focused") return PlayWhen_Focused;
+				return PlayWhen_Advanced;
+			}
+			if (clip.condition == UIClipCondition::Trigger)
+			{
+				if (clip.conditionParamName == "Click") return PlayWhen_Click;
+				return PlayWhen_Advanced;
+			}
+			return PlayWhen_Advanced;
 		}
 
 
-		// ---- メインウィンドウ ---------------------------------------------------
-
-		void UIAnimationEditor::DebugRender()
+		// Timeline 左パネルの見出し文字列。Manual は groupName (空なら name)、
+		// Bool / Trigger は Play when の表示名 (Advanced 相当は conditionParamName)
+		static std::string ComputeGroupHeader(const UIAnimationClip& clip)
 		{
-			if (!show_) return;
+			if (clip.condition == UIClipCondition::Manual)
+				return clip.groupName.empty() ? clip.name : clip.groupName;
 
-			const ImGuiWindowFlags winFlags = windowPinned_
-				? (ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)
-				: ImGuiWindowFlags_None;
+			const int pw = ComputePlayWhenIndex(clip);
+			if (pw == PlayWhen_Advanced)
+				return clip.conditionParamName;
+			return PLAY_WHEN_LABELS[pw];
+		}
 
-			ImGui::SetNextWindowSize(ImVec2(1000, 600), ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("UI Animation Editor", &show_, winFlags))
-			{
-				ImGui::End();
-				return;
-			}
 
-			// dt 取得 (preview 用)
-			const float dt = ImGui::GetIO().DeltaTime;
+		// ---- Animation タブ -----------------------------------------------------
 
-			if (ImGui::SmallButton(windowPinned_ ? "[Pinned] Unpin" : "[Pin]"))
-				windowPinned_ = !windowPinned_;
-			ImGui::SameLine();
+		void UIAnimationEditor::DrawAnimationTab(UIObject* obj)
+		{
+			if (!obj) return;
+			auto* anim = obj->GetComponent<UIAnimationComponent>();
+			if (!anim) return;
 
-			auto& session = UIEditorSession::Get();
-
-			// UI Editor の Hierarchy 選択が変わったら Clip / Keyframe 選択とプレビューを捨てる
-			if (session.selectedObject != prevTargetHandle_)
-			{
-				UIObject* prevTarget = UIContext::Get().Resolve(prevTargetHandle_);
-				OnTargetChanged(prevTarget);
-				prevTargetHandle_ = session.selectedObject;
-			}
-
-			UIObject* target = UIContext::Get().Resolve(session.selectedObject);
-
-			ImGui::Text("Target: %s", target ? target->GetName().data() : "(none)");
-			ImGui::Separator();
-
-			if (!target)
-			{
-				ImGui::TextDisabled("Select an object in UI Editor");
-				ImGui::End();
-				return;
-			}
-
-			auto* anim = target->GetComponent<UIAnimationComponent>();
-			if (!anim)
-			{
-				ImGui::TextColored(ImVec4(1,0.6f,0,1), "No UIAnimationComponent");
-				if (ImGui::Button("Add Component"))
-					anim = target->AddComponent<UIAnimationComponent>();
-				if (!anim) { ImGui::End(); return; }
-			}
-
-			// 選択 Clip が範囲外なら解除
+			// 選択 Clip が範囲外なら解除 (Clip 削除直後など)
 			if (selClipIdx_ >= (int)anim->GetClips().size())
 			{
 				selClipIdx_     = -1;
 				prevSelClipIdx_ = -1;
 			}
 
-			// 左右分割
-			const float leftW  = 260.f;
-			const float totalH = ImGui::GetContentRegionAvail().y - 120.f; // 下部パネル分を確保
-
-			ImGui::BeginChild("##left", ImVec2(leftW, totalH), true);
-			DrawClipPanel(target);
-			ImGui::EndChild();
-
-			ImGui::SameLine();
-
-			ImGui::BeginChild("##right", ImVec2(0, totalH), true);
-			if (selClipIdx_ >= 0)
-			{
-				auto& clip = anim->EditClip(static_cast<size_t>(selClipIdx_));
-				DrawTimeline(target, clip);
-			}
-			else
-			{
-				ImGui::TextDisabled("Select a clip");
-			}
-			ImGui::EndChild();
-
-			ImGui::Separator();
-
-			// 下部: キーフレーム Inspector + Preview Controls
-			ImGui::BeginChild("##bottom", ImVec2(0, 0));
-			{
-				if (selClipIdx_ >= 0)
-				{
-					auto& clip = anim->EditClip(static_cast<size_t>(selClipIdx_));
-
-					// キーフレーム Inspector (左)
-					ImGui::BeginChild("##kfinspector", ImVec2(300, 0), false);
-					DrawKeyframeInspector(clip);
-					ImGui::EndChild();
-
-					ImGui::SameLine();
-
-					// Preview Controls (残り全部)
-					ImGui::BeginChild("##preview", ImVec2(0, 0), false);
-					DrawPreviewControls(target, clip, dt);
-					ImGui::EndChild();
-				}
-			}
-			ImGui::EndChild();
-
-			ImGui::End();
-		}
-
-
-		// ---- Selection --------------------------------------------------------
-
-		// UI Editor の Hierarchy 選択が変わった時の後始末。
-		// 旧オブジェクトのプレビュースナップショットを戻し、Clip / Keyframe 選択を捨てる。
-		void UIAnimationEditor::OnTargetChanged(UIObject* prevObj)
-		{
-			selClipIdx_     = -1;
-			prevSelClipIdx_ = -1;
-			selTrackIdx_    = -1;
-			selKeyframeIdx_ = -1;
-			if (hasSnapshot_)
-			{
-				if (prevObj)
-					RestoreSnapshot(prevObj);
-				hasSnapshot_ = false;
-			}
-			isPlaying_ = false;
-		}
-
-
-		// ---- Left Panel: Clip + Track List ------------------------------------
-
-		void UIAnimationEditor::DrawClipPanel(UIObject* obj)
-		{
-			auto* anim = obj->GetComponent<UIAnimationComponent>();
-			if (!anim) return;
-
 			const auto& clips = anim->GetClips();
 
-			// ---- Clip selector ----
+			// 検証は毎フレーム掛ける。上の一覧の赤字と下のエラー表示の両方に使う
+			std::vector<UIAnimationSerializer::ValidationError> errors;
+			UIAnimationSerializer::ValidateDetailed(clips, errors);
+
+			auto hasError = [&errors](const int clipIdx)
+				{
+					for (const auto& e : errors)
+					{
+						if (static_cast<int>(e.clipIndex) == clipIdx) return true;
+					}
+					return false;
+				};
+
+			// ---- Clip 一覧 ----
 			ImGui::Text("Clips");
 			ImGui::SameLine();
 			if (ImGui::SmallButton("+ Clip"))
@@ -185,7 +124,6 @@ namespace aq
 				nc.name     = "NewClip";
 				nc.duration = 1.f;
 
-				// 名前重複回避
 				auto nameExists = [&clips](const std::string& n)
 					{
 						for (const auto& c : clips) { if (c.name == n) return true; }
@@ -196,9 +134,27 @@ namespace aq
 					nc.name = "NewClip" + std::to_string(idx++);
 
 				const size_t newIdx = anim->AddClip(std::move(nc));
+				// AddClip は group を引き直さない (groupName 空 = 未解決のまま)。
+				// SetClipGroup("") で group = aqHash32(name) を確定させる (§4.3)
+				anim->SetClipGroup(newIdx, "");
 				selClipIdx_  = static_cast<int>(newIdx);
 				selTrackIdx_ = selKeyframeIdx_ = -1;
 				UIEditorSession::Get().dirty = true;
+			}
+			ImGui::SameLine();
+			{
+				const bool canRemove = selClipIdx_ >= 0 && selClipIdx_ < (int)clips.size();
+				if (!canRemove) ImGui::BeginDisabled();
+				if (ImGui::SmallButton("- Clip"))
+				{
+					if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
+					anim->RemoveClip(static_cast<size_t>(selClipIdx_));
+					selClipIdx_     = -1;
+					prevSelClipIdx_ = -1;
+					selTrackIdx_    = selKeyframeIdx_ = -1;
+					UIEditorSession::Get().dirty = true;
+				}
+				if (!canRemove) ImGui::EndDisabled();
 			}
 
 			ImGui::Separator();
@@ -207,7 +163,9 @@ namespace aq
 			{
 				ImGui::PushID(i);
 				const bool sel = (i == selClipIdx_);
-				if (ImGui::Selectable(clips[i].name.c_str(), sel, ImGuiSelectableFlags_AllowDoubleClick))
+				const bool err = hasError(i);
+				if (err) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
+				if (ImGui::Selectable(clips[i].name.c_str(), sel))
 				{
 					if (selClipIdx_ != i)
 					{
@@ -218,30 +176,32 @@ namespace aq
 						if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
 					}
 				}
+				if (err) ImGui::PopStyleColor();
 				ImGui::PopID();
 			}
 
 			if (selClipIdx_ < 0 || selClipIdx_ >= (int)clips.size())
+			{
+				ImGui::Separator();
+				if (!errors.empty())
+					ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%zu error(s) in other clips", errors.size());
 				return;
+			}
 
 			auto& clip = anim->EditClip(static_cast<size_t>(selClipIdx_));
 
 			// 選択クリップが変わったときだけバッファを同期する
 			if (selClipIdx_ != prevSelClipIdx_)
 			{
-				std::snprintf(clipNameBuf_,  sizeof(clipNameBuf_),  "%s", clip.name.c_str());
-				std::snprintf(clipParamBuf_, sizeof(clipParamBuf_), "%s", clip.conditionParamName.c_str());
-				std::snprintf(clipGroupBuf_, sizeof(clipGroupBuf_), "%s", clip.groupName.c_str());
+				SyncClipBuffers(clip);
 				prevSelClipIdx_ = selClipIdx_;
 			}
 
 			ImGui::Separator();
-			ImGui::Text("Clip: %s", clip.name.c_str());
 
 			// Name
-			ImGui::SetNextItemWidth(120.f);
-			if (ImGui::InputText("Name##clip", clipNameBuf_, sizeof(clipNameBuf_),
-			                     ImGuiInputTextFlags_EnterReturnsTrue))
+			ImGui::SetNextItemWidth(160.f);
+			if (ImGui::InputText("Name", clipNameBuf_, sizeof(clipNameBuf_), ImGuiInputTextFlags_EnterReturnsTrue))
 			{
 				const std::string newName(clipNameBuf_);
 				if (!newName.empty())
@@ -249,49 +209,52 @@ namespace aq
 					clip.name = newName;
 					// groupName が空のクリップは group = aqHash32(name) なので、改名で group も引き直す (§4.3)
 					if (clip.groupName.empty())
-						anim->SetClipGroup(static_cast<size_t>(selClipIdx_), clip.groupName);
+						anim->SetClipGroup(static_cast<size_t>(selClipIdx_), "");
 					UIEditorSession::Get().dirty = true;
 				}
-			}
-
-			// Duration
-			ImGui::SetNextItemWidth(80.f);
-			ImGui::DragFloat("Duration", &clip.duration, 0.01f, 0.01f, 60.f, "%.2fs");
-			if (ImGui::IsItemEdited())
-				UIEditorSession::Get().dirty = true;
-			clip.duration = std::max(clip.duration, 0.01f);
-
-			// Cond
-			static const char* COND_LABELS[] = { "Manual", "Bool", "Trigger" };
-			int condIdx = static_cast<int>(clip.condition);
-			ImGui::SetNextItemWidth(80.f);
-			if (ImGui::Combo("Cond", &condIdx, COND_LABELS, 3))
-			{
-				const auto newCond = static_cast<UIClipCondition>(condIdx);
-				anim->SetClipCondition(static_cast<size_t>(selClipIdx_), newCond,
-				                       aqHash32(clipParamBuf_), clipParamBuf_);
-				UIEditorSession::Get().dirty = true;
-			}
-
-			// Param (Bool / Trigger のときだけ)
-			if (clip.condition == UIClipCondition::Bool || clip.condition == UIClipCondition::Trigger)
-			{
-				ImGui::SetNextItemWidth(100.f);
-				if (ImGui::InputText("Param##clip", clipParamBuf_, sizeof(clipParamBuf_),
-				                     ImGuiInputTextFlags_EnterReturnsTrue))
+				else
 				{
-					anim->SetClipCondition(static_cast<size_t>(selClipIdx_), clip.condition,
-					                       aqHash32(clipParamBuf_), clipParamBuf_);
-					UIEditorSession::Get().dirty = true;
+					// 空は拒否してバッファを元に戻す
+					std::snprintf(clipNameBuf_, sizeof(clipNameBuf_), "%s", clip.name.c_str());
 				}
 			}
 
-			// Group (Manual のときだけ)
+			// Play when
+			{
+				const int pwIdx = ComputePlayWhenIndex(clip);
+				ImGui::SetNextItemWidth(140.f);
+				if (ImGui::BeginCombo("Play when", PLAY_WHEN_LABELS[pwIdx]))
+				{
+					for (int k = 0; k < PlayWhen_Count; ++k)
+					{
+						ImGui::PushID(k);
+						const bool isExitOption = (k == PlayWhen_Exit);
+						const bool disabled     = isExitOption && !kExitTransitionReady;
+						const bool selected     = (k == pwIdx);
+
+						if (disabled) ImGui::BeginDisabled();
+						if (ImGui::Selectable(PLAY_WHEN_LABELS[k], selected))
+						{
+							ApplyPlayWhenSelection(anim, selClipIdx_, clip, k);
+							SyncClipBuffers(clip);
+							if (k != PlayWhen_Advanced)
+								UIEditorSession::Get().dirty = true;
+						}
+						if (disabled) ImGui::EndDisabled();
+						if (disabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+							ImGui::SetTooltip("(available after screen transition support)");
+						if (selected) ImGui::SetItemDefaultFocus();
+						ImGui::PopID();
+					}
+					ImGui::EndCombo();
+				}
+			}
+
+			// Group (Manual のときだけ。内部用語の condition / conditionParam は Advanced へ)
 			if (clip.condition == UIClipCondition::Manual)
 			{
-				ImGui::SetNextItemWidth(100.f);
-				if (ImGui::InputText("Group##clip", clipGroupBuf_, sizeof(clipGroupBuf_),
-				                     ImGuiInputTextFlags_EnterReturnsTrue))
+				ImGui::SetNextItemWidth(120.f);
+				if (ImGui::InputText("Group", clipGroupBuf_, sizeof(clipGroupBuf_), ImGuiInputTextFlags_EnterReturnsTrue))
 				{
 					anim->SetClipGroup(static_cast<size_t>(selClipIdx_), clipGroupBuf_);
 					UIEditorSession::Get().dirty = true;
@@ -303,6 +266,13 @@ namespace aq
 				}
 			}
 
+			// Duration
+			ImGui::SetNextItemWidth(100.f);
+			ImGui::DragFloat("Duration", &clip.duration, 0.01f, 0.01f, 60.f, "%.2f sec");
+			if (ImGui::IsItemEdited())
+				UIEditorSession::Get().dirty = true;
+			clip.duration = std::clamp(clip.duration, 0.01f, 60.f);
+
 			// Loop
 			bool loop = (clip.loopFrom >= 0.f);
 			if (ImGui::Checkbox("Loop", &loop))
@@ -313,37 +283,334 @@ namespace aq
 			if (loop)
 			{
 				ImGui::SameLine();
-				ImGui::SetNextItemWidth(60.f);
+				ImGui::SetNextItemWidth(80.f);
 				ImGui::DragFloat("LoopFrom", &clip.loopFrom, 0.01f, 0.f, clip.duration, "%.2f");
 				if (ImGui::IsItemEdited())
 					UIEditorSession::Get().dirty = true;
 				clip.loopFrom = std::clamp(clip.loopFrom, 0.f, clip.duration);
 			}
 
-			// Finish
-			static const char* FINISH_LABELS[] = { "Hold", "Restore" };
-			int finishIdx = static_cast<int>(clip.finish);
-			ImGui::SetNextItemWidth(90.f);
-			if (ImGui::Combo("Finish", &finishIdx, FINISH_LABELS, 2))
+			// After finish
 			{
-				clip.finish = static_cast<UIAnimationFinishMode>(finishIdx);
-				UIEditorSession::Get().dirty = true;
+				static const char* FINISH_LABELS[] = { "Keep", "Return" };
+				int finishIdx = static_cast<int>(clip.finish);
+				ImGui::SetNextItemWidth(100.f);
+				if (ImGui::Combo("After finish", &finishIdx, FINISH_LABELS, 2))
+				{
+					clip.finish = static_cast<UIAnimationFinishMode>(finishIdx);
+					UIEditorSession::Get().dirty = true;
+				}
 			}
 
-			if (ImGui::SmallButton("- Clip"))
+			// Advanced (既定で閉じる。condition / conditionParam / group の生値はここだけ)
+			if (wantOpenAdvanced_)
 			{
-				if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
-				anim->RemoveClip(static_cast<size_t>(selClipIdx_));
-				selClipIdx_     = -1;
-				prevSelClipIdx_ = -1;
-				selTrackIdx_    = selKeyframeIdx_ = -1;
-				UIEditorSession::Get().dirty = true;
-				return;
+				ImGui::SetNextItemOpen(true);
+				wantOpenAdvanced_ = false;
+			}
+			if (ImGui::CollapsingHeader("Advanced"))
+			{
+				static const char* COND_LABELS[] = { "Manual", "Bool", "Trigger" };
+				int condIdx = static_cast<int>(clip.condition);
+				ImGui::SetNextItemWidth(100.f);
+				if (ImGui::Combo("Condition", &condIdx, COND_LABELS, 3))
+				{
+					anim->SetClipCondition(static_cast<size_t>(selClipIdx_),
+					                       static_cast<UIClipCondition>(condIdx),
+					                       aqHash32(clipParamBuf_), clipParamBuf_);
+					UIEditorSession::Get().dirty = true;
+				}
+
+				ImGui::SetNextItemWidth(140.f);
+				if (ImGui::InputText("Condition param", clipParamBuf_, sizeof(clipParamBuf_), ImGuiInputTextFlags_EnterReturnsTrue))
+				{
+					anim->SetClipCondition(static_cast<size_t>(selClipIdx_), clip.condition,
+					                       aqHash32(clipParamBuf_), clipParamBuf_);
+					UIEditorSession::Get().dirty = true;
+				}
+
+				ImGui::SetNextItemWidth(140.f);
+				if (ImGui::InputText("Group##adv", clipGroupBuf_, sizeof(clipGroupBuf_), ImGuiInputTextFlags_EnterReturnsTrue))
+				{
+					anim->SetClipGroup(static_cast<size_t>(selClipIdx_), clipGroupBuf_);
+					UIEditorSession::Get().dirty = true;
+				}
+
+				ImGui::TextDisabled("group = 0x%08X  param = 0x%08X", clip.group, clip.conditionParam);
 			}
 
 			ImGui::Separator();
-			DrawTrackList(clip);
+
+			// ---- 検証エラー: 選択クリップは全文赤字、他クリップは件数だけ ----
+			int otherCount = 0;
+			for (const auto& e : errors)
+			{
+				if (static_cast<int>(e.clipIndex) == selClipIdx_)
+					ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", e.message.c_str());
+				else
+					++otherCount;
+			}
+			if (otherCount > 0)
+				ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%d error(s) in other clips", otherCount);
 		}
+
+
+		// 選択クリップの Name / Param / Group バッファをクリップの現在値へ同期する
+		void UIAnimationEditor::SyncClipBuffers(const UIAnimationClip& clip)
+		{
+			std::snprintf(clipNameBuf_,  sizeof(clipNameBuf_),  "%s", clip.name.c_str());
+			std::snprintf(clipParamBuf_, sizeof(clipParamBuf_), "%s", clip.conditionParamName.c_str());
+			std::snprintf(clipGroupBuf_, sizeof(clipGroupBuf_), "%s", clip.groupName.c_str());
+		}
+
+
+		// "Play when" Combo の選択値を内部設定 (condition / conditionParam / group) へ反映する (設計書 §10.3)
+		void UIAnimationEditor::ApplyPlayWhenSelection(
+			UIAnimationComponent* anim, const int clipIndex, UIAnimationClip& clip, const int option)
+		{
+			const auto idx = static_cast<size_t>(clipIndex);
+
+			switch (option)
+			{
+			case PlayWhen_Enter:
+				anim->SetClipCondition(idx, UIClipCondition::Manual, 0u, "");
+				anim->SetClipGroup(idx, "Enter");
+				break;
+
+			case PlayWhen_Exit:
+				anim->SetClipCondition(idx, UIClipCondition::Manual, 0u, "");
+				anim->SetClipGroup(idx, "Exit");
+				break;
+
+			case PlayWhen_Hover:
+				anim->SetClipCondition(idx, UIClipCondition::Bool, kUIAnimCondHover, "Hover");
+				break;
+
+			case PlayWhen_Pressed:
+				anim->SetClipCondition(idx, UIClipCondition::Bool, kUIAnimCondPressed, "Pressed");
+				break;
+
+			case PlayWhen_Focused:
+				anim->SetClipCondition(idx, UIClipCondition::Bool, kUIAnimCondFocused, "Focused");
+				break;
+
+			case PlayWhen_Click:
+				anim->SetClipCondition(idx, UIClipCondition::Trigger, kUIAnimTriggerClick, "Click");
+				break;
+
+			case PlayWhen_Manual:
+				anim->SetClipCondition(idx, UIClipCondition::Manual, 0u, "");
+				// Enter / Exit から戻ってきた場合だけ group をクリアする。それ以外は現状維持
+				if (clip.groupName == "Enter" || clip.groupName == "Exit")
+					anim->SetClipGroup(idx, "");
+				break;
+
+			case PlayWhen_Advanced:
+				// 内部設定は変えず、Advanced セクションを開かせるだけ
+				wantOpenAdvanced_ = true;
+				break;
+
+			default:
+				break;
+			}
+		}
+
+
+		// ---- Timeline パネル (下部) ---------------------------------------------
+
+		void UIAnimationEditor::DrawTimelinePanel(UIObject* obj, float dt)
+		{
+			if (!obj) return;
+			auto* anim = obj->GetComponent<UIAnimationComponent>();
+			if (!anim) return;
+
+			// 選択 Clip が範囲外なら解除
+			if (selClipIdx_ >= (int)anim->GetClips().size())
+			{
+				selClipIdx_     = -1;
+				prevSelClipIdx_ = -1;
+			}
+
+			const float leftW  = 260.f;
+			const float totalH = ImGui::GetContentRegionAvail().y - 120.f; // 下部パネル分を確保
+
+			ImGui::BeginChild("##tlLeft", ImVec2(leftW, totalH), true);
+			DrawTimelineClipList(obj, anim);
+			ImGui::EndChild();
+
+			ImGui::SameLine();
+
+			ImGui::BeginChild("##tlRight", ImVec2(0, totalH), true);
+			if (selClipIdx_ >= 0)
+			{
+				auto& clip = anim->EditClip(static_cast<size_t>(selClipIdx_));
+				DrawTimeline(obj, clip);
+			}
+			else
+			{
+				ImGui::TextDisabled("Select a clip");
+			}
+			ImGui::EndChild();
+
+			ImGui::Separator();
+
+			// 下部: キーフレーム Inspector + Preview Controls
+			ImGui::BeginChild("##tlBottom", ImVec2(0, 0));
+			{
+				if (selClipIdx_ >= 0)
+				{
+					auto& clip = anim->EditClip(static_cast<size_t>(selClipIdx_));
+
+					ImGui::BeginChild("##kfinspector", ImVec2(300, 0), false);
+					DrawKeyframeInspector(clip);
+					ImGui::EndChild();
+
+					ImGui::SameLine();
+
+					ImGui::BeginChild("##preview", ImVec2(0, 0), false);
+					DrawPreviewControls(obj, anim, clip, dt);
+					ImGui::EndChild();
+				}
+			}
+			ImGui::EndChild();
+		}
+
+
+		// ---- Selection ----------------------------------------------------------
+
+		// UI Editor の Hierarchy 選択が変わった時の後始末。
+		// 旧オブジェクトのプレビュースナップショットを戻し、Clip / Keyframe 選択を捨てる。
+		void UIAnimationEditor::OnTargetChanged(UIObject* prevObj)
+		{
+			selClipIdx_     = -1;
+			prevSelClipIdx_ = -1;
+			selTrackIdx_    = -1;
+			selKeyframeIdx_ = -1;
+			wantOpenAdvanced_ = false;
+			if (hasSnapshot_)
+			{
+				if (prevObj)
+					RestoreSnapshot(prevObj);
+				hasSnapshot_ = false;
+			}
+			isPlaying_ = false;
+		}
+
+
+		// Reload 直前。オブジェクトはこの直後に破棄されるので触らず、選択とプレビュー状態だけを捨てる
+		void UIAnimationEditor::Reset()
+		{
+			selClipIdx_       = -1;
+			prevSelClipIdx_   = -1;
+			selTrackIdx_      = -1;
+			selKeyframeIdx_   = -1;
+			wantOpenAdvanced_ = false;
+
+			isDraggingKf_   = false;
+			dragKfTrackIdx_ = dragKfKiIdx_ = -1;
+
+			scrubTime_   = 0.f;
+			isPlaying_   = false;
+			hasSnapshot_ = false;
+			snapshot_.clear();
+		}
+
+
+		// root 以下の全 UIAnimationComponent を検証する (Save 前のチェック用)
+		bool UIAnimationEditor::ValidateTree(const UIObject* root, std::vector<std::string>& errors)
+		{
+			if (!root) return true;
+
+			bool ok = true;
+
+			if (auto* anim = root->GetComponent<UIAnimationComponent>())
+			{
+				std::vector<UIAnimationSerializer::ValidationError> clipErrors;
+				if (!UIAnimationSerializer::ValidateDetailed(anim->GetClips(), clipErrors))
+				{
+					ok = false;
+					for (const auto& e : clipErrors)
+						errors.push_back(std::string(root->GetName()) + ": " + e.message);
+				}
+			}
+
+			for (const auto* child : root->GetChildren())
+			{
+				if (!ValidateTree(child, errors))
+					ok = false;
+			}
+
+			return ok;
+		}
+
+
+		// ---- Timeline: 左パネル (Clip 一覧) --------------------------------------
+
+		// Manual は groupName (空なら name) ごと、Bool / Trigger は Play when の見出しごとにまとめる。
+		// データは平ら (clip の並びは変えない)。見た目だけの 2 段
+		void UIAnimationEditor::DrawTimelineClipList(UIObject* obj, UIAnimationComponent* anim)
+		{
+			const auto& clips = anim->GetClips();
+
+			struct Group
+			{
+				std::string      header;
+				std::vector<int> clipIndices;
+			};
+			std::vector<Group> groups;
+
+			for (int i = 0; i < (int)clips.size(); ++i)
+			{
+				const std::string header = ComputeGroupHeader(clips[i]);
+
+				Group* found = nullptr;
+				for (auto& g : groups)
+				{
+					if (g.header == header) { found = &g; break; }
+				}
+				if (!found)
+				{
+					groups.push_back(Group{ header, {} });
+					found = &groups.back();
+				}
+				found->clipIndices.push_back(i);
+			}
+
+			for (const auto& group : groups)
+			{
+				ImGui::TextDisabled("%s", group.header.empty() ? "(unnamed)" : group.header.c_str());
+
+				for (const int i : group.clipIndices)
+				{
+					const auto& clip = clips[i];
+					ImGui::PushID(i);
+
+					const bool sel = (i == selClipIdx_);
+					if (ImGui::Selectable(clip.name.c_str(), sel))
+					{
+						if (selClipIdx_ != i)
+						{
+							selClipIdx_     = i;
+							selTrackIdx_    = selKeyframeIdx_ = -1;
+							scrubTime_      = 0.f;
+							isPlaying_      = false;
+							if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
+						}
+					}
+
+					// 要約: Play when / Duration / Loop
+					ImGui::Indent();
+					ImGui::TextDisabled("%s  %.2fs%s",
+					                     PLAY_WHEN_LABELS[ComputePlayWhenIndex(clip)],
+					                     clip.duration,
+					                     (clip.loopFrom >= 0.f ? "  Loop" : ""));
+					ImGui::Unindent();
+
+					ImGui::PopID();
+				}
+			}
+		}
+
 
 		void UIAnimationEditor::DrawTrackList(UIAnimationClip& clip)
 		{
@@ -432,10 +699,16 @@ namespace aq
 		}
 
 
-		// ---- Timeline -------------------------------------------------------
+		// ---- Timeline: 右パネル ---------------------------------------------------
 
 		void UIAnimationEditor::DrawTimeline(UIObject* obj, UIAnimationClip& clip)
 		{
+			auto* anim = obj->GetComponent<UIAnimationComponent>();
+
+			// Track の追加 / 削除 / プロパティ選択 (Timeline の一部として扱う)
+			DrawTrackList(clip);
+			ImGui::Separator();
+
 			const float totalDur = clip.duration;
 			const float totalW   = totalDur * zoomPxPerSec_;
 
@@ -484,7 +757,7 @@ namespace aq
 			float rowY = tlY + RULER_H;
 			for (int ti = 0; ti < (int)clip.tracks.size(); ++ti)
 			{
-				DrawTrackRow(dl, clip, ti, tlX, rowY, ROW_H, totalDur);
+				DrawTrackRow(dl, anim, clip, ti, tlX, rowY, ROW_H, totalDur);
 				rowY += ROW_H;
 			}
 
@@ -706,7 +979,7 @@ namespace aq
 		}
 
 		void UIAnimationEditor::DrawTrackRow(
-			ImDrawList* dl, UIAnimationClip& clip,
+			ImDrawList* dl, UIAnimationComponent* anim, UIAnimationClip& clip,
 			int trackIdx,
 			float ox, float rowY, float rowH, float duration)
 		{
@@ -716,13 +989,21 @@ namespace aq
 			const bool   rowSel = (trackIdx == selTrackIdx_);
 			const ImVec2 mouse  = ImGui::GetMousePos();
 
+			// このプロパティの勝者がこのクリップなら先頭に "*" を出す (設計書 §10.4)
+			const bool isWinner = anim && selClipIdx_ >= 0 &&
+			                      anim->FindWinnerClip(track.property) == selClipIdx_;
+
 			// ラベル列 (ox - LABEL_W .. ox) — content スクロールに乗る
 			const ImU32 lblBg = rowSel ? IM_COL32(50, 80, 120, 210) : IM_COL32(35, 38, 48, 210);
 			dl->AddRectFilled(ImVec2(ox - LABEL_W, rowY), ImVec2(ox, rowY + rowH), lblBg);
 			// ラベルテキストは window 左端固定 (スクロールしても読める)
+			char labelBuf[64];
+			std::snprintf(labelBuf, sizeof(labelBuf), "%s%s",
+			              isWinner ? "* " : "",
+			              UIAnimationSerializer::PropertyToStr(track.property));
 			dl->AddText(ImVec2(ox - LABEL_W + 4.f, rowY + 4.f),
 			            IM_COL32(200, 215, 235, 255),
-			            UIAnimationSerializer::PropertyToStr(track.property));
+			            labelBuf);
 
 			// タイムライン列 (ox ..)
 			const float trackW  = duration * zoomPxPerSec_;
@@ -744,6 +1025,7 @@ namespace aq
 			// キーフレーム描画 & クリック
 			const float cy = rowY + rowH * 0.5f;
 			bool anyKfRightClicked = false;
+			bool anyKfHovered      = false;
 			for (int ki = 0; ki < (int)track.keyframes.size(); ++ki)
 			{
 				auto& kf = track.keyframes[ki];
@@ -792,12 +1074,29 @@ namespace aq
 				// Tooltip (ドラッグ中は非表示)
 				if (inKf && !isDraggingKf_)
 				{
+					anyKfHovered = true;
 					ImGui::BeginTooltip();
 					ImGui::Text("t=%.3f  v=%.3f  ease=%s",
 					            kf.time, kf.value,
 					            UIAnimationSerializer::EaseToStr(kf.ease));
 					ImGui::EndTooltip();
 				}
+			}
+
+			// 行ホバー時のツールチップ: active / time / serial / winner (設計書 §10.4)。
+			// キーフレーム自体のツールチップが出ているときは重ねない
+			const bool inRow = mouse.y >= rowY && mouse.y < rowY + rowH &&
+			                   mouse.x >= ox - LABEL_W && mouse.x <= ox + trackW;
+			if (inRow && !anyKfHovered && ImGui::IsWindowHovered() && anim && selClipIdx_ >= 0)
+			{
+				const auto selIdx = static_cast<size_t>(selClipIdx_);
+				ImGui::BeginTooltip();
+				ImGui::Text("active=%d time=%.2f serial=%u winner=#%d",
+				            anim->IsClipActive(selIdx) ? 1 : 0,
+				            anim->GetClipTime(selIdx),
+				            anim->GetClipSerial(selIdx),
+				            anim->FindWinnerClip(track.property));
+				ImGui::EndTooltip();
 			}
 
 			// 空トラック領域の右クリック → キー追加コンテキストメニュー
@@ -881,10 +1180,41 @@ namespace aq
 		// ---- Preview Controls -----------------------------------------------
 
 		void UIAnimationEditor::DrawPreviewControls(
-			UIObject* obj, UIAnimationClip& clip, float dt)
+			UIObject* obj, UIAnimationComponent* anim, UIAnimationClip& clip, float dt)
 		{
 			ImGui::Text("Preview");
 			ImGui::Separator();
+
+			// ---- 実再生 (ランタイム経由。設計書 §10.4) ----
+			if (ImGui::Button("Play"))
+			{
+				switch (clip.condition)
+				{
+				case UIClipCondition::Manual:  anim->Play(clip.group); break;
+				case UIClipCondition::Trigger: anim->Trigger(clip.conditionParam); break;
+				case UIClipCondition::Bool:    anim->SetCondition(clip.conditionParam, true); break;
+				}
+			}
+			ImGui::SameLine();
+			{
+				const bool stopDisabled = (clip.condition == UIClipCondition::Trigger);
+				if (stopDisabled) ImGui::BeginDisabled();
+				if (ImGui::Button("Stop"))
+				{
+					if (clip.condition == UIClipCondition::Manual)
+						anim->Stop(clip.group);
+					else if (clip.condition == UIClipCondition::Bool)
+						anim->SetCondition(clip.conditionParam, false);
+				}
+				if (stopDisabled) ImGui::EndDisabled();
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(plays the real clip through the component)");
+
+			ImGui::Separator();
+
+			// ---- スクラブ再生 (エディタのスナップショットへ直書きする擬似再生。キー編集の補助) ----
+			ImGui::TextDisabled("Scrub play (preview only, does not use Play/Stop):");
 
 			// 再生更新
 			if (isPlaying_)
@@ -975,6 +1305,16 @@ namespace aq
 					RestoreSnapshot(obj);
 					hasSnapshot_ = false;
 					scrubTime_   = 0.f;
+				}
+			}
+
+			// 検証エラー: 同じ起動単位のプロパティ重複などがあれば赤字で 1 行
+			{
+				std::vector<UIAnimationSerializer::ValidationError> errors;
+				if (!UIAnimationSerializer::ValidateDetailed(anim->GetClips(), errors))
+				{
+					ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f),
+					                    "%zu animation error(s) - see Animation tab", errors.size());
 				}
 			}
 		}

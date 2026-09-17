@@ -85,6 +85,212 @@ namespace aq
 		}
 
 
+		// "+ Preset" が生成するプリセットの一式 (設計書 §14)。生成後は普通の Clip として
+		// Timeline で自由に直せる。数値はここに定数として集約する
+		namespace
+		{
+			enum class PresetKind
+			{
+				FadeIn = 0,
+				FadeOut,
+				PopIn,
+				SlideIn,
+				Blink,
+				Shake,
+				Count,
+			};
+
+			static const char* PRESET_LABELS[static_cast<int>(PresetKind::Count)] =
+			{
+				"FadeIn", "FadeOut", "PopIn", "SlideIn", "Blink", "Shake",
+			};
+
+			/** プリセットの既定値 (設計書 §14 の表) */
+			static constexpr float PRESET_FADE_DURATION    = 0.30f;
+			static constexpr float PRESET_POPIN_DURATION   = 0.25f;
+			static constexpr float PRESET_SLIDEIN_DURATION = 0.30f;
+			static constexpr float PRESET_BLINK_DURATION   = 0.60f;
+			static constexpr float PRESET_SHAKE_DURATION   = 0.30f;
+			static constexpr float PRESET_BLINK_MID_TIME   = 0.30f; // Blink の中間キーフレーム時刻
+			static constexpr float PRESET_SLIDEIN_OFFSET   = 200.f; // px
+			static constexpr float PRESET_SHAKE_OFFSET     = 8.f;   // px
+			static constexpr float PRESET_POPIN_SCALE      = 0.8f;  // ×0.8
+			static constexpr float PRESET_BLINK_MIN_SCALE  = 0.3f;  // ×0.3
+
+
+			// clips 内で name と重複しない名前を作る (非重複ならそのまま。重複したら name1, name2 ...)
+			std::string UniqueClipName(const std::vector<UIAnimationClip>& clips, const std::string& name)
+			{
+				auto nameExists = [&clips](const std::string& n)
+					{
+						for (const auto& c : clips) { if (c.name == n) return true; }
+						return false;
+					};
+
+				std::string result = name;
+				int idx = 1;
+				while (nameExists(result))
+					result = name + std::to_string(idx++);
+				return result;
+			}
+
+
+			// そのプロパティの現在値を読む。ColorA は描画コンポーネントが無いと ReadFrom が
+			// 0 を返すため、その場合は 1.0 とみなす (設計書 §14)
+			float ReadPresetCurrentValue(const UIObject* obj, UIAnimatedProperty property)
+			{
+				if (property == UIAnimatedProperty::ColorA && (!obj || !obj->HasRenderComponent()))
+					return 1.f;
+
+				UIAnimationTrack t;
+				t.property = property;
+				return t.ReadFrom(obj);
+			}
+
+
+			// プリセットに対応する "Play when" (UIAnimationEditor::ApplyPlayWhenSelection の option。設計書 §10.3)
+			int PresetPlayWhenOption(PresetKind kind)
+			{
+				switch (kind)
+				{
+				case PresetKind::FadeIn:  return PlayWhen_Enter;
+				case PresetKind::FadeOut: return PlayWhen_Exit;
+				case PresetKind::PopIn:   return PlayWhen_Enter;
+				case PresetKind::SlideIn: return PlayWhen_Enter;
+				case PresetKind::Blink:   return PlayWhen_Focused;
+				case PresetKind::Shake:   return PlayWhen_Click;
+				default:                  return PlayWhen_Manual;
+				}
+			}
+
+
+			// §14 の表どおりに Track / Keyframe を組み立てる。Play when (condition / group) は
+			// 呼び出し側が ApplyPlayWhenSelection() で設定するので、ここでは Manual のまま触らない
+			UIAnimationClip MakePresetClip(PresetKind kind, const UIObject* obj, std::string name)
+			{
+				auto addKey = [](UIAnimationTrack& track, float time, float value, EaseType ease)
+					{
+						track.keyframes.push_back(UIKeyframe{ time, value, ease });
+					};
+
+				UIAnimationClip clip;
+				clip.name = std::move(name);
+
+				switch (kind)
+				{
+				case PresetKind::FadeIn:
+				{
+					clip.duration = PRESET_FADE_DURATION;
+					clip.finish   = UIAnimationFinishMode::Hold;
+					const float cur = ReadPresetCurrentValue(obj, UIAnimatedProperty::ColorA);
+
+					UIAnimationTrack colorA;
+					colorA.property = UIAnimatedProperty::ColorA;
+					addKey(colorA, 0.f,           0.f, EaseType::EaseOut);
+					addKey(colorA, clip.duration, cur,  EaseType::EaseOut);
+					clip.tracks.push_back(std::move(colorA));
+					break;
+				}
+
+				case PresetKind::FadeOut:
+				{
+					clip.duration = PRESET_FADE_DURATION;
+					clip.finish   = UIAnimationFinishMode::Hold;
+					const float cur = ReadPresetCurrentValue(obj, UIAnimatedProperty::ColorA);
+
+					UIAnimationTrack colorA;
+					colorA.property = UIAnimatedProperty::ColorA;
+					addKey(colorA, 0.f,           cur, EaseType::EaseIn);
+					addKey(colorA, clip.duration, 0.f, EaseType::EaseIn);
+					clip.tracks.push_back(std::move(colorA));
+					break;
+				}
+
+				case PresetKind::PopIn:
+				{
+					clip.duration = PRESET_POPIN_DURATION;
+					clip.finish   = UIAnimationFinishMode::Hold;
+					const float curScaleX = ReadPresetCurrentValue(obj, UIAnimatedProperty::ScaleX);
+					const float curScaleY = ReadPresetCurrentValue(obj, UIAnimatedProperty::ScaleY);
+					const float curColorA = ReadPresetCurrentValue(obj, UIAnimatedProperty::ColorA);
+
+					UIAnimationTrack scaleX;
+					scaleX.property = UIAnimatedProperty::ScaleX;
+					addKey(scaleX, 0.f,           curScaleX * PRESET_POPIN_SCALE, EaseType::EaseOut);
+					addKey(scaleX, clip.duration, curScaleX,                      EaseType::EaseOut);
+					clip.tracks.push_back(std::move(scaleX));
+
+					UIAnimationTrack scaleY;
+					scaleY.property = UIAnimatedProperty::ScaleY;
+					addKey(scaleY, 0.f,           curScaleY * PRESET_POPIN_SCALE, EaseType::EaseOut);
+					addKey(scaleY, clip.duration, curScaleY,                      EaseType::EaseOut);
+					clip.tracks.push_back(std::move(scaleY));
+
+					UIAnimationTrack colorA;
+					colorA.property = UIAnimatedProperty::ColorA;
+					addKey(colorA, 0.f,           0.f,       EaseType::Linear);
+					addKey(colorA, clip.duration, curColorA, EaseType::Linear);
+					clip.tracks.push_back(std::move(colorA));
+					break;
+				}
+
+				case PresetKind::SlideIn:
+				{
+					clip.duration = PRESET_SLIDEIN_DURATION;
+					clip.finish   = UIAnimationFinishMode::Hold;
+					const float cur = ReadPresetCurrentValue(obj, UIAnimatedProperty::PositionX);
+
+					UIAnimationTrack posX;
+					posX.property = UIAnimatedProperty::PositionX;
+					addKey(posX, 0.f,           cur - PRESET_SLIDEIN_OFFSET, EaseType::EaseOut);
+					addKey(posX, clip.duration, cur,                        EaseType::EaseOut);
+					clip.tracks.push_back(std::move(posX));
+					break;
+				}
+
+				case PresetKind::Blink:
+				{
+					clip.duration = PRESET_BLINK_DURATION;
+					clip.finish   = UIAnimationFinishMode::Restore;
+					clip.loopFrom = 0.f; // Loop: on (0 から)
+					const float cur = ReadPresetCurrentValue(obj, UIAnimatedProperty::ColorA);
+
+					UIAnimationTrack colorA;
+					colorA.property = UIAnimatedProperty::ColorA;
+					addKey(colorA, 0.f,                   cur,                          EaseType::EaseInOut);
+					addKey(colorA, PRESET_BLINK_MID_TIME, cur * PRESET_BLINK_MIN_SCALE,  EaseType::EaseInOut);
+					addKey(colorA, clip.duration,         cur,                          EaseType::EaseInOut);
+					clip.tracks.push_back(std::move(colorA));
+					break;
+				}
+
+				case PresetKind::Shake:
+				{
+					clip.duration = PRESET_SHAKE_DURATION;
+					clip.finish   = UIAnimationFinishMode::Restore;
+					const float cur = ReadPresetCurrentValue(obj, UIAnimatedProperty::PositionX);
+
+					UIAnimationTrack posX;
+					posX.property = UIAnimatedProperty::PositionX;
+					addKey(posX, 0.00f,         cur,                       EaseType::Linear);
+					addKey(posX, 0.05f,         cur + PRESET_SHAKE_OFFSET, EaseType::Linear);
+					addKey(posX, 0.10f,         cur - PRESET_SHAKE_OFFSET, EaseType::Linear);
+					addKey(posX, 0.15f,         cur + PRESET_SHAKE_OFFSET, EaseType::Linear);
+					addKey(posX, 0.20f,         cur - PRESET_SHAKE_OFFSET, EaseType::Linear);
+					addKey(posX, clip.duration, cur,                       EaseType::Linear);
+					clip.tracks.push_back(std::move(posX));
+					break;
+				}
+
+				default:
+					break;
+				}
+
+				return clip;
+			}
+		} // namespace
+
+
 		// ---- Animation タブ -----------------------------------------------------
 
 		void UIAnimationEditor::DrawAnimationTab(UIObject* obj)
@@ -155,6 +361,30 @@ namespace aq
 					UIEditorSession::Get().dirty = true;
 				}
 				if (!canRemove) ImGui::EndDisabled();
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("+ Preset"))
+				ImGui::OpenPopup("preset_menu");
+			if (ImGui::BeginPopup("preset_menu"))
+			{
+				for (int i = 0; i < static_cast<int>(PresetKind::Count); ++i)
+				{
+					if (ImGui::MenuItem(PRESET_LABELS[i]))
+					{
+						const auto kind = static_cast<PresetKind>(i);
+						UIAnimationClip nc = MakePresetClip(kind, obj, UniqueClipName(clips, PRESET_LABELS[i]));
+						const size_t newIdx = anim->AddClip(std::move(nc));
+
+						// Play when (condition / group) は ApplyPlayWhenSelection() を通す (設計書 §14)
+						auto& newClip = anim->EditClip(newIdx);
+						ApplyPlayWhenSelection(anim, static_cast<int>(newIdx), newClip, PresetPlayWhenOption(kind));
+
+						selClipIdx_  = static_cast<int>(newIdx);
+						selTrackIdx_ = selKeyframeIdx_ = -1;
+						UIEditorSession::Get().dirty = true;
+					}
+				}
+				ImGui::EndPopup();
 			}
 
 			ImGui::Separator();

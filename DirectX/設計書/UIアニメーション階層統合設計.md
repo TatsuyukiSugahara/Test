@@ -6,7 +6,7 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
 `Clip → Track → Keyframe` の 3 階層へ)だけを対象に初版を書き、
 2026-09-17 の 5 回のレビューで **プロパティ競合規則・状態遷移・エディタ統合・画面遷移** まで
-範囲を広げた。P0〜P3 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み(本書の全フェーズ)。残るは Windows / D3D11 でのビルド確認と §12 の後続改善。
+範囲を広げた。P0〜P4 は 2026-09-17 に実装し Mac(Metal / Debug)で評価済み。§12 の後続改善は P4(プリセット)から順に本書へ取り込む。
 
 本書の構成は実施順に並べてある。
 
@@ -15,7 +15,8 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 | 第 1 部 | P0 | 編集・保存基盤(共通選択 / 保存 / Reload / texturePath) |
 | 第 2 部 | P1 / P2 / P2B | データ構造・排他モデル / レイヤー評価と基本自動フック / Exit 待機遷移 |
 | 第 3 部 | P3 | 統合エディタ(Animation タブ / タイムライン / プレビュー) |
-| 後続 | — | プリセット / オートキー / ベクタトラック / Ease / 相対値 |
+| 第 4 部 | P4 | プリセット(§14) |
+| 後続 | — | ベクタトラック / オートキー / Ease / 相対値 |
 
 ---
 
@@ -919,11 +920,38 @@ P3 の実装で決めたこと・直したこと
 
 ---
 
+### P4: プリセット(第 4 部、§14)
+
+実装
+
+- Animation タブに `+ Preset` メニュー(FadeIn / FadeOut / PopIn / SlideIn / Blink / Shake)。選ぶと §14 の規則で Clip を生成して
+  `AddClip()` → `SetClipCondition()` / `SetClipGroup()` を通し、選択して dirty を立てる
+- 生成はエディタ内の関数群(`UIAnimationEditor.cpp` の無名 namespace)。新規ファイルは作らない
+- 現在値は `UIAnimationTrack::ReadFrom(obj)` で読む(相対値モードは §12 の後続)
+
+評価
+
+- [x] 空の AnimationComponent に 6 種をそれぞれ単独で挿入すると検証エラーが 0 件で、Save できる(FadeIn と PopIn は
+  どちらも Enter で ColorA を使うので、同時に挿入すると §4.5 どおり赤字になる。これは仕様。Mac 2026-09-17:
+  FadeIn / Shake / FadeOut / SlideIn / Blink は赤字なし、PopIn と 2 本目の FadeIn は赤字で `Save blocked`)
+- [x] FadeIn を挿入して Save → 再起動で Enter 時にフェードインする(Reload 直後の連続撮影で alpha 0.25 → 0.69 → 0.95 → 1.0)
+- [x] Shake を挿入 → クリックで揺れ、終わると元の位置に戻る(左端の白の量が揺れて静止時の値に戻る)
+- [x] 現在値を基準に生成される(Position X が -600 の Shake のキーが -600 / -592 / -608 …)
+- [x] 同名クリップがあれば連番になる(`FadeIn1`)
+- [ ] Windows / D3D11 でビルドが通り、警告が増えていない(Windows 機の宿題)
+
+P4 の実装で気づいたこと
+
+- Duration を伸ばしてもキーの時刻は動かない(0.3 秒のキーのまま末尾でホールド)。キーの時間を Duration に比例して伸ばす操作は §12 の後続
+- Play when が Enter / Exit のときも Group 欄が出る(§10.3 は Manual のときだけ)。エディタ寸法の修正と一緒に直す(§13)
+
+---
+
 ## 12. 後続改善(本書の範囲外。この順で続ける)
 
 本書が入ってから着手する。逆順にすると全部書き直しになる。
 
-1. **プリセット** — `FadeIn` / `FadeOut` / `PopIn` / `SlideIn` / `Blink` / `Shake` をワンクリック挿入。必要なトラックとキーを裏で生成する
+1. ~~**プリセット**~~ → **P4 として本書に取り込んだ(§14)**
 2. **ベクタトラック** — `PositionX` / `PositionY` を 1 行の `Position` として扱い、タイムラインの行数を減らす
 3. **オートキー** — 録画中に値をいじった瞬間、現在のスクラブ時刻へキーを自動追加する
 4. **Ease 拡充** — `Back` / `Elastic` / `Bounce` と曲線プレビュー。現状 5 種のみ、`Bezier` の実体は smoothstep。
@@ -940,3 +968,29 @@ P3 の実装で決めたこと・直したこと
 - `Save As` は P0 で作った(ポップアップでパス入力)。使われなければ後で外す
 - P1 のエディタ追従で Cond / Finish は enum 名(Manual / Bool / Trigger、Hold / Restore)のまま出している。§10.3 の「Play when」「Keep / Return」への言い換えは P3
 - `priority`(§6.2)を足す条件。serial で足りなくなった実例が出るまで足さない
+- **エディタの寸法(2026-09-17 ユーザー指摘、後で直す)**: UI Editor の既定サイズ(700x560)では Animation タブと Timeline で縦横が
+  足りず、TextStyle ポップアップも幅が足りない。既定サイズの拡大と、Timeline の高さを内容に合わせる(P4 以降の小改修)
+
+---
+
+# 第 4 部: プリセット
+
+## 14. プリセットの生成規則(P4)
+
+`+ Preset` は「今の値」を基準に Clip / Track / Keyframe を一式作る。作ったあとは普通の Clip で、手で直せる。
+相対値モード(§12-5)が入るまでは、キー値は生成時点の絶対値で焼き込む。
+
+| プリセット | Play when | Duration | finish | Loop | Track(キー) |
+| --- | --- | --- | --- | --- | --- |
+| `FadeIn` | Enter | 0.30 | Keep | なし | ColorA: 0 → cur(EaseOut) |
+| `FadeOut` | Exit | 0.30 | Keep | なし | ColorA: cur → 0(EaseIn) |
+| `PopIn` | Enter | 0.25 | Keep | なし | ScaleX / ScaleY: cur×0.8 → cur(EaseOut)、ColorA: 0 → cur(Linear) |
+| `SlideIn` | Enter | 0.30 | Keep | なし | PositionX: cur − 200 → cur(EaseOut) |
+| `Blink` | Focused | 0.60 | Return | あり(0 から) | ColorA: cur → cur×0.3(0.30)→ cur(0.60)(EaseInOut) |
+| `Shake` | Click | 0.30 | Return | なし | PositionX: cur → cur+8(0.05)→ cur−8(0.10)→ cur+8(0.15)→ cur−8(0.20)→ cur(0.30)(Linear) |
+
+- `cur` はそのプロパティの現在値(`UIAnimationTrack::ReadFrom`)。対象が描画コンポーネントを持たず ColorA を読めないときは 1.0 とみなす
+- クリップ名はプリセット名。同名があれば `FadeIn1`、`FadeIn2` … と連番
+- `Play when` の内部設定は §10.3 の表どおり(Enter / Exit = Manual + group、Focused = Bool、Click = Trigger)
+- 挿入した結果が §4.5 に違反する(同じ起動単位で同じプロパティを既に使っている等)ときは、普通の編集と同じく赤字になる。挿入自体は止めない
+- 数値(0.30 秒、200px、±8px、×0.8、×0.3)はプリセットの既定値で、生成後に Timeline で直す前提。パラメータ UI は作らない

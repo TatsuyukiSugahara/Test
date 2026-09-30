@@ -1,6 +1,6 @@
 # ECS 設計ドキュメント
 
-> 対象コミット: `144ae8a` / 最終更新: 2026-07-03
+> 対象コミット: `144ae8a` / 最終更新: 2026-09-30(§4 の System 登録の記述のみ 34aa75c 以降に合わせて更新)
 
 対象: `aqEngine/ECS/`, `aqEngine/Component/`
 関連: [Prefab設計.md](Prefab設計.md)
@@ -73,8 +73,8 @@ EntityContext（唯一のシングルトン・統括窓口）
 
 | ファイル | 責務 |
 |---|---|
-| `System.h` | **`SystemBase`**(`Update()` 純粋仮想 + debug 用 `DebugRender*`)と **`SystemManager`**。`AddSystem<T, Deps...>`(重複登録は依存追加のみ)/`AddDependency<Sys, Dep>`/`GetSystem<T>`(dynamic_cast)/`HasSystem`。`SystemEntry` は system + 依存インデックス + 実行 level を持つ。 |
-| `System.cpp` | **スケジューリングと並列実行**。`BuildSchedule()` は Kahn のトポロジカルソートで実行順を確定し、循環依存を assert 検出。各 System に **level**(= max(依存 level)+1)を割り当て。`Update()` は **level(wave)ごとに全 System を `ThreadPool::Submit` で並列実行**し、wave 完了を全 future の `get()` で待つ(次 wave へ)。例外は全完了後に最初の 1 つを rethrow。プロファイラで System 名別に計測。 |
+| `System.h` | **`SystemBase`**(`Update()` 純粋仮想 + debug 用 `DebugRender*`)と **`SystemManager`**。`AddSystem<T, Deps...>`(重複登録は依存追加のみ)/`AddDependency<Sys, Dep>`/`GetSystem<T>`/`HasSystem`。型の照合は登録時の `type_index` との完全一致。`SystemEntry` は system + 型 + 依存インデックス + 実行 level を持つ。登録ルールと違反時の扱いは [System登録契約設計](System登録契約設計.md) が一次資料。 |
+| `System.cpp` | **スケジューリングと並列実行**。`BuildSchedule()` は Kahn のトポロジカルソートで実行順を確定する。循環依存や登録中のエラーがあれば false を返し、起動を初期化失敗で止める(Release でも有効。[System登録契約設計](System登録契約設計.md))。各 System に **level**(= max(依存 level)+1)を割り当て。`Update()` は **level(wave)ごとに全 System を `ThreadPool::Submit` で並列実行**し、wave 完了を全 future の `get()` で待つ(次 wave へ)。例外は全完了後に最初の 1 つを rethrow。プロファイラで System 名別に計測。 |
 
 **並列モデル**: 依存の無い System は同じ wave で並列。依存があれば後の wave へ。構造変更は遅延コマンドなので、並列実行中に他 System のデータ配置が壊れない(FlushCommands は wave 完了後の `EntityContext::Update` 内)。
 

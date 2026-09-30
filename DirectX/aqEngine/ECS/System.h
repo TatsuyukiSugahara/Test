@@ -4,6 +4,7 @@
 #include <vector>
 #include <future>
 #include <string>
+#include <typeindex>
 #include <algorithm>
 
 
@@ -43,6 +44,7 @@ namespace aq
 			struct SystemEntry
 			{
 				std::unique_ptr<SystemBase> system;
+				std::type_index      type = typeid(void); // 登録時の型。照合は完全一致で行う
 				std::vector<size_t> dependencyIndices;
 				std::string          displayName;
 				size_t               level = 0; // wave schedule 用 実行レベル
@@ -118,6 +120,7 @@ namespace aq
 
 				SystemEntry entry;
 				entry.system      = std::make_unique<T>();
+				entry.type        = typeid(T);
 				entry.displayName = typeid(T).name();
 				T* ptr            = static_cast<T*>(entry.system.get());
 				systemEntries_.push_back(std::move(entry));
@@ -154,7 +157,7 @@ namespace aq
 				}
 				if (sysIdx == SIZE_MAX || depIdx == SIZE_MAX) return;
 
-				// dynamic_cast 照合では別の型が同じ System に解決されることがある
+				// 型は完全一致で照合するので通常は起きない。照合規則が変わったときの防御
 				if (sysIdx == depIdx) {
 					RecordDependencyError("both types resolve to the same system", typeid(TSystem).name(), typeid(TDependency).name());
 					return;
@@ -192,16 +195,14 @@ namespace aq
 
 			/**
 			 * 型で System を取得する。登録されていない場合は nullptr を返す。
+			 * 登録した型との完全一致のみ。基底型を指定しても派生型の System は返らない。
 			 */
 			template <typename T>
 			T* GetSystem()
 			{
-				for (auto& entry : systemEntries_) {
-					if (auto* system = dynamic_cast<T*>(entry.system.get())) {
-						return system;
-					}
-				}
-				return nullptr;
+				const size_t index = FindIndex<T>();
+				if (index == SIZE_MAX) return nullptr;
+				return static_cast<T*>(systemEntries_[index].system.get());
 			}
 
 
@@ -223,8 +224,9 @@ namespace aq
 			template <typename T>
 			size_t FindIndex() const
 			{
+				const std::type_index type(typeid(T));
 				for (size_t i = 0; i < systemEntries_.size(); ++i) {
-					if (dynamic_cast<T*>(systemEntries_[i].system.get()) != nullptr)
+					if (systemEntries_[i].type == type)
 						return i;
 				}
 				return SIZE_MAX;

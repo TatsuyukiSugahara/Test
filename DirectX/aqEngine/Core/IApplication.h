@@ -38,7 +38,8 @@ namespace aq
 		/**
 		 * 登録用関数
 		 * NOTE:Initialize後に呼ばれる
+		 * false を返すと初期化失敗として扱われる
 		 */
-		virtual void Register() = 0;
+		virtual bool Register() = 0;
 	};
 }

@@ -39,6 +39,7 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 | --- | --- |
 | [Prefab設計](Prefab設計.md) | JSON Prefab、Reflection、override、遅延生成、エディタ |
 | [Level設計](Level設計.md) | Level階層、非同期ロード、ストリーミング、エディタ |
+| [System登録契約設計](System登録契約設計.md) | `SystemManager` の登録ルール(循環・未登録依存・確定後登録・確定前更新)を Release でも強制する。登録失敗を初期化失敗として伝える経路、型照合の完全一致化。フェーズ P1〜P2(2026-09-27 設計、実装未着手) |
 
 ## パーティクル / アセット
 

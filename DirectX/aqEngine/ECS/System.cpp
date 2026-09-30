@@ -13,8 +13,15 @@ namespace aq
 	{
 		void SystemManager::Update()
 		{
-			EngineAssertMsg(registrationFinalized_,
-				"SystemManager::Update: FinalizeRegistration has not been called");
+			if (registrationState_ != RegistrationState::Finalized) {
+				// 毎フレーム呼ばれるので、ログは最初の 1 回だけにする
+				if (!updateRejectLogged_) {
+					updateRejectLogged_ = true;
+					aq::StartupLog("[ecs] SystemManager::Update: registration is not finalized (ignored)");
+					EngineAssertMsg(false, "SystemManager::Update: FinalizeRegistration has not succeeded");
+				}
+				return;
+			}
 
 			// wave ごとに全 task を submit してから全 future を get() する。
 			// worker 内 future.wait() がなくなりスレッドを無駄に占有しない。
@@ -52,7 +59,7 @@ namespace aq
 		}
 
 
-		void SystemManager::BuildSchedule()
+		bool SystemManager::BuildSchedule()
 		{
 			const size_t n = systemEntries_.size();
 			updateOrder_.clear();
@@ -89,8 +96,25 @@ namespace aq
 				}
 			}
 
-			EngineAssertMsg(updateOrder_.size() == n,
-				"SystemManager::BuildSchedule: circular dependency detected");
+			// 循環に含まれるものと、その後段を区別せずに記録する
+			if (updateOrder_.size() != n) {
+				for (size_t i = 0; i < n; ++i) {
+					if (inDegree[i] == 0) continue;
+					registrationErrors_.push_back(
+						"[ecs] BuildSchedule: not scheduled (circular dependency or downstream of one): "
+						+ systemEntries_[i].displayName);
+				}
+			}
+
+			if (!registrationErrors_.empty()) {
+				for (const std::string& error : registrationErrors_) {
+					aq::StartupLog(error.c_str());
+				}
+				updateOrder_.clear();
+				registrationState_ = RegistrationState::Failed;
+				EngineAssertMsg(false, "SystemManager::BuildSchedule: registration failed (see startup log)");
+				return false;
+			}
 
 			// 各 System の実行レベルを計算（level[i] = max(level[dep]) + 1）
 			std::vector<size_t> levels(n, 0);
@@ -101,7 +125,7 @@ namespace aq
 				systemEntries_[cur].level = levels[cur];
 			}
 
-			registrationFinalized_ = true;
+			registrationState_ = RegistrationState::Finalized;
 
 #ifdef AQ_DEBUG_IMGUI
 			groups_.clear();
@@ -118,12 +142,34 @@ namespace aq
 					it->systems.push_back(entry.system.get());
 			}
 #endif
+
+			return true;
+		}
+
+
+		void SystemManager::LogRejectedAfterFinalize(const char* api, const char* systemName, const char* dependencyName) const
+		{
+			std::string message = std::string("[ecs] ") + api + ": called after FinalizeRegistration (ignored): " + systemName;
+			if (dependencyName != nullptr) {
+				message += " -> ";
+				message += dependencyName;
+			}
+			aq::StartupLog(message.c_str());
+		}
+
+
+		void SystemManager::RecordDependencyError(const char* reason, const char* systemName, const char* dependencyName)
+		{
+			registrationErrors_.push_back(
+				std::string("[ecs] AddDependency: ") + reason + ": " + systemName + " -> " + dependencyName);
 		}
 
 
 #ifdef AQ_DEBUG_IMGUI
 		void SystemManager::DebugRenderMenuAll()
 		{
+			if (registrationState_ == RegistrationState::Failed) return;
+
 			for (auto& entry : systemEntries_)
 				if (entry.system->GetDebugGroup() == nullptr)
 					entry.system->DebugRenderMenu();
@@ -135,6 +181,8 @@ namespace aq
 
 		void SystemManager::DebugRenderAll()
 		{
+			if (registrationState_ == RegistrationState::Failed) return;
+
 			for (auto& entry : systemEntries_)
 				if (entry.system->GetDebugGroup() == nullptr)
 					entry.system->DebugRender();

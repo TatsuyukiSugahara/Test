@@ -57,9 +57,19 @@ namespace aq
 			};
 #endif
 
+			/** 登録状態(登録中 → 確定済み / 確定失敗 の一方向) */
+			enum class RegistrationState
+			{
+				Registering,
+				Finalized,
+				Failed,
+			};
+
 			std::vector<SystemEntry> systemEntries_;
 			std::vector<size_t>      updateOrder_;
-			bool                     registrationFinalized_ = false;
+			RegistrationState        registrationState_   = RegistrationState::Registering;
+			std::vector<std::string> registrationErrors_;
+			bool                     updateRejectLogged_  = false;
 #ifdef AQ_DEBUG_IMGUI
 			std::vector<GroupEntry>  groups_;
 #endif
@@ -94,7 +104,11 @@ namespace aq
 			template <typename T, typename... Dependencies>
 			T* AddSystem()
 			{
-				EngineAssertMsg(!registrationFinalized_, "AddSystem: called after FinalizeRegistration");
+				if (registrationState_ != RegistrationState::Registering) {
+					LogRejectedAfterFinalize("AddSystem", typeid(T).name(), nullptr);
+					EngineAssertMsg(false, "AddSystem: called after FinalizeRegistration");
+					return nullptr;
+				}
 
 				if (HasSystem<T>()) {
 					if constexpr (sizeof...(Dependencies) > 0)
@@ -117,20 +131,34 @@ namespace aq
 
 			/**
 			 * TSystem が TDependency の完了を待つ依存を追加する。
-			 * 両方とも AddSystem 済みであること（未登録の場合は assert + Release ガード）。
+			 * 両方とも AddSystem 済みであること（未登録の場合はエラーとして記録し、確定時に失敗する）。
 			 */
 			template <typename TSystem, typename TDependency>
 			void AddDependency()
 			{
-				EngineAssertMsg(!registrationFinalized_, "AddDependency: called after FinalizeRegistration");
-				EngineAssertMsg((!std::is_same_v<TSystem, TDependency>), "AddDependency: TSystem and TDependency are the same type (self-dependency)");
-				if constexpr (std::is_same_v<TSystem, TDependency>) return;
+				static_assert(!std::is_same_v<TSystem, TDependency>, "AddDependency: TSystem and TDependency are the same type (self-dependency)");
+
+				if (registrationState_ != RegistrationState::Registering) {
+					LogRejectedAfterFinalize("AddDependency", typeid(TSystem).name(), typeid(TDependency).name());
+					EngineAssertMsg(false, "AddDependency: called after FinalizeRegistration");
+					return;
+				}
 
 				const size_t sysIdx = FindIndex<TSystem>();
 				const size_t depIdx = FindIndex<TDependency>();
-				EngineAssertMsg(sysIdx != SIZE_MAX, "AddDependency: TSystem is not registered");
-				EngineAssertMsg(depIdx != SIZE_MAX, "AddDependency: TDependency is not registered");
+				if (sysIdx == SIZE_MAX) {
+					RecordDependencyError("system is not registered", typeid(TSystem).name(), typeid(TDependency).name());
+				}
+				if (depIdx == SIZE_MAX) {
+					RecordDependencyError("dependency is not registered", typeid(TSystem).name(), typeid(TDependency).name());
+				}
 				if (sysIdx == SIZE_MAX || depIdx == SIZE_MAX) return;
+
+				// dynamic_cast 照合では別の型が同じ System に解決されることがある
+				if (sysIdx == depIdx) {
+					RecordDependencyError("both types resolve to the same system", typeid(TSystem).name(), typeid(TDependency).name());
+					return;
+				}
 
 				auto& deps = systemEntries_[sysIdx].dependencyIndices;
 				if (std::find(deps.begin(), deps.end(), depIdx) == deps.end())
@@ -182,8 +210,15 @@ namespace aq
 			 * 全 System の登録と依存設定が終わったら呼ぶ。
 			 * EntityContext::FinalizeRegistration() 経由でのみ呼ぶこと。
 			 * トポロジカルソートで実行順を確定し、以降の登録系呼び出しを禁止する。
+			 * @return 登録エラーが 1 件もなく実行順を確定できたら true
 			 */
-			void BuildSchedule();
+			bool BuildSchedule();
+
+			/** 確定後の登録呼び出しを拒否した旨をログに出す(dependencyName は nullptr 可) */
+			void LogRejectedAfterFinalize(const char* api, const char* systemName, const char* dependencyName) const;
+
+			/** AddDependency の登録エラーを記録する */
+			void RecordDependencyError(const char* reason, const char* systemName, const char* dependencyName);
 
 			template <typename T>
 			size_t FindIndex() const

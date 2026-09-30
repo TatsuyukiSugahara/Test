@@ -78,7 +78,7 @@ namespace aq
 		void Finalize() override;
 		void Update() override;
 		void FlushRender() override;
-		void Register() override;
+		bool Register() override;
 
 	protected:
 		/**

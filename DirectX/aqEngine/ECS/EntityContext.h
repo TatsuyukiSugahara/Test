@@ -265,10 +265,11 @@ namespace aq
 			/**
 			 * 全 System の登録と依存設定が終わったら呼ぶ。
 			 * Register() / OnRegister() の末尾で一度だけ実行すること。
+			 * @return 登録エラーがなく実行順を確定できたら true
 			 */
-			void FinalizeRegistration()
+			[[nodiscard]] bool FinalizeRegistration()
 			{
-				systemManager_.BuildSchedule();
+				return systemManager_.BuildSchedule();
 			}
 
 			template <typename T>

@@ -636,7 +636,7 @@ namespace aq
 	}
 
 
-	void Application::Register()
+	bool Application::Register()
 	{
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::AnimationSystem>();
@@ -660,7 +660,7 @@ namespace aq
 
 		OnRegister();
 
-		aq::ecs::EntityContext::Get().FinalizeRegistration();
+		return aq::ecs::EntityContext::Get().FinalizeRegistration();
 	}
 
 

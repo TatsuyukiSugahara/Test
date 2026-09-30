@@ -114,7 +114,10 @@ namespace aq
 		if (!EnsureSoundInitialized()) {
 			return false;
 		}
-		application_->Register();
+		if (!application_->Register()) {
+			aq::StartupLog("  [engine] application_->Register FAILED");
+			return false;
+		}
 
 		gameTimer_.Initialize();
 

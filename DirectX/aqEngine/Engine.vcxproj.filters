@@ -13,6 +13,9 @@
     <Filter Include="Level">
       <UniqueIdentifier>{b1e7c2a4-9d3f-4a6b-8c2e-3f5a7d9e1c04}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Link">
+      <UniqueIdentifier>{85b2749e-3bc7-439a-9dfd-9768ae5cb788}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Graphics">
       <UniqueIdentifier>{d9b46fa0-fb3c-4aaa-949d-35794da9d000}</UniqueIdentifier>
     </Filter>
@@ -240,6 +243,15 @@
     </ClCompile>
     <ClCompile Include="Core\AppModuleRegistry.cpp">
       <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Link\LinkSocket.cpp">
+      <Filter>Link</Filter>
+    </ClCompile>
+    <ClCompile Include="Link\LinkService.cpp">
+      <Filter>Link</Filter>
+    </ClCompile>
+    <ClCompile Include="Link\LinkCommands.cpp">
+      <Filter>Link</Filter>
     </ClCompile>
     <ClCompile Include="Component\AnimationComponentSystem.cpp">
       <Filter>Component</Filter>
@@ -885,6 +897,15 @@
     </ClInclude>
     <ClInclude Include="Core\AppModuleRegistry.h">
       <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Link\LinkSocket.h">
+      <Filter>Link</Filter>
+    </ClInclude>
+    <ClInclude Include="Link\LinkService.h">
+      <Filter>Link</Filter>
+    </ClInclude>
+    <ClInclude Include="Link\LinkCommands.h">
+      <Filter>Link</Filter>
     </ClInclude>
     <ClInclude Include="Component\AnimationComponentSystem.h">
       <Filter>Component</Filter>

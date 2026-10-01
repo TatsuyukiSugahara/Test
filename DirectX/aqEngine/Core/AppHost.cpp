@@ -57,6 +57,8 @@
 #include "Level/LevelComponentRegistry.h"
 #include "Level/LevelStreamSystem.h"
 #include "Level/LevelManager.h"
+#include "Link/LinkService.h"
+#include "Link/LinkCommands.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "DebugUI.h"
 #include "Ocean/Debug/OceanDebugPanel.h"
@@ -382,6 +384,22 @@ namespace aq
 		aq::StartupMark("  [app] ImGui ok (font atlas built, ASCII only)");
 #endif // AQ_IMGUI
 
+		// エディタ連携(-editor-port 指定時だけ)。モジュールが OnInitialize で命令を足せるよう、その前に起動する。
+		// 待ち受けに失敗してもゲームは動かす(エディタ側からは接続できないだけ)
+		{
+			const uint16_t editorPort = Engine::Get().GetLaunchOptions().editorPort;
+			if (editorPort != 0)
+			{
+				if (aq::link::LinkService::Initialize(editorPort, module_->GetName()))
+				{
+					aq::link::RegisterEngineCommands(aq::link::LinkService::Get());
+				}
+				aq::StartupMarkf("  [app] LinkService %s (port %u)",
+				                 aq::link::LinkService::IsAvailable() ? "ok" : "unavailable",
+				                 static_cast<uint32_t>(editorPort));
+			}
+		}
+
 		if (!module_->OnInitialize(*this)) return false;
 		aq::StartupMark("  [app] game OnInitialize ok");
 
@@ -527,6 +545,10 @@ namespace aq
 	{
 		module_->OnFinalize();
 
+		// 通信スレッドを止める(未送信データは破棄して閉じ、join してから WSACleanup)。
+		// 以降のサブシステム破棄中に命令が実行されないよう、モジュールの終了直後に行う
+		aq::link::LinkService::Finalize();
+
 		if (renderThreadReady_)
 		{
 			FlushRender();             // 最後のフレームを描き切ってから停止
@@ -624,6 +646,12 @@ namespace aq
 		{
 			AQ_PROFILE_SCOPE("ResourceManager::Update");
 			aq::res::ResourceManager::Get().Update();
+		}
+		// エディタからの命令はここ(ECS の反復外・Level の即時生成も安全な点)でだけ実行する
+		if (aq::link::LinkService::IsAvailable())
+		{
+			AQ_PROFILE_SCOPE("LinkService::Tick");
+			aq::link::LinkService::Get().Tick();
 		}
 		{ AQ_PROFILE_SCOPE("OnUpdate"); module_->OnUpdate(); }
 		{

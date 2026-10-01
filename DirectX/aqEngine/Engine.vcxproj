@@ -209,6 +209,9 @@
     <ClCompile Include="Core\DebugUI.cpp" />
     <ClCompile Include="Core\LaunchOptions.cpp" />
     <ClCompile Include="Core\AppModuleRegistry.cpp" />
+    <ClCompile Include="Link\LinkSocket.cpp" />
+    <ClCompile Include="Link\LinkService.cpp" />
+    <ClCompile Include="Link\LinkCommands.cpp" />
     <ClCompile Include="Component\AnimationComponentSystem.cpp" />
     <ClCompile Include="Component\BodyComponentSystem.cpp" />
     <ClCompile Include="Component\DecalComponent.cpp" />
@@ -452,6 +455,9 @@
     <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Core\LaunchOptions.h" />
     <ClInclude Include="Core\AppModuleRegistry.h" />
+    <ClInclude Include="Link\LinkSocket.h" />
+    <ClInclude Include="Link\LinkService.h" />
+    <ClInclude Include="Link\LinkCommands.h" />
     <ClInclude Include="Component\AnimationComponentSystem.h" />
     <ClInclude Include="Component\BodyComponentSystem.h" />
     <ClInclude Include="Component\InstancedStaticMeshComponentSystem.h" />

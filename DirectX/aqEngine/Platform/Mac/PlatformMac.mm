@@ -163,7 +163,7 @@ namespace
 		}
 
 #if defined(AQ_IMGUI)
-		// ImGui にも同じイベントを渡す。ゲーム入力との排他は Application::Update の
+		// ImGui にも同じイベントを渡す。ゲーム入力との排他は AppHost::Update の
 		// SuppressKeyboard/Mouse(io.WantCapture*)で効くので、両方が見てよい(設計書 P4b)。
 		// どちらも状態を溜めるだけなので、シンクへの転送との順序に意味は無い。
 		aq::platform::MacImGui::HandleEvent(event, view);

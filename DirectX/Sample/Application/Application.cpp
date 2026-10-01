@@ -6,11 +6,11 @@
 
 namespace sample
 {
-	bool Application::OnInitialize()
+	bool Application::OnInitialize(aq::AppHost& host)
 	{
 		// 影 / ディファード / ポストプロセス / 空を既定構成で組む。
 		// 個別に設定したいときは aq::RendererPreset を渡す。
-		SetupStandardRenderers();
+		host.SetupStandardRenderers();
 
 		// カメラ。斜め上から原点を見る。
 		aq::Camera* camera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);

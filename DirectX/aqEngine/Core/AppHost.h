@@ -1,5 +1,6 @@
 #pragma once
 #include "IApplication.h"
+#include "IAppModule.h"
 #include "Rendering/Renderer.h"
 #include "Rendering/RenderThread.h"
 #include "Rendering/Pipeline/PipelinePresets.h"
@@ -32,10 +33,10 @@ namespace aq
 
 
 	/**
-	 * エンジンサブシステムの初期化・更新・終了を担うアプリケーション基底クラス。
-	 * ゲーム側は OnInitialize / OnFinalize / OnUpdate / OnRegister / OnPreRender を override する。
+	 * エンジンサブシステムの初期化・更新・終了を担うアプリケーションの土台(常駐)。
+	 * ゲーム側は IAppModule を実装し、AppHost に所有させる。フックは module_ 経由で呼ぶ。
 	 */
-	class Application : public IApplication
+	class AppHost final : public IApplication
 	{
 	public:
 		/** 分割画面の 1 ビュー (カメラ + ビューポート矩形)。camera の寿命は設定側が保証する */
@@ -46,11 +47,13 @@ namespace aq
 		};
 
 
-	protected:
+	private:
+		/** 差し替え単位(ゲーム本体など) */
+		std::unique_ptr<IAppModule> module_;
+
 		aq::rendering::Renderer     renderer_;
 		aq::rendering::RenderThread renderThread_;
 
-	private:
 		bool renderThreadReady_ = false;
 
 		/** 分割画面ビュー (2 個以上でマルチビュー描画。空 or 1 個は従来の単一ビュー経路) */
@@ -58,6 +61,20 @@ namespace aq
 
 
 	public:
+		/** @param module 所有して動かすモジュール(nullptr 不可) */
+		explicit AppHost(std::unique_ptr<IAppModule> module);
+		~AppHost() override;
+
+
+	public:
+		/** 現在のモジュール */
+		inline IAppModule& GetModule() { return *module_; }
+
+		/** メイン描画のレンダラ */
+		inline rendering::Renderer& GetRenderer() { return renderer_; }
+		/** レンダースレッド(オフスクリーン Submit 用) */
+		inline rendering::RenderThread& GetRenderThread() { return renderThread_; }
+
 		/** 分割画面ビューを設定する (次フレームから有効。ステージ退出時などは Clear すること) */
 		void SetSplitViews(const std::vector<SplitView>& views) { splitViews_ = views; }
 		void ClearSplitViews() { splitViews_.clear(); }
@@ -80,11 +97,11 @@ namespace aq
 		void FlushRender() override;
 		bool Register() override;
 
-	protected:
+	public:
 		/**
 		 * 標準的な描画構成(Shadow + Deferred + Hi-Z + PostProcess + Sky)をまとめて組む。
 		 *
-		 * `OnInitialize()` から 1 行呼べば従来と同じ絵になる。中身は
+		 * モジュールの `OnInitialize()` から 1 行呼べば従来と同じ絵になる。中身は
 		 * `PipelinePresets::Standard(preset, uiCallback)` で `PipelineBuilder` を組み、
 		 * `Build()` した `RenderPipeline` を `renderer_.SetPipeline()` へ渡すだけ
 		 * (設計書/レンダーパイプライン設計.md)。個別のパス構成を自分で組みたいゲームは
@@ -119,27 +136,6 @@ namespace aq
 		 */
 		void SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline);
 
-		/** ゲーム固有の初期化（エンジンサブシステム初期化後に呼ばれる） */
-		virtual bool OnInitialize() { return true; }
-		/** ゲーム固有の終了処理（エンジンサブシステム終了前に呼ばれる） */
-		virtual void OnFinalize() {}
-		/** ゲーム固有の更新（Input/ECS/ResourceManager 更新後に呼ばれる） */
-		virtual void OnUpdate() {}
-		/** ゲーム固有のリソース・システム登録 */
-		virtual void OnRegister() {}
-		/** メインパス Submit 前に呼ばれる（オフスクリーンパス等を Submit する） */
-		virtual void OnPreRender() {}
-#ifdef AQ_IMGUI
-		/** ImGui::NewFrame() 直後に呼ばれる。ゲーム固有の ImGui ウィンドウをここで構築する */
-		virtual void OnImGuiRender() {}
-#endif
-#ifdef AQ_DEBUG_IMGUI
-		/** メインメニューバー内にゲーム固有のメニュー項目を追加する */
-		virtual void OnDebugRenderMenu() {}
-		/** ImGui ウィンドウ構築（EntityContext::DebugRender() の後に呼ばれる） */
-		virtual void OnDebugRender() {}
-#endif
-
 	private:
 		void Render();
 
@@ -155,5 +151,13 @@ namespace aq
 		std::unique_ptr<aq::ecs::PrefabEditorPanel>         prefabEditorPanel_;   // 全シーン共通の Prefab エディタ
 		std::unique_ptr<aq::level::LevelEditorPanel>        levelEditorPanel_;    // 全シーン共通の Level エディタ
 #endif
+
+
+	private:
+		static AppHost* instance_;
+
+	public:
+		static AppHost& Get()     { return *instance_; }
+		static bool IsAvailable() { return instance_ != nullptr; }
 	};
 }

@@ -1,5 +1,5 @@
 #pragma once
-#include "aqEngine/Core/Application.h"
+#include "aqEngine/Core/AppHost.h"
 #include "Sound/SoundFwd.h"
 #include <memory>
 
@@ -7,7 +7,10 @@ namespace aq { namespace audio { class AudioAuthoringPanel; } }
 
 namespace app
 {
-	class Application : public aq::Application
+	/**
+	 * AquaDash 本体のモジュール。AppHost に所有されて動く
+	 */
+	class Application : public aq::IAppModule
 	{
 	public:
 		// unique_ptr<SoundStream>（不完全型）のため、ctor/dtor は .cpp 側で定義する。
@@ -53,8 +56,11 @@ namespace app
 		/** 俯瞰ベイク先の RT。UI へ SRV を渡すのに使う */
 		inline aq::rendering::RenderTargetHandle GetMinimapRT() const { return minimapRT_; }
 
+	public:
+		const char* GetName() const override { return "AquaDash"; }
+
 	protected:
-		bool OnInitialize() override;
+		bool OnInitialize(aq::AppHost& host) override;
 		void OnFinalize() override;
 		void OnUpdate() override;
 		void OnRegister() override;

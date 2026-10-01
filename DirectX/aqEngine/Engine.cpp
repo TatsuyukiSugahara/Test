@@ -2,6 +2,8 @@
 #include "Engine.h"
 #include "Resource/AssetPath.h"
 #include "Core/IApplication.h"
+#include "Core/IAppModule.h"
+#include "Core/AppHost.h"
 #include "Platform/IPlatform.h"
 #include "Platform/PlatformBudget.h"
 #include "Physics/PhysicsBackend.h"
@@ -49,10 +51,27 @@ namespace aq
 	}
 
 
+	void Engine::SetAppModule(std::unique_ptr<IAppModule> module)
+	{
+		EngineAssert(application_ == nullptr);
+		appModule_ = std::move(module);
+	}
+
+
 	bool Engine::Initialize(const InitializeParameter& initializeParameter)
 	{
 		platform_ = initializeParameter.platform;
 		EngineAssert(platform_);
+
+		// 土台(AppHost)を生成し、SetAppModule で受け取ったモジュールを所有させる。
+		// 旧 CreateApplication と同じく、メモリマネージャ初期化より前の生成になる。
+		EngineAssertMsg(application_ == nullptr, "Engine::Initialize: application already created");
+		EngineAssertMsg(appModule_ != nullptr, "Engine::Initialize: SetAppModule must be called before Initialize");
+		if (!appModule_) {
+			aq::StartupLog("  [engine] no app module FAILED");
+			return false;
+		}
+		application_ = new AppHost(std::move(appModule_));
 
 		// メモリマネージャを最初に初期化することで、ウィンドウ・グラフィクス初期化中の
 		// new/delete もエンジンアロケータ管理下に置く。

@@ -11,11 +11,13 @@
 #include "Rendering/RenderTargetHandle.h"
 #include "Util/GameTimer.h"
 #include <future>
+#include <memory>
 
 
 namespace aq
 {
 	class IApplication;
+	class IAppModule;
 
 	/**
 	 * メモリ管理を畳む(Debug ではリーク報告もここで出る)。
@@ -64,6 +66,8 @@ namespace aq
 		uint32_t renderHeight_;
 
 		IApplication* application_;
+		/** Initialize で AppHost へ渡すモジュール(SetAppModule で設定) */
+		std::unique_ptr<IAppModule> appModule_;
 
 		aq::util::GameTimer gameTimer_;
 
@@ -181,12 +185,11 @@ namespace aq
 #endif // AQ_PLATFORM_WIN32
 
 	public:
-		template <typename _Application>
-		void CreateApplication()
-		{
-			EngineAssert(application_ == nullptr);
-			application_ = new _Application();
-		}
+		/**
+		 * 動かすモジュールを設定する。Initialize より前に 1 回だけ呼ぶ。
+		 * Initialize の先頭で AppHost を生成し、このモジュールを所有させる。
+		 */
+		void SetAppModule(std::unique_ptr<IAppModule> module);
 
 	private:
 		static Engine* instance_;

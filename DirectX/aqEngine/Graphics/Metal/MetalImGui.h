@@ -1,7 +1,7 @@
 #pragma once
 // Metal 用 ImGui 自前バックエンド(設計書/MetalBackend設計.md §12 P6)。
 //
-// **本ヘッダは素の C++**。Core/Application.cpp(素の .cpp)が Init / Shutdown / NewFrame を
+// **本ヘッダは素の C++**。Core/AppHost.cpp(素の .cpp)が Init / Shutdown / NewFrame を
 // 呼ぶため、Objective-C 型を表に出さない(設計書 §10)。
 // 唯一 id<MTLRenderCommandEncoder> を取る Render() だけは __OBJC__ ブロックへ隔離してあり、
 // MetalGraphicsDeviceImpl.mm(Objective-C++)からのみ見える。

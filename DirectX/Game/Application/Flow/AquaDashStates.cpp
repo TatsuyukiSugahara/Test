@@ -1639,8 +1639,8 @@ namespace app
 				// 描画フレームがそれらを参照したまま解放すると device removed でクラッシュするため、
 				// レンダースレッドを完全にドレインして GPU アイドルにしてから、遅延コマンドを
 				// 即時フラッシュして破棄を確定させる (この時点で参照は自分だけなので安全に解放できる)。
-				if (app::Application::IsAvailable()) {
-					app::Application::Get().WaitForRenderIdle();
+				if (aq::AppHost::IsAvailable()) {
+					aq::AppHost::Get().WaitForRenderIdle();
 				}
 				aq::ecs::EntityContext::Get().FlushPendingCommands();
 			}

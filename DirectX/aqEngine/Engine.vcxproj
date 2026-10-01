@@ -205,7 +205,7 @@
       <PrecompiledHeader Condition="'$(Platform)'=='x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Platform)'=='x64'">aq.h</PrecompiledHeaderFile>
     </ClCompile>
-    <ClCompile Include="Core\Application.cpp" />
+    <ClCompile Include="Core\AppHost.cpp" />
     <ClCompile Include="Core\DebugUI.cpp" />
     <ClCompile Include="Component\AnimationComponentSystem.cpp" />
     <ClCompile Include="Component\BodyComponentSystem.cpp" />
@@ -443,8 +443,9 @@
     <ClCompile Include="..\ThirdParty\DirectXTex\DirectXTexWIC.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Core\Application.h" />
+    <ClInclude Include="Core\AppHost.h" />
     <ClInclude Include="Core\IApplication.h" />
+    <ClInclude Include="Core\IAppModule.h" />
     <ClInclude Include="Core\DebugUI.h" />
     <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Component\AnimationComponentSystem.h" />

@@ -52,7 +52,7 @@ namespace
 
 				aq::Engine::Create();
 				aq::Engine& engine = aq::Engine::Get();
-				engine.CreateApplication<app::Application>();
+				engine.SetAppModule(std::make_unique<app::Application>());
 				aq::StartupLog("engine + application created");
 
 				aq::InitializeParameter ip;

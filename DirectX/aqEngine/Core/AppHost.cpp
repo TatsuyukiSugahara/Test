@@ -1,5 +1,5 @@
 #include "aq.h"
-#include "Application.h"
+#include "AppHost.h"
 #include "ECS/EntityContext.h"
 #include "HID/Input.h"
 #include "HID/TouchGesture.h"
@@ -112,7 +112,28 @@ namespace aq
 	}
 
 
-	rendering::PipelineBuilder Application::BuildStandardPipeline(const RendererPreset& preset)
+	AppHost* AppHost::instance_ = nullptr;
+
+
+	AppHost::AppHost(std::unique_ptr<IAppModule> module)
+		: module_(std::move(module))
+	{
+		EngineAssertMsg(module_ != nullptr, "AppHost requires an IAppModule");
+		EngineAssert(instance_ == nullptr);
+		instance_ = this;
+	}
+
+
+	AppHost::~AppHost()
+	{
+		// 旧来の継承構成ではゲーム側(派生)の破棄が土台のメンバより先に走っていた。
+		// その順序を保つため、モジュールを明示的に先に破棄する。
+		module_.reset();
+		instance_ = nullptr;
+	}
+
+
+	rendering::PipelineBuilder AppHost::BuildStandardPipeline(const RendererPreset& preset)
 	{
 		// worldPos (GBuffer2) → MotionBlurPass の配線や Shadow/Sky の生成失敗時のフォールバックは
 		// 各パスの Setup() / Build() 側の責務になった(設計書/レンダーパイプライン設計.md §2)。
@@ -125,7 +146,7 @@ namespace aq
 	}
 
 
-	void Application::SetupStandardRenderers(const RendererPreset& preset)
+	void AppHost::SetupStandardRenderers(const RendererPreset& preset)
 	{
 		auto builder = BuildStandardPipeline(preset);
 
@@ -149,7 +170,7 @@ namespace aq
 	}
 
 
-	void Application::SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline)
+	void AppHost::SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline)
 	{
 		const uint32_t renderW = Engine::Get().GetRenderWidth();
 		const uint32_t renderH = Engine::Get().GetRenderHeight();
@@ -161,7 +182,7 @@ namespace aq
 	}
 
 
-	bool Application::Initialize(aq::graphics::RenderContext& renderContext)
+	bool AppHost::Initialize(aq::graphics::RenderContext& renderContext)
 	{
 #ifdef AQ_PROFILE_ENABLED
 		aq::profile::Profiler::Get().SetThreadName("Main");
@@ -361,7 +382,7 @@ namespace aq
 		aq::StartupMark("  [app] ImGui ok (font atlas built, ASCII only)");
 #endif // AQ_IMGUI
 
-		if (!OnInitialize()) return false;
+		if (!module_->OnInitialize(*this)) return false;
 		aq::StartupMark("  [app] game OnInitialize ok");
 
 		// GPU 駆動クラスタ(トライアングル)カリング: compute シェーダをロード。
@@ -502,9 +523,9 @@ namespace aq
 	}
 
 
-	void Application::Finalize()
+	void AppHost::Finalize()
 	{
-		OnFinalize();
+		module_->OnFinalize();
 
 		if (renderThreadReady_)
 		{
@@ -559,12 +580,12 @@ namespace aq
 		aq::ecs::EntityContext::Finalize();
 		aq::res::ResourceManager::Finalize();
 		aq::hid::InputManager::Finalize();
-		// Initialize で new したきり解放していなかった。シングルトンだが寿命は Application に合わせる。
+		// Initialize で new したきり解放していなかった。シングルトンだが寿命は AppHost に合わせる。
 		aq::CameraManager::Finalize();
 	}
 
 
-	void Application::Update()
+	void AppHost::Update()
 	{
 #ifdef AQ_PROFILE_ENABLED
 		// 前フレームの計測結果を publish (メイン + アイドル状態のワーカー)。
@@ -572,7 +593,7 @@ namespace aq
 		aq::profile::Profiler::Get().PublishThisThread();
 		aq::profile::Profiler::Get().PublishWorkers();
 #endif
-		AQ_PROFILE_SCOPE("Application::Update");
+		AQ_PROFILE_SCOPE("AppHost::Update");
 
 #ifdef AQ_IMGUI
 		if (imguiReady_)
@@ -597,7 +618,7 @@ namespace aq
 			AQ_PROFILE_SCOPE("ResourceManager::Update");
 			aq::res::ResourceManager::Get().Update();
 		}
-		{ AQ_PROFILE_SCOPE("OnUpdate"); OnUpdate(); }
+		{ AQ_PROFILE_SCOPE("OnUpdate"); module_->OnUpdate(); }
 		{
 			AQ_PROFILE_SCOPE("UI::Update");
 			auto& ui = aq::ui::UIContext::Get();
@@ -610,7 +631,7 @@ namespace aq
 	}
 
 
-	void Application::FlushRender()
+	void AppHost::FlushRender()
 	{
 		if (!renderThreadReady_) return;
 #ifdef AQ_RENDER_PIPELINED
@@ -623,7 +644,7 @@ namespace aq
 	}
 
 
-	void Application::WaitForRenderIdle()
+	void AppHost::WaitForRenderIdle()
 	{
 		// CPU 側: 提出済みコマンドリストの実行と Present の呼び出しが終わるまで待つ。
 		if (renderThreadReady_) {
@@ -636,7 +657,7 @@ namespace aq
 	}
 
 
-	bool Application::Register()
+	bool AppHost::Register()
 	{
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::HierarcicalTransformSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::AnimationSystem>();
@@ -658,15 +679,15 @@ namespace aq
 		aq::ecs::EntityContext::Get().AddSystem<aq::ecs::SceneHierarchySystem>();
 #endif
 
-		OnRegister();
+		module_->OnRegister();
 
 		return aq::ecs::EntityContext::Get().FinalizeRegistration();
 	}
 
 
-	void Application::Render()
+	void AppHost::Render()
 	{
-		AQ_PROFILE_SCOPE("Application::Render");
+		AQ_PROFILE_SCOPE("AppHost::Render");
 		const float renderW = static_cast<float>(Engine::Get().GetRenderWidth());
 		const float renderH = static_cast<float>(Engine::Get().GetRenderHeight());
 		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -804,7 +825,7 @@ namespace aq
 				ImGui::End();
 			}
 
-			{ AQ_PROFILE_SCOPE("OnImGuiRender"); OnImGuiRender(); }
+			{ AQ_PROFILE_SCOPE("OnImGuiRender"); module_->OnImGuiRender(); }
 
 #ifdef AQ_DEBUG_IMGUI
 			// デバッグ UI 表示トグル: 中クリック or F1。非表示中は下の重い ECS::DebugRender / 各パネル描画を
@@ -829,12 +850,12 @@ namespace aq
 				{
 					aq::ecs::EntityContext::Get().DebugRenderMenu();
 					aq::DebugUI::Get().DebugRenderMenuAll();
-					OnDebugRenderMenu();
+					module_->OnDebugRenderMenu();
 					ImGui::EndMainMenuBar();
 				}
 				{ AQ_PROFILE_SCOPE("ECS::DebugRender"); aq::ecs::EntityContext::Get().DebugRender(); }
 				aq::DebugUI::Get().DebugRenderAll();
-				{ AQ_PROFILE_SCOPE("OnDebugRender"); OnDebugRender(); }
+				{ AQ_PROFILE_SCOPE("OnDebugRender"); module_->OnDebugRender(); }
 			}
 #endif
 
@@ -842,7 +863,7 @@ namespace aq
 		}
 #endif
 
-		{ AQ_PROFILE_SCOPE("OnPreRender"); OnPreRender(); }
+		{ AQ_PROFILE_SCOPE("OnPreRender"); module_->OnPreRender(); }
 
 		auto mainCmdList = std::make_unique<aq::rendering::RenderCommandList>();
 		mainCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(Engine::Get().GetMainRenderTargetHandle());

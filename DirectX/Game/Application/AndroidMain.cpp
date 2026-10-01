@@ -49,7 +49,7 @@ namespace
 
 		aq::Engine::Create();
 		aq::Engine& engineInstance = aq::Engine::Get();
-		engineInstance.CreateApplication<app::Application>();
+		engineInstance.SetAppModule(std::make_unique<app::Application>());
 
 		aq::InitializeParameter initializeParameter;
 		initializeParameter.platform     = &platform;

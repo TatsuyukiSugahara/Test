@@ -20,7 +20,7 @@ int main(int /*argc*/, const char* /*argv*/[])
 
 		aq::Engine::Create();
 		aq::Engine& engineInstance = aq::Engine::Get();
-		engineInstance.CreateApplication<sample::Application>();
+		engineInstance.SetAppModule(std::make_unique<sample::Application>());
 
 		aq::InitializeParameter initializeParameter;
 		initializeParameter.platform     = &platform;

@@ -27,12 +27,12 @@ namespace aq
 		/**
 		 * 標準的な描画構成の設定値(設計書/使いやすさ改善設計.md P2-B)。
 		 *
-		 * 元は Core/Application.h の RendererPreset。`Rendering/` から `Core/` への依存を避けるため
+		 * 元は Core/AppHost.h の RendererPreset。`Rendering/` から `Core/` への依存を避けるため
 		 * こちらへ移した。ゲームが Shadow / Deferred / Hi-Z / PostProcess / Sky を 1 つずつ生成して
 		 * 配線していた定型を `PipelinePresets::Standard()` 1 呼び出しへ畳むための引数。
 		 * **既定値のまま渡せば従来と同じ絵になる。**
 		 *
-		 * `Core/Application.h` は `using RendererPreset = rendering::RendererPreset;` で互換を保つ
+		 * `Core/AppHost.h` は `using RendererPreset = rendering::RendererPreset;` で互換を保つ
 		 * (ゲームは `aq::RendererPreset` と書いている)。
 		 *
 		 * 解像度はここで持たない。`Engine::GetRenderWidth/Height()` から取るため

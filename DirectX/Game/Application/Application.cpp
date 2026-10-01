@@ -46,7 +46,7 @@ namespace app
 	}
 
 
-	bool Application::OnInitialize()
+	bool Application::OnInitialize(aq::AppHost& host)
 	{
 		// ミニマップ用の俯瞰オフスクリーン。メインとは別の 2 本目のパイプラインを組む。
 		// 縮小 GBuffer はこの列の GBufferPass が 512x512 で作るので、メイン解像度の深度と混ざらない。
@@ -95,7 +95,7 @@ namespace app
 
 			// 輪郭線 (エンジンの任意パス。Standard() には入っていないのでここで挿す)。
 			// UI の手前 = トーンマップ後の LDR に乗るので、露出やブルームの影響を受けない。
-			auto builder = BuildStandardPipeline(preset);
+			auto builder = host.BuildStandardPipeline(preset);
 			auto outline = std::make_unique<aq::rendering::OutlinePass>();
 			outline->SetColor(OUTLINE_COLOR);
 			outline->SetIntensity(OUTLINE_INTENSITY);
@@ -103,8 +103,8 @@ namespace app
 			outline->SetThickness(OUTLINE_THICKNESS);
 			builder.InsertBefore<aq::rendering::UIPass>(std::move(outline));
 
-			SetRenderPipeline(builder.Build(aq::Engine::Get().GetRenderWidth(),
-			                                aq::Engine::Get().GetRenderHeight()));
+			host.SetRenderPipeline(builder.Build(aq::Engine::Get().GetRenderWidth(),
+			                                     aq::Engine::Get().GetRenderHeight()));
 		}
 
 		// BGM: 起動時から常時ループ再生する(バンク登録に依存しない wav 直読み)。
@@ -153,8 +153,9 @@ namespace app
 	{
 		app::GameFlow::Get().Update(aq::Engine::GetDeltaTime());
 
-		auto* shadowPass = renderer_.GetPipeline()
-			? renderer_.GetPipeline()->Find<aq::rendering::ShadowPass>() : nullptr;
+		aq::rendering::Renderer& renderer = aq::AppHost::Get().GetRenderer();
+		auto* shadowPass = renderer.GetPipeline()
+			? renderer.GetPipeline()->Find<aq::rendering::ShadowPass>() : nullptr;
 		if (auto* shadowRenderer = shadowPass ? shadowPass->GetShadowRenderer() : nullptr)
 		{
 			auto pos = app::GameFlow::Get().GetFocusPosition();
@@ -163,7 +164,7 @@ namespace app
 		}
 
 		// スピード感演出: 速度に応じたカメラモーションブラー強度 (タイトル/リザルトでは 0 で無効)。
-		auto* motionBlur = renderer_.GetPipeline() ? renderer_.GetPipeline()->Find<aq::rendering::MotionBlurPass>() : nullptr;
+		auto* motionBlur = renderer.GetPipeline() ? renderer.GetPipeline()->Find<aq::rendering::MotionBlurPass>() : nullptr;
 		if (motionBlur)
 		{
 			constexpr float BLUR_SPEED_MIN     = 30.0f;   // [m/s] これ以下はブラーなし
@@ -264,7 +265,7 @@ namespace app
 		aq::ecs::RenderSystem::Get().BuildRenderFrame(offscreenFrame, *offscreenCamera,
 			false /*frustum*/, false /*occlusion*/, false /*stats*/, true /*gather*/);
 
-		// メインパス (Application::Render) と同じ作法で、RT / クリア / ビューポートは呼び出し側が積む。
+		// メインパス (AppHost::Render) と同じ作法で、RT / クリア / ビューポートは呼び出し側が積む。
 		auto offscreenCmdList = std::make_unique<aq::rendering::RenderCommandList>();
 		offscreenCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(minimapRT_);
 		offscreenCmdList->Enqueue<aq::rendering::ClearRenderTargetCommand>(0u, OFFSCREEN_CLEAR_COLOR);
@@ -275,7 +276,7 @@ namespace app
 		                        static_cast<float>(OFFSCREEN_RT_HEIGHT));
 
 		// displayRT は INVALID。オフスクリーンなので Present しない。
-		renderThread_.Submit(std::move(offscreenCmdList), aq::rendering::RenderTargetHandle{},
-		                     offscreenFrame.lighting, offscreenFrame.shadow);
+		aq::AppHost::Get().GetRenderThread().Submit(std::move(offscreenCmdList), aq::rendering::RenderTargetHandle{},
+		                                            offscreenFrame.lighting, offscreenFrame.shadow);
 	}
 }

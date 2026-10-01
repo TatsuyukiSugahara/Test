@@ -16,7 +16,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 		aq::Engine::Create();
 		aq::Engine& engineInstance = aq::Engine::Get();
-		engineInstance.CreateApplication<sample::Application>();
+		engineInstance.SetAppModule(std::make_unique<sample::Application>());
 
 		aq::InitializeParameter initializeParameter;
 		initializeParameter.platform     = &platform;

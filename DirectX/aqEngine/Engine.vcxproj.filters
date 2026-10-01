@@ -229,7 +229,7 @@
       <Filter>ThirdParty\DirectXTex</Filter>
     </ClCompile>
     <ClCompile Include="aq.cpp" />
-    <ClCompile Include="Core\Application.cpp">
+    <ClCompile Include="Core\AppHost.cpp">
       <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="Core\DebugUI.cpp">
@@ -859,10 +859,13 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Core\Application.h">
+    <ClInclude Include="Core\AppHost.h">
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="Core\IApplication.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\IAppModule.h">
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="Core\DebugUI.h">

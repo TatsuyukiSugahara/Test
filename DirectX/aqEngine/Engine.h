@@ -112,6 +112,13 @@ namespace aq
 		 */
 		bool EnsureSoundInitialized();
 
+		/**
+		 * 提出済みの描画が CPU・GPU とも完了するまで待つ(AppHost::WaitForRenderIdle へ渡すだけ)。
+		 * AppHost を知らないエンジン内部(Level の作り直しなど)が、GPU バッファを持つエンティティを
+		 * 破棄する前に呼ぶための窓口。アプリ生成前は何もしない。
+		 */
+		void WaitForRenderIdle();
+
 
 	private:
 		bool InitializeWindow(const InitializeParameter& initializeParameter);

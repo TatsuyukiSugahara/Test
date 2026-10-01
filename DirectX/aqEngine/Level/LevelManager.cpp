@@ -303,6 +303,16 @@ namespace aq
 					roots.push_back({ slot.path, MakeId(i) });
 			}
 			for (const auto& r : roots) { if (IsLoaded(r.second)) Unload(r.second); }
+
+			// Unload は破棄を予約するだけで、実際の解放は次のフレームの FlushCommands になる。そのとき直前の
+			// フレームの描画が GPU 上でまだ地形などのバッファを使っていると、解放した途端に GPU がハングする
+			// (D3D12 で DXGI_ERROR_DEVICE_HUNG)。描画の完了を待ってから、破棄をここで確定させる。
+			// 呼び出し元(エディタ連携の命令・Level エディタのボタン・自動リロード)はいずれも System 反復の外。
+			if (!roots.empty()) {
+				aq::Engine::Get().WaitForRenderIdle();
+				ecs::EntityContext::Get().FlushPendingCommands();
+			}
+
 			for (const auto& r : roots) { Load(r.first); }
 		}
 

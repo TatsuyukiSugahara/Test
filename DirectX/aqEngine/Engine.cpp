@@ -250,6 +250,14 @@ namespace aq
 	}
 
 
+	void Engine::WaitForRenderIdle()
+	{
+		if (application_) {
+			application_->WaitForRenderIdle();
+		}
+	}
+
+
 	bool Engine::EnsureSoundInitialized()
 	{
 		if (soundInitFuture_.valid()) {

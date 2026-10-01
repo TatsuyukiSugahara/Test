@@ -43,7 +43,7 @@ namespace aq
 
 		public:
 			// タッチはデバイスの初期化を要さない(取得済みの TouchState を読むだけ)。
-			bool Initialize(aq::graphics::NativeWindowHandle /*window*/) override { return true; }
+			bool Initialize(const InputWindowDesc& /*desc*/) override { return true; }
 
 			void Poll(MouseState& out) override;
 

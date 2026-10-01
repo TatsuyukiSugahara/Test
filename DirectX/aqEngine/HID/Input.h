@@ -27,7 +27,8 @@ namespace aq
 			~KeyBoard() = default;
 
 			void SetBackend(IKeyboardBackend* backend) { backend_ = backend; }
-			void Update(float dt);
+			/** blocked なら取得結果を中立値(全キー離し)に置き換えてから判定する */
+			void Update(float dt, bool blocked);
 
 			bool IsTriggered(KeyBoardType key) const;
 			bool IsPressed  (KeyBoardType key) const;
@@ -69,7 +70,8 @@ namespace aq
 			~Mouse() = default;
 
 			void SetBackend(IMouseBackend* backend) { backend_ = backend; }
-			void Update(float dt);
+			/** blocked なら取得結果を中立値(全ボタン離し・移動 0)に置き換えてから判定する */
+			void Update(float dt, bool blocked);
 
 			bool          IsTriggered(MouseButton btn) const;
 			bool          IsPressed  (MouseButton btn) const;
@@ -100,6 +102,12 @@ namespace aq
 
 			void SetIndex  (uint32_t index)      { index_ = index; }
 			void SetBackend(IPadBackend* backend) { backend_ = backend; }
+			/** フォーカス外の入力停止フラグ(InputManager が持つ)。ワーカーからの Rumble も読む */
+			void SetFocusBlockedFlag(const std::atomic<bool>* blocked) { focusBlocked_ = blocked; }
+			/**
+			 * ボタンと軸はフォーカス外の入力停止中なら中立値(全ボタン離し・軸 0)に置き換えてから判定する。
+			 * 接続状態はバックエンドから取った実際の値のまま
+			 */
 			void Update(float dt);
 
 			bool  IsConnected() const { return now_.connected; }
@@ -124,9 +132,19 @@ namespace aq
 			// アダプティブトリガー(L2 / R2)の抵抗。strength = 0 で解除。
 			void SetTriggerResistance(PadAxis trigger, float startPos, float strength);
 
+			/**
+			 * 保留中の振動を捨てる(左右の強度と残り時間をすべて 0 にする)。メインスレッド専用。
+			 * フォーカス外の入力停止に入るとき・明けるときに InputManager が呼ぶ。
+			 * トリガーエフェクト(継続する設定)は捨てない。
+			 */
+			void DiscardRumble();
+
 		private:
 			// 出力バッファをバックエンドへ適用する (メインスレッド専用)。
 			void ApplyOutput(float dt);
+
+			/** フォーカス外の入力停止中か */
+			bool IsFocusBlocked() const { return focusBlocked_ && focusBlocked_->load(); }
 
 		private:
 			static constexpr uint32_t BTN_COUNT     = PadState::BUTTON_COUNT;
@@ -137,6 +155,9 @@ namespace aq
 			PadState     old_{};
 			float        holdTimers_[BTN_COUNT]{};
 			uint32_t     index_   = 0;
+
+			/** フォーカス外の入力停止フラグ(InputManager の持ち物を参照する) */
+			const std::atomic<bool>* focusBlocked_ = nullptr;
 
 			// 出力バッファ。書き手はワーカースレッド、読み手はメインスレッドの Update だけなので、
 			// 値ごとの atomic で足りる (取り違えても 1 フレーム分ずれるだけで破綻しない)。
@@ -198,6 +219,14 @@ namespace aq
 			bool IsKeyboardSuppressed() const    { return suppressKeyboard_; }
 			bool IsMouseSuppressed()    const    { return suppressMouse_;    }
 
+			/**
+			 * フォーカス外の入力停止(ImGui の Suppress とは別の理由)。メインスレッドがフレームの境目で呼ぶ。
+			 * 立っている間の Update はキーボード・マウス・全パッドを中立値として扱い、パッドの出力(振動・
+			 * トリガーエフェクトの強度)を 0 にする。入るとき・明けるときに保留中の振動を捨てる。
+			 */
+			void SetFocusBlocked(bool blocked);
+			bool IsFocusBlocked() const { return focusBlocked_.load(); }
+
 			static void          Initialize() { if (!sInstance_) sInstance_ = new InputManager(); }
 			static InputManager& Get()        { return *sInstance_; }
 			static void          Finalize()   { if (sInstance_) { delete sInstance_; sInstance_ = nullptr; } }
@@ -237,6 +266,9 @@ namespace aq
 
 			bool suppressKeyboard_ = false;
 			bool suppressMouse_    = false;
+
+			/** フォーカス外の入力停止中か。Pad::Rumble がワーカースレッドから読むので atomic */
+			std::atomic<bool> focusBlocked_ { false };
 
 			static InputManager* sInstance_;
 		};

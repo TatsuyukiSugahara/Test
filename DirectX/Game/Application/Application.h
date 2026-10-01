@@ -4,6 +4,7 @@
 #include <memory>
 
 namespace aq { namespace audio { class AudioAuthoringPanel; } }
+namespace aq { class AppModuleRegistry; }
 
 namespace app
 {
@@ -74,4 +75,10 @@ namespace app
 		static Application& Get()   { return *instance_; }
 		static bool IsAvailable()   { return instance_ != nullptr; }
 	};
+
+
+	/**
+	 * このゲームのモジュールをレジストリへ登録する。エントリが Engine::Initialize より前に呼ぶ
+	 */
+	void RegisterAppModules(aq::AppModuleRegistry& registry);
 }

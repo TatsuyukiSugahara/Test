@@ -17,7 +17,7 @@ namespace aq
 		class CocoaMouseBackend : public IMouseBackend
 		{
 		public:
-			bool Initialize(aq::graphics::NativeWindowHandle window) override;
+			bool Initialize(const InputWindowDesc& desc) override;
 			void Poll(MouseState& out) override;
 		};
 	}

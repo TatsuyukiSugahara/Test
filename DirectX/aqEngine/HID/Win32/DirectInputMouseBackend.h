@@ -32,7 +32,7 @@ namespace aq
 
 
 		public:
-			bool Initialize(aq::graphics::NativeWindowHandle window) override;
+			bool Initialize(const InputWindowDesc& desc) override;
 			void Poll(MouseState& out) override;
 		};
 	}

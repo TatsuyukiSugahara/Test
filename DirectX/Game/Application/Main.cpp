@@ -8,7 +8,8 @@
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow)
 {
 	UNREFERENCED_PARAMETER(hPrevInstance);
-	UNREFERENCED_PARAMETER(lpCmdLine);
+
+	int exitCode = 0;
 
 	// Win32 プラットフォーム実装。ウィンドウ/メッセージループの寿命は WinMain が持つ。
 	// 道A(UWP) では PlatformUWP に差し替えるブートストラップになる。
@@ -19,7 +20,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		aq::StartupMark("WinMain");
 		aq::Engine::Create();
 		aq::Engine& engineInstance = aq::Engine::Get();
-		engineInstance.SetAppModule(std::make_unique<app::Application>());
+		app::RegisterAppModules(engineInstance.GetAppModuleRegistry());
 
 		aq::InitializeParameter initializeParameter;
 		initializeParameter.platform = &platform;
@@ -27,8 +28,13 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		initializeParameter.screenHeight = 720;
 		initializeParameter.renderWidth = 1280;
 		initializeParameter.renderHeight = 720;
+		// 起動引数(-app= / -mode= / -editor-port= / -parent-hwnd=)。lpCmdLine はプログラム名を含まない
+		initializeParameter.launch = aq::LaunchOptions::ParseCommandLine(lpCmdLine);
+		// 初期化に失敗したら終了コード 1 を返す(エディタなど起動した側が失敗を判別できるように)。
 		if (engineInstance.Initialize(initializeParameter)) {
 			engineInstance.RunGame();
+		} else {
+			exitCode = 1;
 		}
 		engineInstance.Finalize();
 		aq::Engine::Release();
@@ -36,6 +42,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 	// Engine もプラットフォームも壊れた後に畳む。ここで初めてリーク報告が意味を持つ。
 	aq::ShutdownMemory();
-	return 0;
+	return exitCode;
 }
 #endif // AQ_PLATFORM_WIN32

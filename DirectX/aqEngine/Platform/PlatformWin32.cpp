@@ -21,6 +21,10 @@ namespace aq
 		{
 			// ユーザーデータを置くフォルダ名。ゲーム名が変わったらここを変える。
 			static constexpr char APP_FOLDER_NAME[] = "AquaDash";
+
+			// 入力協調用の非表示ウィンドウのクラス名。メインウィンドウとは別クラスにして、
+			// MsgProc(WM_DESTROY で PostQuitMessage する)を通らないようにする。
+			static constexpr TCHAR INPUT_COOPERATIVE_CLASS_NAME[] = TEXT("AqInputCooperative");
 		}
 
 
@@ -28,6 +32,8 @@ namespace aq
 			: hInstance_(hInstance)
 			, nCmdShow_(nCmdShow)
 			, hWnd_(nullptr)
+			, parentWnd_(nullptr)
+			, inputCooperativeWnd_(nullptr)
 			, userDataDirectory_()
 			, userDataDirectoryResolved_(false)
 		{
@@ -36,6 +42,11 @@ namespace aq
 
 		PlatformWin32::~PlatformWin32()
 		{
+			if (inputCooperativeWnd_ && ::IsWindow(inputCooperativeWnd_))
+			{
+				::DestroyWindow(inputCooperativeWnd_);
+			}
+			inputCooperativeWnd_ = nullptr;
 		}
 
 
@@ -54,18 +65,104 @@ namespace aq
 			};
 			RegisterClassEx(&wc);
 
-			RECT rc = { 0, 0, static_cast<LONG>(desc.width), static_cast<LONG>(desc.height) };
-			AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-			hWnd_ = CreateWindow(
-				TEXT("Application"), TEXT("Application"),
-				WS_OVERLAPPEDWINDOW, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
-				nullptr, nullptr, hInstance_, nullptr
-			);
+			parentWnd_ = static_cast<HWND>(desc.parentWindow);
+			if (parentWnd_)
+			{
+				// 外部エディタへの埋め込み: 親のクライアント全面に子ウィンドウとして作る。
+				// WS_VISIBLE で表示されるので ShowWindow は呼ばない。リサイズには追従しない。
+				RECT rc = {};
+				::GetClientRect(parentWnd_, &rc);
+				hWnd_ = CreateWindow(
+					TEXT("Application"), TEXT("Application"),
+					WS_CHILD | WS_VISIBLE, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
+					parentWnd_, nullptr, hInstance_, nullptr
+				);
+				if (hWnd_ == nullptr)
+				{
+					return false;
+				}
 
-			ShowWindow(hWnd_, nCmdShow_);
+				// DirectInput の協調ウィンドウは子ウィンドウにできないので、別に用意しておく。
+				if (!CreateInputCooperativeWindow())
+				{
+					return false;
+				}
+			}
+			else
+			{
+				RECT rc = { 0, 0, static_cast<LONG>(desc.width), static_cast<LONG>(desc.height) };
+				AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
+				hWnd_ = CreateWindow(
+					TEXT("Application"), TEXT("Application"),
+					WS_OVERLAPPEDWINDOW, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
+					nullptr, nullptr, hInstance_, nullptr
+				);
+
+				ShowWindow(hWnd_, nCmdShow_);
+			}
 
 			out.handle = hWnd_;
 			return hWnd_ != nullptr;
+		}
+
+
+		bool PlatformWin32::CreateInputCooperativeWindow()
+		{
+			// 1x1 の WS_POPUP を作り、表示はしない(ShowWindow を呼ばない)。
+			// 入力を受けるためではなく、DirectInput に協調レベルを設定する先としてだけ使う。
+			WNDCLASSEX wc = {};
+			wc.cbSize        = sizeof(WNDCLASSEX);
+			wc.lpfnWndProc   = DefWindowProc;
+			wc.hInstance     = GetModuleHandle(nullptr);
+			wc.lpszClassName = INPUT_COOPERATIVE_CLASS_NAME;
+			RegisterClassEx(&wc);
+
+			inputCooperativeWnd_ = CreateWindowEx(
+				WS_EX_TOOLWINDOW, INPUT_COOPERATIVE_CLASS_NAME, INPUT_COOPERATIVE_CLASS_NAME,
+				WS_POPUP, 0, 0, 1, 1,
+				nullptr, nullptr, hInstance_, nullptr
+			);
+			return inputCooperativeWnd_ != nullptr;
+		}
+
+
+		bool PlatformWin32::HasInputFocus() const
+		{
+			// 埋め込みでないときは従来どおり、フォーカスに関係なく入力を読む。
+			if (!parentWnd_)
+			{
+				return true;
+			}
+
+			// 前面ウィンドウとキーボードフォーカスは別物なので、前面のスレッドのフォーカス先を見る。
+			// プロセスを跨ぐ親子ウィンドウは入力キューが結合されるので、エディタ側のスレッドの
+			// 情報としてゲームの子ウィンドウが見える。
+			const HWND foreground = ::GetForegroundWindow();
+			if (foreground == nullptr)
+			{
+				return false;
+			}
+			const DWORD threadId = ::GetWindowThreadProcessId(foreground, nullptr);
+
+			GUITHREADINFO info = {};
+			info.cbSize = sizeof(GUITHREADINFO);
+			if (!::GetGUIThreadInfo(threadId, &info))
+			{
+				return false;
+			}
+			if (info.hwndFocus == nullptr)
+			{
+				return false;
+			}
+			return info.hwndFocus == hWnd_ || ::IsChild(hWnd_, info.hwndFocus);
+		}
+
+
+		aq::graphics::NativeWindowHandle PlatformWin32::GetInputCooperativeWindow() const
+		{
+			aq::graphics::NativeWindowHandle handle;
+			handle.handle = inputCooperativeWnd_ ? inputCooperativeWnd_ : hWnd_;
+			return handle;
 		}
 
 
@@ -127,6 +224,14 @@ namespace aq
 
 		LRESULT CALLBACK PlatformWin32::MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		{
+			// 埋め込み(子ウィンドウ)はクリックしても自動ではキーボードフォーカスを取らないので、自分で取る。
+			// ImGui に渡す前に済ませる(ImGui が処理済みとして返しても取れるように)。
+			if ((msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN)
+			 && (::GetWindowLongPtr(hWnd, GWL_STYLE) & WS_CHILD))
+			{
+				::SetFocus(hWnd);
+			}
+
 #ifdef AQ_IMGUI
 			if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
 			{

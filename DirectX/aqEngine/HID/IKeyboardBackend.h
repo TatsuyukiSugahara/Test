@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include "Graphics/GraphicsTypes.h"   // NativeWindowHandle
+#include "HID/InputWindowDesc.h"      // InputWindowDesc
 
 namespace aq
 {
@@ -35,8 +35,8 @@ namespace aq
 		public:
 			virtual ~IKeyboardBackend() = default;
 
-			// デバイスを初期化する。window は協調レベル設定などに使う。成功で true。
-			virtual bool Initialize(aq::graphics::NativeWindowHandle window) = 0;
+			// デバイスを初期化する。desc は協調レベル設定などに使う。成功で true。
+			virtual bool Initialize(const InputWindowDesc& desc) = 0;
 
 			// キーボードをポーリングし、状態を out に書き込む(未取得なら全ゼロ)。
 			virtual void Poll(KeyboardState& out) = 0;

@@ -10,7 +10,7 @@ namespace aq
 		class NullKeyboardBackend : public IKeyboardBackend
 		{
 		public:
-			bool Initialize(aq::graphics::NativeWindowHandle /*window*/) override { return true; }
+			bool Initialize(const InputWindowDesc& /*desc*/) override { return true; }
 			void Poll(KeyboardState& out) override { out = {}; }
 		};
 	}

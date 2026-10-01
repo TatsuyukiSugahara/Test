@@ -8,7 +8,8 @@
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow)
 {
 	UNREFERENCED_PARAMETER(hPrevInstance);
-	UNREFERENCED_PARAMETER(lpCmdLine);
+
+	int exitCode = 0;
 
 	// スコープで囲むのは、リーク報告(ShutdownMemory)を platform の破棄より後に出すため。
 	{
@@ -16,7 +17,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 		aq::Engine::Create();
 		aq::Engine& engineInstance = aq::Engine::Get();
-		engineInstance.SetAppModule(std::make_unique<sample::Application>());
+		sample::RegisterAppModules(engineInstance.GetAppModuleRegistry());
 
 		aq::InitializeParameter initializeParameter;
 		initializeParameter.platform     = &platform;
@@ -26,15 +27,20 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		initializeParameter.renderHeight = 720;
 		// "Assets/..." をこのプロジェクトの Sample/Assets/ へ向ける。
 		initializeParameter.gameRootName = "Sample";
+		// 起動引数(-app= / -mode= / -editor-port= / -parent-hwnd=)。lpCmdLine はプログラム名を含まない
+		initializeParameter.launch = aq::LaunchOptions::ParseCommandLine(lpCmdLine);
 
+		// 初期化に失敗したら終了コード 1 を返す(エディタなど起動した側が失敗を判別できるように)。
 		if (engineInstance.Initialize(initializeParameter)) {
 			engineInstance.RunGame();
+		} else {
+			exitCode = 1;
 		}
 		engineInstance.Finalize();
 		aq::Engine::Release();
 	}
 
 	aq::ShutdownMemory();
-	return 0;
+	return exitCode;
 }
 #endif // AQ_PLATFORM_WIN32

@@ -6,7 +6,7 @@
 #include "Application.h"
 #include "Platform/Mac/PlatformMac.h"
 
-int main(int /*argc*/, const char* /*argv*/[])
+int main(int argc, const char* argv[])
 {
 	@autoreleasepool
 	{
@@ -20,7 +20,7 @@ int main(int /*argc*/, const char* /*argv*/[])
 
 		aq::Engine::Create();
 		aq::Engine& engineInstance = aq::Engine::Get();
-		engineInstance.SetAppModule(std::make_unique<sample::Application>());
+		sample::RegisterAppModules(engineInstance.GetAppModuleRegistry());
 
 		aq::InitializeParameter initializeParameter;
 		initializeParameter.platform     = &platform;
@@ -30,6 +30,8 @@ int main(int /*argc*/, const char* /*argv*/[])
 		initializeParameter.renderHeight = 720;
 		// "Assets/..." をこのプロジェクトの Sample/Assets/ へ向ける。
 		initializeParameter.gameRootName = "Sample";
+		// 起動引数(-app= / -mode= / -editor-port=)。argv[0] はプログラム名として読み飛ばされる
+		initializeParameter.launch = aq::LaunchOptions::Parse(argc, argv);
 
 		if (engineInstance.Initialize(initializeParameter)) {
 			engineInstance.RunGame();

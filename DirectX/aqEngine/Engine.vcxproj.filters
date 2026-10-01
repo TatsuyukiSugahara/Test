@@ -235,6 +235,12 @@
     <ClCompile Include="Core\DebugUI.cpp">
       <Filter>Core</Filter>
     </ClCompile>
+    <ClCompile Include="Core\LaunchOptions.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\AppModuleRegistry.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
     <ClCompile Include="Component\AnimationComponentSystem.cpp">
       <Filter>Component</Filter>
     </ClCompile>
@@ -874,6 +880,12 @@
     <ClInclude Include="Core\IDebugRenderable.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="Core\LaunchOptions.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\AppModuleRegistry.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Component\AnimationComponentSystem.h">
       <Filter>Component</Filter>
     </ClInclude>
@@ -1205,6 +1217,9 @@
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\IKeyboardBackend.h">
+      <Filter>HID</Filter>
+    </ClInclude>
+    <ClInclude Include="HID\InputWindowDesc.h">
       <Filter>HID</Filter>
     </ClInclude>
     <ClInclude Include="HID\XInputPadBackend.h">

@@ -10,6 +10,8 @@
 #include "Memory/MemoryManager.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Util/GameTimer.h"
+#include "Core/LaunchOptions.h"
+#include "Core/AppModuleRegistry.h"
 #include <future>
 #include <memory>
 
@@ -17,7 +19,6 @@
 namespace aq
 {
 	class IApplication;
-	class IAppModule;
 
 	/**
 	 * メモリ管理を畳む(Debug ではリーク報告もここで出る)。
@@ -49,6 +50,12 @@ namespace aq
 		 * (設計書/使いやすさ改善設計.md P3-A)。
 		 */
 		const char* gameRootName = "Game";
+
+		/**
+		 * 起動引数(-app= / -mode= / -editor-port= / -parent-hwnd=)。
+		 * Win32 は lpCmdLine、Mac は argv を LaunchOptions で解釈して入れる。他は既定値のまま。
+		 */
+		aq::LaunchOptions launch;
 	};
 
 	class Engine
@@ -66,8 +73,13 @@ namespace aq
 		uint32_t renderHeight_;
 
 		IApplication* application_;
-		/** Initialize で AppHost へ渡すモジュール(SetAppModule で設定) */
-		std::unique_ptr<IAppModule> appModule_;
+
+		/** 起動できるモジュールの一覧(エントリが Initialize より前に登録する) */
+		AppModuleRegistry appModuleRegistry_;
+		/** Initialize で受け取った起動引数 */
+		LaunchOptions     launchOptions_;
+		/** Initialize がモジュール生成を越えてサブシステムを作り始めたか(Finalize で畳む範囲の判定) */
+		bool              subsystemsStarted_ = false;
 
 		aq::util::GameTimer gameTimer_;
 
@@ -186,10 +198,28 @@ namespace aq
 
 	public:
 		/**
-		 * 動かすモジュールを設定する。Initialize より前に 1 回だけ呼ぶ。
-		 * Initialize の先頭で AppHost を生成し、このモジュールを所有させる。
+		 * 起動できるモジュールの登録先。エントリが Initialize より前に登録する。
+		 * Initialize が起動引数 -app= の名前(省略時は登録順の先頭)で生成し、AppHost に所有させる。
 		 */
-		void SetAppModule(std::unique_ptr<IAppModule> module);
+		inline AppModuleRegistry& GetAppModuleRegistry() { return appModuleRegistry_; }
+
+		/** Initialize で受け取った起動引数 */
+		inline const LaunchOptions& GetLaunchOptions() const { return launchOptions_; }
+
+		/** 外部エディタのウィンドウへ子ウィンドウとして埋め込まれているか(Win32 のみ) */
+		bool IsEmbedded() const;
+
+		/**
+		 * ゲームのウィンドウがキーボードフォーカスを持っているか。
+		 * 埋め込みでないときは常に true(従来どおりフォーカス外でも入力を読む)。
+		 */
+		bool HasInputFocus() const;
+
+		/**
+		 * 入力デバイスの協調レベル設定に使うウィンドウ。
+		 * 埋め込み時は入力協調用の非表示ウィンドウ、それ以外はメインウィンドウ。
+		 */
+		aq::graphics::NativeWindowHandle GetInputCooperativeWindow() const;
 
 	private:
 		static Engine* instance_;

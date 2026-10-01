@@ -63,7 +63,7 @@
 
 	aq::Engine::Create();
 	aq::Engine& engineInstance = aq::Engine::Get();
-	engineInstance.SetAppModule(std::make_unique<app::Application>());
+	app::RegisterAppModules(engineInstance.GetAppModuleRegistry());
 
 	aq::InitializeParameter initializeParameter;
 	initializeParameter.platform     = platform_;

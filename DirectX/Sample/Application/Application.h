@@ -1,6 +1,8 @@
 #pragma once
 #include "Core/AppHost.h"
 
+namespace aq { class AppModuleRegistry; }
+
 namespace sample
 {
 	/**
@@ -17,4 +19,10 @@ namespace sample
 	protected:
 		bool OnInitialize(aq::AppHost& host) override;
 	};
+
+
+	/**
+	 * このプロジェクトのモジュールをレジストリへ登録する。エントリが Engine::Initialize より前に呼ぶ
+	 */
+	void RegisterAppModules(aq::AppModuleRegistry& registry);
 }

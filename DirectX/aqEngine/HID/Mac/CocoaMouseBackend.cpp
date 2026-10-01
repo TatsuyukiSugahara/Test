@@ -9,7 +9,7 @@ namespace aq
 {
 	namespace hid
 	{
-		bool CocoaMouseBackend::Initialize(aq::graphics::NativeWindowHandle /*window*/)
+		bool CocoaMouseBackend::Initialize(const InputWindowDesc& /*desc*/)
 		{
 			// 開くデバイスが無い(理由は CocoaKeyboardBackend::Initialize と同じ)。
 			return true;

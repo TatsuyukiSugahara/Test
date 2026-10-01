@@ -84,10 +84,6 @@ namespace
 
 int main(int argc, const char* argv[])
 {
-	// UNREFERENCED_PARAMETER は windows.h の定義なので Mac では使えない。
-	(void)argc;
-	(void)argv;
-
 	// .app 単体起動の下ごしらえ。Vulkan ローダーが ICD を読むのも、起動診断ログを
 	// CWD へ開くのも、この後の処理なので**最初に**行う。
 	SetupBundleEnvironment();
@@ -112,7 +108,7 @@ int main(int argc, const char* argv[])
 		aq::StartupMark("main");
 		aq::Engine::Create();
 		aq::Engine& engineInstance = aq::Engine::Get();
-		engineInstance.SetAppModule(std::make_unique<app::Application>());
+		app::RegisterAppModules(engineInstance.GetAppModuleRegistry());
 
 		aq::InitializeParameter initializeParameter;
 		initializeParameter.platform = &platform;
@@ -120,6 +116,8 @@ int main(int argc, const char* argv[])
 		initializeParameter.screenHeight = 720;
 		initializeParameter.renderWidth = 1280;
 		initializeParameter.renderHeight = 720;
+		// 起動引数(-app= / -mode= / -editor-port=)。argv[0] はプログラム名として読み飛ばされる
+		initializeParameter.launch = aq::LaunchOptions::Parse(argc, argv);
 		if (engineInstance.Initialize(initializeParameter)) {
 			engineInstance.RunGame();
 		}

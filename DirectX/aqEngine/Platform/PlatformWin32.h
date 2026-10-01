@@ -17,6 +17,14 @@ namespace aq
 			int       nCmdShow_;
 			HWND      hWnd_;
 
+			/** 埋め込み先の親(外部エディタ)。nullptr なら通常のトップレベルウィンドウ */
+			HWND      parentWnd_;
+			/**
+			 * 入力協調用の非表示トップレベルウィンドウ(埋め込み時のみ)。
+			 * DirectInput は子ウィンドウを協調ウィンドウとして受け付けないため、代わりにこれを渡す。
+			 */
+			HWND      inputCooperativeWnd_;
+
 			/** ユーザーデータの書き込み先(末尾セパレータ付き)。初回要求時に解決してキャッシュする */
 			std::string userDataDirectory_;
 			bool        userDataDirectoryResolved_;
@@ -30,6 +38,12 @@ namespace aq
 			bool PumpEvents() override;
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
+			bool HasInputFocus() const override;
+			aq::graphics::NativeWindowHandle GetInputCooperativeWindow() const override;
+
+		private:
+			/** 入力協調用の非表示ウィンドウを作る(埋め込み時のみ呼ぶ) */
+			bool CreateInputCooperativeWindow();
 
 		private:
 			static LRESULT CALLBACK MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

@@ -17,7 +17,7 @@ namespace aq
 		class CocoaKeyboardBackend : public IKeyboardBackend
 		{
 		public:
-			bool Initialize(aq::graphics::NativeWindowHandle window) override;
+			bool Initialize(const InputWindowDesc& desc) override;
 			void Poll(KeyboardState& out) override;
 		};
 	}

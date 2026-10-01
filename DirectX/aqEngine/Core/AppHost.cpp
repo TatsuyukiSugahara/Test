@@ -603,6 +603,13 @@ namespace aq
 			aq::hid::InputManager::Get().SuppressMouse(io.WantCaptureMouse);
 		}
 #endif
+		// 埋め込み時は、ゲームの子ウィンドウがキーボードフォーカスを持たない間(エディタ側を操作中)の
+		// 入力を止める。ImGui の有無に依らず、パッドも含めて効かせるため AQ_IMGUI の外に置く。
+		// 通常起動では立てない(フォーカス外でもパッドを読める従来の挙動を保つ)。
+		if (Engine::Get().IsEmbedded())
+		{
+			aq::hid::InputManager::Get().SetFocusBlocked(!Engine::Get().HasInputFocus());
+		}
 		{ AQ_PROFILE_SCOPE("Input::Update"); aq::hid::InputManager::Get().Update(); }
 		{
 			AQ_PROFILE_SCOPE("EntityContext::Update");

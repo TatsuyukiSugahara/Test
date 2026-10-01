@@ -279,4 +279,14 @@ namespace app
 		aq::AppHost::Get().GetRenderThread().Submit(std::move(offscreenCmdList), aq::rendering::RenderTargetHandle{},
 		                                            offscreenFrame.lighting, offscreenFrame.shadow);
 	}
+
+
+	void RegisterAppModules(aq::AppModuleRegistry& registry)
+	{
+		// 名前は Application::GetName と揃える(起動引数 -app= と照合する)
+		registry.Register("AquaDash", []
+			{
+				return std::make_unique<Application>();
+			});
+	}
 }

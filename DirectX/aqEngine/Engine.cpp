@@ -51,10 +51,30 @@ namespace aq
 	}
 
 
-	void Engine::SetAppModule(std::unique_ptr<IAppModule> module)
+	bool Engine::IsEmbedded() const
 	{
-		EngineAssert(application_ == nullptr);
-		appModule_ = std::move(module);
+#if defined(AQ_PLATFORM_WIN32)
+		return launchOptions_.parentWindow != 0;
+#else
+		return false;
+#endif // AQ_PLATFORM_WIN32
+	}
+
+
+	bool Engine::HasInputFocus() const
+	{
+		return platform_ ? platform_->HasInputFocus() : true;
+	}
+
+
+	aq::graphics::NativeWindowHandle Engine::GetInputCooperativeWindow() const
+	{
+		// プラットフォームが専用のウィンドウを持たない(nullptr を返す)ときはメインウィンドウを使う
+		aq::graphics::NativeWindowHandle window;
+		if (platform_) {
+			window = platform_->GetInputCooperativeWindow();
+		}
+		return window.handle ? window : window_;
 	}
 
 
@@ -63,15 +83,56 @@ namespace aq
 		platform_ = initializeParameter.platform;
 		EngineAssert(platform_);
 
-		// 土台(AppHost)を生成し、SetAppModule で受け取ったモジュールを所有させる。
+		launchOptions_ = initializeParameter.launch;
+		aq::StartupMarkf("  [engine] launch: app=%s mode=%s editor-port=%u parent-hwnd=0x%llx",
+			launchOptions_.appName.empty() ? "(default)" : launchOptions_.appName.c_str(),
+			(launchOptions_.mode == LaunchMode::Edit) ? "edit" : "play",
+			static_cast<uint32_t>(launchOptions_.editorPort),
+			static_cast<unsigned long long>(launchOptions_.parentWindow));
+		if (launchOptions_.mode == LaunchMode::Edit) {
+			aq::StartupMarkf("  [engine] -mode=edit is not implemented yet; running as play");
+		}
+#if !defined(AQ_PLATFORM_WIN32)
+		if (launchOptions_.parentWindow != 0) {
+			aq::StartupMarkf("  [engine] -parent-hwnd is supported only on Win32; ignored");
+		}
+#endif // !AQ_PLATFORM_WIN32
+
+#if defined(AQ_PLATFORM_WIN32)
+		// 親ウィンドウの検証はモジュール生成より前に行う。ここで失敗すれば Finalize は何も触らずに戻れる
+		// (ウィンドウ生成の段階で失敗すると、未生成のサブシステムを Finalize が触ってしまう)。
+		if (IsEmbedded()) {
+			const HWND parent = reinterpret_cast<HWND>(launchOptions_.parentWindow);
+			RECT rc = {};
+			if (!::IsWindow(parent) || !::GetClientRect(parent, &rc)
+			 || rc.right - rc.left <= 0 || rc.bottom - rc.top <= 0) {
+				aq::StartupMarkf("  [engine] invalid -parent-hwnd 0x%llx FAILED",
+					static_cast<unsigned long long>(launchOptions_.parentWindow));
+				return false;
+			}
+		}
+#endif // AQ_PLATFORM_WIN32
+
+		// 起動引数 -app= の名前(省略時は登録順の先頭)でモジュールを生成し、土台(AppHost)に所有させる。
+		// 見つからなければ別のアプリで黙って動かさず、初期化失敗にする(エディタからの起動ミスに気付けるように)。
 		// 旧 CreateApplication と同じく、メモリマネージャ初期化より前の生成になる。
 		EngineAssertMsg(application_ == nullptr, "Engine::Initialize: application already created");
-		EngineAssertMsg(appModule_ != nullptr, "Engine::Initialize: SetAppModule must be called before Initialize");
-		if (!appModule_) {
-			aq::StartupLog("  [engine] no app module FAILED");
+		std::unique_ptr<IAppModule> module = appModuleRegistry_.Create(launchOptions_.appName);
+		if (!module) {
+			std::string names;
+			for (const std::string& name : appModuleRegistry_.GetNames()) {
+				if (!names.empty()) {
+					names += ", ";
+				}
+				names += name;
+			}
+			aq::StartupMarkf("  [engine] app module not found: %s (registered: %s) FAILED",
+				launchOptions_.appName.empty() ? "(default)" : launchOptions_.appName.c_str(),
+				names.empty() ? "none" : names.c_str());
 			return false;
 		}
-		application_ = new AppHost(std::move(appModule_));
+		application_       = new AppHost(std::move(module));
+		subsystemsStarted_ = true;
 
 		// メモリマネージャを最初に初期化することで、ウィンドウ・グラフィクス初期化中の
 		// new/delete もエンジンアロケータ管理下に置く。
@@ -146,6 +207,11 @@ namespace aq
 
 	void Engine::Finalize()
 	{
+		// モジュールの生成で失敗したときは、まだ何も作っていない(下の Get() は生成前だと落ちる)。
+		if (!subsystemsStarted_) {
+			return;
+		}
+
 		if (application_) {
 			application_->Finalize();
 			delete application_;
@@ -325,6 +391,28 @@ namespace aq
 		aq::platform::WindowDesc desc;
 		desc.width  = initializeParameter.screenWidth;
 		desc.height = initializeParameter.screenHeight;
+
+#if defined(AQ_PLATFORM_WIN32)
+		// 埋め込み時は親のクライアント全面に子ウィンドウを作るので、スクリーンサイズも親に合わせる。
+		// レンダー解像度は引数のまま(オフスクリーン RT から拡縮して提示する)。
+		// 親のリサイズには追従しない(起動時の大きさで固定)。
+		if (IsEmbedded()) {
+			const HWND parent = reinterpret_cast<HWND>(launchOptions_.parentWindow);
+			RECT rc = {};
+			if (!::IsWindow(parent) || !::GetClientRect(parent, &rc)
+			 || rc.right - rc.left <= 0 || rc.bottom - rc.top <= 0) {
+				aq::StartupMarkf("  [engine] invalid -parent-hwnd 0x%llx FAILED",
+					static_cast<unsigned long long>(launchOptions_.parentWindow));
+				return false;
+			}
+			screenWidth_      = static_cast<uint32_t>(rc.right - rc.left);
+			screenHeight_     = static_cast<uint32_t>(rc.bottom - rc.top);
+			desc.width        = static_cast<int32_t>(screenWidth_);
+			desc.height       = static_cast<int32_t>(screenHeight_);
+			desc.parentWindow = parent;
+		}
+#endif // AQ_PLATFORM_WIN32
+
 		return platform_->CreateMainWindow(desc, window_);
 	}
 

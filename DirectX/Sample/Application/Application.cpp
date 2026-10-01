@@ -38,4 +38,14 @@ namespace sample
 
 		return true;
 	}
+
+
+	void RegisterAppModules(aq::AppModuleRegistry& registry)
+	{
+		// 名前は Application::GetName と揃える(起動引数 -app= と照合する)
+		registry.Register("Sample", []
+			{
+				return std::make_unique<Application>();
+			});
+	}
 }

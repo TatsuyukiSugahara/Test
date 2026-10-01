@@ -64,7 +64,7 @@ namespace aq
 		}
 
 
-		bool DirectInputKeyboardBackend::Initialize(aq::graphics::NativeWindowHandle window)
+		bool DirectInputKeyboardBackend::Initialize(const InputWindowDesc& desc)
 		{
 			if (FAILED(DirectInput8Create(
 				GetModuleHandle(nullptr), DIRECTINPUT_VERSION,
@@ -75,7 +75,10 @@ namespace aq
 				return false;
 			if (FAILED(device_->SetDataFormat(&c_dfDIKeyboard)))
 				return false;
-			if (FAILED(device_->SetCooperativeLevel(static_cast<HWND>(window.handle), DISCL_NONEXCLUSIVE | DISCL_FOREGROUND)))
+			// 埋め込み時は子ウィンドウを協調ウィンドウにできないため、別の非表示ウィンドウへ
+			// バックグラウンドで設定する(フォーカスの判定は InputManager 側で行う)。
+			const DWORD focusFlag = desc.background ? DISCL_BACKGROUND : DISCL_FOREGROUND;
+			if (FAILED(device_->SetCooperativeLevel(static_cast<HWND>(desc.cooperativeWindow.handle), DISCL_NONEXCLUSIVE | focusFlag)))
 				return false;
 			device_->Acquire();
 			return true;

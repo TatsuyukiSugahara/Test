@@ -14,6 +14,10 @@ namespace aq
 			int32_t     width  = 1280;
 			int32_t     height = 720;
 			const char* title  = "Application";
+
+			// 埋め込み先の親ウィンドウ(Win32 の HWND)。nullptr なら通常のトップレベルウィンドウ。
+			// 指定時は子ウィンドウとして親のクライアント全面に作る(外部エディタへの埋め込み用)。
+			void*       parentWindow = nullptr;
 		};
 
 		// プラットフォーム抽象。
@@ -69,6 +73,16 @@ namespace aq
 			// スワップチェーンを作り直してから次のフレームへ進む。
 			// 同じ窓を使い続けるプラットフォームでは起こらないので既定は false。
 			virtual bool ConsumeSurfaceChanged(aq::graphics::NativeWindowHandle& /*out*/) { return false; }
+
+			// ゲームのウィンドウがキーボードフォーカスを持っているか。
+			// 埋め込み(子ウィンドウ)時に、エディタ側を操作している間の入力を止めるのに使う。
+			// 埋め込みを持たないプラットフォームでは常に true(従来どおり)。
+			virtual bool HasInputFocus() const { return true; }
+
+			// 入力デバイスの協調レベル設定に使うウィンドウ。
+			// 既定はメインウィンドウ。ここでは空のハンドルを返し、Engine がメインウィンドウへ読み替える
+			// (Engine::GetInputCooperativeWindow)。メインウィンドウでは足りない実装だけが override する。
+			virtual aq::graphics::NativeWindowHandle GetInputCooperativeWindow() const { return {}; }
 
 			// アセット読み込みの基点パス。
 			// Win32: ソースツリー / 実行ディレクトリ、UWP: パッケージ install フォルダ。

@@ -9,7 +9,7 @@ namespace aq
 {
 	namespace hid
 	{
-		bool CocoaKeyboardBackend::Initialize(aq::graphics::NativeWindowHandle /*window*/)
+		bool CocoaKeyboardBackend::Initialize(const InputWindowDesc& /*desc*/)
 		{
 			// Cocoa ではイベント配送を NSApplication が行うため、開くデバイスが無い。
 			// 協調レベルの設定(DirectInput の SetCooperativeLevel 相当)も不要。

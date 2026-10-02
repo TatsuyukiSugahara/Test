@@ -18,7 +18,7 @@
 
 namespace aq
 {
-	class IApplication;
+	class AppHost;
 
 	/**
 	 * メモリ管理を畳む(Debug ではリーク報告もここで出る)。
@@ -72,7 +72,7 @@ namespace aq
 		uint32_t renderWidth_;
 		uint32_t renderHeight_;
 
-		IApplication* application_;
+		AppHost* appHost_;
 
 		/** 起動できるモジュールの一覧(エントリが Initialize より前に登録する) */
 		AppModuleRegistry appModuleRegistry_;

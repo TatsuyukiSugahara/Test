@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "AquaDashStates.h"
-#include "Application.h"
+#include "GameModule.h"
 #include "UI/AquaDashScreens.h"
 #include "GameInput.h"
 #include "GameAction.h"
@@ -1841,7 +1841,7 @@ namespace app
 			// up を +Z に取ると RT は「画面右=+X / 画面上=+Z」になり、
 			// SetMinimapMarker の u=+X / v=-Z (下+) と一致する。
 			auto* screen = static_cast<InGameScreen*>(aq::ui::UIContext::Get().Screens().Top());
-			const bool minimapReady = session->minimapHalfExtent > 1.0f && app::Application::IsAvailable();
+			const bool minimapReady = session->minimapHalfExtent > 1.0f && app::GameModule::IsAvailable();
 			if (minimapReady)
 			{
 				// 俯瞰は正射影なので高さは構図に影響しない。地形 (最大約 31m) とループを
@@ -1863,12 +1863,12 @@ namespace app
 				camera->SetOrthographic(span, span);
 
 				// RETRY / ステージ再入場でもここを通るので毎回ベイクし直す。
-				app::Application& application = app::Application::Get();
-				application.RequestMinimapBake();
+				app::GameModule& gameModule = app::GameModule::Get();
+				gameModule.RequestMinimapBake();
 
 				if (screen) {
 					screen->SetMinimapTexture(aq::graphics::GraphicsDevice::Get()
-						.GetRenderTargetSRVShared(application.GetMinimapRT()));
+						.GetRenderTargetSRVShared(gameModule.GetMinimapRT()));
 				}
 			}
 			else if (screen)

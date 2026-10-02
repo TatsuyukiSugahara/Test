@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include "Application.h"
+#include "GameModule.h"
 #include "GameFlow.h"
 #include "Rendering/Pipeline/PipelineBuilder.h"
 #include "Rendering/Pipeline/Passes/GBufferPass.h"
@@ -27,26 +27,26 @@
 
 namespace app
 {
-	Application* Application::instance_ = nullptr;
+	GameModule* GameModule::instance_ = nullptr;
 
 	// 輪郭線の色（海と空に馴染む濃紺。真っ黒はコースの陰と区別が付かない）。
-	const aq::math::Vector3 Application::OUTLINE_COLOR = aq::math::Vector3(0.02f, 0.06f, 0.12f);
+	const aq::math::Vector3 GameModule::OUTLINE_COLOR = aq::math::Vector3(0.02f, 0.06f, 0.12f);
 
 
 	// unique_ptr<aq::sound::SoundStream> の破棄に完全型が必要なため、ここで定義する。
-	Application::Application()
+	GameModule::GameModule()
 	{
 		instance_ = this;
 	}
 
 
-	Application::~Application()
+	GameModule::~GameModule()
 	{
 		instance_ = nullptr;
 	}
 
 
-	bool Application::OnInitialize(aq::AppHost& host)
+	bool GameModule::OnInitialize(aq::AppHost& host)
 	{
 		// ミニマップ用の俯瞰オフスクリーン。メインとは別の 2 本目のパイプラインを組む。
 		// 縮小 GBuffer はこの列の GBufferPass が 512x512 で作るので、メイン解像度の深度と混ざらない。
@@ -132,7 +132,7 @@ namespace app
 	}
 
 
-	void Application::OnFinalize()
+	void GameModule::OnFinalize()
 	{
 #ifdef AQ_DEBUG_IMGUI
 		if (audioPanel_ && aq::DebugUI::IsAvailable()) {
@@ -149,7 +149,7 @@ namespace app
 	}
 
 
-	void Application::OnUpdate()
+	void GameModule::OnUpdate()
 	{
 		app::GameFlow::Get().Update(aq::Engine::GetDeltaTime());
 
@@ -201,7 +201,7 @@ namespace app
 	}
 
 
-	void Application::OnRegister()
+	void GameModule::OnRegister()
 	{
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CharacterSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::ActorStateMachineSystem>();
@@ -241,7 +241,7 @@ namespace app
 	}
 
 
-	void Application::OnPreRender()
+	void GameModule::OnPreRender()
 	{
 		// ミニマップの俯瞰ベイク。要求が立ったフレームだけシーンをもう 1 回描く
 		// (ロード完了時の 1 回きりなので走行中のコストはゼロ)。
@@ -283,10 +283,10 @@ namespace app
 
 	void RegisterAppModules(aq::AppModuleRegistry& registry)
 	{
-		// 名前は Application::GetName と揃える(起動引数 -app= と照合する)
+		// 名前は GameModule::GetName と揃える(起動引数 -app= と照合する)
 		registry.Register("AquaDash", []
 			{
-				return std::make_unique<Application>();
+				return std::make_unique<GameModule>();
 			});
 	}
 }

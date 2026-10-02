@@ -3,7 +3,7 @@
 // 担うため、それ以外の構成では空 TU になる(同一プロジェクトに 2 つのエントリを共存させないため)。
 #if defined(AQ_PLATFORM_MAC)
 #import <Cocoa/Cocoa.h>
-#include "Application.h"
+#include "GameModule.h"
 #include "Platform/Mac/PlatformMac.h"
 #include <cstdlib>
 

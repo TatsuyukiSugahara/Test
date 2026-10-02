@@ -368,7 +368,7 @@ otool -l /tmp/Game.app/Contents/MacOS/Game | grep -A2 LC_RPATH
 | 5 | `_TRUNCATE` が未定義 | `strncpy_s` の残り。`std::snprintf(buf, sizeof(buf), "%s", …)` へ |
 | 6 | リンクで **D3D12 の未定義シンボル** | CMake が `ENGINE_GRAPHICS_Vulkan` を定義していた(コードは `_VULKAN`)。D3D11/D3D12 は元から大文字なので Vulkan 構成でしか出ない |
 | 7 | `.mm` で `@interface` が壊れる / `BOOL` の typedef 衝突 | PCH(`aq.h`)→ DirectXTex → スタブ `basetsd.h` が `BOOL`/`interface` を定義。`aq.h` で `__OBJC__` のとき DirectXTex を外す |
-| 8 | `ImGui::NewFrame` で `Invalid DisplaySize` | `ImGui_ImplWin32_NewFrame` が非 Windows で呼ばれない。`Application.cpp` で `DisplaySize`/`DeltaTime` を自前で埋める(P4 で `imgui_impl_osx` へ) |
+| 8 | `ImGui::NewFrame` で `Invalid DisplaySize` | `ImGui_ImplWin32_NewFrame` が非 Windows で呼ばれない。`Application.cpp`(現 `Core/AppHost.cpp`)で `DisplaySize`/`DeltaTime` を自前で埋める(P4 で `imgui_impl_osx` へ) |
 | 9 | validation の `VUID-VkRenderingInfo-pNext-06079/06080` | Retina で drawableSize が 2560x1440。`contentsScale = 1` に固定して 1280x720 に揃える(設計書 §8-13) |
 | 10 | 終了時に validation が `currently in use by VkCommandBuffer` を並べる | GPU の完了を待たずに破棄していた。`Application::Finalize` でレンダースレッド停止直後に `vkDeviceWaitIdle` |
 | 11 | 終了時に VMA が `Some allocations were not freed` でアサート | `void*` への `delete` でデストラクタが走らずテクスチャが漏れていた(リソース 4 型)。`delete static_cast<T*>(data_)` へ |

@@ -8,7 +8,7 @@
 // どちらが実体を持つかはガードマクロが決める(CMake 側の振り分けは不要)。
 #if defined(AQ_PLATFORM_IOS)
 #import <UIKit/UIKit.h>
-#include "Application.h"
+#include "GameModule.h"
 #include "Platform/iOS/PlatformiOS.h"
 
 // 本 TU は手動参照カウント(MRR)前提で書いている。CMake は -fobjc-arc を渡していない。

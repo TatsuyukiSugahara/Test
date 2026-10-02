@@ -449,7 +449,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\AppHost.h" />
-    <ClInclude Include="Core\IApplication.h" />
     <ClInclude Include="Core\IAppModule.h" />
     <ClInclude Include="Core\DebugUI.h" />
     <ClInclude Include="Core\IDebugRenderable.h" />

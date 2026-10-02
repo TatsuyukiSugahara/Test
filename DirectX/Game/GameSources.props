@@ -9,7 +9,7 @@
       <PrecompiledHeaderFile Condition="'$(Platform)'=='x64'">stdafx.h</PrecompiledHeaderFile>
     </ClCompile>
     <ClCompile Include="Application\Actor\StateMachine.cpp" />
-    <ClCompile Include="Application\Application.cpp" />
+    <ClCompile Include="Application\GameModule.cpp" />
     <ClCompile Include="Application\GameFlow.cpp" />
     <ClCompile Include="Application\GameInput.cpp" />
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp" />
@@ -27,7 +27,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application\Actor\StateMachine.h" />
-    <ClInclude Include="Application\Application.h" />
+    <ClInclude Include="Application\GameModule.h" />
     <ClInclude Include="Application\GameFlow.h" />
     <ClInclude Include="Application\GameAction.h" />
     <ClInclude Include="Application\GameInput.h" />

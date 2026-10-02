@@ -1,12 +1,12 @@
 #include "aq.h"
-#include "Application.h"
+#include "SampleModule.h"
 #include "ECS/EntityContext.h"
 #include "Component/TransformComponentSystem.h"
 #include "Component/BodyComponentSystem.h"
 
 namespace sample
 {
-	bool Application::OnInitialize(aq::AppHost& host)
+	bool SampleModule::OnInitialize(aq::AppHost& host)
 	{
 		// 影 / ディファード / ポストプロセス / 空を既定構成で組む。
 		// 個別に設定したいときは aq::RendererPreset を渡す。
@@ -42,10 +42,10 @@ namespace sample
 
 	void RegisterAppModules(aq::AppModuleRegistry& registry)
 	{
-		// 名前は Application::GetName と揃える(起動引数 -app= と照合する)
+		// 名前は SampleModule::GetName と揃える(起動引数 -app= と照合する)
 		registry.Register("Sample", []
 			{
-				return std::make_unique<Application>();
+				return std::make_unique<SampleModule>();
 			});
 	}
 }

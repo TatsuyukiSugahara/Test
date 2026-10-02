@@ -21,7 +21,7 @@
     <ClCompile Include="Application\stdafx.cpp" />
     <ClCompile Include="Application\Main.cpp" />
     <ClCompile Include="Application\UWPMain.cpp" />
-    <ClCompile Include="Application\Application.cpp" />
+    <ClCompile Include="Application\GameModule.cpp" />
     <ClCompile Include="Application\GameInput.cpp" />
     <ClCompile Include="Application\GameFlow.cpp" />
     <ClCompile Include="Application\ECS\ActorComponentSystem.cpp">
@@ -61,7 +61,7 @@
   <ItemGroup>
     <ClInclude Include="Application\stdafx.h" />
     <ClInclude Include="Application\Utility.h" />
-    <ClInclude Include="Application\Application.h" />
+    <ClInclude Include="Application\GameModule.h" />
     <ClInclude Include="Application\GameAction.h" />
     <ClInclude Include="Application\GameInput.h" />
     <ClInclude Include="Application\GameFlow.h" />

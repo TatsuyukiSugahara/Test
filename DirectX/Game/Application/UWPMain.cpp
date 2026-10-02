@@ -3,7 +3,7 @@
 #if defined(AQ_PLATFORM_UWP)
 #include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.UI.Core.h>
-#include "Application.h"
+#include "GameModule.h"
 #include "Platform/PlatformUWP.h"
 
 using namespace winrt;

@@ -880,9 +880,6 @@
     <ClInclude Include="Core\AppHost.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="Core\IApplication.h">
-      <Filter>Core</Filter>
-    </ClInclude>
     <ClInclude Include="Core\IAppModule.h">
       <Filter>Core</Filter>
     </ClInclude>

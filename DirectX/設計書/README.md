@@ -103,7 +103,7 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   `VkQueue` / `VkCommandPool` は外部同期必須。直列描画(`AQ_RENDER_PIPELINED` 無効)では重ならないため
   顕在化していなかった。`queueMutex_` で提出区間を排他。
 - (解決済 2026-09-16)`SpawnSystem` と `HierarcicalTransformSystem` が同一 wave で `parentHandle` を
-  読み書きしていた件は、[Core/Application.cpp](../aqEngine/Core/Application.cpp) で依存を宣言して解消。
+  読み書きしていた件は、[Core/AppHost.cpp](../aqEngine/Core/AppHost.cpp)(旧 Application.cpp)で依存を宣言して解消。
 - (2026-09-30 発見)**依存の経路が無いまま同じ Component やカメラを触る System の組が 7 件ある。**
   うち `ActorStateMachineSystem` ↔ `SpeedCharacterSystem`(`TransformComponent` を両方が書く)と
   `CoinSystem` ↔ `AutoCameraSystem`(`TransformComponent` の書きと読み)は、同じ wave で実際に並列に走っている。
@@ -118,7 +118,7 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   シェーダ生成は `ShaderLoader::Loading`(ワーカー)、メッシュ VB/IB は `RenderSystem::Update`(ワーカー)で
   行っている。4 バックエンドとも生成 API はスレッドセーフなので即バグではないが、規約を
   「生成はどのスレッドでも可、キューとコンテキスト操作だけレンダースレッド」に改めるか実装を寄せるかを決める。
-- **ImGui の接続が Bridge の外に漏れている。** [Core/Application.cpp](../aqEngine/Core/Application.cpp) に
+- **ImGui の接続が Bridge の外に漏れている。** [Core/AppHost.cpp](../aqEngine/Core/AppHost.cpp)(旧 Application.cpp)に
   バックエンド 4 択 / プラットフォーム 5 択の `#if` が計 13 ブロック、
   [ImGuiRenderCommand.cpp](../aqEngine/Rendering/ImGuiRenderCommand.cpp) は `GetImplRaw()` を具象型へキャスト。
   `IGraphicsDeviceImpl` / `IPlatform` に ImGui 用フック(no-op 既定)を足せば消える。

@@ -46,15 +46,15 @@ cmake --build build/macos-ninja-metal --config Release --target Sample
 
 | ファイル | 役割 |
 | --- | --- |
-| `Application.h` / `.cpp` | ゲームの中身。**普段いじるのはここ** |
+| `SampleModule.h` / `.cpp` | ゲームの中身。**普段いじるのはここ** |
 | `Main.cpp` | Windows の起動処理 |
 | `MacMain.mm` | macOS の起動処理 |
 
-`Application.cpp` の `OnInitialize()` がゲームの入口です。やっているのは 3 つだけです。
+`SampleModule.cpp` の `OnInitialize()` がゲームの入口です。やっているのは 3 つだけです。
 
 ```cpp
 // 影 / ディファード / ポストプロセス / 空を既定構成で組む
-SetupStandardRenderers();
+host.SetupStandardRenderers();
 
 // カメラを置く
 aq::Camera* camera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);
@@ -73,7 +73,7 @@ auto entity = aq::ecs::EntityContext::Get().CreateEntity<
 
 ### まず試すこと
 
-`Application.cpp` の `SetColor` の値を変えて、箱の色を変えてみてください。
+`SampleModule.cpp` の `SetColor` の値を変えて、箱の色を変えてみてください。
 
 ```cpp
 entity.GetComponent<aq::ecs::BoxStaticMeshComponent>()
@@ -191,20 +191,20 @@ namespace sample
 
 ### 登録する
 
-`Application.h` に `OnRegister` を足します。
+`SampleModule.h` に `OnRegister` を足します。
 
 ```cpp
 protected:
-    bool OnInitialize() override;
+    bool OnInitialize(aq::AppHost& host) override;
     void OnRegister() override;       // ← 追加
 ```
 
-`Application.cpp` で登録します。
+`SampleModule.cpp` で登録します。
 
 ```cpp
 #include "SpinSystem.h"
 
-void Application::OnRegister()
+void SampleModule::OnRegister()
 {
     aq::ecs::EntityContext::Get().AddSystem<sample::SpinSystem>();
 

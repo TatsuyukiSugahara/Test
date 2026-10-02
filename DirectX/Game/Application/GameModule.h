@@ -11,12 +11,12 @@ namespace app
 	/**
 	 * AquaDash 本体のモジュール。AppHost に所有されて動く
 	 */
-	class Application : public aq::IAppModule
+	class GameModule : public aq::IAppModule
 	{
 	public:
 		// unique_ptr<SoundStream>（不完全型）のため、ctor/dtor は .cpp 側で定義する。
-		Application();
-		~Application();
+		GameModule();
+		~GameModule();
 
 	// ── ミニマップ用オフスクリーンパイプライン（俯瞰スナップショット）──
 	//    メインとは別の 2 本目の RenderPipeline（GBuffer → ライティング → フォワードの 3 パス）。
@@ -69,10 +69,10 @@ namespace app
 
 
 	private:
-		static Application* instance_;
+		static GameModule* instance_;
 
 	public:
-		static Application& Get()   { return *instance_; }
+		static GameModule& Get()   { return *instance_; }
 		static bool IsAvailable()   { return instance_ != nullptr; }
 	};
 

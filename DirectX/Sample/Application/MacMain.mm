@@ -3,7 +3,7 @@
 // それ以外の構成では空 TU になる。
 #if defined(AQ_PLATFORM_MAC)
 #import <Cocoa/Cocoa.h>
-#include "Application.h"
+#include "SampleModule.h"
 #include "Platform/Mac/PlatformMac.h"
 
 int main(int argc, const char* argv[])

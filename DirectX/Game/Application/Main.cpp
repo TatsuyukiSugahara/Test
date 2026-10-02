@@ -2,7 +2,7 @@
 // Win32 デスクトップのエントリ。UWP(Xbox 道A)では UWPMain.cpp、Mac では MacMain.mm が
 // 担うため、それ以外の構成では空 TU になる(同一プロジェクトに 2 つのエントリを共存させないため)。
 #if defined(AQ_PLATFORM_WIN32)
-#include "Application.h"
+#include "GameModule.h"
 #include "Platform/PlatformWin32.h"
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow)

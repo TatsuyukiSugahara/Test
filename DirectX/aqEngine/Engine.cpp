@@ -1,7 +1,6 @@
 #include "aq.h"
 #include "Engine.h"
 #include "Resource/AssetPath.h"
-#include "Core/IApplication.h"
 #include "Core/IAppModule.h"
 #include "Core/AppHost.h"
 #include "Platform/IPlatform.h"
@@ -41,7 +40,7 @@ namespace aq
 		, screenHeight_(0)
 		, renderWidth_(0)
 		, renderHeight_(0)
-		, application_(nullptr)
+		, appHost_(nullptr)
 	{
 	}
 
@@ -116,7 +115,7 @@ namespace aq
 		// 起動引数 -app= の名前(省略時は登録順の先頭)でモジュールを生成し、土台(AppHost)に所有させる。
 		// 見つからなければ別のアプリで黙って動かさず、初期化失敗にする(エディタからの起動ミスに気付けるように)。
 		// 旧 CreateApplication と同じく、メモリマネージャ初期化より前の生成になる。
-		EngineAssertMsg(application_ == nullptr, "Engine::Initialize: application already created");
+		EngineAssertMsg(appHost_ == nullptr, "Engine::Initialize: application already created");
 		std::unique_ptr<IAppModule> module = appModuleRegistry_.Create(launchOptions_.appName);
 		if (!module) {
 			std::string names;
@@ -131,7 +130,7 @@ namespace aq
 				names.empty() ? "none" : names.c_str());
 			return false;
 		}
-		application_       = new AppHost(std::move(module));
+		appHost_          = new AppHost(std::move(module));
 		subsystemsStarted_ = true;
 
 		// メモリマネージャを最初に初期化することで、ウィンドウ・グラフィクス初期化中の
@@ -184,8 +183,8 @@ namespace aq
 		aq::StartupLog("  [engine] audio director ok");
 
 		// application 初期化中にサウンドが要るところ(BGM 開始など)は EnsureSoundInitialized() で合流する。
-		if (!application_->Initialize(renderContext_)) {
-			aq::StartupLog("  [engine] application_->Initialize FAILED");
+		if (!appHost_->Initialize(renderContext_)) {
+			aq::StartupLog("  [engine] application Initialize FAILED");
 			return false;
 		}
 		aq::StartupLog("  [engine] application ok");
@@ -194,8 +193,8 @@ namespace aq
 		if (!EnsureSoundInitialized()) {
 			return false;
 		}
-		if (!application_->Register()) {
-			aq::StartupLog("  [engine] application_->Register FAILED");
+		if (!appHost_->Register()) {
+			aq::StartupLog("  [engine] application Register FAILED");
 			return false;
 		}
 
@@ -212,10 +211,10 @@ namespace aq
 			return;
 		}
 
-		if (application_) {
-			application_->Finalize();
-			delete application_;
-			application_ = nullptr;
+		if (appHost_) {
+			appHost_->Finalize();
+			delete appHost_;
+			appHost_ = nullptr;
 		}
 
 		// オーディオ層は SoundEngine より先に破棄する（SoundStream が SoundEngine を参照）。
@@ -252,8 +251,8 @@ namespace aq
 
 	void Engine::WaitForRenderIdle()
 	{
-		if (application_) {
-			application_->WaitForRenderIdle();
+		if (appHost_) {
+			appHost_->WaitForRenderIdle();
 		}
 	}
 
@@ -375,8 +374,8 @@ namespace aq
 
 		// 在フライトのコマンドが古いサーフェスの画像を参照したまま破棄されないよう、
 		// CPU・GPU 双方の完了を待ってから作り直す。
-		if (application_) {
-			application_->WaitForRenderIdle();
+		if (appHost_) {
+			appHost_->WaitForRenderIdle();
 		}
 
 		if (!aq::graphics::GraphicsDevice::Get().RecreateSurface(window_)) {
@@ -472,7 +471,7 @@ namespace aq
 		// コマンドは記録時にハンドル index を焼き込むため、トグル後の構築でも整合する。
 		ToggleMainRenderTarget();
 #endif
-		application_->Update();
+		appHost_->Update();
 		// サウンド: 終了ボイスの回収・バックエンドのポンプ（§2.1）。
 		aq::sound::SoundEngine::Get().Update(gameTimer_.GetDeltaTime());
 		// オーディオ層: イベントインスタンスの回収・クールダウン更新。
@@ -480,7 +479,7 @@ namespace aq
 		// FlushRender() はレンダースレッドがコマンドリストの実行・RT コピー・Present を
 		// 完了するまで待機する。描画に関わるすべての D3D11 コンテキスト呼び出しは
 		// レンダースレッド側に集約され、メインスレッドは Submit() 以降コンテキストに触れない。
-		application_->FlushRender();
+		appHost_->FlushRender();
 		aq::memory::MemoryManager::Get().ResetStackAllocator();
 	}
 }

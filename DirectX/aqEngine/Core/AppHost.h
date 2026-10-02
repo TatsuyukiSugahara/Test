@@ -1,5 +1,4 @@
 #pragma once
-#include "IApplication.h"
 #include "IAppModule.h"
 #include "Rendering/Renderer.h"
 #include "Rendering/RenderThread.h"
@@ -36,7 +35,7 @@ namespace aq
 	 * エンジンサブシステムの初期化・更新・終了を担うアプリケーションの土台(常駐)。
 	 * ゲーム側は IAppModule を実装し、AppHost に所有させる。フックは module_ 経由で呼ぶ。
 	 */
-	class AppHost final : public IApplication
+	class AppHost final
 	{
 	public:
 		/** 分割画面の 1 ビュー (カメラ + ビューポート矩形)。camera の寿命は設定側が保証する */
@@ -63,7 +62,7 @@ namespace aq
 	public:
 		/** @param module 所有して動かすモジュール(nullptr 不可) */
 		explicit AppHost(std::unique_ptr<IAppModule> module);
-		~AppHost() override;
+		~AppHost();
 
 
 	public:
@@ -88,14 +87,31 @@ namespace aq
 		 * Signal するだけで GPU 完了を待たないため、ドレイン後も GPU はまだリソースを
 		 * 読んでいることがある。GraphicsDevice::WaitIdle まで込みで初めて破棄が安全になる。
 		 */
-		void WaitForRenderIdle() override;
+		void WaitForRenderIdle();
 
 	public:
-		bool Initialize(aq::graphics::RenderContext& renderContext) override;
-		void Finalize() override;
-		void Update() override;
-		void FlushRender() override;
-		bool Register() override;
+		/** エンジンサブシステムを初期化し、モジュールの OnInitialize を呼ぶ */
+		bool Initialize(aq::graphics::RenderContext& renderContext);
+		/** モジュールの OnFinalize を呼んでから、エンジンサブシステムを終了する */
+		void Finalize();
+
+		/**
+		 * ゲームロジックの更新。RenderContext は受け取らない。
+		 * 描画処理は RenderCommandList に積んで RenderThread::Submit() で行う。
+		 */
+		void Update();
+
+		/**
+		 * Engine が Update() の直後に呼ぶ。
+		 * RenderThread がフレームの描画・CopyToBackBuffer・Present を完了するまでここで待機する。
+		 */
+		void FlushRender();
+
+		/**
+		 * エンジン標準の System を登録し、モジュールの OnRegister を呼ぶ。
+		 * Initialize の後に呼ばれる。false を返すと初期化失敗として扱われる
+		 */
+		bool Register();
 
 	public:
 		/**

@@ -5,7 +5,7 @@
 #if defined(AQ_PLATFORM_ANDROID)
 #include <android_native_app_glue.h>
 #include <android/native_window.h>
-#include "Application.h"
+#include "GameModule.h"
 #include "Platform/Android/PlatformAndroid.h"
 
 

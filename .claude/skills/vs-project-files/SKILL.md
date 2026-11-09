@@ -11,6 +11,18 @@ description: このリポジトリ(DirectX/aqEngine エンジン + Game)に新�
 
 ---
 
+## 0. CMake(Mac / iOS / Android / Linux)は登録不要
+
+`aqEngine/CMakeLists.txt` と `Game/CMakeLists.txt` は
+`file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` でソースを拾うので、**追加・削除に
+CMake 側の編集は要らない**(再構成で反映される)。
+ただし次の場合だけ CMake の除外リストを確認する:
+UWP 専用・Windows 専用のファイルを足したとき(`PlatformUWP.cpp` のようにプラットフォーム別に
+除外している)、ビルド対象にしたくないファイルを置いたとき。
+以降の手順は **Visual Studio(Windows / UWP)用の登録**である。
+
+---
+
 ## 1. どのファイルを編集するか(配置先で分岐)
 
 追加するファイルのパスで編集対象が変わる。

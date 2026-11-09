@@ -62,8 +62,8 @@ description: このリポジトリ(DirectX/aqEngine エンジン + Game)で git 
 1. `git status` / `git diff` で変更範囲を確認し、主目的の領域を判定する。
 2. §1 の表からタグを1つ選ぶ。
 3. 件名を `<タグ> 内容` で作る(スペース1つ、句点なし、日本語)。
-4. コミットする。Claude Code の既定フッタ(`Co-Authored-By: ...`)は
-    ユーザー方針に従い付与する。
+4. コミットする。末尾の `Co-Authored-By: ...` 行は、その時点でシステムの
+    指示(system-reminder の Attribution)が示すものをそのまま付ける。
 
 ```bash
 git commit -m "<Engine> メッシュクラスタの遅延生成をスレッドセーフ化"

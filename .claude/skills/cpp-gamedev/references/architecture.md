@@ -1,7 +1,7 @@
 # C++ゲーム開発 設計ガイド(architecture)
 
 `SKILL.md` から参照される設計リファレンス。グラフィックスAPI抽象化・プラットフォーム対応・
-OOPとECSの使い分け・スレッド境界・ドキュメント運用の方針を定義する。
+OOPとECSの使い分け・スレッド境界の方針を定義する(設計書の運用規約は CLAUDE.md)。
 **設計に関わるコード(レンダリング/新モジュール/ECS/プラットフォーム対応)を書くときは本書に従うこと。**
 
 出典はユーザーの実コードベース(`aqEngine/`)。抽象名・マクロ名は実物に合わせている。
@@ -10,7 +10,7 @@ OOPとECSの使い分け・スレッド境界・ドキュメント運用の方�
 
 ## 1. グラフィックスAPI抽象化(ブリッジパターン)
 
-DirectX 11 / DirectX 12 / Vulkan を**ブリッジパターン**で差し替え可能にする。
+DirectX 11 / DirectX 12 / Vulkan / Metal を**ブリッジパターン**で差し替え可能にする。
 抽象(`GraphicsDevice` / `RenderContext`)が実装インターフェース(`IGraphicsDeviceImpl` /
 `IRenderContextImpl`)を保持・委譲し、抽象と実装を独立に拡張できる構造。
 
@@ -22,7 +22,8 @@ DirectX 11 / DirectX 12 / Vulkan を**ブリッジパターン**で差し替え�
   RenderContext  ──保持──▶ IRenderContextImpl
                               ├─ D3D11...Impl
                               ├─ D3D12...Impl   ← バックエンド実装
-                              └─ Vulkan...Impl
+                              ├─ Vulkan...Impl
+                              └─ Metal...Impl
 ```
 
 > **Adapter との違い(用語注)**: Adapter は「既存の互換性のない IF を変換して
@@ -32,11 +33,11 @@ DirectX 11 / DirectX 12 / Vulkan を**ブリッジパターン**で差し替え�
 ### ルール
 
 - **API 固有型(`ID3D11*` / `ID3D12*` / `Vk*`)を上位レイヤーに漏らさない。**
-  これらが現れてよいのは `Graphics/D3D1x/`・`Graphics/Vulkan/` 内のみ。
+  これらが現れてよいのは `Graphics/D3D11/`・`Graphics/D3D12/`・`Graphics/Vulkan/`・`Graphics/Metal/` 内のみ。
   抽象 IF のメソッド引数・戻り値はすべて API 非依存型(`IBuffer` / `IShader` /
   `PixelFormat` / `NativeWindowHandle` 等)にする。
 - **バックエンド選択はコンパイル時マクロ**で行う(`ENGINE_GRAPHICS_D3D11 / _D3D12 /
-  _VULKAN` をちょうど 1 つ定義)。生成は `GraphicsDevice::Create<TImpl>()` テンプレートに注入する。
+  _VULKAN / _METAL` をちょうど 1 つ定義。`aq.h`)。生成は `GraphicsDevice::Create<TImpl>()` テンプレートに注入する。
 - **API を追加するときは「抽象 IF に no-op 既定を足す → 対応バックエンドだけ override」**の順。
   こうすると未対応 API(例: DX11 FL11_0 未満で compute/UAV/間接描画が無い)を壊さない。
   未対応かどうかは `IsComputeSupported()` 等のゲートで実行時にフォールバックする。
@@ -50,24 +51,27 @@ DirectX 11 / DirectX 12 / Vulkan を**ブリッジパターン**で差し替え�
 
 | サブシステム | 抽象 | 実装インターフェース | バックエンド | 選択 |
 |---|---|---|---|---|
-| グラフィックス | `GraphicsDevice` / `RenderContext` | `IGraphicsDeviceImpl` / `IRenderContextImpl` | D3D11 / D3D12 / Vulkan | `ENGINE_GRAPHICS_*` |
-| サウンド | `SoundEngine` | `ISoundBackend` / `ISoundVoice` | XAudio2 / (Oboe) | `SoundBackend.h` の `#define` |
-| パッド入力 | `Pad` / `InputManager` | `IPadBackend` | XInput / WinRT | `PadBackend.h` の `#define` |
-| プラットフォーム | `Engine` | `IPlatform` | Win32 / UWP / (GDK) | エントリで注入 |
+| グラフィックス | `GraphicsDevice` / `RenderContext` | `IGraphicsDeviceImpl` / `IRenderContextImpl` | D3D11 / D3D12 / Vulkan / Metal | `ENGINE_GRAPHICS_*` |
+| サウンド | `SoundEngine` | `ISoundBackend` / `ISoundVoice` | XAudio2 / CoreAudio / AAudio / Null | `SoundBackend.h`(`AQ_PLATFORM_*` から選択) |
+| パッド入力 | `Pad` / `InputManager` | `IPadBackend`(+ キーボード / マウス / タッチの各 IF) | XInput / WinRT / DualSense / 仮想パッド ほか | `PadBackend.h`(`AQ_PLATFORM_*` から選択) |
+| プラットフォーム | `Engine` | `IPlatform` | Win32 / UWP / Mac / iOS / Android | エントリで注入。`AQ_PLATFORM_*` をちょうど 1 つ(`PlatformDefs.h`) |
 
 ---
 
-## 2. プラットフォーム対応(Xbox / UWP)
+## 2. プラットフォーム対応(Windows / UWP / Mac / iOS / Android)
 
 - **プラットフォーム差は `IPlatform` に閉じる。** ウィンドウ生成・イベントループ・
   PLM ライフサイクル(`OnSuspend`/`OnResume`)・コンテンツ基点(`GetContentRoot`)を抽象化し、
-  `Engine` は `IPlatform*` しか知らない。エントリ(`Main.cpp` / `UWPMain.cpp`)が
-  Win32/UWP の実装を選んで注入する。
-- **API 選択とプラットフォーム選択は直交させる。**「UWP × D3D12」「Win32 × D3D11」等の
-  組み合わせが自由に成立するようにする(グラフィックス Bridge と `IPlatform` を混ぜない)。
+  `Engine` は `IPlatform*` しか知らない。エントリ(`Main.cpp` / `UWPMain.cpp` など)が
+  Win32 / UWP / Mac / iOS / Android の実装を選んで注入する。
+- **API 選択とプラットフォーム選択は直交させる。**「UWP × D3D12」「Win32 × D3D11」
+  「Mac × Metal / Vulkan(MoltenVK)」等の組み合わせが自由に成立するようにする
+  (グラフィックス Bridge と `IPlatform` を混ぜない)。
 - **`#if defined(AQ_PLATFORM_UWP)` 分岐は最小限にし、中立フォールバックを用意する。**
   例: UWP で DirectInput が使えないキーボード/マウスは中立状態(入力なし)で
-  ビルド・動作させ、落ちないようにする。
+  ビルド・動作させ、落ちないようにする(`Null*Backend`)。
+  GPU 差(ボーダーカラー・compute・BC 圧縮など)がある環境では劣化経路を用意し、
+  実機でしか出ない差は移植設計書に記録する。
 - **リソース予算はコンパイル時プロファイル**(`PlatformBudget.h`)で持つ。
   Xbox Dev Mode(UWP「Game」分類)の制約(メモリ 5GB・4+2 コア・2GB/ファイル)を
   設計目標として反映する。Feature Level 等の具体値は該当プラットフォーム設計書に一元化し、
@@ -124,15 +128,3 @@ DirectX 11 / DirectX 12 / Vulkan を**ブリッジパターン**で差し替え�
 - ワーカースレッドで COM/MF を使う場合は自前で初期化する(メインの初期化に依存しない)。
 
 ---
-
-## 6. 設計書の運用規約
-
-- 設計書は「ファイル別責務表 + 末尾チェックポイント(`- [ ]` 形式)」を基本形とする。
-- タイトル直下に `> 対象コミット: <hash> / 最終更新: <日付>` を必ず置く。
-  設計に影響するコミットで更新すること。
-- **同じ内容を 2 つの設計書に書かない。** 一方を一次資料と明記し、他方はリンクで参照する。
-- 内容は必ず実コード(ヘッダ/主要 .cpp)を読んで書く。推測で埋めない。
-  未確認箇所は TODO として残す。
-- 発見したバグ・命名の澱みは README の「既知の課題」節に追記する(その場で直さない)。
-- Feature Level 等のプラットフォーム固有の具体値は該当プラットフォーム設計書に
-  一元化し、他書は条件表記(例: FL11_0 未満)で参照する。

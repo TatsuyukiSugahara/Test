@@ -109,12 +109,21 @@ message(STATUS "AquaDash: AQ_GRAPHICS_API = ${AQ_GRAPHICS_API}")
 #  Android は例外で SDK を要求しない。NDK の sysroot が Vulkan ヘッダと
 #  libvulkan.so の両方を持ち、シェーダは事前生成した .spv を読むだけなので
 #  dxc も要らない(.spv の生成はデスクトップ側で行う)。
+#
+#  解決したパスはキャッシュ(AQ_VULKAN_SDK_ROOT)へ覚えておき、環境変数が無いときは
+#  そちらを使う。**Xcode はターミナルの環境を引き継がない**ため、ソースの追加・削除で
+#  ZERO_CHECK が CMake を再実行すると、ここで止まって ⌘B が
+#  「PhaseScriptExecution failed with a nonzero exit code」になるのを防ぐ。
 set(AQ_VULKAN_SDK "")
 if((AQ_GRAPHICS_API STREQUAL "Vulkan" AND NOT ANDROID) OR AQ_GRAPHICS_API STREQUAL "Metal")
-	if(NOT DEFINED ENV{VULKAN_SDK})
+	if(DEFINED ENV{VULKAN_SDK})
+		file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" AQ_VULKAN_SDK)
+		set(AQ_VULKAN_SDK_ROOT "${AQ_VULKAN_SDK}" CACHE PATH "Vulkan SDK のルート(環境変数 VULKAN_SDK が無いときに使う)" FORCE)
+	elseif(AQ_VULKAN_SDK_ROOT AND IS_DIRECTORY "${AQ_VULKAN_SDK_ROOT}")
+		set(AQ_VULKAN_SDK "${AQ_VULKAN_SDK_ROOT}")
+	else()
 		message(FATAL_ERROR "AQ_GRAPHICS_API=${AQ_GRAPHICS_API} には環境変数 VULKAN_SDK が必要です (dxc / spirv-cross の入手元)")
 	endif()
-	file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" AQ_VULKAN_SDK)
 	message(STATUS "AquaDash: VULKAN_SDK = ${AQ_VULKAN_SDK}")
 endif()
 

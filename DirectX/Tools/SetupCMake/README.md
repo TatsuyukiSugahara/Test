@@ -193,12 +193,26 @@ METAL_DEVICE_WRAPPER_TYPE=1 ../build/macos-ninja-metal/bin/Debug/Game.app/Conten
 **Xcode プロジェクトは CMake が生成する**。`.xcodeproj` はリポジトリに入っていないので、
 まず生成してから開く(ソースを追加したときも同じ手順でよい)。
 
+**`Tools/SetupCMake/open_xcode.sh` を使う**(環境の読み込み → 生成 → Xcode で開く、を 1 本で行う):
+
+```bash
+<repo>/DirectX/Tools/SetupCMake/open_xcode.sh          # Vulkan(build/macos-xcode)
+<repo>/DirectX/Tools/SetupCMake/open_xcode.sh metal    # ネイティブ Metal(build/macos-xcode-metal)
+```
+
+手で叩く場合は次と同じ:
+
 ```bash
 source ~/.local/aq-mac-env.sh
 cd <repo>/DirectX
 cmake --preset macos-xcode          # build/macos-xcode/AquaDash.xcodeproj を生成
 open build/macos-xcode/AquaDash.xcodeproj
 ```
+
+configure 時の `VULKAN_SDK` は CMake のキャッシュ `AQ_VULKAN_SDK_ROOT` に残る。
+Xcode の **ZERO_CHECK**(ソースの追加・削除を検知して CMake を再実行する)は Xcode の環境、
+つまり `VULKAN_SDK` の無い環境で走るが、このキャッシュを使うので止まらない。
+以前は `環境変数 VULKAN_SDK が必要です` で `PhaseScriptExecution failed` になっていた。
 
 Xcode が開いたら:
 
@@ -226,6 +240,7 @@ CMake が configure 時に解決して焼き込んである(手で設定する�
 | Working Directory | `<repo>/DirectX/Game` | アセットが見つからない(§5.2 と同じ理由) |
 | 環境変数 `VK_ICD_FILENAMES` ほか | Vulkan SDK の `setup-env.sh` と同じ値 | 実行時に **`vkCreateInstance` が `VK_ERROR_INCOMPATIBLE_DRIVER`(-9)で落ちる**。MoltenVK の ICD を見つけられない |
 | `dxc` のパス | configure 時に解決した絶対パス | ビルド時に **`aqCompileSpv` が `PhaseScriptExecution failed with a nonzero exit code` で落ちる**(`Tools/ShaderCompile/compile_spv.cmake`) |
+| `VULKAN_SDK` | キャッシュ `AQ_VULKAN_SDK_ROOT` | **ZERO_CHECK が `PhaseScriptExecution failed` で落ちる**(ソースの追加・削除後の再 configure がルート `CMakeLists.txt` で止まる) |
 
 確認は Product > Scheme > Edit Scheme… > Run > Options(作業ディレクトリ)と
 Arguments(環境変数)。

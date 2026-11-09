@@ -153,6 +153,9 @@ function(aq_spv_resolve_dxc outPath)
 	set(hints "")
 	if(DEFINED ENV{VULKAN_SDK})
 		list(APPEND hints "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin" "$ENV{VULKAN_SDK}/macOS/bin")
+	elseif(AQ_VULKAN_SDK_ROOT)
+		# 環境変数の無い再 configure(Xcode の ZERO_CHECK など)はルートがキャッシュしたパスを使う
+		list(APPEND hints "${AQ_VULKAN_SDK_ROOT}/Bin" "${AQ_VULKAN_SDK_ROOT}/bin" "${AQ_VULKAN_SDK_ROOT}/macOS/bin")
 	endif()
 
 	find_program(AQ_SPV_DXC_FOUND

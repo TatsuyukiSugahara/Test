@@ -31,7 +31,7 @@ Windows(D3D11/12・Vulkan・UWP)、Mac(Metal/Vulkan)、iOS、Android に対応�
 | 作業 | スキル |
 |---|---|
 | C++ を書く・直す・レビューする | `cpp-gamedev`(規約) |
-| まとまった機能の開発 | `feature-dev-cycle`(設計 → 実装 → 評価) |
+| まとまった機能の開発 | `aq-dlc`(AI-DLC の個人開発版。設計 → Codex レビュー → 承認 → 実装 → テスト → コミット) |
 | `.cpp` / `.h` の追加・移動・削除 | `vs-project-files` |
 | コミット | `git-commit`(件名は `<Game|Engine|Build|Chore> 内容`) |
 

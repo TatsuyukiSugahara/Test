@@ -132,6 +132,18 @@ namespace aq
 			template <class T, typename = std::enable_if_t<type::GetTypeName<T>>>
 			static constexpr TypeInfo Create()
 			{
+				// Chunk の拡張・swap-and-pop は MoveImpl(= T の move コンストラクタ)で要素を移す。
+				// move できない型(ユーザー宣言のデストラクタ等で暗黙の move が消えた型。
+				// `~T() = default;` もユーザー宣言なので同じ)はコピーコンストラクタへ黙って切り替わり、
+				// vector などを深いコピーして数十 ms 止まる。
+				// AQ_ECS_STRICT_COMPONENT_MOVE を定義すると、そのような型をビルドで列挙できる。
+				// 既定では無効(Transform 系の数学型など、無害な型も引っかかるため。
+				// 設計書/アロケーター改良設計.md §0.8)。
+#if defined(AQ_ECS_STRICT_COMPONENT_MOVE)
+				static_assert(std::is_nothrow_move_constructible_v<T>,
+					"コンポーネントが noexcept に move できない。ユーザー宣言のデストラクタを消すか、"
+					"move コンストラクタ/代入を noexcept = default で明示すること");
+#endif
 				return TypeInfo(
 					T::GetTypeHash(),
 					sizeof(T),

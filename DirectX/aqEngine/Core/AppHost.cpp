@@ -131,7 +131,7 @@ namespace aq
 	}
 
 
-	void AppHost::SetupStandardRenderers(const RendererPreset& preset)
+	bool AppHost::SetupStandardRenderers(const RendererPreset& preset)
 	{
 		auto builder = BuildStandardPipeline(preset);
 
@@ -142,8 +142,10 @@ namespace aq
 		if (!pipeline)
 		{
 			// 理由は Build() が [pipeline] ログへ既に出している。
+			// EngineAssertMsg は Release では no-op なので、ログと戻り値で必ず失敗を伝える。
+			aq::StartupMark("  [app] ERROR: standard pipeline Build failed (see [pipeline] log)");
 			EngineAssertMsg(false, "PipelinePresets::ForCurrentPlatform: PipelineBuilder::Build failed (see [pipeline] log)");
-			return;
+			return false;
 		}
 
 		renderer_.SetPipeline(std::move(pipeline),
@@ -152,11 +154,21 @@ namespace aq
 		                      static_cast<float>(renderH));
 
 		aq::StartupMark("  [app] standard renderers ok (shadow/deferred/postprocess/sky)");
+		return true;
 	}
 
 
-	void AppHost::SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline)
+	bool AppHost::SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline)
 	{
+		// Build 失敗の nullptr がそのまま来る。設定すると Renderer が全描画を黙って捨てる
+		// (Renderer::Render の `if (!pipeline_) return;`)ので、ここで失敗として返す。
+		if (!pipeline)
+		{
+			aq::StartupMark("  [app] ERROR: SetRenderPipeline got null (PipelineBuilder::Build failed, see [pipeline] log)");
+			EngineAssertMsg(false, "AppHost::SetRenderPipeline: pipeline is null");
+			return false;
+		}
+
 		const uint32_t renderW = Engine::Get().GetRenderWidth();
 		const uint32_t renderH = Engine::Get().GetRenderHeight();
 
@@ -164,6 +176,7 @@ namespace aq
 		                      Engine::Get().GetMainRenderTargetHandle(),
 		                      static_cast<float>(renderW),
 		                      static_cast<float>(renderH));
+		return true;
 	}
 
 

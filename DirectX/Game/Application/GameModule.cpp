@@ -103,8 +103,11 @@ namespace app
 			outline->SetThickness(OUTLINE_THICKNESS);
 			builder.InsertBefore<aq::rendering::UIPass>(std::move(outline));
 
-			host.SetRenderPipeline(builder.Build(aq::Engine::Get().GetRenderWidth(),
-			                                     aq::Engine::Get().GetRenderHeight()));
+			// Build 失敗(nullptr)は黙って続けると全描画が消えるので、初期化失敗として返す。
+			if (!host.SetRenderPipeline(builder.Build(aq::Engine::Get().GetRenderWidth(),
+			                                          aq::Engine::Get().GetRenderHeight()))) {
+				return false;
+			}
 		}
 
 		// BGM: 起動時から常時ループ再生する(バンク登録に依存しない wav 直読み)。

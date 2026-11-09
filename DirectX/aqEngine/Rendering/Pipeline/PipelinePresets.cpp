@@ -36,6 +36,9 @@ namespace aq
 					auto shadow = std::make_unique<HardShadowRenderer>();
 					if (shadow->Create(preset.shadow, preset.shadowVSPath)) {
 						builder.Add<ShadowPass>(std::move(shadow));
+					} else {
+						// 生成に失敗すると ShadowPass は列へ入らない(パス側の Setup は走らない)ので、ここで残す。
+						aq::StartupMark("[pipeline] 影の生成に失敗したので影なしで続行");
 					}
 				}
 
@@ -68,6 +71,9 @@ namespace aq
 					auto sky = std::make_unique<SkyRenderer>();
 					if (sky->Create(preset.skyCubemapPath)) {
 						builder.Add<SkyPass>(std::move(sky));
+					} else {
+						// 生成に失敗すると SkyPass は列へ入らない(パス側の Setup は走らない)ので、ここで残す。
+						aq::StartupMark("[pipeline] 空の生成に失敗したので空なしで続行");
 					}
 				}
 
@@ -113,6 +119,9 @@ namespace aq
 					auto shadow = std::make_unique<HardShadowRenderer>();
 					if (shadow->Create(preset.shadow, preset.shadowVSPath)) {
 						builder.Add<ShadowPass>(std::move(shadow));
+					} else {
+						// 生成に失敗すると ShadowPass は列へ入らない(パス側の Setup は走らない)ので、ここで残す。
+						aq::StartupMark("[pipeline] 影の生成に失敗したので影なしで続行");
 					}
 				}
 
@@ -125,6 +134,9 @@ namespace aq
 					auto sky = std::make_unique<SkyRenderer>();
 					if (sky->Create(preset.skyCubemapPath)) {
 						builder.Add<SkyPass>(std::move(sky));
+					} else {
+						// 生成に失敗すると SkyPass は列へ入らない(パス側の Setup は走らない)ので、ここで残す。
+						aq::StartupMark("[pipeline] 空の生成に失敗したので空なしで続行");
 					}
 				}
 

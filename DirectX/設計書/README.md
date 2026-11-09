@@ -131,8 +131,11 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   D3D11 / D3D12 / Win32 / UWP / Android の確認は実機待ち。
 - (解決済)**抽象があるのに具象へ依存する箇所。** `IDeferredRenderer`→`DeferredRenderer` の `dynamic_cast` と
   `PostProcessChain` の直書きは、パス列方式への移行で消えていた(2026-11-09 に実コードで確認。
-  [エンジン課題解消設計](エンジン課題解消設計.md) §0)。**代わりに残る無言の失敗**(Release で no-op になる assert による
-  全描画の消失、Shadow / Sky / FullscreenCompute の無ログ return)は同設計書 P2 で扱う。
+  [エンジン課題解消設計](エンジン課題解消設計.md) §0)。
+- (解決済 2026-11-09)**パイプライン構築の失敗が黙って全描画の消失になる**件は、`AppHost::SetRenderPipeline` /
+  `SetupStandardRenderers` を `bool` 戻りにして初期化失敗として伝える形で解消(同設計書 P2)。影・空の生成失敗と
+  `FullscreenComputeCommand` の無ログ return にも、1 回だけのログを足した。
+- **初期化失敗でもプロセスの終了コードが 0 になる**(P2 の確認で観測。`Main` / `MacMain` の戻り値の扱いは未調査)。
 - **`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする。
 - **`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む。**
 - **[Graphics/GPUBuffer.cpp](../aqEngine/Graphics/GPUBuffer.cpp) は D3D11 型を直接使う旧実装**で、

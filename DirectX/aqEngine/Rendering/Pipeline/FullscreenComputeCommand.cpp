@@ -3,6 +3,7 @@
 #include "Rendering/FrameContext.h"
 #include "Graphics/RenderContext.h"
 #include "Graphics/IRenderTarget.h"
+#include <atomic>
 #include <cstring>
 
 
@@ -41,13 +42,22 @@ namespace aq
 			auto& device = graphics::GraphicsDevice::Get();
 
 			// 入力・出力 RT が 1 つでも取れなければ何もしない(TonemapPassCommand と同じ作法)。
+			// 毎フレームのログは禁物なので、失敗の最初の 1 回だけ理由を残す(ポストが消えたときの手掛かり)。
+			static std::atomic<bool> s_warned{ false };
+			auto skip = [&](const char* reason)
+			{
+				if (!s_warned.exchange(true)) {
+					aq::StartupMarkf("[pipeline] FullscreenCompute: %s ので描画を飛ばす(以後ログなし)", reason);
+				}
+			};
 			graphics::IRenderTarget* inputRTs[MAX_INPUT_COUNT] = {};
 			for (uint32_t i = 0; i < inputCount_; ++i) {
 				inputRTs[i] = device.GetRenderTarget(inputs_[i]);
-				if (!inputRTs[i]) { return; }
+				if (!inputRTs[i]) { skip("入力 RT が取れない"); return; }
 			}
 			auto* out = device.GetRenderTarget(output_);
-			if (!computeShader_ || !out) { return; }
+			if (!computeShader_) { skip("compute シェーダが無い"); return; }
+			if (!out)            { skip("出力 RT が取れない"); return; }
 
 			// RTV を外してから SRV/UAV として使用する
 			ctx.OMSetRenderTargets(0, nullptr);

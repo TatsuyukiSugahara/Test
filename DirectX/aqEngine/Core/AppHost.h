@@ -129,11 +129,13 @@ namespace aq
 		 *
 		 * 生成に失敗したパスは黙って飛ばす。空やブルームが出ないだけで描画は継続する
 		 * (Deferred の decal と同じ作法)。パイプライン全体の Build() が失敗した場合は
-		 * assert してログのみ出し、パイプラインを設定しない。
+		 * Release でもログを出し(Debug は assert も)、パイプラインを設定せず false を返す。
+		 * **呼び出し側は false を初期化失敗として返すこと**(黙って続けると全描画が消える)。
 		 *
 		 * @param preset 各パスの有効/無効と設定値。既定のままで従来構成
+		 * @return 組めて設定できたら true。パイプラインの Build が失敗したら false
 		 */
-		void SetupStandardRenderers(const RendererPreset& preset = {});
+		bool SetupStandardRenderers(const RendererPreset& preset = {});
 
 		/**
 		 * UI パス込みの標準パイプラインを `PipelineBuilder` のまま返す(設計書/レンダーパイプライン設計.md P2)。
@@ -149,8 +151,12 @@ namespace aq
 		 * ゲームが自前で組んだ RenderPipeline を丸ごと設定する。
 		 * SetupStandardRenderers() を使わず PipelineBuilder で独自の構成を組みたいゲーム向けの入口。
 		 * メイン RT とビューポートは Engine から取り、RenderDebugSync 用に Renderer へ渡す。
+		 *
+		 * @param pipeline `PipelineBuilder::Build()` の結果。Build 失敗の nullptr をそのまま渡してよい
+		 * @return 設定できたら true。nullptr(Build 失敗)なら Release でもログを出して false を返す。
+		 *         呼び出し側は false を初期化失敗として返すこと
 		 */
-		void SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline);
+		bool SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline);
 
 	private:
 		void Render();

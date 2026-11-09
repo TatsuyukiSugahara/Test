@@ -1,6 +1,6 @@
 # スカイキューブ(スカイボックス)設計
 
-> 対象コミット: feed446(実装)/ 文書更新: 92b6c54 以降 / 最終更新: 2026-11-09(P1/P2 完了。Codex レビューの 7 件を実コードで裏取りして反映。§4 課題 5 は Mobile の順序と半透明の要確認)
+> 対象コミット: feed446(実装)/ 文書更新: 92b6c54 以降 / 最終更新: 2026-11-09(P1/P2 完了。Codex レビューの 7 件を実コードで裏取りして反映。§4 課題 5 は Mobile の半透明が空でなくクリア色と合成される不具合。修正案は確認済み・未適用)
 
 対象: `aqEngine/Rendering/Sky/` + `aqEngine/Assets/Shader/Skybox.fx` + `aqEngine/Assets/Sky/DefaultSkyCube.dds` +
 `aqEngine/Rendering/Pipeline/Passes/SkyPass.*` + キューブマップ生成ツール。
@@ -194,7 +194,7 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
 4. **ミニマップに空を出すか**。ミニマップの列は `SkyPass` を積まず、呼び出し側が独自のクリア色を置く(暗い青)。
    真上から見下ろす画なので空はほぼ映らない。P3 で判断。
 
-5. **Mobile 構成では Sky が Forward の後ろにある(順序の確認。ジオメトリが隠れる問題ではない)。**
+5. **Mobile 構成では Sky が Forward の後ろにあり、半透明が空でなくクリア色と合成される(不具合。実描画で確認済み)。**
    `PipelinePresets.cpp` の `Mobile()` は `ForwardPass` → `SkyPass` の順(Standard は Lighting → Sky → Forward)。
    Mobile は GBuffer を持たないので `PassResourceKeys::Depth` は無いが、**それは深度バッファが無いという意味ではない**。
    メイン RT は Metal / Vulkan とも深度付きで作られ(`MetalGraphicsDeviceImpl.mm` / `VulkanGraphicsDeviceImpl.cpp` の
@@ -202,10 +202,26 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
    バインドする(`MetalRenderContextImpl.mm` / `VulkanRenderContextImpl.cpp`)。したがって Sky は `ReadOnly` の
    深度テストで Forward の不透明ジオメトリに落とされ、**ジオメトリが空に隠れることはない**はず
    (初版の本項は「深度なしで上塗りする」と書いていたが誤りで、Codex の再レビューで訂正した)。
-   **残る確認事項**は半透明だけ: Forward 内の半透明が深度を書かない場合、Sky が後から描かれるとその画素を
-   上塗りする可能性がある(`ForwardPass.cpp` の半透明描画が深度を書くかは未確認)。Standard は Sky が
-   Forward より前なので起きない。Mobile で半透明が空に消えないかを Android / iOS で確認する。
-   問題が出るなら Mobile を `Sky → Forward` の順にする。
+   半透明については下の実描画の確認のとおり。
+   **実描画での確認(2026-11-09、Mac / Metal / Sample。環境変数で切り替える一時変更を入れて撮影し、確認後に戻した)**:
+   Sample の箱を `PipelineKind::Mobile` で描き、背景(空)・箱の位置の画素を比べた。
+
+   | 構成 | 箱の画素(代表点) | 判定 |
+   |---|---|---|
+   | Standard / 不透明 | (76,172,205) | 基準 |
+   | Mobile / 不透明 | (76,172,205) | **Standard と一致。ジオメトリは空に隠れない**(RT 自身の深度が効く) |
+   | Standard / 半透明 α0.4 | (110,170,198) ほか | 基準(箱が空と合成される) |
+   | Mobile / 半透明 α0.4 | (155,187,205) ほか | **不一致。箱の色にも空(150,168,180)にも無い明るさ** |
+   | Mobile / 半透明(Sky → Forward に入れ替え) | (110,170,198) ほか | **Standard と全点一致** |
+
+   結論:
+   - **空に上塗りされることはない**(半透明も深度を書くので Sky は落ちる)。当初の懸念は外れ。
+   - **ただし Mobile の半透明は、空ではなくクリア色(明るい背景)と合成される。** Sky が Forward の後ろにあり、
+     半透明を描く時点では背景にまだ空が無いため。見た目が白っぽくなる**実際の不具合**。
+   - **直し方は Mobile を `Sky → Forward` の順にすること**。入れ替えで Standard と一致することを確認済み。
+     未適用(`PipelinePresets.cpp` の `Mobile()`。`レンダーパイプライン設計.md` の Mobile の列の記述も合わせて直す)。
+   - 確認していないこと: Vulkan 構成、Android / iOS 実機、Forward 内の半透明が SkeletalMesh の場合
+     (今回は StaticMesh の箱に一時的に `translucent` を立てた)、Particle との前後関係。
    **Mobile 構成を選ぶのは `Auto` のとき Android / iOS**(`ForCurrentPlatform`)。
    `preset.pipeline = PipelineKind::Mobile` を明示すれば Mac / Windows でも選べるので、
    デスクトップで確認するならこの指定で足りる(実機が要らない)。
@@ -216,7 +232,7 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
 
 - [ ] 既存の `.fx` が無改変(`Skybox.fx` の新規追加のみ)
 - [ ] `aqEngine/Assets/Shader/shader_entries.txt` に 2 行登録されている
-- [ ] Standard / Mobile のどちらでもジオメトリと半透明が空に隠れない(Mobile の半透明は課題 5)
+- [ ] Mobile の順序を `Sky → Forward` に直し、Mobile でも半透明が空と合成される(課題 5。Metal / Sample では入れ替えで確認済み)
 - [ ] 抽象IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本
 - [ ] 新規 `.h/.cpp` が `.vcxproj` / `.filters` に登録されている
 - [ ] 空の生成が失敗しても**起動できる**(デカールと同じ「失敗しても続行」)

@@ -1,13 +1,17 @@
 # スカイキューブ(スカイボックス)設計
 
-> 対象コミット: feed446 / 最終更新: 2026-09-11(P1/P2 完了)
+> 対象コミット: feed446(実装)/ 文書更新: 92b6c54 以降 / 最終更新: 2026-11-09(P1/P2 完了。Codex レビューの 7 件を実コードで裏取りして反映。§4 課題 5 は Mobile の順序と半透明の要確認)
 
-対象: `aqEngine/Rendering/Sky/`(新規)+ `Game/Assets/Shader/Skybox.fx`(新規)+
-キューブマップ生成ツール。**全バックエンド(D3D11 / D3D12 / Vulkan / Metal)**で動かす。
+対象: `aqEngine/Rendering/Sky/` + `aqEngine/Assets/Shader/Skybox.fx` + `aqEngine/Assets/Sky/DefaultSkyCube.dds` +
+`aqEngine/Rendering/Pipeline/Passes/SkyPass.*` + キューブマップ生成ツール。
+(設計時は `Game/Assets/` 配下だったが、`883ea1d` でエンジンアセットとして `aqEngine/Assets/` へ移った。)**全バックエンド(D3D11 / D3D12 / Vulkan / Metal)**で動かす。
 
 一次資料の分担:
 - **本書** … 方針決定・新規/変更ファイルの責務・フェーズ計画・チェックリスト。
-- [01_レンダリング設計.md](01_レンダリング設計.md) … 描画パスの全体像。本書はそこへ 1 パス足す差分だけを書く。
+- [01_レンダリング設計.md](01_レンダリング設計.md)、[レンダーパイプライン設計.md](レンダーパイプライン設計.md) … 描画パスの全体像とパス列方式。本書は Sky を 1 パス足す差分だけを書く。
+
+> **§0.1〜§0.3 と §3 の P1/P2 は、パス列方式(`RenderPipeline`)導入前(2026-09-11)の記録。**
+> 挿入位置・所有者の現行の姿は §0.2 の表の「現行」列と §1 を正とする。
 
 ---
 
@@ -35,9 +39,9 @@ DirectXTex の `IsCubemap()` から立て、D3D11 / D3D12 / Vulkan / Metal の�
 | 絵の出所 | **手続き的に生成した DDS キューブマップ**を同梱 | リポジトリにキューブマップが 1 本も無い。生成しておけば外部依存なしで見た目が出せ、後から市販の HDRI や自作画像へ差し替えられる |
 | ファイル形式 | **DDS(BGRA8 / 非圧縮 / キューブマップ)** | `Resource.cpp` の既存経路がそのまま通る唯一の形式。6 面バラの PNG だと組み立てコードの新規実装が要る |
 | 描画方法 | **フルスクリーン三角形 1 枚**(頂点バッファ無し) | 立方体メッシュを持つ必要がない。`DeferredLightingCommand.cpp:80-84` に `ctx.Draw(3, 0)` の前例がある |
-| 挿す位置 | **ディファードライティングの直後・フォワードの直前**(`Renderer.cpp:106` の `SetRenderTargetWithDepthCommand` の直後) | その時点で「シーン RT(色)+ GBuffer0(深度)」がバインド済みなので、RT 設定を一切せずに済む。半透明より前なので順序も正しい |
+| 挿す位置 | **ディファードライティングの直後・フォワードの直前**(設計時は `Renderer.cpp:106` の `SetRenderTargetWithDepthCommand` の直後) | その時点で「シーン RT(色)+ GBuffer0(深度)」がバインド済み。半透明より前なので順序も正しい。**現行(Standard)**: `PipelinePresets.cpp` の `Standard()` が Lighting の後・`ForwardPass` の前に `SkyPass` を追加する。ただし `SkyPass` は自分で RT をバインドし直す(パス間契約 3)ので「RT 設定を一切せずに済む」は成り立たない。**Mobile は順序が逆(§4 課題 5)** |
 | 深度 | **`DepthMode::ReadOnly`**(テスト有効・書き込み無し) | G-Buffer が書いた深度はライティング後も残っている(ライティングは `Disabled` で描くだけで書き込まない)。ジオメトリのある画素は深度テストで落ちる |
-| 所有者 | **`SkyRenderer`(新規クラス)を `Renderer` が持つ** | `postProcessRenderer_` と同じ形。`DeferredRenderer` に載せると「ディファード専用機能」に見えるが、空はフォワードでも要る |
+| 所有者 | 設計時: `SkyRenderer` を `Renderer` が持つ。**現行: `SkyPass` が `SkyRenderer` を `unique_ptr` で所有し、`PipelinePresets` が `preset.enableSky` のとき生成して `SkyPass` を追加する** | 空はフォワードでも要るので `DeferredRenderer` には載せない。パス列方式への置き換え(`c60d345`)で `Renderer` から `SkyPass` へ移った。ゲームは `SkyPass::GetSkyRenderer()` から色調を触る |
 | シェーダ | `Skybox.fx`(`VSMain` / `PSMain`)。`.fx` は新規 1 本のみ | 既存 `.fx` は無改変 |
 | キューブマップのスロット | **t5** | t0-t3 = マテリアル、t4 = シャドウ、t8-t11 = GBuffer で埋まっている。t5-t7 が空き |
 
@@ -62,12 +66,13 @@ DirectXTex の `IsCubemap()` から立て、D3D11 / D3D12 / Vulkan / Metal の�
 | ファイル | 責務 |
 |---|---|
 | `Tools/SkyCubeGen/gen_skycube.py` **(新規)** | 手続き的な空のキューブマップを DDS で生成する。天頂/地平/地面色・太陽方向・雲の量を定数で持つ。再生成可能にしておくのが目的で、ビルドには組み込まない(生成物をコミットする) |
-| `Game/Assets/Sky/SkyCube.dds` **(新規・生成物をコミット)** | 512x512 x6 面 / BGRA8 / ミップ無し。約 6MB |
-| `Game/Assets/Shader/Skybox.fx` **(新規)** | フルスクリーン三角形。VS は NDC から**視線方向**を復元し、`z = 0.999999` を出す。PS は `TextureCube` をサンプルするだけ |
+| `aqEngine/Assets/Sky/DefaultSkyCube.dds` **(新規・生成物をコミット。設計時は `Game/Assets/Sky/SkyCube.dds`)** | 512x512 x6 面 / BGRA8 / ミップ無し。約 6MB。既定の読み込み先は `RendererPreset::skyCubemapPath` |
+| `aqEngine/Assets/Shader/Skybox.fx` **(新規。設計時は `Game/Assets/Shader/`)** | フルスクリーン三角形。VS は NDC から**視線方向**を復元し、`z = 0.999999` を出す。PS は `TextureCube` をサンプルするだけ |
 | `aqEngine/Rendering/Sky/SkyRenderer.{h,cpp}` **(新規)** | キューブマップ・シェーダ・サンプラの所有と `BuildCommandList`。**生成に失敗しても続行**(デカールと同じ作法。空が出ないだけ) |
 | `aqEngine/Rendering/Sky/SkyCommand.{h,cpp}` **(新規)** | `IRenderCommand` 派生。`ParticleDrawCommand` と同じ構成(値コピーで保持 / `Execute` 1 本) |
-| `aqEngine/Rendering/Renderer.{h,cpp}` | `skyRenderer_` の保持と、`BuildCommandList` / **`BuildCommandListViews` の両方**への 1 行追加 |
-| `Game/Assets/Shader/shader_entries.txt` | `Skybox.fx VSMain vs` / `Skybox.fx PSMain ps` の 2 行を追加(**登録し忘れると Vulkan / Metal でシェーダが見つからない**。D3D は実行時コンパイルなので気付きにくい) |
+| `aqEngine/Rendering/Pipeline/Passes/SkyPass.{h,cpp}` | `SkyRenderer` を包むパス。`Scene` を読み書きし `Depth` は任意(`ReadsOptional`)。**自分で RT をバインドしてから描く**(Depth があれば `SetRenderTargetWithDepthCommand`、無ければ `SetRenderTargetCommand`)。スコープは既定の View(分割画面のビューごとに実行される) |
+| `aqEngine/Rendering/Pipeline/PipelinePresets.cpp` | `Standard()` / `Mobile()` が `preset.enableSky` のとき `SkyRenderer::Create(preset.skyCubemapPath)` → `SkyPass` を追加(生成失敗なら追加しない) |
+| `aqEngine/Assets/Shader/shader_entries.txt`(設計時は `Game/Assets/Shader/`) | `Skybox.fx VSMain vs` / `Skybox.fx PSMain ps` の 2 行を追加(**登録し忘れると Vulkan / Metal でシェーダが見つからない**。D3D は実行時コンパイルなので気付きにくい) |
 | `Engine.vcxproj` / `.filters` | 新規 `.h/.cpp` の登録(`vs-project-files` スキル。**フィルターは実装前にユーザーへ確認する**) |
 
 ## 2. 視線方向の復元
@@ -79,13 +84,18 @@ VS で NDC(-1..1)から視線方向を作る。**逆ビュープロジェクシ�
 cbuffer SkyCB : register(b0)
 {
     float4x4 invViewProjection;   // 平行移動を抜いた view * projection の逆行列
-    float4   skyTint;             // rgb = 色調, a = 強度(既定 1,1,1,1)
+    float4   skyTint;             // rgb = 色調(既定 1,1,1,1)。a は強度ではない(下記)
 };
 ```
 
 **平行移動を抜く**のが肝。カメラ位置を含めたまま逆変換すると、空がカメラの移動に
 合わせてずれる(無限遠にならない)。`view` の平行移動成分を 0 にしてから
 `projection` と合成し、その逆行列を渡す。
+
+> **`skyTint.a` は強度として効かない。** PS は `gSkyCube.Sample(...) * skyTint` と成分ごとに掛けるだけで、
+> a は出力の alpha にしか掛からず(`Skybox.fx:53`)、描画は `BlendMode::Opaque`(`SkyCommand.cpp`)なので
+> a を変えても明るさは変わらない。明るさは rgb で調整する。a を強度にするなら PS を
+> `rgb *= tint.a` にする必要がある(未対応。§4 課題 3)。
 
 CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` と同じ)。
 
@@ -120,12 +130,20 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
       VK エラー 0 / 終了コード 0 / Metal 由来の警告 0
 - [ ] **同一カメラ状態での 2 構成の画素比較は未実施**(ゲーム進行が揃わないため)
 - [ ] 半透明(パーティクル・海)が空の手前に正しく出る — **未確認**
-      (この区間に半透明が出てこなかった)
+      (この区間に半透明が出てこなかった)。Standard では Sky が Forward より前なので Forward 内の半透明も
+      空の手前に出るはずだが、**Mobile は Sky が Forward の後ろ**(§4 課題 5)なので別に確認が要る。
+      確認対象は「パーティクル・海」に加えて「Forward 内の半透明」と「Mobile 構成」
+- 補足: 上の「平行移動で空がずれない」は走行中の**目視**による確認で、条件(固定した回転・投影)と
+  許容差を持たない。実装側は平行移動成分を 0 にしている(`SkyCommand.cpp`)ので設計としては正しいが、
+  再現可能な検証にするなら「カメラ回転・投影を固定し位置だけ変えた 2 フレームの画素差が 0(または許容差内)」を
+  条件にする(未実施)
 
 ### P3: 詰め
 
 実装:
-- 分割画面(`BuildCommandListViews`)への反映。
+- 分割画面への反映。**`BuildCommandListViews` は現行の `Renderer` に無い**(パス列方式で
+  `RenderPipeline::BuildViews` に置き換わった)。`SkyPass` は View スコープなので `BuildViews` が
+  ビューごとに `Build` を呼び、追加実装なしで全ビューに出るはず。残るのは**確認だけ**(未実施)。
 - ミニマップ(2 本目の `RenderPipeline`)に空を出すかの判断。
 - デバッグ UI のトグル(Rendering パネル)。
 
@@ -138,7 +156,9 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
 
 ### P2 で判明したこと(設計に無かった 2 点)
 
-1. **`SkyRenderer` の生成は `OnInitialize()` ではなく `OnRegister()` から行う。**
+1. **(P2 時点の制約。現在は解消済み)`SkyRenderer` の生成は `OnInitialize()` ではなく `OnRegister()` から行う。**
+   現行は `AppHost::Initialize` が `RegisterEngineResourceBanks()` で既定バンクを `OnInitialize` より前に
+   登録する(`AppHost.cpp`)ので、`OnInitialize` で `Load` しても落ちない。以下は当時の記録(行番号も当時のもの)。
    `SkyRenderer` はキューブマップを `ResourceManager` 経由で非同期ロードするが、
    **リソースバンクの登録は `OnRegister()` が行い、Engine は `Initialize()` →
    `Register()` の順で呼ぶ**(`Engine.cpp:95-105`)。`OnInitialize` で `Load` すると
@@ -169,16 +189,34 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
 2. ~~**ミップマップを持たせるか**~~ → **解決(P2)**。生成 DDS はミップ 1 枚だが、
    `Resource.cpp` が読み込み時に自動生成しており `mips=10` になっていた。
 3. **HDR にするか**。メイン RT は `R16G16B16A16_Float` なので、LDR の DDS を
-   そのまま出すとトーンマップで少し沈む。強度(`skyTint.a`)で持ち上げて様子を見る。
+   そのまま出すとトーンマップで少し沈む。持ち上げるなら **rgb の色調で行う**(`skyTint.a` は効かない。§2)。
+   a を強度にしたいなら PS を `rgb *= tint.a` に変える(判断待ち)。
 4. **ミニマップに空を出すか**。ミニマップの列は `SkyPass` を積まず、呼び出し側が独自のクリア色を置く(暗い青)。
    真上から見下ろす画なので空はほぼ映らない。P3 で判断。
+
+5. **Mobile 構成では Sky が Forward の後ろにある(順序の確認。ジオメトリが隠れる問題ではない)。**
+   `PipelinePresets.cpp` の `Mobile()` は `ForwardPass` → `SkyPass` の順(Standard は Lighting → Sky → Forward)。
+   Mobile は GBuffer を持たないので `PassResourceKeys::Depth` は無いが、**それは深度バッファが無いという意味ではない**。
+   メイン RT は Metal / Vulkan とも深度付きで作られ(`MetalGraphicsDeviceImpl.mm` / `VulkanGraphicsDeviceImpl.cpp` の
+   `CreateOffscreen(..., hasDepth=true)`)、`SetRenderTargetCommand` → `OMSetRenderTargets` はその RT 自身の深度を
+   バインドする(`MetalRenderContextImpl.mm` / `VulkanRenderContextImpl.cpp`)。したがって Sky は `ReadOnly` の
+   深度テストで Forward の不透明ジオメトリに落とされ、**ジオメトリが空に隠れることはない**はず
+   (初版の本項は「深度なしで上塗りする」と書いていたが誤りで、Codex の再レビューで訂正した)。
+   **残る確認事項**は半透明だけ: Forward 内の半透明が深度を書かない場合、Sky が後から描かれるとその画素を
+   上塗りする可能性がある(`ForwardPass.cpp` の半透明描画が深度を書くかは未確認)。Standard は Sky が
+   Forward より前なので起きない。Mobile で半透明が空に消えないかを Android / iOS で確認する。
+   問題が出るなら Mobile を `Sky → Forward` の順にする。
+   **Mobile 構成を選ぶのは `Auto` のとき Android / iOS**(`ForCurrentPlatform`)。
+   `preset.pipeline = PipelineKind::Mobile` を明示すれば Mac / Windows でも選べるので、
+   デスクトップで確認するならこの指定で足りる(実機が要らない)。
 
 ---
 
 ## 5. チェックポイント
 
 - [ ] 既存の `.fx` が無改変(`Skybox.fx` の新規追加のみ)
-- [ ] `shader_entries.txt` に 2 行登録されている
+- [ ] `aqEngine/Assets/Shader/shader_entries.txt` に 2 行登録されている
+- [ ] Standard / Mobile のどちらでもジオメトリと半透明が空に隠れない(Mobile の半透明は課題 5)
 - [ ] 抽象IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本
 - [ ] 新規 `.h/.cpp` が `.vcxproj` / `.filters` に登録されている
 - [ ] 空の生成が失敗しても**起動できる**(デカールと同じ「失敗しても続行」)

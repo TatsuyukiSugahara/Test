@@ -51,9 +51,23 @@ namespace aq
 			friend class EntityContext;
 			template <typename...> friend class EntityView;
 
-			EntityManager() {}
+			EntityManager()
+			{
+#if defined(AQ_ECS_CHUNK_STATS)
+				// DumpChunkStats() などの引数なしの関数からスナップショットを取れるように収集元を登録する
+				ChunkStats::Get().SetCollector([this](std::vector<ChunkStatsRow>& rows)
+					{
+						CollectChunkStats(rows);
+					});
+#endif
+			}
 			~EntityManager()
 			{
+#if defined(AQ_ECS_CHUNK_STATS)
+				// 終了時に 1 回だけ出力する(EntityContext::Finalize から来る)
+				ChunkStats::Get().Dump("exit");
+				ChunkStats::Get().ClearCollector();
+#endif
 				chunkList_.clear();
 				slots_.clear();
 			}
@@ -187,6 +201,17 @@ namespace aq
 			 * 溜まったコマンドを一括実行（SystemManager::Update 後に呼ぶ）
 			 */
 			void FlushCommands();
+
+
+#if defined(AQ_ECS_CHUNK_STATS)
+		public:
+			/**
+			 * 全 Chunk の使用状況を読み取る(統計用。ChunkStats.h)
+			 * iterationMutex_ のリードロックを取るので、ForEach 中・FlushCommands 中には呼ばないこと。
+			 * @param rows 結果の格納先(中身は置き換える)
+			 */
+			void CollectChunkStats(std::vector<ChunkStatsRow>& rows) const;
+#endif
 
 
 		public:

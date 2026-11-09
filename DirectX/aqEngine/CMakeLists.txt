@@ -222,6 +222,14 @@ target_compile_definitions(aqEngine PUBLIC
 	ENGINE_GRAPHICS_${AQ_GRAPHICS_API_UPPER}
 )
 
+#  ECS の Chunk 使用状況の統計(ECS/ChunkStats.h、設計書/アロケーター改良設計.md §0.3)。
+#  Debug 専用にしない(Release での時間比較に使う)。OFF なら計測コードは残らない。
+#  Engine.vcxproj には無いので、MSBuild で使うときはプリプロセッサ定義へ手で足す。
+option(AQ_ECS_CHUNK_STATS "ECS の Chunk 統計を有効にする(計測用)" OFF)
+if(AQ_ECS_CHUNK_STATS)
+	target_compile_definitions(aqEngine PUBLIC AQ_ECS_CHUNK_STATS)
+endif()
+
 
 # ----------------------------------------------------------------------------
 #  ThirdParty

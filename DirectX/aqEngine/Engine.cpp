@@ -481,5 +481,17 @@ namespace aq
 		// レンダースレッド側に集約され、メインスレッドは Submit() 以降コンテキストに触れない。
 		appHost_->FlushRender();
 		aq::memory::MemoryManager::Get().ResetStackAllocator();
+#if defined(AQ_ECS_CHUNK_STATS)
+		// Chunk 統計(設計書/アロケーター改良設計.md §0.3)。フレーム番号を進め、
+		// 300 フレームごとにスナップショットを溜める(出力は終了時に 1 回だけ)。
+		// ここは ForEach / FlushCommands の外なので、収集のリードロックを安全に取れる。
+		{
+			static uint32_t statsFrame = 0;
+			aq::ecs::AdvanceChunkStatsFrame();
+			if (++statsFrame % 300 == 0) {
+				aq::ecs::CaptureChunkStats("auto");
+			}
+		}
+#endif
 	}
 }

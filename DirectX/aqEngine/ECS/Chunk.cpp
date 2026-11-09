@@ -226,13 +226,41 @@ namespace aq
 
 		void Chunk::ResetMemory(uint32_t capacity)
 		{
+#if defined(AQ_ECS_CHUNK_STATS)
+			// 計測(ChunkStats.h)。区間は確保・移動・旧バッファ解放の全体。ここではログを出さない
+			const auto statsStart = std::chrono::steady_clock::now();
+			ChunkResizeSample statsSample;
+			statsSample.oldCapacity    = capacity_;
+			statsSample.newCapacity    = capacity;
+			statsSample.bytesPerEntity = archetype_.GetArchetypeMemorySize();
+			statsSample.movedEntities  = size_;
+#endif
+
 			auto work = AllocBuffer(archetype_.GetArchetypeMemorySize() * capacity, archetype_.GetMaxAlign());
+#if defined(AQ_ECS_CHUNK_STATS)
+			const auto statsAllocEnd = std::chrono::steady_clock::now();
+			// 型ごとの移動時間(原因調査用)。コンポーネントが 16 個を超える分は記録しない
+			double statsTypeMs[16] = {};
+#endif
 
 			for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i) {
 				const auto offsetBase = archetype_.GetOffsetByIndex(i);
 				const auto compSize   = archetype_.GetSize(i);
 				const auto mover      = archetype_.GetTypeInfo(i).GetMover();
 				const auto dtor       = archetype_.GetTypeInfo(i).GetDestructor();
+
+#if defined(AQ_ECS_CHUNK_STATS)
+				const auto statsTypeStart = std::chrono::steady_clock::now();
+				// 内側のループには手を入れず、型ごとに件数で数える(下のループと同じ条件)
+				statsSample.movedElements += size_;
+				statsSample.movedBytes    += static_cast<uint64_t>(compSize) * size_;
+				if (mover) {
+					statsSample.moverCalls += size_;
+					if (dtor) {
+						statsSample.destructorCalls += size_;
+					}
+				}
+#endif
 
 				for (uint32_t e = 0; e < size_; ++e) {
 					void* src = begin_.get() + offsetBase * capacity_ + compSize * e;
@@ -245,10 +273,42 @@ namespace aq
 						memcpy(dst, src, compSize);
 					}
 				}
+#if defined(AQ_ECS_CHUNK_STATS)
+				if (i < 16) {
+					statsTypeMs[i] = std::chrono::duration<double, std::milli>(
+						std::chrono::steady_clock::now() - statsTypeStart).count();
+				}
+#endif
 			}
 
+#if defined(AQ_ECS_CHUNK_STATS)
+			const auto statsMoveEnd = std::chrono::steady_clock::now();
+#endif
 			capacity_ = capacity;
 			begin_ = std::move(work);
+
+#if defined(AQ_ECS_CHUNK_STATS)
+			// 旧バッファは上の move 代入で解放済み。その時間も含める
+			const auto statsEnd = std::chrono::steady_clock::now();
+			statsSample.elapsedMs = std::chrono::duration<double, std::milli>(statsEnd - statsStart).count();
+			statsSample.allocMs   = std::chrono::duration<double, std::milli>(statsAllocEnd - statsStart).count();
+			statsSample.moveMs    = std::chrono::duration<double, std::milli>(statsMoveEnd - statsAllocEnd).count();
+			statsSample.freeMs    = std::chrono::duration<double, std::milli>(statsEnd - statsMoveEnd).count();
+			// アーキタイプの識別用(計測区間の外で組み立てる)
+			for (size_t i = 0; i < archetype_.GetArchetypeSize(); ++i) {
+				if (i > 0) { statsSample.components += ','; }
+				statsSample.components += std::to_string(archetype_.GetSize(i));
+				if (archetype_.GetTypeInfo(i).GetMover())      { statsSample.components += 'm'; }
+				if (archetype_.GetTypeInfo(i).GetDestructor()) { statsSample.components += 'd'; }
+				statsSample.components += '#' + std::to_string(archetype_.GetTypeInfo(i).GetHash());
+				if (i < 16) {
+					char ms[32];
+					std::snprintf(ms, sizeof(ms), "=%.4fms", statsTypeMs[i]);
+					statsSample.components += ms;
+				}
+			}
+			ChunkStats::Get().RecordResize(statsSample);
+#endif
 		}
 
 

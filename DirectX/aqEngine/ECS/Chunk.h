@@ -2,6 +2,7 @@
 #include "ComponentArray.h"
 #include "Archetype.h"
 #include "Entity.h"
+#include "ChunkStats.h"
 #include <cassert>
 #include <memory>
 #include <new>
@@ -181,6 +182,22 @@ namespace aq
 			 * Chunkに登録されているデータ数を取得
 			 */
 			uint32_t GetSize() const { return size_; }
+
+
+#if defined(AQ_ECS_CHUNK_STATS)
+			/**
+			 * 統計用の読み取り(ChunkStats.h)
+			 */
+		public:
+			/** 容量(確保済みの体数) */
+			inline uint32_t GetCapacity() const { return capacity_; }
+
+			/** entityIDs_ の capacity */
+			inline size_t GetEntityIDCapacity() const { return entityIDs_.capacity(); }
+
+			/** entityIDs_ の size */
+			inline size_t GetEntityIDCount() const { return entityIDs_.size(); }
+#endif
 
 
 

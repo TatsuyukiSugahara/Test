@@ -127,5 +127,29 @@ Entity EntityManager::CreateEntityImpl(const Archetype& archetype)
 		}
 
 
+#if defined(AQ_ECS_CHUNK_STATS)
+		void EntityManager::CollectChunkStats(std::vector<ChunkStatsRow>& rows) const
+		{
+			std::shared_lock<std::shared_mutex> lock(iterationMutex_);
+
+			rows.clear();
+			rows.reserve(chunkList_.size());
+			for (uint32_t i = 0; i < static_cast<uint32_t>(chunkList_.size()); ++i) {
+				const Chunk& chunk = chunkList_[i];
+				ChunkStatsRow row;
+				row.chunkIndex       = i;
+				row.componentCount   = static_cast<uint32_t>(chunk.GetArchetype().GetArchetypeSize());
+				row.size             = chunk.GetSize();
+				row.capacity         = chunk.GetCapacity();
+				row.bytesPerEntity   = chunk.GetArchetype().GetArchetypeMemorySize();
+				row.entityIDCapacity = chunk.GetEntityIDCapacity();
+				row.entityIDSize     = chunk.GetEntityIDCount();
+				row.entityIDBytes    = sizeof(EntityID);
+				rows.push_back(row);
+			}
+		}
+#endif
+
+
 	}
 }

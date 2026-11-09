@@ -49,7 +49,6 @@ namespace aq
 
 		public:
 			DecalComponent() = default;
-			~DecalComponent() = default;
 
 			void SetTexturePath(const char* path);
 			void SetSize(const aq::math::Vector3& size)   { size_ = size; }

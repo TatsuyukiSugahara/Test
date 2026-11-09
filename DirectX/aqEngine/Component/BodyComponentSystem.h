@@ -39,7 +39,6 @@ namespace aq
 
 		public:
 			BoxStaticMeshComponent();
-			~BoxStaticMeshComponent();
 			void Update();
 
 			/** 箱の単色を設定する。初期化前に呼んだ場合は初期化完了時にまとめて反映される */
@@ -116,7 +115,6 @@ namespace aq
 
 		public:
 			StaticMeshComponent();
-			~StaticMeshComponent();
 			void Update();
 			void SetModelPath(const char* modelPath, const char* texturePath = nullptr);
 			void SetModelLocalMatrix(const aq::math::Matrix4x4& localMatrix);
@@ -242,7 +240,6 @@ namespace aq
 
 		public:
 			SkeletalMeshComponent();
-			~SkeletalMeshComponent();
 
 			/**
 			 * 描画するか。false の間は gather がこのメッシュを積まないので、

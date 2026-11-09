@@ -86,7 +86,8 @@ namespace aq
 
 		public:
 			InstancedPointListComponent()  {}
-			~InstancedPointListComponent() {}
+			// デストラクタは宣言しない。空でも宣言すると暗黙の move コンストラクタが生成されず、
+			// Chunk の拡張(TypeInfo::MoveImpl)で vector 群が深いコピーになる(数十 ms の停止になる)。
 
 
 		public:

@@ -49,7 +49,6 @@ namespace aq
 
 		public:
 			AnimationComponent();
-			~AnimationComponent() = default;
 
 			void AddAnimation(uint32_t nameHash, const char* path);
 			// 名前から hash を計算し、name も保持する（serialize 対応版）。

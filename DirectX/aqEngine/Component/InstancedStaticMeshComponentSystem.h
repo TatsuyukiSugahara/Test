@@ -27,7 +27,6 @@ namespace aq
 
 		public:
 			InstancedStaticMeshComponent()  {}
-			~InstancedStaticMeshComponent() {}
 
 
 		public:

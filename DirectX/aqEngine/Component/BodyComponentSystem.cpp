@@ -136,9 +136,6 @@ namespace aq
 		}
 
 
-		BoxStaticMeshComponent::~BoxStaticMeshComponent()
-		{
-		}
 		void BoxStaticMeshComponent::Update()
 		{
 			switch (componentState_)
@@ -289,10 +286,6 @@ namespace aq
 		}
 
 
-		StaticMeshComponent::~StaticMeshComponent()
-		{
-		}
-
 		void StaticMeshComponent::SetModelPath(const char* modelPath, const char* texturePath)
 		{
 			modelPath_ = modelPath ? modelPath : "";
@@ -424,11 +417,6 @@ namespace aq
 			, texturePath_()
 			, modelLocalMatrix_(MakeZUpSkeletalLocalMatrix(0.05f))
 			, textureLoadRequested_(false)
-		{
-		}
-
-
-		SkeletalMeshComponent::~SkeletalMeshComponent()
 		{
 		}
 

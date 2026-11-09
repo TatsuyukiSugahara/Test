@@ -124,14 +124,15 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   シェーダ生成は `ShaderLoader::Loading`(ワーカー)、メッシュ VB/IB は `RenderSystem::Update`(ワーカー)で
   行っている。4 バックエンドとも生成 API はスレッドセーフなので即バグではないが、規約を
   「生成はどのスレッドでも可、キューとコンテキスト操作だけレンダースレッド」に改めるか実装を寄せるかを決める。
-- **ImGui の接続が Bridge の外に漏れている。** [Core/AppHost.cpp](../aqEngine/Core/AppHost.cpp)(旧 Application.cpp)に
-  バックエンド 4 択 / プラットフォーム 5 択の `#if` が計 13 ブロック、
-  [ImGuiRenderCommand.cpp](../aqEngine/Rendering/ImGuiRenderCommand.cpp) は `GetImplRaw()` を具象型へキャスト。
-  `IGraphicsDeviceImpl` / `IPlatform` に ImGui 用フック(no-op 既定)を足せば消える。
-  `GetImplRaw()` のコメント「D3D11 専用」も実態と違う。
-- **抽象があるのに具象へ依存する箇所。** `Application` が `IDeferredRenderer` を `DeferredRenderer` へ
-  `dynamic_cast` し、失敗時はモーションブラーと Hi-Z がログ無しで無効化される。
-  `PostProcessChain` は `IPostProcessPass` を持ちながら 3 パスをメンバに直書き。
+- (解決済 2026-11-09)**ImGui の接続が Bridge の外に漏れている**件は、`IGraphicsDeviceImpl` /
+  `IPlatform` の no-op 既定フック(`ImGuiInit` / `ImGuiShutdown` / `ImGuiNewFrame` / `ImGuiRender`、VSync、`GetBackendName`)へ移して解消
+  ([エンジン課題解消設計](エンジン課題解消設計.md) P1-A / P1-B)。`ENGINE_GRAPHICS_*` と Platform 入力バックエンドの `#if` は
+  AppHost / ImGuiRenderCommand から 0 件。フォント読込・iOS の ini パス・モバイルの UI スケールは AppHost に残してある(設計書 §2.2)。
+  D3D11 / D3D12 / Win32 / UWP / Android の確認は実機待ち。
+- (解決済)**抽象があるのに具象へ依存する箇所。** `IDeferredRenderer`→`DeferredRenderer` の `dynamic_cast` と
+  `PostProcessChain` の直書きは、パス列方式への移行で消えていた(2026-11-09 に実コードで確認。
+  [エンジン課題解消設計](エンジン課題解消設計.md) §0)。**代わりに残る無言の失敗**(Release で no-op になる assert による
+  全描画の消失、Shadow / Sky / FullscreenCompute の無ログ return)は同設計書 P2 で扱う。
 - **`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする。
 - **`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む。**
 - **[Graphics/GPUBuffer.cpp](../aqEngine/Graphics/GPUBuffer.cpp) は D3D11 型を直接使う旧実装**で、

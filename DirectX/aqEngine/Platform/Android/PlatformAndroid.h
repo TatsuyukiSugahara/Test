@@ -64,6 +64,9 @@ namespace aq
 			bool        PumpEvents() override;
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
+			bool        ImGuiInit() override;
+			void        ImGuiShutdown() override;
+			bool        ImGuiNewFrame() override;
 
 			/** 描画可能か(ウィンドウが生きているか)。false の間はフレームを回してはいけない */
 			bool        IsRenderable() const override { return window_ != nullptr; }

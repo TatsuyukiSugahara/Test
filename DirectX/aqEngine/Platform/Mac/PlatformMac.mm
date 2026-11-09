@@ -466,6 +466,35 @@ namespace aq
 		}
 
 
+		bool PlatformMac::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			return MacImGui::Init();
+#else
+			return true;
+#endif
+		}
+
+
+		void PlatformMac::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			MacImGui::Shutdown();
+#endif
+		}
+
+
+		bool PlatformMac::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			MacImGui::NewFrame();
+			return true;
+#else
+			return false;
+#endif
+		}
+
+
 		const char* PlatformMac::GetUserDataDirectory()
 		{
 			if (!userDataDirectoryResolved_)

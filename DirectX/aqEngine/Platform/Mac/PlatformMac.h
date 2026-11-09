@@ -47,6 +47,9 @@ namespace aq
 			bool PumpEvents() override;
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
+			bool        ImGuiInit() override;
+			void        ImGuiShutdown() override;
+			bool        ImGuiNewFrame() override;
 
 			// アプリ終了を要求する(ウィンドウデリゲートから呼ぶ)。
 			inline void RequestExit() { exitRequested_ = true; }

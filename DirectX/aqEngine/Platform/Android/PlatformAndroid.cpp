@@ -4,6 +4,9 @@
 #if defined(AQ_PLATFORM_ANDROID)
 #include "Platform/Android/PlatformAndroid.h"
 #include "HID/Android/AndroidInputSink.h"
+#if defined(AQ_IMGUI)
+#include "Platform/Common/ImGuiPointerInput.h"
+#endif
 #include <android_native_app_glue.h>
 #include <android/asset_manager.h>
 #include <android/input.h>
@@ -340,6 +343,38 @@ namespace aq
 
 			contentRoot_ = base;
 			return true;
+		}
+
+
+		bool PlatformAndroid::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			// タッチはマウス抽象へ合成済みなので、それを ImGui へ流すだけのシムで足りる
+			// (imgui_impl_android / imgui_impl_osx は使わない。
+			//  設計書/Android移植設計.md §P7 / 設計書/iOS移植設計.md §5.3)。
+			return ImGuiPointerInput::Init();
+#else
+			return true;
+#endif
+		}
+
+
+		void PlatformAndroid::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			ImGuiPointerInput::Shutdown();
+#endif
+		}
+
+
+		bool PlatformAndroid::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			ImGuiPointerInput::NewFrame();
+			return true;
+#else
+			return false;
+#endif
 		}
 
 

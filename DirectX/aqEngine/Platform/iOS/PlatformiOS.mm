@@ -4,6 +4,9 @@
 #if defined(AQ_PLATFORM_IOS)
 #include "Platform/iOS/PlatformiOS.h"
 #include "HID/iOS/iOSInputSink.h"
+#if defined(AQ_IMGUI)
+#include "Platform/Common/ImGuiPointerInput.h"
+#endif
 #import <UIKit/UIKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 
@@ -520,6 +523,38 @@ namespace aq
 
 			// 用意できなければ nullptr(Mac / Android と同じ流儀)。
 			return contentRoot_.empty() ? nullptr : contentRoot_.c_str();
+		}
+
+
+		bool PlatformiOS::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			// タッチはマウス抽象へ合成済みなので、それを ImGui へ流すだけのシムで足りる
+			// (imgui_impl_android / imgui_impl_osx は使わない。
+			//  設計書/Android移植設計.md §P7 / 設計書/iOS移植設計.md §5.3)。
+			return ImGuiPointerInput::Init();
+#else
+			return true;
+#endif
+		}
+
+
+		void PlatformiOS::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			ImGuiPointerInput::Shutdown();
+#endif
+		}
+
+
+		bool PlatformiOS::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			ImGuiPointerInput::NewFrame();
+			return true;
+#else
+			return false;
+#endif
 		}
 
 

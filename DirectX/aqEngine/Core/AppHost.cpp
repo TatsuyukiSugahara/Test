@@ -17,6 +17,7 @@
 #include "UI/Font/FontResource.h"
 #include "Sound/SoundClip.h"
 #include "Util/Profiler.h"
+#include "Platform/IPlatform.h"
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
@@ -33,13 +34,6 @@
 #endif
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
-#if defined(AQ_PLATFORM_WIN32)
-#include <imgui/imgui_impl_win32.h>
-#elif defined(AQ_PLATFORM_MAC)
-#include "Platform/Mac/MacImGui.h"
-#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
-#include "Platform/Common/ImGuiPointerInput.h"
-#endif
 #include "Rendering/ImGuiRenderCommand.h"
 #endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
@@ -327,19 +321,9 @@ namespace aq
 				}
 #endif
 
-#if defined(AQ_PLATFORM_WIN32)
-			const bool winOk = ImGui_ImplWin32_Init(Engine::Get().GetHWND());
-#elif defined(AQ_PLATFORM_MAC)
-			const bool winOk = aq::platform::MacImGui::Init();
-#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
-			// タッチはマウス抽象へ合成済みなので、それを ImGui へ流すだけのシムで足りる
-			// (imgui_impl_android / imgui_impl_osx は使わない。
-			//  設計書/Android移植設計.md §P7 / 設計書/iOS移植設計.md §5.3)。
-			const bool winOk = aq::platform::ImGuiPointerInput::Init();
-#else
-			// UWP はプラットフォームバックエンドを持たない(ImGui へ入力が届かない)。
-			const bool winOk = true;
-#endif
+			// Platform 側の入力バックエンド。UWP など持たない実装は既定(成功)を返す。
+			aq::platform::IPlatform* platform = Engine::Get().GetPlatform();
+			const bool winOk = platform && platform->ImGuiInit();
 			const bool backendOk = winOk && aq::graphics::GraphicsDevice::Get().ImGuiInit();
 			if (backendOk)
 			{
@@ -347,13 +331,7 @@ namespace aq
 			}
 			else
 			{
-#if defined(AQ_PLATFORM_WIN32)
-				if (winOk) ImGui_ImplWin32_Shutdown();
-#elif defined(AQ_PLATFORM_MAC)
-				if (winOk) aq::platform::MacImGui::Shutdown();
-#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
-				if (winOk) aq::platform::ImGuiPointerInput::Shutdown();
-#endif
+				if (winOk) platform->ImGuiShutdown();
 				ImGui::DestroyContext();
 				EngineAssertMsg(false, "ImGui backend initialization failed");
 			}
@@ -546,13 +524,8 @@ namespace aq
 		if (imguiReady_)
 		{
 			aq::graphics::GraphicsDevice::Get().ImGuiShutdown();
-#if defined(AQ_PLATFORM_WIN32)
-			ImGui_ImplWin32_Shutdown();
-#elif defined(AQ_PLATFORM_MAC)
-			aq::platform::MacImGui::Shutdown();
-#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
-			aq::platform::ImGuiPointerInput::Shutdown();
-#endif
+			if (aq::platform::IPlatform* platform = Engine::Get().GetPlatform())
+				platform->ImGuiShutdown();
 			ImGui::DestroyContext();
 			imguiReady_ = false;
 		}
@@ -704,24 +677,18 @@ namespace aq
 		ImDrawData* imguiDrawData = nullptr;
 		if (imguiReady_)
 		{
-#if defined(AQ_PLATFORM_WIN32)
-			ImGui_ImplWin32_NewFrame();
-#elif defined(AQ_PLATFORM_MAC)
-			aq::platform::MacImGui::NewFrame();
-#elif defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
-			aq::platform::ImGuiPointerInput::NewFrame();
-#else
-			// UWP はプラットフォームバックエンドが無いので、それが埋めるべき最低限の 2 つを自前で入れる。
-			//  - DisplaySize: 0 のままだと ImGui::NewFrame のサニティチェックで停止する
-			//  - DeltaTime  : 0 以下だと同じくアサートに掛かる(初回フレームは実測値が無い)
+			aq::platform::IPlatform* platform = Engine::Get().GetPlatform();
+			if (!(platform && platform->ImGuiNewFrame()))
 			{
+				// Platform 側のバックエンドが無い(UWP 等)ので、それが埋めるべき最低限の 2 つを自前で入れる。
+				//  - DisplaySize: 0 のままだと ImGui::NewFrame のサニティチェックで停止する
+				//  - DeltaTime  : 0 以下だと同じくアサートに掛かる(初回フレームは実測値が無い)
 				ImGuiIO& io = ImGui::GetIO();
 				io.DisplaySize = ImVec2(static_cast<float>(Engine::Get().GetScreenWidth()),
 				                        static_cast<float>(Engine::Get().GetScreenHeight()));
 				const float deltaTime = Engine::GetDeltaTime();
 				io.DeltaTime = (deltaTime > 0.0f) ? deltaTime : (1.0f / 60.0f);
 			}
-#endif
 			aq::graphics::GraphicsDevice::Get().ImGuiNewFrame();
 			ImGui::NewFrame();
 

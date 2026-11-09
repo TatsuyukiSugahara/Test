@@ -172,6 +172,9 @@ namespace aq
 		 */
 		const char* GetUserDataDirectory() const;
 
+		/** プラットフォーム実装(呼び出し側所有)。未設定なら nullptr */
+		inline aq::platform::IPlatform* GetPlatform() const { return platform_; }
+
 		// static ラッパー (Engine::Get() を省略して呼べる)
 		static float GetDeltaTime() { return Get().gameTimer_.GetDeltaTime(); }
 		static float GetTotalTime() { return Get().gameTimer_.GetTotalTime(); }

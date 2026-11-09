@@ -99,6 +99,29 @@ namespace aq
 			// Activity 由来で実行時にしか分からない)。よってコンパイル時定数や、初期化前に
 			// 呼べる静的関数の形にはしない。
 			virtual const char* GetUserDataDirectory() = 0;
+
+			/**
+			 * ImGui の Platform 側バックエンド(入力 / DisplaySize / DeltaTime)の初期化。
+			 * 呼び出しはメインスレッド。ImGui::CreateContext の後、グラフィックス側の
+			 * バックエンドの ImGuiInit の前に呼ばれる。AQ_IMGUI 未定義のビルドでは呼ばれない。
+			 * 既定は何もせず成功(バックエンドを持たない実装向け)。
+			 *
+			 * @return 失敗したら false(その場合 ImGuiShutdown は呼ばれない)
+			 */
+			virtual bool ImGuiInit() { return true; }
+
+			/**
+			 * ImGuiInit() が成功したバックエンドの後始末。呼び出しはメインスレッド。
+			 * グラフィックス側の ImGuiShutdown の後、ImGui::DestroyContext の前に呼ばれる。
+			 */
+			virtual void ImGuiShutdown() {}
+
+			/**
+			 * ImGui::NewFrame の前に毎フレーム呼ばれる。呼び出しはメインスレッド。
+			 * バックエンドが ImGuiIO(DisplaySize / DeltaTime / 入力)を更新したら true。
+			 * false を返したときは、呼び出し側(AppHost)が最低限の DisplaySize と DeltaTime を入れる。
+			 */
+			virtual bool ImGuiNewFrame() { return false; }
 		};
 	}
 }

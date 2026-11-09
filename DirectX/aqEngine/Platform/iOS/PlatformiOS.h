@@ -78,6 +78,9 @@ namespace aq
 			void        RunFrameLoop(const std::function<void()>& frame) override;
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
+			bool        ImGuiInit() override;
+			void        ImGuiShutdown() override;
+			bool        ImGuiNewFrame() override;
 
 			/**
 			 * 描画してよい状態か。背面にいる間は false。

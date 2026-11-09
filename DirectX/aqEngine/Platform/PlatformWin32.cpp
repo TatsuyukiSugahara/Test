@@ -5,6 +5,7 @@
 #include "Platform/PlatformWin32.h"
 #ifdef AQ_IMGUI
 #include <imgui/imgui.h>
+#include <imgui/imgui_impl_win32.h>
 // header 内で #if 0 されているため、使用する .cpp で前方宣言が必要
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
@@ -163,6 +164,35 @@ namespace aq
 			aq::graphics::NativeWindowHandle handle;
 			handle.handle = inputCooperativeWnd_ ? inputCooperativeWnd_ : hWnd_;
 			return handle;
+		}
+
+
+		bool PlatformWin32::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			return ImGui_ImplWin32_Init(hWnd_);
+#else
+			return true;
+#endif
+		}
+
+
+		void PlatformWin32::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			ImGui_ImplWin32_Shutdown();
+#endif
+		}
+
+
+		bool PlatformWin32::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			ImGui_ImplWin32_NewFrame();
+			return true;
+#else
+			return false;
+#endif
 		}
 
 

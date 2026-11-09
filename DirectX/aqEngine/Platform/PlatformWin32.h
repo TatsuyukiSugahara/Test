@@ -40,6 +40,9 @@ namespace aq
 			const char* GetUserDataDirectory() override;
 			bool HasInputFocus() const override;
 			aq::graphics::NativeWindowHandle GetInputCooperativeWindow() const override;
+			bool ImGuiInit() override;
+			void ImGuiShutdown() override;
+			bool ImGuiNewFrame() override;
 
 		private:
 			/** 入力協調用の非表示ウィンドウを作る(埋め込み時のみ呼ぶ) */

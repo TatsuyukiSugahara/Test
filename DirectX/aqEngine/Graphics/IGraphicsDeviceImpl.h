@@ -10,6 +10,8 @@
 #include "IGpuBuffer.h"
 #include "GraphicsTypes.h"
 
+struct ImDrawData;   // 前方宣言のみ。imgui.h を引き込まない
+
 
 namespace aq
 {
@@ -70,6 +72,31 @@ namespace aq
 			 * 即時実行モデル(D3D11)では不要のため既定は no-op。
 			 */
 			virtual void WaitIdle() {}
+
+			/**
+			 * ImGui のバックエンド接続(既定 no-op。AQ_IMGUI 構成でのみ意味を持つ)。
+			 * ImGuiInit / ImGuiNewFrame / ImGuiShutdown はメインスレッドで呼ぶ。
+			 * ImGuiShutdown は GPU アイドル(WaitIdle)の後に呼ぶこと。
+			 *
+			 * @return ImGuiInit は初期化に失敗したら false
+			 */
+			virtual bool ImGuiInit()     { return true; }
+			virtual void ImGuiShutdown() {}
+			virtual void ImGuiNewFrame() {}
+
+			/**
+			 * ImGui の描画データを描く(ImGuiRenderCommand::Execute から、レンダースレッドで呼ばれる)。
+			 * Vulkan / Metal は描画データを保持し、CopyToBackBuffer 後に swapchain / drawable へ描く。
+			 */
+			virtual void ImGuiRender(ImDrawData* /*drawData*/) {}
+
+			/** VSync を実行時に切り替えられるか(現状 D3D12 のみ) */
+			virtual bool CanToggleVSync() const { return false; }
+			virtual bool GetVSync() const       { return true; }
+			virtual void SetVSync(bool /*enabled*/) {}
+
+			/** デバッグ表示用のバックエンド名("D3D11" / "D3D12" / "Vulkan" / "Metal") */
+			virtual const char* GetBackendName() const { return "?"; }
 
 			/**
 			 * RenderContext に API 依存のコンテキストを渡す。

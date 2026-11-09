@@ -59,6 +59,16 @@ namespace aq
 		void GraphicsDevice::WaitIdle()  { if (impl_) impl_->WaitIdle();  }
 
 
+		bool GraphicsDevice::ImGuiInit()                  { return impl_ ? impl_->ImGuiInit() : false; }
+		void GraphicsDevice::ImGuiShutdown()              { if (impl_) impl_->ImGuiShutdown(); }
+		void GraphicsDevice::ImGuiNewFrame()              { if (impl_) impl_->ImGuiNewFrame(); }
+		void GraphicsDevice::ImGuiRender(ImDrawData* drawData) { if (impl_) impl_->ImGuiRender(drawData); }
+		bool GraphicsDevice::CanToggleVSync() const       { return impl_ ? impl_->CanToggleVSync() : false; }
+		bool GraphicsDevice::GetVSync() const             { return impl_ ? impl_->GetVSync() : true; }
+		void GraphicsDevice::SetVSync(bool enabled)       { if (impl_) impl_->SetVSync(enabled); }
+		const char* GraphicsDevice::GetBackendName() const { return impl_ ? impl_->GetBackendName() : "?"; }
+
+
 		bool GraphicsDevice::RecreateSurface(NativeWindowHandle window)
 		{
 			return impl_ ? impl_->RecreateSurface(window) : false;

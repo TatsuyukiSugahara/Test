@@ -41,17 +41,6 @@
 #include "Platform/Common/ImGuiPointerInput.h"
 #endif
 #include "Rendering/ImGuiRenderCommand.h"
-#ifdef ENGINE_GRAPHICS_D3D11
-#include "Graphics/D3D11/D3D11GraphicsDeviceImpl.h"
-#include <imgui/imgui_impl_dx11.h>
-#elif defined(ENGINE_GRAPHICS_D3D12)
-#include "Graphics/D3D12/D3D12ImGui.h"
-#include "Graphics/D3D12/D3D12GraphicsDeviceImpl.h"
-#elif defined(ENGINE_GRAPHICS_VULKAN)
-#include "Graphics/Vulkan/VulkanImGui.h"
-#elif defined(ENGINE_GRAPHICS_METAL)
-#include "Graphics/Metal/MetalImGui.h"
-#endif
 #endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #include "Level/LevelComponentRegistry.h"
@@ -351,19 +340,7 @@ namespace aq
 			// UWP はプラットフォームバックエンドを持たない(ImGui へ入力が届かない)。
 			const bool winOk = true;
 #endif
-			bool backendOk = false;
-#ifdef ENGINE_GRAPHICS_D3D11
-			auto* d3d = dynamic_cast<aq::graphics::D3D11GraphicsDeviceImpl*>(
-				aq::graphics::GraphicsDevice::Get().GetImplRaw());
-			EngineAssertMsg(d3d != nullptr, "AQ_IMGUI requires D3D11GraphicsDeviceImpl");
-			backendOk = winOk && d3d && ImGui_ImplDX11_Init(d3d->GetDevice(), d3d->GetDeviceContext());
-#elif defined(ENGINE_GRAPHICS_D3D12)
-			backendOk = winOk && aq::graphics::D3D12ImGui::Init();
-#elif defined(ENGINE_GRAPHICS_VULKAN)
-			backendOk = winOk && aq::graphics::VulkanImGui::Init();
-#elif defined(ENGINE_GRAPHICS_METAL)
-			backendOk = winOk && aq::graphics::MetalImGui::Init();
-#endif
+			const bool backendOk = winOk && aq::graphics::GraphicsDevice::Get().ImGuiInit();
 			if (backendOk)
 			{
 				imguiReady_ = true;
@@ -568,15 +545,7 @@ namespace aq
 #ifdef AQ_IMGUI
 		if (imguiReady_)
 		{
-#ifdef ENGINE_GRAPHICS_D3D11
-			ImGui_ImplDX11_Shutdown();
-#elif defined(ENGINE_GRAPHICS_D3D12)
-			aq::graphics::D3D12ImGui::Shutdown();
-#elif defined(ENGINE_GRAPHICS_VULKAN)
-			aq::graphics::VulkanImGui::Shutdown();
-#elif defined(ENGINE_GRAPHICS_METAL)
-			aq::graphics::MetalImGui::Shutdown();
-#endif
+			aq::graphics::GraphicsDevice::Get().ImGuiShutdown();
 #if defined(AQ_PLATFORM_WIN32)
 			ImGui_ImplWin32_Shutdown();
 #elif defined(AQ_PLATFORM_MAC)
@@ -753,15 +722,7 @@ namespace aq
 				io.DeltaTime = (deltaTime > 0.0f) ? deltaTime : (1.0f / 60.0f);
 			}
 #endif
-#ifdef ENGINE_GRAPHICS_D3D11
-			ImGui_ImplDX11_NewFrame();
-#elif defined(ENGINE_GRAPHICS_D3D12)
-			aq::graphics::D3D12ImGui::NewFrame();
-#elif defined(ENGINE_GRAPHICS_VULKAN)
-			aq::graphics::VulkanImGui::NewFrame();
-#elif defined(ENGINE_GRAPHICS_METAL)
-			aq::graphics::MetalImGui::NewFrame();
-#endif
+			aq::graphics::GraphicsDevice::Get().ImGuiNewFrame();
 			ImGui::NewFrame();
 
 #if defined(AQ_PLATFORM_ANDROID) || defined(AQ_PLATFORM_IOS)
@@ -824,17 +785,7 @@ namespace aq
 					ImGuiWindowFlags_NoMove;
 				if (ImGui::Begin("##FPSOverlay", nullptr, flags))
 				{
-#if defined(ENGINE_GRAPHICS_D3D12)
-					const char* backend = "D3D12";
-#elif defined(ENGINE_GRAPHICS_D3D11)
-					const char* backend = "D3D11";
-#elif defined(ENGINE_GRAPHICS_VULKAN)
-					const char* backend = "Vulkan";
-#elif defined(ENGINE_GRAPHICS_METAL)
-					const char* backend = "Metal";
-#else
-					const char* backend = "?";
-#endif
+					const char* backend = aq::graphics::GraphicsDevice::Get().GetBackendName();
 					ImGui::Text("%s  %.1f FPS (%.2f ms)", backend, fps, ms);
 #ifdef AQ_DEBUG_IMGUI
 					// トグル操作のヒント（非表示中は重いデバッグ描画がスキップされる）。
@@ -846,16 +797,12 @@ namespace aq
 #endif
 #endif
 
-#if defined(ENGINE_GRAPHICS_D3D12)
-					// VSync を実機で切り替えられるようにする
-					auto* d3d12 = static_cast<aq::graphics::D3D12GraphicsDeviceImpl*>(
-						aq::graphics::GraphicsDevice::Get().GetImplRaw());
-					if (d3d12)
+					// VSync を実機で切り替えられるバックエンドだけチェックボックスを出す
+					if (aq::graphics::GraphicsDevice::Get().CanToggleVSync())
 					{
-						bool vsync = d3d12->GetVSync();
-						if (ImGui::Checkbox("VSync", &vsync)) d3d12->SetVSync(vsync);
+						bool vsync = aq::graphics::GraphicsDevice::Get().GetVSync();
+						if (ImGui::Checkbox("VSync", &vsync)) aq::graphics::GraphicsDevice::Get().SetVSync(vsync);
 					}
-#endif
 				}
 				ImGui::End();
 			}

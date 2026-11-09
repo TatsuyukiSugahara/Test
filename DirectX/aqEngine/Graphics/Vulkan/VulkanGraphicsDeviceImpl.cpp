@@ -847,6 +847,29 @@ namespace aq
 			vkCmdPipelineBarrier2(cmd, &dep);
 		}
 
+		bool VulkanGraphicsDeviceImpl::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			return VulkanImGui::Init();
+#else
+			return true;
+#endif
+		}
+
+		void VulkanGraphicsDeviceImpl::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			VulkanImGui::Shutdown();
+#endif
+		}
+
+		void VulkanGraphicsDeviceImpl::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			VulkanImGui::NewFrame();
+#endif
+		}
+
 		void VulkanGraphicsDeviceImpl::WaitDeviceIdle()
 		{
 			if (device_) vkDeviceWaitIdle(device_);

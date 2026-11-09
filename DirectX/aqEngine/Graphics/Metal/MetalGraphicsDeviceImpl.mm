@@ -692,6 +692,32 @@ namespace aq
 		}
 
 
+		bool MetalGraphicsDeviceImpl::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			return MetalImGui::Init();
+#else
+			return true;
+#endif
+		}
+
+
+		void MetalGraphicsDeviceImpl::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			MetalImGui::Shutdown();
+#endif
+		}
+
+
+		void MetalGraphicsDeviceImpl::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			MetalImGui::NewFrame();
+#endif
+		}
+
+
 		void MetalGraphicsDeviceImpl::WaitIdle()
 		{
 			if (objects_ == nullptr || objects_->lastCommandBuffer == nil) {

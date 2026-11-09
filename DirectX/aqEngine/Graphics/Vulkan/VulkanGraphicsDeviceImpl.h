@@ -109,6 +109,12 @@ namespace aq
 			/** imgui の描画データを受け取り、CopyToBackBuffer 後に swapchain へ描く (AQ_IMGUI 時)。 */
 			void SetImGuiDrawData(ImDrawData* d) { imguiDrawData_ = d; }
 
+			bool ImGuiInit() override;       // VulkanImGui::Init
+			void ImGuiShutdown() override;
+			void ImGuiNewFrame() override;
+			void ImGuiRender(ImDrawData* drawData) override { SetImGuiDrawData(drawData); }
+			const char* GetBackendName() const override { return "Vulkan"; }
+
 			/**
 			 * 提出済みの全 GPU 作業が終わるまで待つ(vkDeviceWaitIdle)。
 			 * RenderThread::WaitForCompletion は CPU 側(コマンド積み)の完了までしか見ないため、

@@ -5,6 +5,9 @@
 #include "D3D11Buffers.h"
 #include "D3D11Shader.h"
 #include "D3D11DepthMap.h"
+#ifdef AQ_IMGUI
+#include <imgui/imgui_impl_dx11.h>
+#endif
 #if defined(AQ_PLATFORM_UWP)
 #include <dxgi1_2.h>   // IDXGIFactory2 / CreateSwapChainForCoreWindow / DXGI_SWAP_CHAIN_DESC1
 #include <dxgi1_6.h>   // IDXGIFactory4 / IDXGIAdapter1 (D3D12 probe 用)
@@ -166,6 +169,42 @@ namespace aq
 
 		void D3D11GraphicsDeviceImpl::OnResume()
 		{
+		}
+
+
+		bool D3D11GraphicsDeviceImpl::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			return ImGui_ImplDX11_Init(device_, deviceContext_);
+#else
+			return true;
+#endif
+		}
+
+
+		void D3D11GraphicsDeviceImpl::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			ImGui_ImplDX11_Shutdown();
+#endif
+		}
+
+
+		void D3D11GraphicsDeviceImpl::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			ImGui_ImplDX11_NewFrame();
+#endif
+		}
+
+
+		void D3D11GraphicsDeviceImpl::ImGuiRender(ImDrawData* drawData)
+		{
+#ifdef AQ_IMGUI
+			ImGui_ImplDX11_RenderDrawData(drawData);
+#else
+			(void)drawData;
+#endif
 		}
 
 

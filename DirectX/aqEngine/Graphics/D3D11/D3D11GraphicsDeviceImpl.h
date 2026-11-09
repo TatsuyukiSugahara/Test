@@ -35,9 +35,15 @@ namespace aq
 			void CopyToBackBuffer(IRenderTarget& src) override;
 			void SetupDefaultRenderState(RenderContext& context) override;
 
+			bool ImGuiInit() override;       // ImGui_ImplDX11_Init(自分の device / context)
+			void ImGuiShutdown() override;
+			void ImGuiNewFrame() override;
+			void ImGuiRender(ImDrawData* drawData) override;
+			const char* GetBackendName() const override { return "D3D11"; }
+
 			/** D3D11 固有: デバイスが必要な箇所（バッファ生成など）向け */
 			ID3D11Device* GetDevice() const { return device_; }
-			/** D3D11 固有: imgui など context が必要な箇所向け */
+			/** D3D11 固有: context が必要な箇所向け */
 			ID3D11DeviceContext* GetDeviceContext() const { return deviceContext_; }
 
 			/** SamplerState / RenderTarget / Texture 等 D3D11 リソースクラス向け静的アクセサ */

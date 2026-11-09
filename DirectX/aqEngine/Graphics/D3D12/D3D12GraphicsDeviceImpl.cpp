@@ -11,6 +11,9 @@
 #include "D3D12RootSignature.h"
 #include "D3D12PipelineStateCache.h"
 #include "D3D12GpuBuffer.h"
+#ifdef AQ_IMGUI
+#include "D3D12ImGui.h"
+#endif
 
 
 namespace aq
@@ -164,6 +167,44 @@ namespace aq
 
 		void D3D12GraphicsDeviceImpl::OnResume()
 		{
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::ImGuiInit()
+		{
+#ifdef AQ_IMGUI
+			return D3D12ImGui::Init();
+#else
+			return true;
+#endif
+		}
+
+
+		void D3D12GraphicsDeviceImpl::ImGuiShutdown()
+		{
+#ifdef AQ_IMGUI
+			D3D12ImGui::Shutdown();
+#endif
+		}
+
+
+		void D3D12GraphicsDeviceImpl::ImGuiNewFrame()
+		{
+#ifdef AQ_IMGUI
+			D3D12ImGui::NewFrame();
+#endif
+		}
+
+
+		void D3D12GraphicsDeviceImpl::ImGuiRender(ImDrawData* drawData)
+		{
+#ifdef AQ_IMGUI
+			// 描画パス末尾。現在のRTV(表示RT)へ ImGui を記録する。
+			BeginFrameIfNeeded();
+			D3D12ImGui::Render(drawData, GetCommandList());
+#else
+			(void)drawData;
+#endif
 		}
 
 

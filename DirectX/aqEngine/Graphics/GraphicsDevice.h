@@ -68,6 +68,16 @@ namespace aq
 			// 提出済みの全 GPU 作業の完了待ち(終了処理でリソースを破棄する前に呼ぶ)。実装へ委譲。
 			void WaitIdle();
 
+			// ImGui のバックエンド接続・VSync・バックエンド名。実装へ委譲(詳細は IGraphicsDeviceImpl)。
+			bool ImGuiInit();
+			void ImGuiShutdown();
+			void ImGuiNewFrame();
+			void ImGuiRender(ImDrawData* drawData);
+			bool CanToggleVSync() const;
+			bool GetVSync() const;
+			void SetVSync(bool enabled);
+			const char* GetBackendName() const;
+
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);
 
@@ -111,7 +121,7 @@ namespace aq
 			/** デフォルトのレンダーステートを設定する */
 			void SetupDefaultRenderState(RenderContext& context);
 
-			/** Impl への生ポインタ (D3D11 専用クラスが static getter 経由で使う) */
+			/** Impl への生ポインタ (各バックエンドの static アクセサが内部で使う。上位レイヤーは使わないこと) */
 			IGraphicsDeviceImpl* GetImplRaw() const { return impl_.get(); }
 
 			/**

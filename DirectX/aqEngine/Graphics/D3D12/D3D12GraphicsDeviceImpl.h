@@ -67,6 +67,12 @@ namespace aq
 			void CopyToBackBuffer(IRenderTarget& src) override;
 			void SetupDefaultRenderState(RenderContext& context) override;
 
+			bool ImGuiInit() override;       // D3D12ImGui::Init
+			void ImGuiShutdown() override;
+			void ImGuiNewFrame() override;
+			void ImGuiRender(ImDrawData* drawData) override;   // BeginFrameIfNeeded + D3D12ImGui::Render
+			const char* GetBackendName() const override { return "D3D12"; }
+
 			// オフスクリーン RT (Phase 3)
 			IRenderTarget* GetRenderTarget(uint32_t index) override;
 			uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
@@ -139,8 +145,9 @@ namespace aq
 			static constexpr uint32_t GetFrameCount() { return FRAME_COUNT; }
 
 			// VSync の実行時トグル (ImGui から操作)
-			void SetVSync(bool enabled) { vsyncEnabled_ = enabled; }
-			bool GetVSync() const       { return vsyncEnabled_; }
+			bool CanToggleVSync() const override { return true; }
+			void SetVSync(bool enabled) override { vsyncEnabled_ = enabled; }
+			bool GetVSync() const override       { return vsyncEnabled_; }
 
 		private:
 			bool CreateDeviceAndQueues();

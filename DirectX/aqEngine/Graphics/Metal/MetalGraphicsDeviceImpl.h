@@ -181,6 +181,13 @@ namespace aq
 			 */
 			inline void SetImGuiDrawData(ImDrawData* data) { imguiDrawData_ = data; }
 
+			/** IGraphicsDeviceImpl の ImGui フック(MetalImGui へ委譲。ImGuiRender は SetImGuiDrawData と同じ) */
+			bool ImGuiInit() override;
+			void ImGuiShutdown() override;
+			void ImGuiNewFrame() override;
+			void ImGuiRender(ImDrawData* drawData) override { SetImGuiDrawData(drawData); }
+			const char* GetBackendName() const override { return "Metal"; }
+
 
 			/**
 			 * リソースファクトリー

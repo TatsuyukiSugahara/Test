@@ -14,6 +14,85 @@ namespace aq
 		}
 
 
+		bool RenderPipeline::CanResize()
+		{
+			bool ok = true;
+			for (const auto& pass : passes_)
+			{
+				const ResizePolicy policy = pass->GetResizePolicy();
+				if (policy == ResizePolicy::Unsupported)
+				{
+					if (!resizeUnsupportedLogged_) {
+						aq::StartupMarkf("[pipeline] リサイズ無効: %s が未対応(GetResizePolicy が Unsupported)", pass->GetName());
+					}
+					ok = false;
+					continue;
+				}
+				if (policy == ResizePolicy::Independent)
+				{
+					// 掲示板へ登録するパスは、リサイズ後に登録をやり直す必要があるので Resizable でなければならない。
+					PassDeclaration decl;
+					pass->DeclareResources(decl);
+					for (const PassResourceKey key : decl.GetWrites())
+					{
+						if (key != PassResourceKeys::Scene)
+						{
+							if (!resizeUnsupportedLogged_) {
+								aq::StartupMarkf("[pipeline] リサイズ無効: Independent の %s が %s を Writes している(Resizable にする必要がある)",
+								                 pass->GetName(), DescribePassKey(key));
+							}
+							ok = false;
+							break;
+						}
+					}
+				}
+			}
+			if (!ok) { resizeUnsupportedLogged_ = true; }
+			return ok;
+		}
+
+
+		bool RenderPipeline::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			size_t prepared = 0;
+			for (; prepared < passes_.size(); ++prepared)
+			{
+				auto& pass = passes_[prepared];
+				if (pass->GetResizePolicy() != ResizePolicy::Resizable) { continue; }
+				if (!pass->PrepareResize(width, height))
+				{
+					aq::StartupMarkf("[pipeline] PrepareResize 失敗: %s (%ux%u)", pass->GetName(), width, height);
+					// 失敗したパス自身は自己清掃済み。成功済みのパスだけ取り消す。
+					for (size_t i = 0; i < prepared; ++i) {
+						if (passes_[i]->GetResizePolicy() == ResizePolicy::Resizable) { passes_[i]->AbortResize(); }
+					}
+					return false;
+				}
+			}
+			return true;
+		}
+
+
+		void RenderPipeline::AbortResize()
+		{
+			for (auto& pass : passes_) {
+				if (pass->GetResizePolicy() == ResizePolicy::Resizable) { pass->AbortResize(); }
+			}
+		}
+
+
+		void RenderPipeline::CommitResize()
+		{
+			// 掲示板を Build 直後と同じ初期状態へ戻し、列順に登録し直す。
+			// 旧 Output などが残っていると、Wire で「前段の出力」として旧 RT を拾ってしまう。
+			resources_.Clear();
+			resources_.Set(PassResourceKeys::Scene, lastSceneRT_);
+			for (auto& pass : passes_) {
+				if (pass->GetResizePolicy() == ResizePolicy::Resizable) { pass->CommitResize(resources_); }
+			}
+		}
+
+
 		void RenderPipeline::Build(RenderFrame& frame, RenderCommandList& outList,
 		                           const RenderTargetHandle sceneRT, const float viewportW, const float viewportH)
 		{

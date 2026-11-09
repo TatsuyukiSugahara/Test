@@ -74,6 +74,12 @@ namespace aq
 			// 同じ窓を使い続けるプラットフォームでは起こらないので既定は false。
 			virtual bool ConsumeSurfaceChanged(aq::graphics::NativeWindowHandle& /*out*/) { return false; }
 
+			// 描画面(クライアント領域)のピクセル寸法。リサイズの検出に使う(設計書/エンジン課題解消設計.md P4)。
+			// **デバイスの内部状態を読まず Platform が持つ値だけを返す**ので、レンダースレッドと競合しない
+			// (GraphicsDevice::GetSurfaceSize はバックエンドによってはレンダースレッドが書き換える値を読む)。
+			// メインスレッドから呼ぶ。取得できない実装は false を返し、Engine は従来の経路へフォールバックする。
+			virtual bool GetClientPixelSize(uint32_t& /*outWidth*/, uint32_t& /*outHeight*/) const { return false; }
+
 			// ゲームのウィンドウがキーボードフォーカスを持っているか。
 			// 埋め込み(子ウィンドウ)時に、エディタ側を操作している間の入力を止めるのに使う。
 			// 埋め込みを持たないプラットフォームでは常に true(従来どおり)。

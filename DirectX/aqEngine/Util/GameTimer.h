@@ -57,6 +57,13 @@ namespace aq
 			 * @param fps  目標 FPS。0.0f 以下で無制限。
 			 */
 			void SetFPSLimit(float fps);
+
+			/**
+			 * 次の Tick() が測る経過時間を「今から」にする(それまでの待ち時間を捨てる)。
+			 * リサイズの再作成のように、ゲームの外で時間が掛かった直後に呼ぶと、
+			 * 次のフレームのデルタ時間が跳ねない(上限 MAX_DELTA_TIME に頼らずに済む)。
+			 */
+			void ResetDelta();
 		};
 	}
 }

@@ -37,6 +37,9 @@ namespace aq
 			/** トーンマップ後の LDR 出力 */
 			RenderTargetHandle finalRTHandle_;
 
+			/** リサイズ用の一時領域(PrepareResize で作り、CommitResize で本体へ入れ替える) */
+			RenderTargetHandle pendingFinalRTHandle_;
+
 			/** 合成に使うブルーム入力 (呼び出し側が Build 前に渡す) */
 			RenderTargetHandle bloomRTHandle_;
 			float              bloomIntensity_ = 0.0f;
@@ -56,6 +59,15 @@ namespace aq
 		public:
 			bool Initialize(const uint32_t width, const uint32_t height) override;
 			bool IsEnabled(const PostProcessContext& context) const override;
+
+			/**
+			 * リサイズ(設計書/エンジン課題解消設計.md P4)。ゲームスレッドで WaitIdle 済みの区間にだけ呼ぶ。
+			 * PrepareResize は新寸法の最終 RT を一時領域へ作る(失敗したら false)。
+			 * CommitResize は旧 RT を解放して入れ替える。AbortResize は一時領域を解放する(何度呼んでも安全)。
+			 */
+			bool PrepareResize(const uint32_t width, const uint32_t height);
+			void CommitResize();
+			void AbortResize();
 
 			RenderTargetHandle Build(
 				RenderCommandList&        outList,
@@ -89,6 +101,11 @@ namespace aq
 			inline void        SetExposure(const float v)          { exposure_   = v; }
 			inline void        SetWhitePoint(const float v)        { whitePoint_ = v; }
 			inline void        SetApplyGamma(const bool v)         { applyGamma_ = v; }
+
+
+		private:
+			/** 最終 RT の生成(Initialize / PrepareResize 共用) */
+			static RenderTargetHandle CreateFinalRT(const uint32_t width, const uint32_t height);
 		};
 	}
 }

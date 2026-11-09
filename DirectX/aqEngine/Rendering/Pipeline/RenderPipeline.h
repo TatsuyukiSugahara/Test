@@ -41,6 +41,9 @@ namespace aq
 			/** GetOutputRT() が Output 未登録時に返す、直近の Build/BuildViews で使った Scene ハンドル */
 			RenderTargetHandle lastSceneRT_;
 
+			/** CanResize() が false の理由ログを出したか(毎フレーム呼ばれても 1 回だけにする) */
+			bool resizeUnsupportedLogged_ = false;
+
 
 		public:
 			/** PipelineBuilder::Build() から構築される。列と検証済みの掲示板を受け取る */
@@ -59,6 +62,22 @@ namespace aq
 			void BuildViews(RenderFrame* frames, const ViewRect* rects, const uint32_t viewCount,
 			                RenderCommandList& outList, const RenderTargetHandle sceneRT,
 			                const float viewportW, const float viewportH);
+
+			/**
+			 * リサイズできるか(設計書/エンジン課題解消設計.md P4)。全パスが Independent か Resizable のときだけ true。
+			 * Independent のパスが Scene 以外のキーを Writes() していれば Unsupported 扱い。
+			 * false のときは理由(パス名)を 1 回だけログに出す。
+			 */
+			bool CanResize();
+
+			/** 全パスの PrepareResize を列順に呼ぶ。1 つでも失敗したら、成功済みのパスだけ AbortResize して false */
+			bool PrepareResize(uint32_t width, uint32_t height);
+
+			/** 全パスの AbortResize を呼ぶ(PrepareResize が false を返した後の後始末は PrepareResize 自身が済ませるので、通常は不要) */
+			void AbortResize();
+
+			/** 掲示板を初期状態(Scene のみ)へ戻し、全パスの CommitResize を列順に呼ぶ */
+			void CommitResize();
 
 			/** Output キーが登録されていればそれ、無ければ直近の Build/BuildViews で使った Scene */
 			RenderTargetHandle GetOutputRT() const;

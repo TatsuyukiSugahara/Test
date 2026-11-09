@@ -158,6 +158,20 @@ namespace aq
 		 */
 		bool SetRenderPipeline(std::unique_ptr<rendering::RenderPipeline> pipeline);
 
+		/**
+		 * 描画解像度の実行時変更(設計書/エンジン課題解消設計.md P4)。Engine が手順を駆動する。
+		 * すべてゲームスレッドで、WaitForRenderIdle 済みの区間にだけ呼ぶ。
+		 *
+		 * CanResizeRender    : パイプラインがあり、全パスが Independent か Resizable なら true(デバイスを変える前に判定する)
+		 * PrepareRenderResize: 全パスの PrepareResize。失敗したら false(成功済みのパスは取り消し済み)
+		 * AbortRenderResize  : 準備の取り消し
+		 * CommitRenderResize : 全パスの CommitResize と、Renderer / メインカメラの寸法更新
+		 */
+		bool CanResizeRender();
+		bool PrepareRenderResize(uint32_t width, uint32_t height);
+		void AbortRenderResize();
+		void CommitRenderResize(uint32_t width, uint32_t height);
+
 	private:
 		void Render();
 

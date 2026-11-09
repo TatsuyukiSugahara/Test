@@ -1,5 +1,8 @@
 #include "aq.h"
 #include "Engine.h"
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include "Resource/AssetPath.h"
 #include "Core/IAppModule.h"
 #include "Core/AppHost.h"
@@ -298,6 +301,14 @@ namespace aq
 		}
 
 		SyncScreenSize();
+
+		// 描画解像度のリサイズ。通常(1 回で成功)はここで済ませて同じフレームの Update へ進む。
+		// 失敗経路でだけ false が返り、Update を飛ばす(サウンドの供給だけは続ける)。
+		if (!HandleRenderResize()) {
+			UpdateSoundOnly();
+			return;
+		}
+
 		Update();
 	}
 
@@ -351,6 +362,151 @@ namespace aq
 		}
 		screenWidth_  = width;
 		screenHeight_ = height;
+	}
+
+
+	namespace
+	{
+		/** 再試行の上限と間隔(設計書/エンジン課題解消設計.md P4 §5.2)。上限を超えたら致命エラー */
+		constexpr uint32_t RESIZE_MAX_RETRIES = 5;
+		constexpr std::chrono::milliseconds RESIZE_RETRY_INTERVAL{ 200 };
+	}
+
+
+	bool Engine::HandleRenderResize()
+	{
+		auto& device = aq::graphics::GraphicsDevice::Get();
+		if (!appHost_ || !device.SupportsRenderResize()) {
+			return true;   // 未対応のバックエンドは従来どおり固定寸法
+		}
+
+		// 保留中(失敗経路)は、寸法の検出をやり直さず、前回から間隔をあけて再試行する。
+		if (resizePending_)
+		{
+			if (std::chrono::steady_clock::now() - lastResizeAttempt_ < RESIZE_RETRY_INTERVAL) {
+				return false;
+			}
+			return AttemptRenderResize();
+		}
+
+		// 寸法は Platform が持つ値から取る(デバイスの内部状態はレンダースレッドが書き換え得るので読まない)。
+		// 取れない Platform だけ従来の GetSurfaceSize にフォールバックする。
+		uint32_t width  = 0;
+		uint32_t height = 0;
+		if (!platform_->GetClientPixelSize(width, height) && !device.GetSurfaceSize(width, height)) {
+			return true;
+		}
+		if (width == 0 || height == 0) {
+			return true;   // 最小化など。現状維持
+		}
+
+		if (width == lastRequestedW_ && height == lastRequestedH_) {
+			candidateFrames_ = 0;
+			return true;
+		}
+
+		// ドラッグ中の連続変更で毎フレーム作り直さないよう、同じ値が 2 フレーム続いたら確定する。
+		if (width != candidateW_ || height != candidateH_) {
+			candidateW_      = width;
+			candidateH_      = height;
+			candidateFrames_ = 1;
+			return true;
+		}
+		if (++candidateFrames_ < 2) {
+			return true;
+		}
+		candidateFrames_ = 0;
+
+		// 手順 0: 対応可否の判定。デバイスを変える前に、全パスが対応しているかを確かめる
+		// (デバイスだけ新寸法になり、未対応パスが旧寸法のまま取り残されるのを防ぐ入口)。
+		lastRequestedW_ = width;   // 失敗・無効でも毎フレーム再要求しない(寸法がまた変わったときだけ再び来る)
+		lastRequestedH_ = height;
+		if (!appHost_->CanResizeRender())
+		{
+			if (!resizeDisabledLogged_) {
+				aq::StartupMark("[engine] リサイズ無効: パイプラインに未対応のパスがある(固定寸法のまま続行)");
+				resizeDisabledLogged_ = true;
+			}
+			return true;
+		}
+
+		resizePending_    = true;
+		resizeDeviceDone_ = false;
+		pendingReqW_      = width;
+		pendingReqH_      = height;
+		resizeRetries_    = 0;
+		lastSoundOnlyTime_ = std::chrono::steady_clock::now();
+		aq::StartupMarkf("[engine] リサイズ開始: %ux%u -> %ux%u", renderWidth_, renderHeight_, width, height);
+		return AttemptRenderResize();
+	}
+
+
+	bool Engine::AttemptRenderResize()
+	{
+		auto& device = aq::graphics::GraphicsDevice::Get();
+		lastResizeAttempt_ = std::chrono::steady_clock::now();
+
+		auto fail = [this](const char* what)
+		{
+			++resizeRetries_;
+			aq::StartupMarkf("[engine] リサイズ失敗(%s)。再試行 %u/%u", what, resizeRetries_, RESIZE_MAX_RETRIES);
+			if (resizeRetries_ >= RESIZE_MAX_RETRIES)
+			{
+				// リサイズで確保できないのはデバイスロスト / メモリ枯渇に相当し、描画を続けても壊れた画面になる。
+				// Engine に終了要求の API が無いので、ログを残して止める(設計書の「終了を要求する」からの逸脱。README の課題に記録)。
+				aq::StartupMark("[engine] FATAL: リサイズを諦める(再試行の上限)");
+				std::abort();
+			}
+			return false;   // 保留のまま。このフレームは Update を飛ばす
+		};
+
+		// 手順 1: CPU・GPU 双方の完了待ち。以降はフレームの外(レンダースレッド停止中)。
+		appHost_->WaitForRenderIdle();
+
+		// 手順 2: デバイス(スワップチェーン + メイン RT / 深度)。確定寸法を受け取る。
+		if (!resizeDeviceDone_)
+		{
+			uint32_t outW = 0;
+			uint32_t outH = 0;
+			if (!device.ResizeMainTargets(pendingReqW_, pendingReqH_, outW, outH) || outW == 0 || outH == 0) {
+				return fail("デバイス");
+			}
+			pendingOutW_      = outW;
+			pendingOutH_      = outH;
+			resizeDeviceDone_ = true;
+		}
+
+		// 手順 3: 全パスの準備。寸法は要求値ではなくデバイスが確定した値で作る(メイン RT・提示面・全パスを一致させる)。
+		if (!appHost_->PrepareRenderResize(pendingOutW_, pendingOutH_)) {
+			return fail("パス");   // 失敗したパス自身と成功済みパスは PrepareResize が片付け済み
+		}
+
+		// 手順 4: 確定(掲示板を初期状態へ戻して全パスが登録し直す。旧 RT の解放)。
+		appHost_->CommitRenderResize(pendingOutW_, pendingOutH_);
+
+		// 手順 5: Engine の寸法を更新し、保留を解除する。
+		renderWidth_  = pendingOutW_;
+		renderHeight_ = pendingOutH_;
+		resizePending_ = false;
+		aq::StartupMarkf("[engine] リサイズ完了: %ux%u", renderWidth_, renderHeight_);
+
+		// 再作成に掛かった時間が次フレームのデルタ時間に載らないようにする。
+		gameTimer_.ResetDelta();
+		return true;
+	}
+
+
+	void Engine::UpdateSoundOnly()
+	{
+		// Update を飛ばすとストリーミング音声の供給も止まり、既存バッファ(48 kHz で最大約 680 ms)を使い切ると音が切れる。
+		// GameTimer は Tick されないので前回のデルタ時間を繰り返し使ってしまい、フェードが実時間より速く進む。
+		// よって実経過時間を自前で測って渡す。
+		const auto now = std::chrono::steady_clock::now();
+		const float dt = std::min(std::chrono::duration<float>(now - lastSoundOnlyTime_).count(), 0.1f);
+		lastSoundOnlyTime_ = now;
+
+		aq::sound::SoundEngine::Get().Update(dt);
+		aq::audio::AudioDirector::Get().Update(dt);
 	}
 
 
@@ -428,6 +584,8 @@ namespace aq
 	{
 		renderWidth_  = initializeParameter.renderWidth;
 		renderHeight_ = initializeParameter.renderHeight;
+		lastRequestedW_ = renderWidth_;    // リサイズの検出は、起動時の寸法を「要求済み」として始める
+		lastRequestedH_ = renderHeight_;
 
 		// 選択された API の実装を注入 (将来 Vulkan に替える場合は define を変えてここを追加する)
 #ifdef ENGINE_GRAPHICS_D3D11

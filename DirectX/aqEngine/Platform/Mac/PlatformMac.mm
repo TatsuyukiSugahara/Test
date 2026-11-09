@@ -495,6 +495,25 @@ namespace aq
 		}
 
 
+		bool PlatformMac::GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const
+		{
+			if (objects_ == nullptr || objects_->view == nil) {
+				return false;
+			}
+
+			// UpdateLayerBacking が drawableSize に使うのと同じ bounds。contentsScale = 1 固定なので
+			// ポイント値 = ピクセル値。
+			const NSSize bounds = [objects_->view bounds].size;
+			if (bounds.width <= 0.0 || bounds.height <= 0.0) {
+				return false;
+			}
+
+			outWidth  = static_cast<uint32_t>(bounds.width);
+			outHeight = static_cast<uint32_t>(bounds.height);
+			return true;
+		}
+
+
 		const char* PlatformMac::GetUserDataDirectory()
 		{
 			if (!userDataDirectoryResolved_)

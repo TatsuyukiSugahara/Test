@@ -52,8 +52,19 @@ namespace aq
 			RenderTargetHandle outputRT_;
 			/** Setup 時点の Output(無ければ INVALID。その場合は毎フレームの Scene を読む) */
 			RenderTargetHandle inputRT_;
-			/** GBuffer1(法線)。掲示板に無ければ INVALID = このパスは何もしない */
+			/** GBuffer1(法線)。Wire が掲示板から取り直す。無効(active_ = false)なら INVALID */
 			RenderTargetHandle normalRT_;
+			/** PrepareResize が作った新しい出力 RT(CommitResize で outputRT_ へ入れ替わる) */
+			RenderTargetHandle pendingOutputRT_;
+			/** pendingOutputRT_ の寸法(CommitResize で params_ へ反映する) */
+			uint32_t pendingWidth_  = 0;
+			uint32_t pendingHeight_ = 0;
+
+			/**
+			 * 有効か。Setup が GBuffer1 の有無で 1 回だけ決める(無ければ資源を作らず素通し)。
+			 * リサイズ時も掲示板は見直さず、この判定を使う。
+			 */
+			bool active_ = false;
 
 			OutlineCBData params_;
 
@@ -73,8 +84,21 @@ namespace aq
 			bool IsSupported() const override;
 			void DeclareResources(PassDeclaration& decl) const override;
 			bool Setup(PassResources& res, const uint32_t width, const uint32_t height) override;
+			inline ResizePolicy GetResizePolicy() const override { return ResizePolicy::Resizable; }
+			bool PrepareResize(const uint32_t width, const uint32_t height) override;
+			void CommitResize(PassResources& res) override;
+			void AbortResize() override;
 			void Build(RenderFrame& frame, const PassViewInfo& view,
 			           PassResources& res, RenderCommandList& outList) override;
+
+
+		private:
+			/** シェーダ・出力 RT・定数バッファの生成(active_ が true のときだけ呼ぶ) */
+			bool CreateTargets(const uint32_t width, const uint32_t height);
+			/** 出力 RT のみ生成する(Setup と PrepareResize で共有) */
+			static RenderTargetHandle CreateOutputRT(const uint32_t width, const uint32_t height);
+			/** 法線と入力を掲示板から取り直し、自分の出力を Output として登録する(Setup と CommitResize で共有) */
+			void Wire(PassResources& res);
 
 
 			/** 線の見た目。ゲームが好きな値を入れる(既定は控えめな黒) */

@@ -263,6 +263,19 @@ System は登録順ではなく、**宣言した依存関係の順**で走りま
 | `Setup()` | シェーダと自分の RT の生成。掲示板(`PassResources`)に自分の RT を `Output` として登録 |
 | `Build()` | コマンドを積む。`FullscreenComputeCommand` にシェーダ・入力・出力・定数を渡すだけ |
 
+画面寸法の RT を持つパスは、さらに `GetResizePolicy()` を書きます。**書かないと「リサイズ非対応」になり、
+その列が 1 つでもあると描画解像度の実行時変更が全体で無効になります**(ログに名前が出ます)。
+
+| `GetResizePolicy()` | 選ぶ条件 |
+| --- | --- |
+| `Independent` | 画面寸法の資源を持たず、掲示板へ書くのは `Scene` だけ(描画するだけのパス) |
+| `Resizable` | 画面寸法の RT を持つ。`PrepareResize`(新 RT を一時領域へ作る。失敗したら自分で片付けて `false`)、`CommitResize`(旧 RT を `ReleaseOffscreenRenderTarget` で解放して入れ替え、`Wire` をやり直す)、`AbortResize`(一時領域の解放。何度呼んでも安全)を書く |
+
+`Resizable` にするときは `Setup()` を「RT を作る」と「掲示板から入力を読み、出力を登録する(`Wire`)」に割ります。
+リサイズのとき、掲示板は一度 `Scene` だけの状態へ戻されて前段から登録し直されます。前段の RT は作り直されているので、
+`Setup` で取った入力 RT をメンバに持ちっぱなしにすると古い RT を指します。`Wire` で取り直してください
+(`VignettePass` の `Wire` が実例です)。
+
 RT の受け渡しは「掲示板」で行います。パスは前後のパスの型を知らず、`Scene` / `Depth` / `WorldPos` / `Output`
 といったキーで RT を読み書きします。読むと宣言したキーが前のパスに無ければ、起動時に
 「`VignettePass` は `WorldPos` を読むが、それを書くパスが前に無い」のように名指しで止まります。

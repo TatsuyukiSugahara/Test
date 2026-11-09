@@ -41,6 +41,10 @@ namespace aq
 			bool IsSupported() const override;
 			void DeclareResources(PassDeclaration& decl) const override;
 			bool Setup(PassResources& res, const uint32_t width, const uint32_t height) override;
+			inline ResizePolicy GetResizePolicy() const override { return ResizePolicy::Resizable; }
+			bool PrepareResize(const uint32_t width, const uint32_t height) override;
+			void CommitResize(PassResources& res) override;
+			void AbortResize() override;
 			void Build(RenderFrame& frame, const PassViewInfo& view,
 			           PassResources& res, RenderCommandList& outList) override;
 
@@ -52,6 +56,11 @@ namespace aq
 			/** ブルーム強度の取得元を設定する。PipelinePresets が Standard() 組み立て時に繋ぐ */
 			inline void SetBloomIntensitySource(const BloomPass* bloom) { bloomSource_ = bloom; }
 			inline TonemapEffect* GetEffect() const { return effect_.get(); }
+
+
+		private:
+			/** 最終 RT を掲示板の Output へ登録する(Setup / CommitResize 共用) */
+			void Wire(PassResources& res);
 		};
 	}
 }

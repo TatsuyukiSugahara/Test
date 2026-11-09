@@ -99,6 +99,33 @@ namespace aq
 			virtual const char* GetBackendName() const { return "?"; }
 
 			/**
+			 * 描画解像度の実行時変更に対応しているか(設計書/エンジン課題解消設計.md P4)。
+			 * false(既定)のバックエンドは従来どおり**固定寸法のまま**動く(Engine は検出しても何もしない)。
+			 * true を返すバックエンドは ResizeMainTargets と ReleaseOffscreenRenderTarget を必ず実装すること。
+			 */
+			virtual bool SupportsRenderResize() const { return false; }
+
+			/**
+			 * スワップチェーン(提示面)とメイン RT / 深度を reqW × reqH で作り直す。
+			 * 呼べるのは WaitIdle 済みの区間(在フライトのコマンドが無い)だけで、ゲームスレッドから呼ぶ。
+			 * メイン RT のハンドル(添字)は変わらない。
+			 *
+			 * @param outW / outH 実際に確定した寸法(要求値と異なり得る。Vulkan は currentExtent を優先する)。
+			 *                    呼び出し側はこの寸法で全パスの RT を作る。
+			 * @return 成功したら true。失敗したら false(旧状態へ戻れるとは限らない。呼び出し側は再試行する)
+			 */
+			virtual bool ResizeMainTargets(uint32_t /*reqW*/, uint32_t /*reqH*/, uint32_t& /*outW*/, uint32_t& /*outH*/)
+			{
+				return false;
+			}
+
+			/**
+			 * オフスクリーン RT を 1 本解放する。ハンドル(添字)は空き番号として再利用される。
+			 * WaitIdle 済みの区間で呼ぶこと。解放済みの添字を GetRenderTarget に渡すと nullptr を返す。
+			 */
+			virtual void ReleaseOffscreenRenderTarget(uint32_t /*index*/) {}
+
+			/**
 			 * RenderContext に API 依存のコンテキストを渡す。
 			 * D3D11 なら ID3D11DeviceContext*、D3D12 なら CommandList など。
 			 */

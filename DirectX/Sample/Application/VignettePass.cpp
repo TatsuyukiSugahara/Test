@@ -35,12 +35,7 @@ namespace sample
 		}
 
 		// 出力 RT。トーンマップ後と同じ LDR。
-		aq::graphics::RenderTargetDesc desc;
-		desc.width       = width;
-		desc.height      = height;
-		desc.colorFormat = aq::graphics::PixelFormat::R8G8B8A8_Unorm;
-		desc.hasDepth    = false;
-		outputRT_ = gd.CreateOffscreenRenderTarget(desc);
+		outputRT_ = CreateOutputRT(width, height);
 		if (!outputRT_.IsValid()) {
 			return false;
 		}
@@ -52,10 +47,65 @@ namespace sample
 			return false;
 		}
 
+		Wire(res);
+		return true;
+	}
+
+
+	aq::rendering::RenderTargetHandle VignettePass::CreateOutputRT(const uint32_t width, const uint32_t height)
+	{
+		aq::graphics::RenderTargetDesc desc;
+		desc.width       = width;
+		desc.height      = height;
+		desc.colorFormat = aq::graphics::PixelFormat::R8G8B8A8_Unorm;
+		desc.hasDepth    = false;
+		return aq::graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(desc);
+	}
+
+
+	void VignettePass::Wire(aq::rendering::PassResources& res)
+	{
+		using namespace aq::rendering;
 		// 自分より前のパス(トーンマップ)が書いた Output を入力にし、以降の Output は自分の RT にする。
+		// リサイズ後は前段の RT が作り直されているので、Setup のときの値は使えず、ここで取り直す。
 		inputRT_ = res.Get(PassResourceKeys::Output);
 		res.Set(PassResourceKeys::Output, outputRT_);
+	}
+
+
+	bool VignettePass::PrepareResize(const uint32_t width, const uint32_t height)
+	{
+		AbortResize();
+		pendingOutputRT_ = CreateOutputRT(width, height);
+		if (!pendingOutputRT_.IsValid()) {
+			return false;
+		}
+		pendingWidth_  = width;
+		pendingHeight_ = height;
 		return true;
+	}
+
+
+	void VignettePass::CommitResize(aq::rendering::PassResources& res)
+	{
+		auto& gd = aq::graphics::GraphicsDevice::Get();
+		if (outputRT_.IsValid()) {
+			gd.ReleaseOffscreenRenderTarget(outputRT_);
+		}
+		outputRT_        = pendingOutputRT_;
+		pendingOutputRT_ = aq::rendering::RenderTargetHandle();
+		params_.width    = pendingWidth_;    // 定数の寸法も新しい画面に合わせる
+		params_.height   = pendingHeight_;
+		Wire(res);
+	}
+
+
+	void VignettePass::AbortResize()
+	{
+		if (pendingOutputRT_.IsValid()) {
+			aq::graphics::GraphicsDevice::Get().ReleaseOffscreenRenderTarget(pendingOutputRT_);
+		}
+		pendingOutputRT_ = aq::rendering::RenderTargetHandle();
 	}
 
 

@@ -78,6 +78,11 @@ namespace aq
 			void SetVSync(bool enabled);
 			const char* GetBackendName() const;
 
+			/** 描画解像度の実行時変更(設計書/エンジン課題解消設計.md P4)。意味は IGraphicsDeviceImpl の同名関数を参照 */
+			bool SupportsRenderResize() const;
+			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH);
+			void ReleaseOffscreenRenderTarget(rendering::RenderTargetHandle handle);
+
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);
 

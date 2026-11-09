@@ -135,6 +135,10 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 - (解決済 2026-11-09)**パイプライン構築の失敗が黙って全描画の消失になる**件は、`AppHost::SetRenderPipeline` /
   `SetupStandardRenderers` を `bool` 戻りにして初期化失敗として伝える形で解消(同設計書 P2)。影・空の生成失敗と
   `FullscreenComputeCommand` の無ログ return にも、1 回だけのログを足した。
+- (一部解消 2026-11-09)**描画解像度が起動時に固定**されていた件は、Mac の Metal で実行時リサイズに対応した
+  ([エンジン課題解消設計](エンジン課題解消設計.md) P4-A)。Vulkan・iOS(P4-B)、D3D11 / D3D12 / Win32 / Android(P4-C)は未対応で、従来どおり固定寸法のまま動く。
+  未対応のバックエンドや、`GetResizePolicy` を付けていないカスタムパスがある列は、リサイズ無効(ログに 1 回出る)になる。
+- **Engine に終了要求の API が無い**。リサイズの致命的な失敗は `std::abort()` で止めている(上の設計書 P4-A)。
 - **初期化失敗でもプロセスの終了コードが 0 になる**(P2 の確認で観測。`Main` / `MacMain` の戻り値の扱いは未調査)。
 - **`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする。
 - **`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む。**

@@ -418,6 +418,7 @@ namespace aq
 			, width_(0)
 			, height_(0)
 			, offscreenRTs_()
+			, freeOffscreenSlots_()
 			, swapchainRT_()
 			, activeContext_(nullptr)
 			, frameCounter_(0)
@@ -618,6 +619,7 @@ namespace aq
 
 			// 生成と逆順に解放する。
 			offscreenRTs_.clear();
+			freeOffscreenSlots_.clear();
 			for (auto& renderTarget : mainRTs_) {
 				renderTarget.reset();
 			}
@@ -857,8 +859,79 @@ namespace aq
 				return INVALID_RT_INDEX;
 			}
 
+			// 解放済みの番号があれば先に再利用する(ハンドルは添字なので詰め直さない)。
+			if (!freeOffscreenSlots_.empty()) {
+				const uint32_t slot = freeOffscreenSlots_.back();
+				freeOffscreenSlots_.pop_back();
+				offscreenRTs_[slot] = std::move(renderTarget);
+				return MAIN_RT_COUNT + slot;
+			}
+
 			offscreenRTs_.push_back(std::move(renderTarget));
 			return MAIN_RT_COUNT + static_cast<uint32_t>(offscreenRTs_.size() - 1);
+		}
+
+
+		bool MetalGraphicsDeviceImpl::ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
+		{
+			if (reqW == 0 || reqH == 0 || objects_ == nullptr || objects_->device == nil) {
+				return false;
+			}
+
+			// 作成は一時領域へ行い、全部成功してから入れ替える(失敗時に旧 RT を残すため)。
+			const MTLPixelFormat mainColorFormat = metal::ToMTLPixelFormat(PixelFormat::R16G16B16A16_Float);
+			std::unique_ptr<MetalRenderTarget> newRTs[MAIN_RT_COUNT];
+			for (auto& renderTarget : newRTs)
+			{
+				renderTarget = std::make_unique<MetalRenderTarget>();
+				if (!renderTarget->CreateOffscreen(objects_->device, reqW, reqH,
+				                                   mainColorFormat, /*hasDepth*/true)) {
+					return false;
+				}
+			}
+
+			// PlatformMac は drawableSize をビュー bounds に合わせるので通常は一致する。
+			// ずれていたときだけ合わせる(CopyToBackBuffer の宛先は drawable なので寸法差を残さない)。
+			if (objects_->layer != nil) {
+				const CGSize drawableSize = [objects_->layer drawableSize];
+				if (static_cast<uint32_t>(drawableSize.width)  != reqW ||
+				    static_cast<uint32_t>(drawableSize.height) != reqH) {
+					[objects_->layer setDrawableSize:CGSizeMake(reqW, reqH)];
+				}
+			}
+
+			// 旧 RT は WaitIdle 済みの区間なのでここで解放してよい。
+			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i) {
+				mainRTs_[i] = std::move(newRTs[i]);
+			}
+
+			width_  = reqW;
+			height_ = reqH;
+			if (swapchainRT_ != nullptr) {
+				swapchainRT_->InitAsSwapchainProxy(width_, height_, metal::SWAPCHAIN_PIXEL_FORMAT);
+			}
+
+			outW = reqW;
+			outH = reqH;
+			return true;
+		}
+
+
+		void MetalGraphicsDeviceImpl::ReleaseOffscreenRenderTarget(uint32_t index)
+		{
+			// メイン RT の添字・範囲外は無視する。
+			if (index < MAIN_RT_COUNT) {
+				return;
+			}
+
+			const uint32_t slot = index - MAIN_RT_COUNT;
+			if (slot >= offscreenRTs_.size() || offscreenRTs_[slot] == nullptr) {
+				return;   // 範囲外 / 二重解放
+			}
+
+			// 呼び出しは WaitIdle 済みの区間が前提(在フライトのコマンドがこの RT を参照しない)。
+			offscreenRTs_[slot].reset();
+			freeOffscreenSlots_.push_back(slot);
 		}
 
 

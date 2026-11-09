@@ -26,6 +26,14 @@ namespace aq
 
 		bool GBufferPass::Setup(PassResources& res, const uint32_t width, const uint32_t height)
 		{
+			if (!CreateTargets(width, height)) { return false; }
+			Wire(res);
+			return true;
+		}
+
+
+		bool GBufferPass::CreateTargets(const uint32_t width, const uint32_t height)
+		{
 			if (!deferred_) { return false; }
 
 			// 既に Create 済み(GBuffer0 ハンドルが有効)なら作り直さない。
@@ -37,7 +45,33 @@ namespace aq
 					return false;
 				}
 			}
+			return true;
+		}
 
+
+		bool GBufferPass::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			if (!deferred_) { return false; }
+			return deferred_->PrepareResize(width, height);
+		}
+
+
+		void GBufferPass::CommitResize(PassResources& res)
+		{
+			// 共有インスタンスは作り直さず、中身(G-Buffer)だけを入れ替える。
+			deferred_->CommitResize();
+			Wire(res);
+		}
+
+
+		void GBufferPass::AbortResize()
+		{
+			if (deferred_) { deferred_->AbortResize(); }
+		}
+
+
+		void GBufferPass::Wire(PassResources& res)
+		{
 			// Depth = GBuffer0(深度を持つ RT)。WorldPos = GBuffer2 の別名。
 			res.Set(PassResourceKeys::Depth,    deferred_->GetGBuffer0Handle());
 			res.Set(PassResourceKeys::GBuffer0, deferred_->GetGBuffer0Handle());
@@ -45,7 +79,6 @@ namespace aq
 			res.Set(PassResourceKeys::GBuffer2, deferred_->GetGBuffer2Handle());
 			res.Set(PassResourceKeys::GBuffer3, deferred_->GetGBuffer3Handle());
 			res.Set(PassResourceKeys::WorldPos, deferred_->GetGBuffer2Handle());
-			return true;
 		}
 
 

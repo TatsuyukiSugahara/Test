@@ -42,6 +42,13 @@ namespace aq
 			/** 設定済みのパイプライン。ゲームが Find<T>() でパスへアクセスする入口 */
 			RenderPipeline* GetPipeline() const { return pipeline_.get(); }
 
+			/** リサイズ後のメイン RT の寸法(RenderDebugSync 専用の保持値を更新する) */
+			void SetMainViewport(float mainViewportW, float mainViewportH)
+			{
+				mainViewportW_ = mainViewportW;
+				mainViewportH_ = mainViewportH;
+			}
+
 			/**
 			 * パイプラインの Output キーが登録されていればその RT、無ければ直近に使った Scene RT。
 			 * RenderThread::Submit の displayRT に渡す値を決めるために使う。

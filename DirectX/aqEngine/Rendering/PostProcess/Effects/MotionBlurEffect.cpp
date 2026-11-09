@@ -18,18 +18,65 @@ namespace aq
 				"aqEngine/Assets/Shader/MotionBlur.fx", "main", graphics::IShader::ShaderType::CS);
 			if (shader_)
 			{
-				graphics::RenderTargetDesc blurDesc;
-				blurDesc.width       = width;
-				blurDesc.height      = height;
-				blurDesc.colorFormat = graphics::PixelFormat::R16G16B16A16_Float;  // HDR (Bloom 入力になる)
-				blurDesc.hasDepth    = false;
-				outputRTHandle_ = gd.CreateOffscreenRenderTarget(blurDesc);
+				outputRTHandle_ = CreateOutputRT(width, height);
 
 				MotionBlurCBData blurInit{};
 				constantBuffer_ = gd.CreateConstantBuffer(&blurInit, sizeof(blurInit));
 			}
 
 			return true;
+		}
+
+
+		RenderTargetHandle MotionBlurEffect::CreateOutputRT(const uint32_t width, const uint32_t height)
+		{
+			graphics::RenderTargetDesc blurDesc;
+			blurDesc.width       = width;
+			blurDesc.height      = height;
+			blurDesc.colorFormat = graphics::PixelFormat::R16G16B16A16_Float;  // HDR (Bloom 入力になる)
+			blurDesc.hasDepth    = false;
+			return graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(blurDesc);
+		}
+
+
+		bool MotionBlurEffect::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			AbortResize();
+
+			// Initialize でシェーダーが作れなかった(ブラー無効の)ときは RT を持たないので何もしない。
+			if (!shader_) { return true; }
+
+			pendingOutputRTHandle_ = CreateOutputRT(width, height);
+			if (!pendingOutputRTHandle_.IsValid())
+			{
+				EngineAssertMsg(false, "MotionBlur RT のリサイズ用生成に失敗しました");
+				return false;
+			}
+			return true;
+		}
+
+
+		void MotionBlurEffect::CommitResize()
+		{
+			if (!pendingOutputRTHandle_.IsValid()) { return; }   // 無効(シェーダー無し)なら何もしない
+
+			auto& gd = graphics::GraphicsDevice::Get();
+			if (outputRTHandle_.IsValid()) { gd.ReleaseOffscreenRenderTarget(outputRTHandle_); }
+			outputRTHandle_        = pendingOutputRTHandle_;
+			pendingOutputRTHandle_ = RenderTargetHandle();
+
+			// 前フレームの viewProj は旧寸法の画面での値なので、速度ゼロから再開する。
+			prevValid_ = false;
+		}
+
+
+		void MotionBlurEffect::AbortResize()
+		{
+			if (pendingOutputRTHandle_.IsValid())
+			{
+				graphics::GraphicsDevice::Get().ReleaseOffscreenRenderTarget(pendingOutputRTHandle_);
+			}
+			pendingOutputRTHandle_ = RenderTargetHandle();
 		}
 
 

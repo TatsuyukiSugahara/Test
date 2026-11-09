@@ -32,9 +32,35 @@ namespace aq
 
 		bool BloomPass::Setup(PassResources& res, const uint32_t width, const uint32_t height)
 		{
+			if (!effect_ || !effect_->Initialize(width, height)) { return false; }
+			Wire(res);
+			return true;
+		}
+
+
+		bool BloomPass::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			return effect_ && effect_->PrepareResize(width, height);
+		}
+
+
+		void BloomPass::CommitResize(PassResources& res)
+		{
+			effect_->CommitResize();
+			Wire(res);
+		}
+
+
+		void BloomPass::AbortResize()
+		{
+			if (effect_) { effect_->AbortResize(); }
+		}
+
+
+		void BloomPass::Wire(PassResources& res)
+		{
+			// BloomTexture は有効なフレームの Build で登録する。保持する掲示板参照は無い。
 			(void)res;
-			if (!effect_) { return false; }
-			return effect_->Initialize(width, height);
 		}
 
 

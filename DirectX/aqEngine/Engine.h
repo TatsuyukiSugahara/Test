@@ -12,6 +12,7 @@
 #include "Util/GameTimer.h"
 #include "Core/LaunchOptions.h"
 #include "Core/AppModuleRegistry.h"
+#include <chrono>
 #include <future>
 #include <memory>
 
@@ -92,6 +93,25 @@ namespace aq
 		/** 描画対象が差し替わり、サーフェスの作り直しが済んでいない。成功するまでフレームを飛ばす */
 		bool              surfaceDirty_     = false;
 
+		/** リサイズ(設計書/エンジン課題解消設計.md P4)。直近に要求した寸法。確定寸法とは比較しない(Vulkan の currentExtent 等で毎フレーム再要求しないため) */
+		uint32_t          lastRequestedW_   = 0;
+		uint32_t          lastRequestedH_   = 0;
+		/** 検出の安定化: 同じ値が 2 フレーム続いたら確定する */
+		uint32_t          candidateW_       = 0;
+		uint32_t          candidateH_       = 0;
+		uint32_t          candidateFrames_  = 0;
+		/** リサイズ保留(失敗経路)。成功するまで Update を飛ばして再試行する */
+		bool              resizePending_    = false;
+		bool              resizeDeviceDone_ = false;   // ResizeMainTargets まで済んだ(以降は寸法が確定している)
+		uint32_t          pendingReqW_      = 0;
+		uint32_t          pendingReqH_      = 0;
+		uint32_t          pendingOutW_      = 0;       // デバイスが確定した寸法(全パスはこれで作る)
+		uint32_t          pendingOutH_      = 0;
+		uint32_t          resizeRetries_    = 0;
+		std::chrono::steady_clock::time_point lastResizeAttempt_;
+		std::chrono::steady_clock::time_point lastSoundOnlyTime_;
+		bool              resizeDisabledLogged_ = false;
+
 		/** サウンドを鳴らしてよい状態か(= 前面にいるか)。前回の判定を持って変化点だけ叩く */
 		bool              soundActive_      = true;
 
@@ -133,6 +153,16 @@ namespace aq
 
 		/** 実際に提示している面の寸法をスクリーンサイズへ反映する(回転・リサイズ追従) */
 		void SyncScreenSize();
+
+		/**
+		 * 描画解像度のリサイズ(設計書/エンジン課題解消設計.md P4 §5.2)。FrameStep の先頭で呼ぶ。
+		 * @return false ならこのフレームは Update を飛ばす(保留中の失敗経路のみ。通常の 1 回成功ではフレームを飛ばさない)
+		 */
+		bool HandleRenderResize();
+		/** 手順 1〜5(待ち → デバイス → 準備 → 確定)。失敗したら保留状態にして false */
+		bool AttemptRenderResize();
+		/** 保留中のフレームでもサウンドの供給だけは続ける(Update を飛ばすと音が切れるため)。デルタ時間は実時間を測る */
+		void UpdateSoundOnly();
 
 		/**
 		 * 前面/背面の変化をサウンドへ伝える。

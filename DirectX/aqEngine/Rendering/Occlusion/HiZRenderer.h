@@ -48,6 +48,18 @@ namespace aq
 			bool Initialize(uint32_t fullWidth, uint32_t fullHeight);
 
 			/**
+			 * リサイズ(設計書/エンジン課題解消設計.md P4)。インスタンスは作り直さない
+			 * (AppHost が SetOcclusionTester で生ポインタ登録しているため)。ミップ連鎖(段数と各段の RT)だけを入れ替える。
+			 * ゲームスレッドで、レンダースレッド停止中(WaitIdle 済み)にだけ呼ぶ。
+			 *   PrepareResize: 新寸法のミップ連鎖を一時領域へ作る(旧はそのまま)。失敗時は自己清掃して false
+			 *   CommitResize : 旧ミップ連鎖を解放して一時領域と入れ替える。CPU リードバックも破棄する(旧寸法のため)
+			 *   AbortResize  : 一時領域を解放する(何度呼んでも安全)
+			 */
+			bool PrepareResize(uint32_t fullWidth, uint32_t fullHeight);
+			void CommitResize();
+			void AbortResize();
+
+			/**
 			 * Hi-Z チェーン構築 + リードバックコマンドを outList に積む。
 			 * GBuffer パスの後 (worldPos 確定後) に呼ぶこと。
 			 * gbufferWorldPos = DeferredRenderer::GetGBuffer2Handle()。
@@ -55,13 +67,13 @@ namespace aq
 			void BuildCommandList(const RenderFrame& frame, RenderCommandList& outList,
 			                      RenderTargetHandle gbufferWorldPos);
 
-			uint32_t           GetLevelCount() const { return levelCount_; }
-			RenderTargetHandle GetLevelHandle(uint32_t i) const { return levelHandles_[i]; }
-			void GetLevelSize(uint32_t i, uint32_t& w, uint32_t& h) const { w = levelW_[i]; h = levelH_[i]; }
+			uint32_t           GetLevelCount() const { return levels_.count; }
+			RenderTargetHandle GetLevelHandle(uint32_t i) const { return levels_.handles[i]; }
+			void GetLevelSize(uint32_t i, uint32_t& w, uint32_t& h) const { w = levels_.w[i]; h = levels_.h[i]; }
 
 			/** CPU リードバック用に選んだレベル (粗いミップ)。 */
-			uint32_t           GetReadbackLevel()  const { return readbackLevel_; }
-			RenderTargetHandle GetReadbackHandle() const { return levelHandles_[readbackLevel_]; }
+			uint32_t           GetReadbackLevel()  const { return levels_.readbackLevel; }
+			RenderTargetHandle GetReadbackHandle() const { return levels_.handles[levels_.readbackLevel]; }
 
 			/** レンダースレッドから読み戻した Hi-Z を格納する (HiZReadbackCommand が呼ぶ)。 */
 			void StoreReadback(std::vector<float>&& data, uint32_t w, uint32_t h);
@@ -106,15 +118,30 @@ namespace aq
 #endif
 
 		private:
+			/** ミップ連鎖(寸法で段数と各段の RT が決まる) */
+			struct LevelSet
+			{
+				RenderTargetHandle handles[kMaxLevels];
+				uint32_t           w[kMaxLevels] = {};
+				uint32_t           h[kMaxLevels] = {};
+				uint32_t           count         = 0;
+				uint32_t           readbackLevel = 0;
+			};
+
+			/** フル解像度 fullWidth × fullHeight からミップ連鎖を out へ作る。失敗したら作った分を解放して false */
+			static bool CreateLevels(uint32_t fullWidth, uint32_t fullHeight, LevelSet& out);
+			/** out の RT を解放して空にする(何度呼んでも安全) */
+			static void ReleaseLevels(LevelSet& levels);
+
+
+		private:
 			std::shared_ptr<graphics::IShader>         reconstructShader_;
 			std::shared_ptr<graphics::IShader>         downsampleShader_;
 			std::unique_ptr<graphics::IConstantBuffer> hiZCB_;
 
-			RenderTargetHandle levelHandles_[kMaxLevels];
-			uint32_t           levelW_[kMaxLevels] = {};
-			uint32_t           levelH_[kMaxLevels] = {};
-			uint32_t           levelCount_   = 0;
-			uint32_t           readbackLevel_ = 0;
+			LevelSet levels_;
+			/** PrepareResize が作った新ミップ連鎖(CommitResize で levels_ へ入れ替わる) */
+			LevelSet pendingLevels_;
 
 			// CPU リードバックした Hi-Z (レンダースレッド書き込み / ゲームスレッド読み取り)
 			mutable std::mutex   cpuHiZMutex_;

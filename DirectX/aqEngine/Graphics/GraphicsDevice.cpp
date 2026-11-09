@@ -68,6 +68,18 @@ namespace aq
 		void GraphicsDevice::SetVSync(bool enabled)       { if (impl_) impl_->SetVSync(enabled); }
 		const char* GraphicsDevice::GetBackendName() const { return impl_ ? impl_->GetBackendName() : "?"; }
 
+		bool GraphicsDevice::SupportsRenderResize() const { return impl_ ? impl_->SupportsRenderResize() : false; }
+
+		bool GraphicsDevice::ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
+		{
+			return impl_ ? impl_->ResizeMainTargets(reqW, reqH, outW, outH) : false;
+		}
+
+		void GraphicsDevice::ReleaseOffscreenRenderTarget(rendering::RenderTargetHandle handle)
+		{
+			if (impl_ && handle.IsValid()) { impl_->ReleaseOffscreenRenderTarget(handle.index); }
+		}
+
 
 		bool GraphicsDevice::RecreateSurface(NativeWindowHandle window)
 		{

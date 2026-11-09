@@ -30,6 +30,7 @@ namespace aq
 			inline const char* GetName()  const override { return "ShadowPass"; }
 			inline PassScope    GetScope() const override { return PassScope::Frame; }
 
+			inline ResizePolicy GetResizePolicy() const override { return ResizePolicy::Independent; }
 			void DeclareResources(PassDeclaration& decl) const override;
 			void Build(RenderFrame& frame, const PassViewInfo& view,
 			           PassResources& res, RenderCommandList& outList) override;

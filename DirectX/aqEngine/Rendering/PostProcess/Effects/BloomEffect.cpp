@@ -39,6 +39,30 @@ namespace aq
 				return false;
 			}
 
+			// 輝度抽出 RT とピラミッド RT
+			if (!CreateTargets(width, height, brightRTHandle_, pyramidRTHandles_))
+			{
+				return false;
+			}
+
+			// 定数バッファ
+			BloomCBData initData{};
+			bloomCB_ = gd.CreateConstantBuffer(&initData, sizeof(initData));
+			if (!bloomCB_)
+			{
+				EngineAssertMsg(false, "Bloom CB の生成に失敗しました");
+				return false;
+			}
+
+			return true;
+		}
+
+
+		bool BloomEffect::CreateTargets(const uint32_t width, const uint32_t height,
+		                                RenderTargetHandle& outBright, RenderTargetHandle* outPyramid)
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+
 			// 輝度抽出 RT は HDR (R16F)。シーン RT が HDR になったため、1.0 超の輝度をクランプせず
 			// ブルームピラミッドへ運ぶ。
 			graphics::RenderTargetDesc brightDesc;
@@ -47,8 +71,8 @@ namespace aq
 			brightDesc.colorFormat = graphics::PixelFormat::R16G16B16A16_Float;
 			brightDesc.hasDepth    = false;
 
-			brightRTHandle_ = gd.CreateOffscreenRenderTarget(brightDesc);
-			if (!brightRTHandle_.IsValid())
+			outBright = gd.CreateOffscreenRenderTarget(brightDesc);
+			if (!outBright.IsValid())
 			{
 				EngineAssertMsg(false, "Bloom RT の生成に失敗しました");
 				return false;
@@ -62,24 +86,56 @@ namespace aq
 				desc.height      = (height >> (i + 1)) > 0u ? (height >> (i + 1)) : 1u;
 				desc.colorFormat = graphics::PixelFormat::R16G16B16A16_Float;  // HDR ブルームピラミッド
 				desc.hasDepth    = false;
-				pyramidRTHandles_[i] = gd.CreateOffscreenRenderTarget(desc);
-				if (!pyramidRTHandles_[i].IsValid())
+				outPyramid[i] = gd.CreateOffscreenRenderTarget(desc);
+				if (!outPyramid[i].IsValid())
 				{
 					EngineAssertMsg(false, "Bloom ピラミッド RT の生成に失敗しました");
 					return false;
 				}
 			}
 
-			// 定数バッファ
-			BloomCBData initData{};
-			bloomCB_ = gd.CreateConstantBuffer(&initData, sizeof(initData));
-			if (!bloomCB_)
+			return true;
+		}
+
+
+		void BloomEffect::ReleaseTargets(RenderTargetHandle& bright, RenderTargetHandle* pyramid)
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+			if (bright.IsValid()) { gd.ReleaseOffscreenRenderTarget(bright); }
+			bright = RenderTargetHandle();
+			for (uint32_t i = 0; i < MAX_LEVELS; ++i)
 			{
-				EngineAssertMsg(false, "Bloom CB の生成に失敗しました");
+				if (pyramid[i].IsValid()) { gd.ReleaseOffscreenRenderTarget(pyramid[i]); }
+				pyramid[i] = RenderTargetHandle();
+			}
+		}
+
+
+		bool BloomEffect::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			AbortResize();
+			if (!CreateTargets(width, height, pendingBrightRTHandle_, pendingPyramidRTHandles_))
+			{
+				AbortResize();   // 途中まで作れた一時 RT を解放する
 				return false;
 			}
-
 			return true;
+		}
+
+
+		void BloomEffect::CommitResize()
+		{
+			ReleaseTargets(brightRTHandle_, pyramidRTHandles_);
+			brightRTHandle_ = pendingBrightRTHandle_;
+			for (uint32_t i = 0; i < MAX_LEVELS; ++i) { pyramidRTHandles_[i] = pendingPyramidRTHandles_[i]; }
+			pendingBrightRTHandle_ = RenderTargetHandle();
+			for (uint32_t i = 0; i < MAX_LEVELS; ++i) { pendingPyramidRTHandles_[i] = RenderTargetHandle(); }
+		}
+
+
+		void BloomEffect::AbortResize()
+		{
+			ReleaseTargets(pendingBrightRTHandle_, pendingPyramidRTHandles_);
 		}
 
 

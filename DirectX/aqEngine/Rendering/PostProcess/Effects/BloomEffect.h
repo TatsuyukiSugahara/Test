@@ -36,6 +36,10 @@ namespace aq
 			RenderTargetHandle brightRTHandle_;
 			RenderTargetHandle pyramidRTHandles_[MAX_LEVELS]; // pyramid[i]: W/2^(i+1) × H/2^(i+1)
 
+			/** リサイズ用の一時領域(PrepareResize で作り、CommitResize で本体へ入れ替える) */
+			RenderTargetHandle pendingBrightRTHandle_;
+			RenderTargetHandle pendingPyramidRTHandles_[MAX_LEVELS];
+
 			float    threshold_  = 1.0f;   // HDR: 1.0 超の輝度のみブルーム
 			float    intensity_  = 0.45f;
 			uint32_t blurPasses_ = MAX_LEVELS;
@@ -49,6 +53,15 @@ namespace aq
 		public:
 			bool Initialize(const uint32_t width, const uint32_t height) override;
 			bool IsEnabled(const PostProcessContext& context) const override;
+
+			/**
+			 * リサイズ(設計書/エンジン課題解消設計.md P4)。ゲームスレッドで WaitIdle 済みの区間にだけ呼ぶ。
+			 * PrepareResize は新寸法の RT を一時領域へ作る(失敗したら自分で片付けて false)。
+			 * CommitResize は旧 RT を解放して一時領域を入れ替える。AbortResize は一時領域を解放する(何度呼んでも安全)。
+			 */
+			bool PrepareResize(const uint32_t width, const uint32_t height);
+			void CommitResize();
+			void AbortResize();
 
 			RenderTargetHandle Build(
 				RenderCommandList&        outList,
@@ -69,6 +82,15 @@ namespace aq
 			inline void     SetThreshold(const float v)     { threshold_  = v; }
 			inline void     SetIntensity(const float v)     { intensity_  = v; }
 			inline void     SetBlurPasses(const uint32_t v) { blurPasses_ = (v < 1) ? 1 : (v > MAX_LEVELS) ? MAX_LEVELS : v; }
+
+
+		private:
+			/** 輝度抽出 RT とピラミッド RT を作る(Initialize / PrepareResize 共用)。失敗時は作れた分が out に残る */
+			static bool CreateTargets(const uint32_t width, const uint32_t height,
+			                          RenderTargetHandle& outBright, RenderTargetHandle* outPyramid);
+
+			/** RT 群を解放して無効ハンドルへ戻す */
+			static void ReleaseTargets(RenderTargetHandle& bright, RenderTargetHandle* pyramid);
 		};
 	}
 }

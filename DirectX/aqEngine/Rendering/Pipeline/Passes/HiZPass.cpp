@@ -27,6 +27,14 @@ namespace aq
 
 		bool HiZPass::Setup(PassResources& res, const uint32_t width, const uint32_t height)
 		{
+			if (!CreateTargets(width, height)) { return false; }
+			Wire(res);
+			return true;
+		}
+
+
+		bool HiZPass::CreateTargets(const uint32_t width, const uint32_t height)
+		{
 			if (!hiZ_) { return false; }
 
 			if (!hiZ_->Initialize(width, height))
@@ -34,9 +42,34 @@ namespace aq
 				aq::StartupMarkf("[pipeline] HiZPass: HiZRenderer::Initialize failed (%ux%u)", width, height);
 				return false;
 			}
-
-			res.Set(PassResourceKeys::HiZ, hiZ_->GetReadbackHandle());
 			return true;
+		}
+
+
+		bool HiZPass::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			if (!hiZ_) { return false; }
+			return hiZ_->PrepareResize(width, height);
+		}
+
+
+		void HiZPass::CommitResize(PassResources& res)
+		{
+			// HiZRenderer は AppHost が生ポインタで登録しているのでインスタンスは変えず、ミップ連鎖だけを入れ替える。
+			hiZ_->CommitResize();
+			Wire(res);
+		}
+
+
+		void HiZPass::AbortResize()
+		{
+			if (hiZ_) { hiZ_->AbortResize(); }
+		}
+
+
+		void HiZPass::Wire(PassResources& res)
+		{
+			res.Set(PassResourceKeys::HiZ, hiZ_->GetReadbackHandle());
 		}
 
 

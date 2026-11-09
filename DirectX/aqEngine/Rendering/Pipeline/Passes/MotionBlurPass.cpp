@@ -32,9 +32,35 @@ namespace aq
 
 		bool MotionBlurPass::Setup(PassResources& res, const uint32_t width, const uint32_t height)
 		{
+			if (!effect_ || !effect_->Initialize(width, height)) { return false; }
+			Wire(res);
+			return true;
+		}
+
+
+		bool MotionBlurPass::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			return effect_ && effect_->PrepareResize(width, height);
+		}
+
+
+		void MotionBlurPass::CommitResize(PassResources& res)
+		{
+			effect_->CommitResize();
+			Wire(res);
+		}
+
+
+		void MotionBlurPass::AbortResize()
+		{
+			if (effect_) { effect_->AbortResize(); }
+		}
+
+
+		void MotionBlurPass::Wire(PassResources& res)
+		{
+			// PostInput は Build で毎フレーム登録する。保持する掲示板参照は無い。
 			(void)res;
-			if (!effect_) { return false; }
-			return effect_->Initialize(width, height);
 		}
 
 

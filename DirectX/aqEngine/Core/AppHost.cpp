@@ -180,6 +180,42 @@ namespace aq
 	}
 
 
+	bool AppHost::CanResizeRender()
+	{
+		rendering::RenderPipeline* pipeline = renderer_.GetPipeline();
+		return pipeline != nullptr && pipeline->CanResize();
+	}
+
+
+	bool AppHost::PrepareRenderResize(const uint32_t width, const uint32_t height)
+	{
+		rendering::RenderPipeline* pipeline = renderer_.GetPipeline();
+		return pipeline != nullptr && pipeline->PrepareResize(width, height);
+	}
+
+
+	void AppHost::AbortRenderResize()
+	{
+		if (rendering::RenderPipeline* pipeline = renderer_.GetPipeline()) {
+			pipeline->AbortResize();
+		}
+	}
+
+
+	void AppHost::CommitRenderResize(const uint32_t width, const uint32_t height)
+	{
+		if (rendering::RenderPipeline* pipeline = renderer_.GetPipeline()) {
+			pipeline->CommitResize();
+		}
+		renderer_.SetMainViewport(static_cast<float>(width), static_cast<float>(height));
+
+		// メインカメラのアスペクト比(ビューポート寸法)。ゲームが初期化時に 1 回だけ設定した値を、新寸法へ追従させる。
+		if (auto* mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main)) {
+			mainCamera->SetViewportSize(static_cast<float>(width), static_cast<float>(height));
+		}
+	}
+
+
 	bool AppHost::Initialize(aq::graphics::RenderContext& renderContext)
 	{
 #ifdef AQ_PROFILE_ENABLED

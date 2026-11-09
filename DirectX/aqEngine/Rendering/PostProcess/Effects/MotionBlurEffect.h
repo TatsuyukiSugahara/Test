@@ -28,12 +28,20 @@ namespace aq
 			/** ブラー出力 (次段の入力になる) */
 			RenderTargetHandle outputRTHandle_;
 
+			/** リサイズ用の一時領域(PrepareResize で作り、CommitResize で本体へ入れ替える) */
+			RenderTargetHandle pendingOutputRTHandle_;
+
 			/** 前フレーム viewProj の保持 */
 			math::Matrix4x4 prevViewProj_;   // このフレームの CB に使う「前フレーム viewProj」
 			math::Matrix4x4 lastViewProj_;   // 次フレームの prev になる値
 			bool            prevValid_ = false;
 
 			float strength_ = 0.0f;
+
+
+		private:
+			/** 出力 RT の生成(Initialize / PrepareResize 共用) */
+			static RenderTargetHandle CreateOutputRT(const uint32_t width, const uint32_t height);
 
 
 		public:
@@ -44,6 +52,15 @@ namespace aq
 		public:
 			bool Initialize(const uint32_t width, const uint32_t height) override;
 			bool IsEnabled(const PostProcessContext& context) const override;
+
+			/**
+			 * リサイズ(設計書/エンジン課題解消設計.md P4)。ゲームスレッドで WaitIdle 済みの区間にだけ呼ぶ。
+			 * PrepareResize は新寸法の出力 RT を一時領域へ作る(失敗したら片付けて false)。
+			 * CommitResize は旧 RT を解放して入れ替える。AbortResize は一時領域を解放する(何度呼んでも安全)。
+			 */
+			bool PrepareResize(const uint32_t width, const uint32_t height);
+			void CommitResize();
+			void AbortResize();
 
 			RenderTargetHandle Build(
 				RenderCommandList&        outList,

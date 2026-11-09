@@ -34,6 +34,10 @@ namespace aq
 			bool IsSupported() const override;
 			void DeclareResources(PassDeclaration& decl) const override;
 			bool Setup(PassResources& res, const uint32_t width, const uint32_t height) override;
+			inline ResizePolicy GetResizePolicy() const override { return ResizePolicy::Resizable; }
+			bool PrepareResize(const uint32_t width, const uint32_t height) override;
+			void CommitResize(PassResources& res) override;
+			void AbortResize() override;
 			void Build(RenderFrame& frame, const PassViewInfo& view,
 			           PassResources& res, RenderCommandList& outList) override;
 
@@ -42,6 +46,11 @@ namespace aq
 		public:
 			inline void SetStrength(const float strength) { if (effect_) { effect_->SetStrength(strength); } }
 			inline MotionBlurEffect* GetEffect() const { return effect_.get(); }
+
+
+		private:
+			/** 掲示板への登録と入力の取り直し(Setup / CommitResize 共用)。PostInput は Build で登録するので何もしない */
+			void Wire(PassResources& res);
 		};
 	}
 }

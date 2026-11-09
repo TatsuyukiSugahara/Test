@@ -61,6 +61,9 @@ namespace aq
 			std::unique_ptr<MetalRenderTarget>              mainRTs_[MAIN_RT_COUNT];
 			std::vector<std::unique_ptr<MetalRenderTarget>> offscreenRTs_;
 
+			/** 解放済みのオフスクリーン RT の添字(offscreenRTs_ 内)。CreateOffscreenRenderTarget が先に再利用する */
+			std::vector<uint32_t> freeOffscreenSlots_;
+
 			/**
 			 * スワップチェーンプロキシ。実体は毎フレームの nextDrawable のテクスチャ(設計書 §7)。
 			 * GetRenderTarget() の並びには入れない(エンジンからは見えず、CopyToBackBuffer の宛先専用)。
@@ -128,6 +131,22 @@ namespace aq
 			IRenderTarget* GetRenderTarget(uint32_t index) override;
 			uint32_t       CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
 			uint32_t       CreateOffscreenRenderTarget(const RenderTargetDesc& desc) override;
+
+			/** 描画解像度の実行時変更に対応する(設計書/エンジン課題解消設計.md P4) */
+			bool SupportsRenderResize() const override { return true; }
+
+			/**
+			 * メイン RT / 深度を reqW × reqH で作り直す。WaitIdle 済みの区間(在フライトのコマンドが
+			 * 旧 RT を参照しない)でゲームスレッドから呼ぶこと。新 RT を全部作れてから入れ替え、
+			 * 失敗時は旧を残して false を返す。ハンドル(添字)は変わらない。
+			 */
+			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH) override;
+
+			/**
+			 * オフスクリーン RT を 1 本解放し、ハンドルを空き番号へ登録する(vector の要素は動かさない)。
+			 * WaitIdle 済みの区間で呼ぶこと。範囲外・メイン RT・解放済みの添字は何もしない。
+			 */
+			void ReleaseOffscreenRenderTarget(uint32_t index) override;
 
 			void Present() override;
 			void CopyToBackBuffer(IRenderTarget& src) override;

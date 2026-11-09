@@ -27,38 +27,98 @@ namespace aq
 
 		bool OutlinePass::Setup(PassResources& res, const uint32_t width, const uint32_t height)
 		{
-			auto& gd = graphics::GraphicsDevice::Get();
-
 			// 法線を書くパスが前に無いなら、何もしないパスとして素通しする
 			// (Setup 失敗はパイプライン全体の失敗になるため、ここでは false を返さない)。
-			if (!res.Has(PassResourceKeys::GBuffer1)) {
+			// この判定は Setup で 1 回だけ行い、active_ に保持する(リサイズでは見直さない)。
+			active_ = res.Has(PassResourceKeys::GBuffer1);
+			if (!active_) {
 				aq::StartupMark("[pipeline] OutlinePass: GBuffer1 が無いので無効(フォワードのみの列)");
 				return true;
 			}
-			normalRT_ = res.Get(PassResourceKeys::GBuffer1);
 
-			shader_ = gd.CreateShader("aqEngine/Assets/Shader/Outline.fx", "main",
-			                          graphics::IShader::ShaderType::CS);
-			if (!shader_) { return false; }
+			if (!CreateTargets(width, height)) { return false; }
+			Wire(res);
+			return true;
+		}
 
+
+		RenderTargetHandle OutlinePass::CreateOutputRT(const uint32_t width, const uint32_t height)
+		{
 			// 出力 RT。直前の色(トーンマップ後)と同じ LDR。
 			graphics::RenderTargetDesc desc;
 			desc.width       = width;
 			desc.height      = height;
 			desc.colorFormat = graphics::PixelFormat::R8G8B8A8_Unorm;
 			desc.hasDepth    = false;
-			outputRT_ = gd.CreateOffscreenRenderTarget(desc);
+			return graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(desc);
+		}
+
+
+		bool OutlinePass::CreateTargets(const uint32_t width, const uint32_t height)
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+
+			shader_ = gd.CreateShader("aqEngine/Assets/Shader/Outline.fx", "main",
+			                          graphics::IShader::ShaderType::CS);
+			if (!shader_) { return false; }
+
+			outputRT_ = CreateOutputRT(width, height);
 			if (!outputRT_.IsValid()) { return false; }
 
 			params_.width  = width;
 			params_.height = height;
 			constantBuffer_ = gd.CreateConstantBuffer(&params_, sizeof(params_));
 			if (!constantBuffer_) { return false; }
+			return true;
+		}
+
+
+		bool OutlinePass::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			if (!active_) { return true; }
+
+			AbortResize();   // 前回の一時領域が残っていれば捨てる
+			pendingOutputRT_ = CreateOutputRT(width, height);
+			if (!pendingOutputRT_.IsValid()) { return false; }
+
+			// 一時領域の寸法を CommitResize で params_ へ反映するため、ここで覚えておく。
+			pendingWidth_  = width;
+			pendingHeight_ = height;
+			return true;
+		}
+
+
+		void OutlinePass::CommitResize(PassResources& res)
+		{
+			if (!active_) { return; }
+
+			graphics::GraphicsDevice::Get().ReleaseOffscreenRenderTarget(outputRT_);
+			outputRT_        = pendingOutputRT_;
+			pendingOutputRT_ = RenderTargetHandle();
+
+			params_.width  = pendingWidth_;
+			params_.height = pendingHeight_;
+
+			Wire(res);
+		}
+
+
+		void OutlinePass::AbortResize()
+		{
+			graphics::GraphicsDevice::Get().ReleaseOffscreenRenderTarget(pendingOutputRT_);
+			pendingOutputRT_ = RenderTargetHandle();
+		}
+
+
+		void OutlinePass::Wire(PassResources& res)
+		{
+			if (!active_) { return; }
+
+			normalRT_ = res.Get(PassResourceKeys::GBuffer1);
 
 			// 自分より前のパスが書いた Output を入力にし、以降の Output は自分の RT にする。
 			inputRT_ = res.Get(PassResourceKeys::Output);
 			res.Set(PassResourceKeys::Output, outputRT_);
-			return true;
 		}
 
 
@@ -67,7 +127,7 @@ namespace aq
 		{
 			(void)frame;
 
-			if (!shader_ || !outputRT_.IsValid()) { return; }
+			if (!active_ || !shader_ || !outputRT_.IsValid()) { return; }
 
 			// ポストプロセスが無い列では Scene(毎フレーム差し替わる)をそのまま読む。
 			const RenderTargetHandle input = inputRT_.IsValid() ? inputRT_ : res.Get(PassResourceKeys::Scene);

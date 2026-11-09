@@ -21,13 +21,7 @@ namespace aq
 			}
 
 			// 最終 RT のみ LDR (トーンマップ済みの表示出力)。
-			graphics::RenderTargetDesc finalDesc;
-			finalDesc.width       = width;
-			finalDesc.height      = height;
-			finalDesc.colorFormat = graphics::PixelFormat::R8G8B8A8_Unorm;  // トーンマップ後 LDR 表示
-			finalDesc.hasDepth    = false;
-
-			finalRTHandle_ = gd.CreateOffscreenRenderTarget(finalDesc);
+			finalRTHandle_ = CreateFinalRT(width, height);
 			if (!finalRTHandle_.IsValid())
 			{
 				EngineAssertMsg(false, "Bloom RT の生成に失敗しました");
@@ -44,6 +38,49 @@ namespace aq
 			}
 
 			return true;
+		}
+
+
+		RenderTargetHandle TonemapEffect::CreateFinalRT(const uint32_t width, const uint32_t height)
+		{
+			graphics::RenderTargetDesc finalDesc;
+			finalDesc.width       = width;
+			finalDesc.height      = height;
+			finalDesc.colorFormat = graphics::PixelFormat::R8G8B8A8_Unorm;  // トーンマップ後 LDR 表示
+			finalDesc.hasDepth    = false;
+			return graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(finalDesc);
+		}
+
+
+		bool TonemapEffect::PrepareResize(const uint32_t width, const uint32_t height)
+		{
+			AbortResize();
+			pendingFinalRTHandle_ = CreateFinalRT(width, height);
+			if (!pendingFinalRTHandle_.IsValid())
+			{
+				EngineAssertMsg(false, "Tonemap RT のリサイズ用生成に失敗しました");
+				return false;
+			}
+			return true;
+		}
+
+
+		void TonemapEffect::CommitResize()
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+			if (finalRTHandle_.IsValid()) { gd.ReleaseOffscreenRenderTarget(finalRTHandle_); }
+			finalRTHandle_        = pendingFinalRTHandle_;
+			pendingFinalRTHandle_ = RenderTargetHandle();
+		}
+
+
+		void TonemapEffect::AbortResize()
+		{
+			if (pendingFinalRTHandle_.IsValid())
+			{
+				graphics::GraphicsDevice::Get().ReleaseOffscreenRenderTarget(pendingFinalRTHandle_);
+			}
+			pendingFinalRTHandle_ = RenderTargetHandle();
 		}
 
 

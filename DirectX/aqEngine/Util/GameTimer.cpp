@@ -38,6 +38,12 @@ namespace aq
 		}
 
 
+		void GameTimer::ResetDelta()
+		{
+			lastTime_ = Clock::now();
+		}
+
+
 		void GameTimer::Tick()
 		{
 			// FPS 制限: 目標フレーム時間に達するまで待つ

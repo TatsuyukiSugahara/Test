@@ -27,6 +27,7 @@ namespace aq
 		public:
 			inline const char* GetName() const override { return "ForwardPass"; }
 
+			inline ResizePolicy GetResizePolicy() const override { return ResizePolicy::Independent; }
 			void DeclareResources(PassDeclaration& decl) const override;
 			void Build(RenderFrame& frame, const PassViewInfo& view,
 			           PassResources& res, RenderCommandList& outList) override;

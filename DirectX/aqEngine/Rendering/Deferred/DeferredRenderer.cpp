@@ -14,7 +14,7 @@ namespace aq
 {
 	namespace rendering
 	{
-		bool DeferredRenderer::Create(uint32_t width, uint32_t height)
+		bool DeferredRenderer::CreateTargets(uint32_t width, uint32_t height, Targets& out)
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
 
@@ -24,7 +24,7 @@ namespace aq
 			desc0.height      = height;
 			desc0.colorFormat = graphics::PixelFormat::R8G8B8A8_Unorm;
 			desc0.hasDepth    = true;
-			gbuffer0Handle_   = gd.CreateOffscreenRenderTarget(desc0);
+			out.g0            = gd.CreateOffscreenRenderTarget(desc0);
 
 			// GBuffer1-3: RGBA16F (depth なし)
 			graphics::RenderTargetDesc descF;
@@ -32,15 +32,41 @@ namespace aq
 			descF.height      = height;
 			descF.colorFormat = graphics::PixelFormat::R16G16B16A16_Float;
 			descF.hasDepth    = false;
-			gbuffer1Handle_   = gd.CreateOffscreenRenderTarget(descF);
-			gbuffer2Handle_   = gd.CreateOffscreenRenderTarget(descF);
-			gbuffer3Handle_   = gd.CreateOffscreenRenderTarget(descF);
+			out.g1            = gd.CreateOffscreenRenderTarget(descF);
+			out.g2            = gd.CreateOffscreenRenderTarget(descF);
+			out.g3            = gd.CreateOffscreenRenderTarget(descF);
 
-			if (gbuffer0Handle_.index == ~0u || gbuffer1Handle_.index == ~0u ||
-			    gbuffer2Handle_.index == ~0u || gbuffer3Handle_.index == ~0u)
+			if (out.g0.index == ~0u || out.g1.index == ~0u ||
+			    out.g2.index == ~0u || out.g3.index == ~0u)
 			{
+				ReleaseTargets(out);
 				return false;
 			}
+			return true;
+		}
+
+
+		void DeferredRenderer::ReleaseTargets(Targets& targets)
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+			gd.ReleaseOffscreenRenderTarget(targets.g0);
+			gd.ReleaseOffscreenRenderTarget(targets.g1);
+			gd.ReleaseOffscreenRenderTarget(targets.g2);
+			gd.ReleaseOffscreenRenderTarget(targets.g3);
+			targets = Targets();
+		}
+
+
+		bool DeferredRenderer::Create(uint32_t width, uint32_t height)
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+
+			Targets targets;
+			if (!CreateTargets(width, height, targets)) { return false; }
+			gbuffer0Handle_ = targets.g0;
+			gbuffer1Handle_ = targets.g1;
+			gbuffer2Handle_ = targets.g2;
+			gbuffer3Handle_ = targets.g3;
 
 			// PBR ディファードライティングシェーダーをロード（同期）
 			auto vs = gd.CreateShader("aqEngine/Assets/Shader/PBRLighting.fx", "VSMain",
@@ -65,6 +91,36 @@ namespace aq
 			decalSampler_ = gd.CreateSamplerState(decalSamp);
 
 			return true;
+		}
+
+
+		bool DeferredRenderer::PrepareResize(uint32_t width, uint32_t height)
+		{
+			AbortResize();   // 前回の一時領域が残っていれば捨てる
+			return CreateTargets(width, height, pending_);
+		}
+
+
+		void DeferredRenderer::CommitResize()
+		{
+			Targets old;
+			old.g0 = gbuffer0Handle_;
+			old.g1 = gbuffer1Handle_;
+			old.g2 = gbuffer2Handle_;
+			old.g3 = gbuffer3Handle_;
+			ReleaseTargets(old);
+
+			gbuffer0Handle_ = pending_.g0;
+			gbuffer1Handle_ = pending_.g1;
+			gbuffer2Handle_ = pending_.g2;
+			gbuffer3Handle_ = pending_.g3;
+			pending_ = Targets();
+		}
+
+
+		void DeferredRenderer::AbortResize()
+		{
+			ReleaseTargets(pending_);
 		}
 
 

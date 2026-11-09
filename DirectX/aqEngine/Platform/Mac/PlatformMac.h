@@ -51,6 +51,9 @@ namespace aq
 			void        ImGuiShutdown() override;
 			bool        ImGuiNewFrame() override;
 
+			/** 描画面のピクセル寸法。UpdateLayerBacking が drawableSize に使うビュー bounds と同じ値(メインスレッド) */
+			bool        GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const override;
+
 			// アプリ終了を要求する(ウィンドウデリゲートから呼ぶ)。
 			inline void RequestExit() { exitRequested_ = true; }
 		};

@@ -13,6 +13,19 @@ namespace aq
 
 
 		/**
+		 * 画面寸法の変更(リサイズ)への対応(設計書/エンジン課題解消設計.md P4)。
+		 * IRenderPass は**ゲームが独自パスを足せる公開の拡張点**で、画面寸法の RT を持つパスが
+		 * 何もせず旧寸法のまま残ると静かに壊れる。そこで既定は Unsupported(opt-in)にする。
+		 */
+		enum class ResizePolicy : uint8_t
+		{
+			Unsupported,   // 既定。1 つでもあるとパイプライン全体がリサイズ無効になる(ログに名前を出す)
+			Independent,   // 画面寸法に依存する資源も、掲示板への登録(Scene 以外)も持たない
+			Resizable,     // 画面寸法の RT を持つ。PrepareResize / CommitResize / AbortResize を実装する
+		};
+
+
+		/**
 		 * パスの実行単位(設計書/レンダーパイプライン設計.md §1.1)
 		 */
 		enum class PassScope : uint8_t
@@ -121,6 +134,24 @@ namespace aq
 				(void)res; (void)width; (void)height;
 				return true;
 			}
+
+			/** リサイズへの対応。既定は Unsupported(opt-in)。Independent のパスは Scene 以外のキーを Writes() してはならない */
+			virtual ResizePolicy GetResizePolicy() const { return ResizePolicy::Unsupported; }
+
+			/**
+			 * Resizable のパスだけが実装する(以下 3 関数。ゲームスレッドで、WaitIdle 済みの区間にだけ呼ばれる)。
+			 *
+			 * PrepareResize: 新寸法の RT を**一時領域へ**作る(旧 RT はそのまま残す)。
+			 *                失敗したら自分で一時領域を片付けてから false を返す。
+			 * CommitResize : 一時領域を本体へ入れ替え、**旧 RT を GraphicsDevice::ReleaseOffscreenRenderTarget で解放**し、
+			 *                掲示板への登録と入力の取り直し(Setup の Wire 相当)をやり直す。
+			 *                呼ぶ前に掲示板は初期状態(Scene のみ)へ戻され、列順に呼ばれるので、前段の登録は見える。
+			 *                Setup が掲示板を見て「無効」と決めたパスは、その判定を保持して何もしない。
+			 * AbortResize  : 一時領域を解放する(何度呼んでも安全。PrepareResize が true を返したパスにだけ呼ばれる)。
+			 */
+			virtual bool PrepareResize(const uint32_t width, const uint32_t height) { (void)width; (void)height; return true; }
+			virtual void CommitResize(PassResources& res) { (void)res; }
+			virtual void AbortResize() {}
 
 			/**
 			 * コマンドの記録(ゲームスレッド)。

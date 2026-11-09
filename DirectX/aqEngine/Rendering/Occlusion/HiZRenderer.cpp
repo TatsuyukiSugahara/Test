@@ -29,31 +29,7 @@ namespace aq
 				return false;
 			}
 
-			// レベル0 = フル解像度の 1/2。以降 1/2 ずつ。1x1 になるか kMaxLevels で打ち切る。
-			uint32_t w = (fullWidth  > 1u) ? (fullWidth  >> 1) : 1u;
-			uint32_t h = (fullHeight > 1u) ? (fullHeight >> 1) : 1u;
-			levelCount_ = 0;
-			for (uint32_t i = 0; i < kMaxLevels; ++i)
-			{
-				graphics::RenderTargetDesc desc;
-				desc.width       = w;
-				desc.height      = h;
-				desc.colorFormat = graphics::PixelFormat::R32_Float;  // 深度 (最遠) を格納
-				desc.hasDepth    = false;
-				levelHandles_[i] = gd.CreateOffscreenRenderTarget(desc);
-				if (!levelHandles_[i].IsValid())
-				{
-					EngineAssertMsg(false, "Hi-Z レベル RT の生成に失敗しました");
-					return false;
-				}
-				levelW_[i] = w;
-				levelH_[i] = h;
-				++levelCount_;
-
-				if (w == 1u && h == 1u) break;
-				w = (w > 1u) ? (w >> 1) : 1u;
-				h = (h > 1u) ? (h >> 1) : 1u;
-			}
+			if (!CreateLevels(fullWidth, fullHeight, levels_)) { return false; }
 
 			HiZCBData initData{};
 			hiZCB_ = gd.CreateConstantBuffer(&initData, sizeof(initData));
@@ -63,22 +39,95 @@ namespace aq
 				return false;
 			}
 
+			return true;
+		}
+
+
+		bool HiZRenderer::CreateLevels(uint32_t fullWidth, uint32_t fullHeight, LevelSet& out)
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+
+			// レベル0 = フル解像度の 1/2。以降 1/2 ずつ。1x1 になるか kMaxLevels で打ち切る。
+			uint32_t w = (fullWidth  > 1u) ? (fullWidth  >> 1) : 1u;
+			uint32_t h = (fullHeight > 1u) ? (fullHeight >> 1) : 1u;
+			out.count = 0;
+			for (uint32_t i = 0; i < kMaxLevels; ++i)
+			{
+				graphics::RenderTargetDesc desc;
+				desc.width       = w;
+				desc.height      = h;
+				desc.colorFormat = graphics::PixelFormat::R32_Float;  // 深度 (最遠) を格納
+				desc.hasDepth    = false;
+				out.handles[i] = gd.CreateOffscreenRenderTarget(desc);
+				if (!out.handles[i].IsValid())
+				{
+					EngineAssertMsg(false, "Hi-Z レベル RT の生成に失敗しました");
+					ReleaseLevels(out);
+					return false;
+				}
+				out.w[i] = w;
+				out.h[i] = h;
+				++out.count;
+
+				if (w == 1u && h == 1u) break;
+				w = (w > 1u) ? (w >> 1) : 1u;
+				h = (h > 1u) ? (h >> 1) : 1u;
+			}
+
 			// CPU リードバック対象レベル: 幅が ~200px 以下になる最初の (粗い) レベル。
 			// 粗いほどリードバックが軽く、テストも保守的になる。
-			readbackLevel_ = 0;
-			for (uint32_t i = 0; i < levelCount_; ++i)
+			out.readbackLevel = 0;
+			for (uint32_t i = 0; i < out.count; ++i)
 			{
-				if (levelW_[i] <= 200u) { readbackLevel_ = i; break; }
+				if (out.w[i] <= 200u) { out.readbackLevel = i; break; }
 			}
 
 			return true;
 		}
 
 
+		void HiZRenderer::ReleaseLevels(LevelSet& levels)
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+			for (uint32_t i = 0; i < kMaxLevels; ++i)
+			{
+				gd.ReleaseOffscreenRenderTarget(levels.handles[i]);
+			}
+			levels = LevelSet();
+		}
+
+
+		bool HiZRenderer::PrepareResize(uint32_t fullWidth, uint32_t fullHeight)
+		{
+			AbortResize();   // 前回の一時領域が残っていれば捨てる
+			return CreateLevels(fullWidth, fullHeight, pendingLevels_);
+		}
+
+
+		void HiZRenderer::CommitResize()
+		{
+			ReleaseLevels(levels_);
+			levels_ = pendingLevels_;
+			pendingLevels_ = LevelSet();
+
+			// 旧寸法のリードバックは新しい画面と対応しないので捨てる(次フレームの読み戻しまでは「可視」扱い)。
+			std::lock_guard<std::mutex> lock(cpuHiZMutex_);
+			cpuHiZ_.clear();
+			cpuHiZW_ = 0;
+			cpuHiZH_ = 0;
+		}
+
+
+		void HiZRenderer::AbortResize()
+		{
+			ReleaseLevels(pendingLevels_);
+		}
+
+
 		void HiZRenderer::BuildCommandList(const RenderFrame& frame, RenderCommandList& outList,
 		                                   RenderTargetHandle gbufferWorldPos)
 		{
-			if (levelCount_ == 0 || !gbufferWorldPos.IsValid()) return;
+			if (levels_.count == 0 || !gbufferWorldPos.IsValid()) return;
 
 			// viewProj = view * projection (列ベクトル規約・非転置アップロード)
 			HiZCBData cb{};
@@ -92,14 +141,14 @@ namespace aq
 				hiZCB_.get(),
 				cb,
 				gbufferWorldPos,
-				levelHandles_,
-				levelW_,
-				levelH_,
-				levelCount_);
+				levels_.handles,
+				levels_.w,
+				levels_.h,
+				levels_.count);
 
 			// 粗いレベルを CPU へリードバック (オクリュージョンテスト用)
 			outList.Enqueue<HiZReadbackCommand>(
-				this, levelHandles_[readbackLevel_], levelW_[readbackLevel_], levelH_[readbackLevel_]);
+				this, levels_.handles[levels_.readbackLevel], levels_.w[levels_.readbackLevel], levels_.h[levels_.readbackLevel]);
 		}
 
 

@@ -156,7 +156,13 @@ namespace aq
 					};
 					{
 						AQ_PROFILE_SCOPE("CommandList");
+#ifdef AQ_DEBUG_IMGUI
+						DrawStatsCollector::BeginFrame();
+#endif
 						list->Execute(*context_, fc);
+#ifdef AQ_DEBUG_IMGUI
+						DrawStatsCollector::EndFrame();
+#endif
 					}
 					list->Reset();  // shared_ptr を解放し、アリーナカーソルをリセット
 

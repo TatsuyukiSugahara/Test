@@ -61,6 +61,7 @@ namespace aq
 			ctx.PSSetShader(*item_.ps);
 			ctx.IASetInputLayout(*item_.vs);
 
+			AQ_DRAW_STAT(Instanced, item_.vs.get(), item_.ps.get(), item_.albedo.get(), item_.vertexBuffer.get(), 0u);
 			ctx.DrawIndexedInstanced(item_.indexCount, item_.instanceCount);
 		}
 	}

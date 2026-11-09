@@ -90,6 +90,10 @@ namespace aq
 			ctx.PSSetShader(*item_.ps);
 			ctx.IASetInputLayout(*item_.vs);
 
+			// 計測(AQ_DEBUG_IMGUI のみ)。状態設定の概算: CB(b0 x2 + b1 x2 + b3 x2 + b2)+ テクスチャ + サンプラー + VB / トポロジ / VS / PS / IL
+			AQ_DRAW_STAT(Forward, item_.vs.get(), item_.ps.get(), item_.textures[0].get(), item_.vertexBuffer.get(),
+			             7u + kSlotCount + 1u + 5u);
+
 			if (item_.useGpuCull && item_.gpuOutIndices && item_.gpuArgs)
 			{
 				// GPU 駆動: compute が compact した IB + 間接引数で描画

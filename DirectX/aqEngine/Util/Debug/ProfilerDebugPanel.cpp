@@ -3,6 +3,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include <imgui/imgui.h>
 #include "Memory/MemoryManager.h"
+#include "Rendering/FrameContext.h"
 
 
 namespace aq
@@ -129,6 +130,23 @@ namespace aq
 				const double clamped = overlapPct < 0.0 ? 0.0 : (overlapPct > 100.0 ? 100.0 : overlapPct);
 				ImGui::SameLine();
 				ImGui::TextDisabled("overlap ~%.0f%%", clamped);
+			}
+
+			// ドロー数と状態遷移数(直前に完了したレンダーフレームの値。設計書/エンジン課題解消設計.md P3-A)。
+			// 遷移数 = 直前のドローと (vs, ps, テクスチャ 0, 頂点バッファ) が違った回数。ソートの効果はここで見る。
+			{
+				const rendering::DrawStats stats = rendering::DrawStatsCollector::Last();
+				static const char* const kNames[] = { "GBuffer", "Shadow", "Forward", "Instanced" };
+				uint32_t totalDraws = 0;
+				uint32_t totalTransitions = 0;
+				for (const auto& c : stats.category) { totalDraws += c.draws; totalTransitions += c.transitions; }
+				ImGui::Text("Draws: %u   State transitions: %u", totalDraws, totalTransitions);
+				for (uint32_t i = 0; i < static_cast<uint32_t>(rendering::DrawStatCategory::Count); ++i)
+				{
+					const auto& c = stats.category[i];
+					ImGui::TextDisabled("  %-9s draws %5u  transitions %5u  state calls %6u",
+					                    kNames[i], c.draws, c.transitions, c.stateCalls);
+				}
 			}
 
 			ImGui::Separator();

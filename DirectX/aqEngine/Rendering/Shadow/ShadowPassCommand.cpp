@@ -72,6 +72,7 @@ namespace aq
 			ctx.VSSetShader(*shadowVS_);
 			ctx.PSUnsetShader();
 			ctx.IASetInputLayout(*shadowVS_);
+			AQ_DRAW_STAT(Shadow, shadowVS_.get(), nullptr, nullptr, item_.vertexBuffer.get(), 0u);
 			ctx.DrawIndexed(item_.indexCount);
 		}
 

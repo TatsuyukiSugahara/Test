@@ -92,6 +92,10 @@ namespace aq
 			ctx.PSSetShader(*item_.gbufferPS);   // G-Buffer PS を使用
 			ctx.IASetInputLayout(*item_.vs);
 
+			// 計測(AQ_DEBUG_IMGUI のみ)。状態設定の概算は DrawItemCommand と同じ数え方
+			AQ_DRAW_STAT(GBuffer, item_.vs.get(), item_.gbufferPS.get(), item_.textures[0].get(), item_.vertexBuffer.get(),
+			             7u + static_cast<uint32_t>(TextureSlot::Count) + 1u + 5u);
+
 			if (item_.useGpuCull && item_.gpuOutIndices && item_.gpuArgs)
 			{
 				// GPU 駆動: compute が compact した IB + 間接引数で描画

@@ -65,7 +65,6 @@ namespace aq
 
 		public:
 			StaticMesh();
-			~StaticMesh();
 
 			void Initialize(aq::res::RefMeshResource meshResource,
 			                aq::res::RefGPUResource  albedoResource,

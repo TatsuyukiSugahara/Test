@@ -42,10 +42,6 @@ namespace aq
 		}
 
 
-		StaticMesh::~StaticMesh()
-		{
-		}
-
 
 		void StaticMesh::Initialize(aq::res::RefMeshResource meshResource,
 		                            aq::res::RefGPUResource  albedoResource,

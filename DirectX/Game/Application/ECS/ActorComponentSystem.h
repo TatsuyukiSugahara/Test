@@ -14,16 +14,18 @@ namespace app
 			ecsComponent(app::ecs::StateMachineComponent);
 
 		private:
-			app::actor::StateMachine stateMachine_;
+			// StateMachine は各ステートがアドレスを保持するため動かせない。
+			// unique_ptr で持てば、Chunk の拡張でコンポーネントを移してもアドレスは変わらない。
+			// (デストラクタは宣言しない。宣言すると暗黙の move が消えてコピーになる)
+			std::unique_ptr<app::actor::StateMachine> stateMachine_ = std::make_unique<app::actor::StateMachine>();
 
 
 		public:
 			StateMachineComponent() {}
-			~StateMachineComponent() {}
 
 
 		public:
-			app::actor::StateMachine* GetStateMachine() { return &stateMachine_; }
+			app::actor::StateMachine* GetStateMachine() { return stateMachine_.get(); }
 		};
 
 

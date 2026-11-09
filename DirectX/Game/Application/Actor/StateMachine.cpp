@@ -113,10 +113,7 @@ namespace app
 
 		StateMachine::~StateMachine()
 		{
-			for (auto it : stateHashMap_) {
-				delete it.second;
-				it.second = nullptr;
-			}
+			// ステートは unique_ptr が解放する(派生の後始末も IState の仮想デストラクタ経由で走る)
 			stateHashMap_.clear();
 		}
 
@@ -127,7 +124,7 @@ namespace app
 				if (currentState_) {
 					currentState_->Exit();
 				}
-				currentState_ = stateHashMap_[requestStateId_];
+				currentState_ = stateHashMap_[requestStateId_].get();
 				currentState_->Entry();
 				requestStateId_ = INVALID_STATE_ID;
 			}

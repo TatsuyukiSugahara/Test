@@ -72,8 +72,9 @@ namespace app
 		class StateMachine
 		{
 		private:
-			using StateHashMap = std::unordered_map<uint32_t, IState*>;
-			using StatePair = std::pair<uint32_t, IState*>;
+			// 各ステートは生成時に StateMachine* を覚える(IState::stateMachine_)。
+			// そのため StateMachine はアドレスが変わってはいけない(下でコピー/move を禁止する)。
+			using StateHashMap = std::unordered_map<uint32_t, std::unique_ptr<IState>>;
 
 
 		private:
@@ -94,6 +95,14 @@ namespace app
 			StateMachine();
 			~StateMachine();
 
+			// ステートが自分のアドレスを保持するため、コピーも move もできない。
+			// ECS コンポーネントに載せるときは StateMachineComponent のように unique_ptr 経由で持つこと
+			// (Chunk の拡張で要素を移しても、StateMachine 本体のアドレスは動かない)。
+			StateMachine(const StateMachine&) = delete;
+			StateMachine& operator=(const StateMachine&) = delete;
+			StateMachine(StateMachine&&) = delete;
+			StateMachine& operator=(StateMachine&&) = delete;
+
 			void Update();
 
 
@@ -108,7 +117,7 @@ namespace app
 					EngineAssert(false);
 					return;
 				}
-				stateHashMap_.insert(StatePair(stateId, new T(this)));
+				stateHashMap_.emplace(stateId, std::make_unique<T>(this));
 			}
 
 			/** 状態リクエスト */

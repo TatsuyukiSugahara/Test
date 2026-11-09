@@ -994,6 +994,9 @@
     <ClInclude Include="ECS\Chunk.h">
       <Filter>ECS</Filter>
     </ClInclude>
+    <ClInclude Include="ECS\ChunkStats.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
     <ClInclude Include="ECS\ComponentArray.h">
       <Filter>ECS</Filter>
     </ClInclude>

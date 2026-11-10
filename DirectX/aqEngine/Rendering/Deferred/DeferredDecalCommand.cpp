@@ -46,7 +46,11 @@ namespace aq
 
 			// b0: デカール定数バッファ (perDrawCBPool = 192B から確保)
 			graphics::IConstantBuffer* decalCB = fc.perDrawCBPool->Allocate();
-			if (!decalCB) return;
+			if (!decalCB)
+			{
+				ctx.OMSetDepthMode(graphics::DepthMode::ReadWrite); // 変えた深度モードを戻してから抜ける
+				return;
+			}
 			ctx.UpdateSubresource(*decalCB, item_.cb);
 			ctx.PSSetConstantBuffer(0, *decalCB);
 
@@ -68,6 +72,10 @@ namespace aq
 			ctx.PSUnsetShaderResource(9);
 			ctx.PSUnsetShaderResource(10);
 			ctx.PSUnsetShaderResource(11);
+
+			// DepthMode を既定値に戻す (DeferredLightingCommand と同じ。後続パスの並びに依存しないように)。
+			// ブレンドは BuildDecalCommandList が最後に Opaque へ戻す
+			ctx.OMSetDepthMode(graphics::DepthMode::ReadWrite);
 		}
 	}
 }

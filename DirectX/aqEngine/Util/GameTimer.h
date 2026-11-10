@@ -29,6 +29,7 @@ namespace aq
 			float deltaTime_;
 			float totalTime_;
 			float fpsLimitSec_;
+			float fixedDeltaSec_;
 
 			float fpsAccum_;
 			int   fpsFrameCount_;
@@ -57,6 +58,12 @@ namespace aq
 			 * @param fps  目標 FPS。0.0f 以下で無制限。
 			 */
 			void SetFPSLimit(float fps);
+
+			/**
+			 * デルタ時間を実時間に関わらず固定する(撮影・画面比較用)。
+			 * @param fps  固定する FPS。0.0f 以下で実時間に戻す。FPS 制限の待機は従来どおり行う。
+			 */
+			void SetFixedFPS(float fps);
 
 			/**
 			 * 次の Tick() が測る経過時間を「今から」にする(それまでの待ち時間を捨てる)。

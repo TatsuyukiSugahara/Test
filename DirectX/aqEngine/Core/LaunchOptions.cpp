@@ -130,6 +130,26 @@ namespace aq
 				return;
 			}
 
+			if (key == "fixed-fps") {
+				uint64_t fps = 0;
+				if (ParseUnsigned(value, 10, 1000, fps) && fps != 0) {
+					options.fixedFps = static_cast<uint32_t>(fps);
+				} else {
+					aq::StartupMarkf("  [launch] ignored -fixed-fps (expected 1-1000): %s", value.c_str());
+				}
+				return;
+			}
+
+			if (key == "freeze-frame") {
+				uint64_t frame = 0;
+				if (ParseUnsigned(value, 10, 1000000, frame) && frame != 0) {
+					options.freezeFrame = static_cast<uint32_t>(frame);
+				} else {
+					aq::StartupMarkf("  [launch] ignored -freeze-frame (expected 1-1000000): %s", value.c_str());
+				}
+				return;
+			}
+
 			aq::StartupMarkf("  [launch] ignored unknown key: %s", argument.c_str());
 		}
 

@@ -25,6 +25,7 @@ namespace aq
 			, deltaTime_     (1.0f / 60.0f)
 			, totalTime_     (0.0f)
 			, fpsLimitSec_   (0.0f)
+			, fixedDeltaSec_ (0.0f)
 			, fpsAccum_      (0.0f)
 			, fpsFrameCount_ (0)
 			, measuredFPS_   (0.0f)
@@ -67,7 +68,9 @@ namespace aq
 			const double elapsed = std::chrono::duration<double>(now - lastTime_).count();
 			lastTime_ = now;
 
-			deltaTime_ = std::min(static_cast<float>(elapsed), MAX_DELTA_TIME);
+			deltaTime_ = (fixedDeltaSec_ > 0.0f)
+				? fixedDeltaSec_
+				: std::min(static_cast<float>(elapsed), MAX_DELTA_TIME);
 			totalTime_ += deltaTime_;
 
 			// FPS 測定 (1 秒ごとに更新)
@@ -79,6 +82,12 @@ namespace aq
 				fpsAccum_     = 0.0f;
 				fpsFrameCount_ = 0;
 			}
+		}
+
+
+		void GameTimer::SetFixedFPS(float fps)
+		{
+			fixedDeltaSec_ = (fps > 0.0f) ? (1.0f / fps) : 0.0f;
 		}
 
 

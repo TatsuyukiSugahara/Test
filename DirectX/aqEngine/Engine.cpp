@@ -203,6 +203,7 @@ namespace aq
 		}
 
 		gameTimer_.Initialize();
+		gameTimer_.SetFixedFPS(static_cast<float>(launchOptions_.fixedFps));
 
 		return true;
 	}
@@ -312,6 +313,18 @@ namespace aq
 			std::this_thread::sleep_for(std::chrono::milliseconds(2));
 			return;
 		}
+
+		// 撮影用: 指定フレームまで更新したら、以降は更新も描画も止めて最後の画面を残す(-freeze-frame)。
+		if (launchOptions_.freezeFrame != 0 && updatedFrames_ >= launchOptions_.freezeFrame)
+		{
+			if (!freezeLogged_) {
+				aq::StartupMarkf("[engine] freeze: %u フレームで更新を止めた(-freeze-frame)", updatedFrames_);
+				freezeLogged_ = true;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(16));
+			return;
+		}
+		++updatedFrames_;
 
 		Update();
 	}

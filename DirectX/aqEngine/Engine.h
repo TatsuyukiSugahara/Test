@@ -112,6 +112,10 @@ namespace aq
 		std::chrono::steady_clock::time_point lastSoundOnlyTime_;
 		bool              resizeDisabledLogged_ = false;
 
+		/** 撮影用(-freeze-frame)。Update を呼んだフレーム数と、止めたかどうか */
+		uint32_t          updatedFrames_ = 0;
+		bool              freezeLogged_  = false;
+
 		/** サウンドを鳴らしてよい状態か(= 前面にいるか)。前回の判定を持って変化点だけ叩く */
 		bool              soundActive_      = true;
 

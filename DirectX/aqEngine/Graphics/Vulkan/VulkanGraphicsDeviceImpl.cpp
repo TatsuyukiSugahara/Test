@@ -15,6 +15,7 @@
 #endif
 #include "Graphics/RenderContext.h"
 #include <vma/vk_mem_alloc.h>
+#include <algorithm>
 
 namespace aq
 {
@@ -505,7 +506,19 @@ namespace aq
 			ci.oldSwapchain     = swapchain_;
 
 			VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
-			if (!VK_VERIFY(vkCreateSwapchainKHR(device_, &ci, nullptr, &newSwapchain))) return false;
+			if (!VK_VERIFY(vkCreateSwapchainKHR(device_, &ci, nullptr, &newSwapchain)))
+			{
+				// oldSwapchain を渡した生成は、失敗しても旧スワップチェーンが退役することがある
+				// (退役済みは次回の oldSwapchain に渡せず、提示にも使えない)。
+				// 旧が生きている前提を捨て、「スワップチェーン無し」へ落とす。
+				// 次の BeginFrame / ResizeMainTargets が oldSwapchain 無しで作り直す。
+				if (swapchain_ != VK_NULL_HANDLE)
+				{
+					WaitDeviceIdle();
+					DestroySwapchainResources();
+				}
+				return false;
+			}
 
 			// ここから先は古い方へ戻せない。在フライトのコマンドが古い画像/ビューを
 			// 参照していることがあるので、破棄の前に GPU を空にする
@@ -516,6 +529,8 @@ namespace aq
 			swapchain_       = newSwapchain;
 			swapchainFormat_ = chosen.format;
 			swapchainExtent_ = extent;
+			publishedExtent_.store((static_cast<uint64_t>(extent.width) << 32) | extent.height,
+			                       std::memory_order_release);
 			imageIndex_      = 0;
 			swapchainDirty_  = false;
 
@@ -533,11 +548,21 @@ namespace aq
 				vi.viewType         = VK_IMAGE_VIEW_TYPE_2D;
 				vi.format           = swapchainFormat_;
 				vi.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-				if (!VK_VERIFY(vkCreateImageView(device_, &vi, nullptr, &swapchainViews_[i]))) return false;
+				swapchainViews_[i]    = VK_NULL_HANDLE;
+				presentSemaphores_[i] = VK_NULL_HANDLE;
+				if (!VK_VERIFY(vkCreateImageView(device_, &vi, nullptr, &swapchainViews_[i])))
+				{
+					DestroySwapchainResources();   // 中途半端な状態を残さない(IsSwapchainReady を false に戻す)
+					return false;
+				}
 
 				// present 待ちセマフォは swapchain 画像単位 (frame 単位だと再利用が安全でない)。
 				VkSemaphoreCreateInfo si{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-				if (!VK_VERIFY(vkCreateSemaphore(device_, &si, nullptr, &presentSemaphores_[i]))) return false;
+				if (!VK_VERIFY(vkCreateSemaphore(device_, &si, nullptr, &presentSemaphores_[i])))
+				{
+					DestroySwapchainResources();
+					return false;
+				}
 			}
 			return true;
 		}
@@ -546,9 +571,10 @@ namespace aq
 		{
 			if (!device_) return;
 
-			for (VkSemaphore s : presentSemaphores_) vkDestroySemaphore(device_, s, nullptr);
+			publishedExtent_.store(0, std::memory_order_release);
+			for (VkSemaphore s : presentSemaphores_) if (s) vkDestroySemaphore(device_, s, nullptr);
 			presentSemaphores_.clear();
-			for (VkImageView v : swapchainViews_) vkDestroyImageView(device_, v, nullptr);
+			for (VkImageView v : swapchainViews_) if (v) vkDestroyImageView(device_, v, nullptr);
 			swapchainViews_.clear();
 			swapchainImages_.clear();
 			if (swapchain_) { vkDestroySwapchainKHR(device_, swapchain_, nullptr); swapchain_ = VK_NULL_HANDLE; }
@@ -571,9 +597,11 @@ namespace aq
 
 		bool VulkanGraphicsDeviceImpl::GetSurfaceSize(uint32_t& outWidth, uint32_t& outHeight) const
 		{
-			if (!IsSwapchainReady()) return false;
-			outWidth  = swapchainExtent_.width;
-			outHeight = swapchainExtent_.height;
+			// レンダースレッドが書き換える swapchainExtent_ ではなく、原子の写しを読む。
+			const uint64_t packed = publishedExtent_.load(std::memory_order_acquire);
+			if (packed == 0) return false;
+			outWidth  = static_cast<uint32_t>(packed >> 32);
+			outHeight = static_cast<uint32_t>(packed & 0xFFFFFFFFu);
 			return true;
 		}
 
@@ -884,6 +912,7 @@ namespace aq
 			defaultTexture_.reset();
 			defaultSampler_.reset();
 			offscreenRTs_.clear();
+			freeOffscreenSlots_.clear();
 			for (auto& rt : mainRTs_) rt.reset();
 			activeContext_ = nullptr;
 			if (pipelineCache_)  { pipelineCache_->Destroy(device_);  pipelineCache_.reset(); }
@@ -966,8 +995,76 @@ namespace aq
 			                         fmt != VK_FORMAT_UNDEFINED ? fmt : VK_FORMAT_R8G8B8A8_UNORM,
 			                         desc.hasDepth))
 				return ~0u;
+
+			// 解放済みの番号があれば先に再利用する(ハンドルは添字なので詰め直さない)。
+			if (!freeOffscreenSlots_.empty())
+			{
+				const uint32_t slot = freeOffscreenSlots_.back();
+				freeOffscreenSlots_.pop_back();
+				offscreenRTs_[slot] = std::move(rt);
+				return MAIN_RT_COUNT + slot;
+			}
+
 			offscreenRTs_.push_back(std::move(rt));
 			return MAIN_RT_COUNT + (uint32_t)(offscreenRTs_.size() - 1);
+		}
+
+		void VulkanGraphicsDeviceImpl::ReleaseOffscreenRenderTarget(uint32_t index)
+		{
+			if (index < MAIN_RT_COUNT) return;
+			const uint32_t slot = index - MAIN_RT_COUNT;
+			if (slot >= offscreenRTs_.size() || offscreenRTs_[slot] == nullptr) return;   // 範囲外 / 二重解放
+
+			// 呼び出しは WaitIdle 済みの区間が前提(在フライトのコマンドがこの RT を参照しない)。
+			offscreenRTs_[slot].reset();
+			freeOffscreenSlots_.push_back(slot);
+		}
+
+		bool VulkanGraphicsDeviceImpl::SupportsRenderResize() const
+		{
+#if defined(__APPLE__)
+			return true;
+#else
+			return false;   // Android / Windows の Vulkan は P4-C で確認するまで固定寸法
+#endif
+		}
+
+		bool VulkanGraphicsDeviceImpl::ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
+		{
+			if (!device_ || reqW == 0 || reqH == 0) return false;
+
+			// 呼び出し側が WaitIdle 済みのはずだが、スワップチェーンの破棄が絡むので念のため。
+			WaitDeviceIdle();
+
+			// 1) スワップチェーン。サーフェスの寸法がすでに今のスワップチェーンと同じなら作り直さない
+			//    (ウィンドウのドラッグ中にデバイス側が OUT_OF_DATE で先に作り直していることが多い)。
+			//    作り直すときは oldSwapchain を渡すので、失敗すると旧が退役し「スワップチェーン無し」へ落ちる
+			//    (CreateSwapchain がそこまで面倒を見る)。その場合も呼び出し側は 1 から再試行すればよい。
+			if (!IsSwapchainReady() || IsSwapchainExtentStale() || swapchainDirty_)
+			{
+				if (!CreateSwapchain(reqW, reqH)) return false;
+			}
+			const VkExtent2D extent = swapchainExtent_;   // メイン RT・全パスはこの確定寸法に揃える
+
+			// 2) メイン RT / 深度を一時領域へ作り、全部成功してから入れ替える。
+			std::unique_ptr<VulkanRenderTarget> newRTs[MAIN_RT_COUNT];
+			for (auto& rt : newRTs)
+			{
+				rt = std::make_unique<VulkanRenderTarget>();
+				if (!rt->CreateOffscreen(extent.width, extent.height,
+				                         VK_FORMAT_R16G16B16A16_SFLOAT, /*hasDepth*/true))
+				{
+					return false;   // 一時領域は unique_ptr が片付ける。メイン RT は旧のまま
+				}
+			}
+			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i)
+			{
+				mainRTs_[i] = std::move(newRTs[i]);   // 旧 RT は WaitIdle 済みなのでここで解放してよい
+			}
+
+			outW = extent.width;
+			outH = extent.height;
+			return true;
 		}
 
 		void VulkanGraphicsDeviceImpl::CopyToBackBuffer(IRenderTarget& src)

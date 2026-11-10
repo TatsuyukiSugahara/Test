@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <atomic>
 
 struct ImDrawData;
 
@@ -47,6 +48,23 @@ namespace aq
 			IRenderTarget* GetRenderTarget(uint32_t index) override;
 			uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
 			uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& desc) override;
+
+			/**
+			 * 描画解像度の実行時変更(設計書/エンジン課題解消設計.md P4-B)。
+			 * 検証済みの Apple 系(MoltenVK)だけ true。Android / Windows の Vulkan は P4-C の確認が済むまで固定寸法。
+			 */
+			bool SupportsRenderResize() const override;
+
+			/**
+			 * スワップチェーンとメイン RT / 深度を作り直し、確定した寸法を返す。WaitIdle 済みの区間で呼ぶ。
+			 * 確定寸法は caps.currentExtent を優先する(要求値と異なり得る)。
+			 * 先にスワップチェーンを作り、その確定寸法でメイン RT を一時領域へ作ってから入れ替える。
+			 * 失敗時は false。スワップチェーンが退役済みのこともあるので、呼び出し側は 1 から再試行する。
+			 */
+			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH) override;
+
+			/** オフスクリーン RT を 1 本解放し、添字を空き番号へ登録する。WaitIdle 済みの区間で呼ぶ */
+			void ReleaseOffscreenRenderTarget(uint32_t index) override;
 
 			// ── リソースファクトリ (Phase 0: 未実装スタブ。Phase 1〜2 で実装) ──
 			std::unique_ptr<IVertexBuffer>       CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
@@ -180,6 +198,13 @@ namespace aq
 			VkSwapchainKHR    swapchain_      = VK_NULL_HANDLE;
 			VkFormat          swapchainFormat_ = VK_FORMAT_UNDEFINED;
 			VkExtent2D        swapchainExtent_ = { 0, 0 };
+
+			/**
+			 * swapchainExtent_ をゲームスレッドへ見せる写し(幅 << 32 | 高さ。0 は未確立)。
+			 * swapchainExtent_ はレンダースレッドの作り直しが書き換えるので、GetSurfaceSize は
+			 * 非原子の本体ではなくこちらを読む。
+			 */
+			std::atomic<uint64_t> publishedExtent_{ 0 };
 			std::vector<VkImage>     swapchainImages_;
 			std::vector<VkImageView> swapchainViews_;
 			std::vector<VkSemaphore> presentSemaphores_;  // swapchain 画像単位 (present 待ち。再利用安全)
@@ -211,6 +236,7 @@ namespace aq
 			std::unique_ptr<class VulkanSampler>  defaultSampler_;  // Clamp/Linear
 			std::unique_ptr<VulkanRenderTarget>   mainRTs_[2];    // 深度付きオフスクリーン HDR (D3D12 と同方式・最後に CopyToBackBuffer)
 			std::vector<std::unique_ptr<VulkanRenderTarget>> offscreenRTs_;  // GBuffer/ポスプロ等
+			std::vector<uint32_t> freeOffscreenSlots_;  // 解放済みの offscreenRTs_ の添字。CreateOffscreenRenderTarget が先に再利用する
 			VulkanRenderContextImpl*              activeContext_ = nullptr;  // Present 前に rendering を閉じる
 			ImDrawData*                          imguiDrawData_ = nullptr;  // CopyToBackBuffer 後に描く
 

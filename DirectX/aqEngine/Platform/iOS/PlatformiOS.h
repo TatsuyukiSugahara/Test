@@ -95,6 +95,9 @@ namespace aq
 			 */
 			bool        IsRenderable() const override { return renderable_; }
 
+			/** 描画面のピクセル寸法。UpdateLayerBacking が drawableSize に使うビュー bounds と同じ値(メインスレッド) */
+			bool        GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const override;
+
 
 			/**
 			 * ライフサイクル(設計書/iOS移植設計.md §3.4)

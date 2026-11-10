@@ -89,8 +89,8 @@ namespace
 
 // 初期レイアウトとサイズ変更に追従する。向きは横向き固定(Info.plist)なので
 // 実際に寸法が変わるのは起動直後の 1 回だけ。
-// TODO(P5): 回転やスプリットビューで寸法が変わる構成を許すなら、Metal 側の
-// リサイズ経路(設計書 §4.5)を用意してから Engine へ変化を通知する必要がある。
+// 寸法が変わる構成(回転・スプリットビュー)を許す場合の追従は、Engine の描画解像度リサイズ
+// (IPlatform::GetClientPixelSize を Engine が見る。設計書/エンジン課題解消設計.md P4)が担う。
 - (void)layoutSubviews
 {
 	[super layoutSubviews];
@@ -523,6 +523,25 @@ namespace aq
 
 			// 用意できなければ nullptr(Mac / Android と同じ流儀)。
 			return contentRoot_.empty() ? nullptr : contentRoot_.c_str();
+		}
+
+
+		bool PlatformiOS::GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const
+		{
+			if (objects_ == nullptr || objects_->view == nil) {
+				return false;
+			}
+
+			// UpdateLayerBacking が drawableSize に使うのと同じ bounds。contentsScale = 1 固定なので
+			// ポイント値 = ピクセル値。
+			const CGSize bounds = [objects_->view bounds].size;
+			if (bounds.width <= 0.0 || bounds.height <= 0.0) {
+				return false;
+			}
+
+			outWidth  = static_cast<uint32_t>(bounds.width);
+			outHeight = static_cast<uint32_t>(bounds.height);
+			return true;
 		}
 
 

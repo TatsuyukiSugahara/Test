@@ -232,6 +232,17 @@ namespace aq
 		}
 
 
+		bool UIAnimationComponent::IsTriggerPlaying(const uint32_t trigger) const
+		{
+			for (size_t i = 0; i < clips_.size(); ++i)
+			{
+				if (clips_[i].condition == UIClipCondition::Trigger && clips_[i].conditionParam == trigger && runtimes_[i].active)
+					return true;
+			}
+			return false;
+		}
+
+
 		bool UIAnimationComponent::IsPlaying() const
 		{
 			for (size_t i = 0; i < clips_.size(); ++i)

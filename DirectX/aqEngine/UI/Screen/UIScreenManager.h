@@ -57,7 +57,8 @@ namespace aq
 
 			// 1. exiting_ でない画面だけ OnUpdate(dt)
 			// 2. UIAnimationSystem::Update()
-			// 3. Exit 待機中なら経過時間を進め、Exit グループの再生が終わるかタイムアウトしたら
+			// 3. ClickWait 中なら経過時間を進め、Click の再生が終わるかタイムアウトしたら clickWaitDone_ を立てる (§20)
+			//    Exit 待機中なら経過時間を進め、Exit グループの再生が終わるかタイムアウトしたら
 			//    ExitDone (破棄・次画面生成) を実行する
 			// 4. FlushPendingOps() (pending 処理 + 画面変化時に UIInputSystem::ClearState())
 			// 5. 画面変化があれば UIInputSystem::ClearState()
@@ -105,6 +106,10 @@ namespace aq
 			// Exit 待機を終え、先頭画面を破棄して次画面 (Pop: 新しい先頭 / Replace: 新規生成) へ進める (§9.2)
 			void CompleteExit();
 
+			// Pop / Replace の BeginExit の前に、先頭画面に再生中の Click があれば ClickWait へ入る (§20.2)。
+			// 入ったら true。呼び出し側は起点 op 自身を含めて残りを pendingOps_ の先頭へ戻して Flush を抜ける
+			bool TryBeginClickWait();
+
 			std::vector<std::unique_ptr<UIScreen>>          stack_;
 			std::vector<PendingOp>                          pendingOps_;
 			std::unordered_map<std::string, ScreenEntry>    registry_;
@@ -116,6 +121,13 @@ namespace aq
 			PendingOp exitOp_;              // 待機完了後に実行する Pop / Replace
 
 			static constexpr float kExitTimeoutSec = 2.0f; // Exit 待機のタイムアウト (§13)
+
+			// ---- Click 演出の完了待ち (§20) ----
+			bool      clickWaiting_  = false; // 先頭画面の Click クリップの再生待ち
+			float     clickElapsed_  = 0.f;   // 待機開始からの経過時間
+			bool      clickWaitDone_ = false; // 待機を終えた。Flush で最初の Pop / Replace が 1 回だけ消費する
+
+			static constexpr float kClickWaitTimeoutSec = 2.0f; // ClickWait のタイムアウト (§20.2)
 		};
 
 	} // namespace ui

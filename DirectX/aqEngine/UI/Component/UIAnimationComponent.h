@@ -90,6 +90,7 @@ namespace aq
 			bool GetCondition(const uint32_t condition) const;
 			bool IsGroupPlaying(const uint32_t group) const; // group の Manual クリップが 1 本でも active
 			bool IsPlaying() const;                          // Manual クリップが 1 本でも active
+			bool IsTriggerPlaying(uint32_t trigger) const;   // conditionParam == trigger の Trigger クリップが 1 本でも active
 
 			// UIAnimationSystem から毎フレーム呼ばれる。GetOwner() 経由で UIObject を取得する。
 			// AdvanceRuntimes(dt) で状態を進め、ApplyLayers() でプロパティへ反映する (設計書 §6.3)

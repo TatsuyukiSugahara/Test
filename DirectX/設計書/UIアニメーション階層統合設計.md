@@ -1,7 +1,7 @@
 # UIアニメーション統合設計
 
 > 対象コミット: 3ff20bf(P6 まで)/ 最終更新: 2026-11-10 / **再開するときは §16 から読む**
-> ⚠ 鮮度: P7(`7bf1bc7` / `e49c34a`)は §11・§16.1 に反映済み。§18(P8)は Codex レビュー 2 回を経て 2026-11-10 に実装・Mac 評価済み(§11 P8)。§19(P9 相対値)は Codex レビューを経て 2026-11-10 に実装・Mac 評価済み(§11 P9)。§20(P10)は 2026-11-10 に `9a9350d` の実コードを読んで設計し、Codex レビュー済み(未実装)。§16.1 以外の §16 は 2026-09-17 時点。
+> ⚠ 鮮度: P7(`7bf1bc7` / `e49c34a`)は §11・§16.1 に反映済み。§18(P8)は Codex レビュー 2 回を経て 2026-11-10 に実装・Mac 評価済み(§11 P8)。§19(P9 相対値)は Codex レビューを経て 2026-11-10 に実装・Mac 評価済み(§11 P9)。§20(P10)は Codex レビューを経て 2026-11-10 に実装・Mac 評価済み(§11 P10)。§16.1 以外の §16 は 2026-09-17 時点。
 
 UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定できる」状態にする。
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
@@ -1186,17 +1186,27 @@ pending 列の先頭へ戻し、`clickWaitDone_` はその op だけが消費す
 `UIInputSystem::FireClick` に一時フック(環境変数で、callback の後に `Replace(<次画面>)` を積む)と、`UIScreenManager` に状態遷移のログ
 (ClickWait 開始 / 終了、ExitStart、ExitDone と、クリックからの経過時間)を入れる。どちらもコミットしない。時刻の許容差は ±1 フレーム(60 FPS で ±17 ms)。
 
-- [ ] **待ってから Exit**: Click クリップ 0.6 秒、Exit クリップ 0.3 秒。クリックから ExitStart まで 0.6 秒、ExitDone まで 0.9 秒(ログ)
-- [ ] **Click クリップが無ければ従来どおり**: Click クリップを外すと、クリックと同じフレームで ExitStart(P2B と同じ)。ClickWait のログが出ない
-- [ ] **待っている間の入力**: ClickWait 中にもう一度クリックしても Click の Trigger も `Replace` も起きない(ログ)。Hover の Bool は ClickWait 開始で false になる
-- [ ] **待っている間も画面は動く**: ClickWait 中は画面の `OnUpdate` が呼ばれ続け、ExitStart 以降は止まる(ログ)
-- [ ] **後から積んだ操作**: ClickWait 中にゲームコードが `Push` を積んでも、Click → Exit → 次画面 → `Push` の順に処理される(ログ)
-- [ ] **タイムアウト**: ループしない 2.5 秒の Click クリップ。クリックから 2.0 秒でタイムアウトの警告ログが出て、**同じフレームで** ExitStart(再び ClickWait に入らない)
-- [ ] **`clickWaitDone_` は 1 回で消える**: 上の遷移先の画面にも Click クリップ付きのボタンを置き、そこから `Replace` すると、改めて ClickWait に入る(ログ)
-- [ ] **非アクティブな階層は待たない**: callback でボタン自身を非アクティブにする一時フックを入れると、ClickWait に入らず同じフレームで ExitStart(ログ)
-- [ ] **検証**: Click のクリップにループを付けると `Validate` でエラー(メッセージにクリップ名)
-- [ ] **回帰**: 既存の 3 画面の表示と、タイトル → ゲームの遷移(Space。Click を使わない経路)が従来どおり(撮影とログ。ClickWait のログが出ない)
-- [ ] Mac(Metal)の Debug / Release ビルドが通り、警告が増えていない
+- [x] **待ってから Exit**: Click クリップ 0.6 秒、Exit クリップ 0.3 秒。クリックから ExitStart まで 0.6 秒、ExitDone まで 0.9 秒(ログ)。結果 0.585 / 0.884 秒(1 フレーム以内)
+- [x] **Click クリップが無ければ従来どおり**: Click クリップを外すと、クリックと同じフレームで ExitStart(P2B と同じ)。ClickWait のログが出ない
+- [x] **待っている間の入力**: ClickWait 中にもう一度クリックしても Click の Trigger も `Replace` も起きない(ログ)。Hover の Bool は ClickWait 開始で false になる。
+      3 回クリックして記録は 2 回(ClickWait 中の 1 回が無視された)。Hover の false はコード上(`ClearState`)の確認のみ
+- [x] **待っている間も画面は動く**: ClickWait 中は画面の `OnUpdate` が呼ばれ続け、ExitStart 以降は止まる(ログ)。0.584 秒の待ちで 35 回
+- [x] **後から積んだ操作**: ClickWait 中にゲームコードが `Push` を積んでも、Click → Exit → 次画面 → `Push` の順に処理される(ログ)。
+      `Replace` と同じ callback で `Push` を積んで確認(ExitDone の 2 ms 後に `push`)
+- [x] **タイムアウト**: ループしない 2.5 秒の Click クリップ。クリックから 2.0 秒でタイムアウトの警告ログが出て、**同じフレームで** ExitStart(再び ClickWait に入らない)。結果 2.001 秒
+- [x] **`clickWaitDone_` は 1 回で消える**: 上の遷移先の画面にも Click クリップ付きのボタンを置き、そこから `Replace` すると、改めて ClickWait に入る(ログ)
+- [x] **非アクティブな階層は待たない**: callback でボタン自身を非アクティブにする一時フックを入れると、ClickWait に入らず同じフレームで ExitStart(ログ)
+- [x] **検証**: Click のクリップにループを付けると `Validate` でエラー(メッセージにクリップ名)。読み込み時に `[UIAnim] clip discarded: clip 'ClickPop': Click clips must not loop`
+- [x] **回帰**: 既存の 3 画面の表示と、タイトル → ゲームの遷移(Space。Click を使わない経路)が従来どおり(撮影とログ。ClickWait のログが出ない)。
+      タイトルと Loading を撮影。InGame / Result の画面は今回撮っていない(P10 の変更はスタック操作と入力ロックだけで、描画には触れない)
+- [x] Mac(Metal)の Debug / Release ビルドが通り、警告が増えていない
+
+評価は Mac(Metal / Debug)の Game で実施(2026-11-10)。タイトル画面 JSON に一時ノード `Btn`(ボタン + Click クリップ + Exit クリップ)を足し、
+`FireClick` の一時フック(環境変数で `Replace("AquaDashTitle")` / `Push("Loading")` / ボタンの非アクティブ化)と `UIScreenManager` の時刻ログで確かめた。いずれもコミットしていない。
+
+**評価で見つけた既存の課題**(P10 では直さない。README「既知の課題」に記録): Exit グループのクリップが**非アクティブなノード**にあると、
+`IsAnimationGroupPlaying` は非アクティブな階層も調べるが更新はされないので、Exit 待機が必ず 2.0 秒のタイムアウトまで続く。
+P10 の `IsTriggerPlaying` で避けたのと同じ穴(callback でボタン自身を非アクティブにし、同じボタンに Exit クリップを付けた構成で観測)。
 
 ユーザー確認(この Mac ではできない):
 - [ ] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通り、警告が増えていない
@@ -1315,7 +1325,8 @@ struct TimelineRow
 | P6 | Windows 回帰 + エディタ寸法(§16.5) | 完了(Windows / D3D11 で評価済) | `3ff20bf` |
 | P7 | オートキー(§17) | 完了(Windows / D3D11 で評価済) | `7bf1bc7` + 追従 |
 | P8 | Ease 拡充(§18) | 完了(Mac / Metal で評価済。Windows のビルド確認と一部のエディタ確認が残る) | `b8541b8` |
-| P9 | 相対値(§19) | 完了(Mac / Metal で評価済。Windows のビルド確認と一部のエディタ確認が残る) | 本コミット |
+| P9 | 相対値(§19) | 完了(Mac / Metal で評価済。Windows のビルド確認と一部のエディタ確認が残る) | `9a9350d` |
+| P10 | Click 演出後の遷移(§20) | 完了(Mac / Metal で評価済。Windows のビルド確認が残る) | 本コミット |
 
 **P0〜P5 で共通に残っていた「Windows / D3D11 でビルドが通り、警告が増えていない」は P6 で消化した。**
 `Game/DirectX.vcxproj` の Debug / x64 を `AqGraphicsApi=D3D11` / `D3D12` / `Vulkan` の 3 通りビルドして全部成功。
@@ -1335,7 +1346,7 @@ TextStyle ポップアップがいずれも出ることを確認済み。段取�
 ### 16.2 残っている作業(この順で)
 
 1. ~~**P8: Ease 拡充(§18)**~~ — 2026-11-10 に完了。残りは Windows 3 構成のビルド確認、右クリックの Disabled の撮影、全グループの先頭・末尾の選択確認
-2. **§12 の続き** — ~~相対値~~(P9 で完了)→ Click 演出後の遷移 → Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
+2. **§12 の続き** — ~~相対値~~(P9)→ ~~Click 演出後の遷移~~(P10)→ Pause。各々を §11 に「Pn: 計画 + 評価チェックリスト」と
    新セクション(§14 / §15 と同じ形)として書いてから実装する
 3. **ゲーム側の実例** — `Play(group)` / `Stop()` を呼ぶコードと、クリックで遷移するボタン(§9.3 の実測)はまだ無い
 

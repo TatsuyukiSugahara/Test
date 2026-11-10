@@ -49,6 +49,9 @@ namespace aq
 			// Exit グループの再生待ちで、破棄待機中かどうか (§9)
 			bool IsExiting() const { return exiting_; }
 
+			// 入力を止めているか。Exit 待機中、または Click 演出の完了待ち (ClickWait, §20) 中
+			bool IsInputLocked() const { return exiting_ || inputLocked_; }
+
 			// ルート以下から名前で UIObject を検索 (再帰)
 			UIObjectHandle FindHandle(std::string_view name) const;
 
@@ -62,6 +65,7 @@ namespace aq
 			std::string name_;
 			UIObject*   root_    = nullptr; // UIContext が所有; UIScreen は非所有参照
 			bool        exiting_ = false;   // OnExit 済みで Exit グループの再生待ち (§9)
+			bool        inputLocked_ = false; // ClickWait 中 (§20)。exiting_ とは別 (OnUpdate は止めない)
 		};
 
 	} // namespace ui

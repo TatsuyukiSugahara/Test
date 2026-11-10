@@ -22,6 +22,10 @@ namespace aq
 			// root 以下のどれかの UIAnimationComponent で group の Manual クリップが active なら true (設計書 §5.2)
 			static bool IsAnimationGroupPlaying(const UIObject* root, uint32_t group);
 
+			// root 以下で trigger の Trigger クリップが active なら true (設計書 §20.3)。
+			// IsActiveInHierarchy() が false のノードとその子は Update されないので調べない
+			static bool IsTriggerPlaying(const UIObject* root, uint32_t trigger);
+
 		private:
 			static void UpdateObject(UIObject* obj, float dt);
 		};

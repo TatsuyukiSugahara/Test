@@ -295,6 +295,10 @@ namespace aq
 				// Exit グループの Manual クリップに loopFrom >= 0 を許さない (画面遷移が止まるため)
 				if (clip.condition == UIClipCondition::Manual && clip.group == kUIAnimGroupExit && clip.loopFrom >= 0.f)
 					errors.push_back({ i, "clip '" + clip.name + "': Exit group clips must not loop" });
+
+				// Click の Trigger クリップに loopFrom >= 0 を許さない (ClickWait が終わらないため, §20.5)
+				if (clip.condition == UIClipCondition::Trigger && clip.conditionParam == kUIAnimTriggerClick && clip.loopFrom >= 0.f)
+					errors.push_back({ i, "clip '" + clip.name + "': Click clips must not loop" });
 			}
 
 			// aqHash32() の結果が 0、または同一コンポーネント内で別文字列が同じハッシュ。

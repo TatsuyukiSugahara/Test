@@ -45,6 +45,22 @@ namespace aq
 			return false;
 		}
 
+		bool UIAnimationSystem::IsTriggerPlaying(const UIObject* root, uint32_t trigger)
+		{
+			if (!root || !root->IsActiveInHierarchy()) return false;
+
+			if (auto* anim = root->GetComponent<UIAnimationComponent>())
+			{
+				if (anim->IsTriggerPlaying(trigger)) return true;
+			}
+
+			for (const UIObject* child : root->GetChildren())
+			{
+				if (IsTriggerPlaying(child, trigger)) return true;
+			}
+			return false;
+		}
+
 		void UIAnimationSystem::UpdateObject(UIObject* obj, float dt)
 		{
 			if (!obj || !obj->IsActiveInHierarchy()) return;

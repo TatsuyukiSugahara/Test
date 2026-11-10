@@ -69,7 +69,28 @@ namespace aq
 
 			bool changed = false;
 
-			// 3. Exit 待機の進行 (§9.2)
+			// 3a. ClickWait の進行 (§20.2)。Exit 待機とは同時に立たない
+			if (clickWaiting_)
+			{
+				clickElapsed_ += dt;
+
+				UIScreen* top          = Top();
+				bool      stillPlaying = top && UIAnimationSystem::IsTriggerPlaying(top->root_, kUIAnimTriggerClick);
+				if (!stillPlaying || clickElapsed_ >= kClickWaitTimeoutSec)
+				{
+					if (stillPlaying)
+					{
+						// ループする Click クリップ等で終わらない場合の保険 (§20.2)
+						EnginePrintf("[UIScreen] click wait timed out (%.1fs): '%s'\n",
+							kClickWaitTimeoutSec, std::string(top->GetName()).c_str());
+					}
+					if (top) top->inputLocked_ = false; // 以降は exiting_ が入力を止める
+					clickWaiting_  = false;
+					clickWaitDone_ = true; // 同フレームの Flush で最初の Pop / Replace が消費する
+				}
+			}
+
+			// 3b. Exit 待機の進行 (§9.2)
 			if (exitWaiting_)
 			{
 				exitElapsed_ += dt;
@@ -132,7 +153,7 @@ namespace aq
 
 		bool UIScreenManager::FlushPendingOps()
 		{
-			if (exitWaiting_) return false; // Exit 待機中は何もしない (op は pendingOps_ に残す)
+			if (exitWaiting_ || clickWaiting_) return false; // Exit / Click 待機中は何もしない (op は pendingOps_ に残す)
 			if (pendingOps_.empty()) return false;
 
 			bool changed = false;
@@ -163,6 +184,15 @@ namespace aq
 				{
 					if (stack_.empty()) break; // 対象が無い。何もしない
 
+					if (TryBeginClickWait())
+					{
+						// 起点の op 自身も含めて、残りを順序を保って先頭へ戻す (§20.2)
+						pendingOps_.insert(pendingOps_.begin(),
+							std::make_move_iterator(ops.begin() + i),
+							std::make_move_iterator(ops.end()));
+						return true;
+					}
+
 					if (!BeginExit(op))
 					{
 						// Exit 待機に入った。未処理の残り op を順序を保って先頭へ戻し、Flush を抜ける
@@ -190,6 +220,14 @@ namespace aq
 							changed = true;
 						}
 						break;
+					}
+
+					if (TryBeginClickWait())
+					{
+						pendingOps_.insert(pendingOps_.begin(),
+							std::make_move_iterator(ops.begin() + i),
+							std::make_move_iterator(ops.end()));
+						return true;
 					}
 
 					if (!BeginExit(op))
@@ -244,6 +282,27 @@ namespace aq
 				changed |= FlushPendingOps();
 
 			return changed;
+		}
+
+		bool UIScreenManager::TryBeginClickWait()
+		{
+			// 待機を終えた直後の Pop / Replace は判定を飛ばして Exit へ進む (タイムアウト後に再び待たない)
+			if (clickWaitDone_)
+			{
+				clickWaitDone_ = false;
+				return false;
+			}
+
+			UIScreen* top = stack_.back().get(); // 呼び出し元がスタック非空を保証する
+			if (!UIAnimationSystem::IsTriggerPlaying(top->root_, kUIAnimTriggerClick))
+				return false;
+
+			// ClickWait 開始: 入力ロック。exiting_ は立てない (OnUpdate を止めない)
+			top->inputLocked_ = true;
+			UIContext::Get().GetInputSystem().ClearState();
+			clickWaiting_ = true;
+			clickElapsed_ = 0.f;
+			return true;
 		}
 
 		bool UIScreenManager::BeginExit(const PendingOp& op)

@@ -144,7 +144,12 @@ namespace aq
 
 			fseek(fp, 0, SEEK_END);
 			const long fileSize = ftell(fp);
-			if (fileSize > 0 && !CheckFileBudget(static_cast<size_t>(fileSize), requestPath_.c_str())) {
+			// ftell の失敗 (-1) や空・ヘッダ未満のファイルは読まない。fp を閉じずに new[-1] へ進むのを防ぐ
+			if (fileSize < static_cast<long>(sizeof(PMDData::Header))) {
+				fclose(fp);
+				return false;
+			}
+			if (!CheckFileBudget(static_cast<size_t>(fileSize), requestPath_.c_str())) {
 				fclose(fp);
 				return false;
 			}

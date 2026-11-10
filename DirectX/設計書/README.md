@@ -157,7 +157,7 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 - 小さいもの: 描画系コンポーネントがリソース所有と状態機械を抱える(設計書の「データのみ」と不一致)、
   `MaterialDef.h` の実体が `Lighting.h` にある、`DeferredDecalCommand` が深度モードを復元しない、
   ドローのソート / バッチングが無い、`TypeInfo::Create(hash, size)` が `ConstructFn` 無しで残る、
-  `PMDLoader` の `ftell` 失敗時に `fp` が漏れる、`SoftwareMixer` の回収リング溢れ時にオーディオスレッドで解放が走る、
+  ~~`PMDLoader` の `ftell` 失敗時に `fp` が漏れる~~(解決済 2026-11-10。サイズがヘッダ未満なら閉じて失敗を返す)、`SoftwareMixer` の回収リング溢れ時にオーディオスレッドで解放が走る、
   設計書の記述ずれ(`GameTimer` は `steady_clock`、`Engine::Finalize` に `MemoryManager` は含まれない)。
 - (解決済 2026-09-14)`FindProjectRoot` の 6 重複は `Resource/AssetPath.{h,cpp}` へ一元化した
   (使いやすさ改善設計.md P1-A)。以下は発見当時の記録。

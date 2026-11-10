@@ -14,18 +14,80 @@ namespace aq
 	{
 		namespace
 		{
-			float ApplyEasing(float t, EaseType ease)
+			static constexpr float BACK_C1    = 1.70158f;
+			static constexpr float BACK_C2    = BACK_C1 * 1.525f;
+			static constexpr float BACK_C3    = BACK_C1 + 1.f;
+			static constexpr float ELASTIC_C4 = 2.f * 3.14159265358979f / 3.f;
+			static constexpr float ELASTIC_C5 = 2.f * 3.14159265358979f / 4.5f;
+			static constexpr float BOUNCE_N1  = 7.5625f;
+			static constexpr float BOUNCE_D1  = 2.75f;
+
+			float BounceOut(float t)
 			{
-				switch (ease)
-				{
-					case EaseType::Linear:   return t;
-					case EaseType::EaseIn:   return t * t;
-					case EaseType::EaseOut:  return t * (2.f - t);
-					case EaseType::EaseInOut:
-						return (t < 0.5f) ? (2.f * t * t) : (-1.f + (4.f - 2.f * t) * t);
-					case EaseType::Bezier:   return t * t * (3.f - 2.f * t); // smoothstep
-					default:                 return t;
+				if (t < 1.f / BOUNCE_D1) {
+					return BOUNCE_N1 * t * t;
+				} else if (t < 2.f / BOUNCE_D1) {
+					t -= 1.5f / BOUNCE_D1;
+					return BOUNCE_N1 * t * t + 0.75f;
+				} else if (t < 2.5f / BOUNCE_D1) {
+					t -= 2.25f / BOUNCE_D1;
+					return BOUNCE_N1 * t * t + 0.9375f;
 				}
+				t -= 2.625f / BOUNCE_D1;
+				return BOUNCE_N1 * t * t + 0.984375f;
+			}
+		}
+
+
+		float EvaluateEase(float t, EaseType ease)
+		{
+			switch (ease)
+			{
+				case EaseType::Linear:     return t;
+				case EaseType::EaseIn:     return t * t;
+				case EaseType::EaseOut:    return t * (2.f - t);
+				case EaseType::EaseInOut:
+					return (t < 0.5f) ? (2.f * t * t) : (-1.f + (4.f - 2.f * t) * t);
+				case EaseType::Smoothstep: return t * t * (3.f - 2.f * t);
+
+				case EaseType::BackIn:
+					return BACK_C3 * t * t * t - BACK_C1 * t * t;
+				case EaseType::BackOut:
+				{
+					const float u = t - 1.f;
+					return 1.f + BACK_C3 * u * u * u + BACK_C1 * u * u;
+				}
+				case EaseType::BackInOut:
+					if (t < 0.5f) {
+						const float u = 2.f * t;
+						return (u * u * ((BACK_C2 + 1.f) * u - BACK_C2)) / 2.f;
+					} else {
+						const float u = 2.f * t - 2.f;
+						return (u * u * ((BACK_C2 + 1.f) * u + BACK_C2) + 2.f) / 2.f;
+					}
+
+				// Elastic は式が端点で厳密に 0 / 1 にならないので先に分岐する
+				case EaseType::ElasticIn:
+					if (t <= 0.f) return 0.f;
+					if (t >= 1.f) return 1.f;
+					return -std::pow(2.f, 10.f * t - 10.f) * std::sin((10.f * t - 10.75f) * ELASTIC_C4);
+				case EaseType::ElasticOut:
+					if (t <= 0.f) return 0.f;
+					if (t >= 1.f) return 1.f;
+					return std::pow(2.f, -10.f * t) * std::sin((10.f * t - 0.75f) * ELASTIC_C4) + 1.f;
+				case EaseType::ElasticInOut:
+					if (t <= 0.f) return 0.f;
+					if (t >= 1.f) return 1.f;
+					if (t < 0.5f)
+						return -(std::pow(2.f, 20.f * t - 10.f) * std::sin((20.f * t - 11.125f) * ELASTIC_C5)) / 2.f;
+					return (std::pow(2.f, -20.f * t + 10.f) * std::sin((20.f * t - 11.125f) * ELASTIC_C5)) / 2.f + 1.f;
+
+				case EaseType::BounceIn:   return 1.f - BounceOut(1.f - t);
+				case EaseType::BounceOut:  return BounceOut(t);
+				case EaseType::BounceInOut:
+					return (t < 0.5f) ? (1.f - BounceOut(1.f - 2.f * t)) / 2.f
+					                  : (1.f + BounceOut(2.f * t - 1.f)) / 2.f;
+				default:                   return t;
 			}
 		}
 
@@ -49,7 +111,7 @@ namespace aq
 			if (span <= 0.f) return b.value;
 
 			float alpha = (t - a.time) / span;          // [0, 1]
-			alpha       = ApplyEasing(alpha, a.ease);   // イージング適用
+			alpha       = EvaluateEase(alpha, a.ease);  // イージング適用
 			return a.value + (b.value - a.value) * alpha;
 		}
 

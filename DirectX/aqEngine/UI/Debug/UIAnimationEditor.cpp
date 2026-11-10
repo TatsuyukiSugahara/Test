@@ -10,6 +10,7 @@
 #include "UI/Animation/UIAnimationTrack.h"
 #include <cstdio>
 #include <cmath>
+#include <iterator>
 
 namespace aq
 {
@@ -24,9 +25,67 @@ namespace aq
 
 		// Timeline 下部 (Keyframe Inspector + Preview Controls) の固定高さと、
 		// ComputeTimelineHeight() が返す高さの上下限
-		static constexpr float BOTTOM_PANE_H  = 120.f;
+		static constexpr float BOTTOM_PANE_H  = 185.f;   // 曲線 90px + X/Y differ + 軸別の区間 2 行が入る高さ (設計書 §18.3 の 150 では切れた)
 		static constexpr float TIMELINE_MIN_H = 240.f;
 		static constexpr float TIMELINE_MAX_H = 560.f;
+
+		// Ease の選択肢表 (右クリックメニューと Keyframe インスペクタの Combo が共有する。設計書 §18.4)。
+		// 表示名は UIAnimationSerializer::EaseToStr() から取る。enum の数値を添字に使わない。
+		// group が変わる所に区切り線を入れる
+		struct EaseEntry
+		{
+			EaseType type;
+			uint8_t  group;
+		};
+
+		static constexpr EaseEntry EASE_TABLE[] =
+		{
+			{ EaseType::Linear,       0 },
+			{ EaseType::EaseIn,       1 },
+			{ EaseType::EaseOut,      1 },
+			{ EaseType::EaseInOut,    1 },
+			{ EaseType::Smoothstep,   1 },
+			{ EaseType::BackIn,       2 },
+			{ EaseType::BackOut,      2 },
+			{ EaseType::BackInOut,    2 },
+			{ EaseType::ElasticIn,    3 },
+			{ EaseType::ElasticOut,   3 },
+			{ EaseType::ElasticInOut, 3 },
+			{ EaseType::BounceIn,     4 },
+			{ EaseType::BounceOut,    4 },
+			{ EaseType::BounceInOut,  4 },
+		};
+		static_assert(std::size(EASE_TABLE) == 14, "EASE_TABLE は EaseType 14 種ぶん");
+
+		static constexpr float EASE_CURVE_W     = 150.f;
+		static constexpr float EASE_CURVE_H     = 90.f;
+		static constexpr float EASE_CURVE_V_MIN = -0.4f;   // 縦レンジ。Back / Elastic の行き過ぎが見える幅
+		static constexpr float EASE_CURVE_V_MAX = 1.4f;
+		static constexpr int   EASE_CURVE_SEGMENTS = 64;
+
+		static constexpr const char* EASE_LAST_KEY_TIP =
+			"Last key: there is no segment after this key, so Ease has no effect.";
+
+		// X/Y 統合行のキー 1 本ぶんの Ease 情報 (設計書 §18.4)
+		struct EaseTarget
+		{
+			EaseType ease;      // 表示する Ease (X 優先、X に無ければ Y)
+			bool     differ;    // 対象軸の Ease が軸で違う
+			bool     allLast;   // 対象軸のすべてで最後のキー (このとき Ease は効かない)
+		};
+
+		static EaseTarget ResolveEaseTarget(
+			const UIAnimationTrack& trackX, const UIAnimationTrack* trackY, int xi, int yi)
+		{
+			EaseTarget r{};
+			r.ease   = (xi >= 0) ? trackX.keyframes[xi].ease : trackY->keyframes[yi].ease;
+			r.differ = (xi >= 0 && yi >= 0) && (trackX.keyframes[xi].ease != trackY->keyframes[yi].ease);
+
+			const bool xLast = (xi < 0) || (static_cast<size_t>(xi) + 1 >= trackX.keyframes.size());
+			const bool yLast = (yi < 0) || (static_cast<size_t>(yi) + 1 >= trackY->keyframes.size());
+			r.allLast = xLast && yLast;
+			return r;
+		}
 
 		// Exit 待機付き画面遷移 (P2B) は完了済みなので Play when: Exit は有効。
 		// false にすると Exit 項目を Disabled にできる仕組みだけ残す (設計書 §10.3)
@@ -889,7 +948,7 @@ namespace aq
 				{
 					auto& clip = anim->EditClip(static_cast<size_t>(selClipIdx_));
 
-					ImGui::BeginChild("##kfinspector", ImVec2(300, 0), false);
+					ImGui::BeginChild("##kfinspector", ImVec2(420, 0), false);
 					DrawKeyframeInspector(clip);
 					ImGui::EndChild();
 
@@ -1399,22 +1458,30 @@ namespace aq
 							ImGui::TextDisabled("%s  t=%.3f  v=%.3f", row.label, selKeyTime_, trackX.keyframes[xi].value);
 						ImGui::Separator();
 
-						static const char* EASE_MENU_LABELS[] =
-							{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
-						if (ImGui::BeginMenu("Ease"))
+						// Ease (表は EASE_TABLE。最後のキーでは効く区間が無いので Disabled)
 						{
-							const EaseType curEase = (xi >= 0) ? trackX.keyframes[xi].ease : trackY->keyframes[yi].ease;
-							for (int ei = 0; ei < 5; ++ei)
+							const EaseTarget et = ResolveEaseTarget(trackX, trackY, xi, yi);
+							const bool easeOpen = ImGui::BeginMenu("Ease", !et.allLast);
+							if (et.allLast && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+								ImGui::SetTooltip("%s", EASE_LAST_KEY_TIP);
+							if (easeOpen)
 							{
-								bool isCur = (static_cast<int>(curEase) == ei);
-								if (ImGui::MenuItem(EASE_MENU_LABELS[ei], nullptr, isCur))
+								for (size_t ei = 0; ei < std::size(EASE_TABLE); ++ei)
 								{
-									if (xi >= 0) trackX.keyframes[xi].ease = static_cast<EaseType>(ei);
-									if (yi >= 0) trackY->keyframes[yi].ease = static_cast<EaseType>(ei);
-									UIEditorSession::Get().dirty = true;
+									const EaseEntry& entry = EASE_TABLE[ei];
+									if (ei > 0 && entry.group != EASE_TABLE[ei - 1].group)
+										ImGui::Separator();
+
+									const bool isCur = !et.differ && (entry.type == et.ease);
+									if (ImGui::MenuItem(UIAnimationSerializer::EaseToStr(entry.type), nullptr, isCur))
+									{
+										if (xi >= 0) trackX.keyframes[xi].ease = entry.type;
+										if (yi >= 0) trackY->keyframes[yi].ease = entry.type;
+										UIEditorSession::Get().dirty = true;
+									}
 								}
+								ImGui::EndMenu();
 							}
-							ImGui::EndMenu();
 						}
 						ImGui::Separator();
 						if (ImGui::MenuItem("Duplicate Key"))
@@ -1722,6 +1789,9 @@ namespace aq
 				return;
 			}
 
+			// 曲線プレビューを右側へ置くため、フィールド群の開始位置を覚えておく
+			const ImVec2 fieldsTop = ImGui::GetCursorPos();
+
 			// Time (両方に効く)
 			float timeVal = selKeyTime_;
 			ImGui::SetNextItemWidth(100.f);
@@ -1777,17 +1847,81 @@ namespace aq
 				}
 			}
 
-			// Ease (両方に効く)
-			static const char* EASE_LABELS[] =
-				{ "Linear","EaseIn","EaseOut","EaseInOut","Bezier" };
-			const EaseType curEase = (xi >= 0) ? trackX.keyframes[xi].ease : trackY->keyframes[yi].ease;
-			int easeIdx = static_cast<int>(curEase);
-			ImGui::SetNextItemWidth(120.f);
-			if (ImGui::Combo("Ease", &easeIdx, EASE_LABELS, 5))
+			// Ease (対象軸すべてに書く。このキーから次のキーまでの区間に効く。設計書 §18.4)
+			const EaseTarget et = ResolveEaseTarget(trackX, trackY, xi, yi);
 			{
-				if (xi >= 0) trackX.keyframes[xi].ease = static_cast<EaseType>(easeIdx);
-				if (yi >= 0) trackY->keyframes[yi].ease = static_cast<EaseType>(easeIdx);
-				UIEditorSession::Get().dirty = true;
+				if (et.allLast) ImGui::BeginDisabled();
+				ImGui::SetNextItemWidth(110.f);
+				if (ImGui::BeginCombo("Ease (to next)", et.differ ? "(mixed)" : UIAnimationSerializer::EaseToStr(et.ease)))
+				{
+					for (size_t ei = 0; ei < std::size(EASE_TABLE); ++ei)
+					{
+						const EaseEntry& entry = EASE_TABLE[ei];
+						if (ei > 0 && entry.group != EASE_TABLE[ei - 1].group)
+							ImGui::Separator();
+
+						const bool isCur = !et.differ && (entry.type == et.ease);
+						if (ImGui::Selectable(UIAnimationSerializer::EaseToStr(entry.type), isCur))
+						{
+							if (xi >= 0) trackX.keyframes[xi].ease = entry.type;
+							if (yi >= 0) trackY->keyframes[yi].ease = entry.type;
+							UIEditorSession::Get().dirty = true;
+						}
+						if (isCur) ImGui::SetItemDefaultFocus();
+					}
+					ImGui::EndCombo();
+				}
+				if (et.allLast) ImGui::EndDisabled();
+				if (et.allLast && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("%s", EASE_LAST_KEY_TIP);
+			}
+
+			// 曲線プレビューと区間表示 (右側。描いたあとカーソルを戻す)
+			{
+				const ImVec2 afterFields = ImGui::GetCursorPos();
+				ImGui::SetCursorPos(ImVec2(fieldsTop.x + 250.f, fieldsTop.y));
+				ImGui::BeginGroup();
+
+				// ease は変更後の値を反映するため再取得する
+				DrawEaseCurvePreview(ResolveEaseTarget(trackX, trackY, xi, yi).ease);
+				if (et.differ)
+					ImGui::TextDisabled("X/Y differ");
+
+				// 区間 (始点 -> 終点)。軸ごとに次のキー時刻を求め、同じなら 1 行、違えば軸別
+				const bool hasX = (xi >= 0);
+				const bool hasY = (yi >= 0);
+				const bool nextX = hasX && (static_cast<size_t>(xi) + 1 < trackX.keyframes.size());
+				const bool nextY = hasY && (static_cast<size_t>(yi) + 1 < trackY->keyframes.size());
+				const float endX = nextX ? trackX.keyframes[xi + 1].time : 0.f;
+				const float endY = nextY ? trackY->keyframes[yi + 1].time : 0.f;
+
+				auto drawSpan = [&](const char* axis, bool hasNext, float endTime)
+					{
+						const char* prefix = axis ? axis : "";
+						const char* colon  = axis ? ": " : "";
+						if (hasNext)
+							ImGui::TextDisabled("%s%s%.2fs -> %.2fs", prefix, colon, selKeyTime_, endTime);
+						else
+							ImGui::TextDisabled("%s%s%.2fs (last key)", prefix, colon, selKeyTime_);
+					};
+
+				if (hasX && hasY)
+				{
+					if (nextX == nextY && (!nextX || endX == endY))
+					{
+						drawSpan(nullptr, nextX, endX);
+					} else {
+						drawSpan("X", nextX, endX);
+						drawSpan("Y", nextY, endY);
+					}
+				} else if (hasX) {
+					drawSpan(nullptr, nextX, endX);
+				} else {
+					drawSpan(nullptr, nextY, endY);
+				}
+
+				ImGui::EndGroup();
+				ImGui::SetCursorPos(afterFields);
 			}
 
 			// Delete ボタン or Delete キー
@@ -1811,6 +1945,39 @@ namespace aq
 				if (xi >= 0) SortKeyframes(trackX.keyframes);
 				if (yi >= 0) SortKeyframes(trackY->keyframes);
 			}
+		}
+
+
+		// Ease の曲線を [0, 1] で描く。縦レンジは Back / Elastic の行き過ぎが見える幅を確保し、
+		// [0, 1] の箱を枠線で示す。式は書き写さず EvaluateEase() を呼ぶ (実挙動とずらさない。設計書 §18.3)
+		void UIAnimationEditor::DrawEaseCurvePreview(EaseType ease)
+		{
+			ImDrawList*  dl = ImGui::GetWindowDrawList();
+			const ImVec2 p0 = ImGui::GetCursorScreenPos();
+			const ImVec2 p1 = ImVec2(p0.x + EASE_CURVE_W, p0.y + EASE_CURVE_H);
+			ImGui::Dummy(ImVec2(EASE_CURVE_W, EASE_CURVE_H));
+
+			const float range = EASE_CURVE_V_MAX - EASE_CURVE_V_MIN;
+			auto toY = [&](float v)
+				{
+					return p1.y - (v - EASE_CURVE_V_MIN) / range * EASE_CURVE_H;
+				};
+
+			dl->AddRectFilled(p0, p1, IM_COL32(20, 20, 24, 255));
+
+			// [0, 1] の箱
+			dl->AddRect(ImVec2(p0.x, toY(1.f)), ImVec2(p1.x, toY(0.f)), IM_COL32(110, 110, 120, 255));
+
+			// 曲線 (描画領域の外は切る)
+			ImVec2 pts[EASE_CURVE_SEGMENTS + 1];
+			for (int i = 0; i <= EASE_CURVE_SEGMENTS; ++i)
+			{
+				const float t = static_cast<float>(i) / static_cast<float>(EASE_CURVE_SEGMENTS);
+				pts[i] = ImVec2(p0.x + t * EASE_CURVE_W, toY(EvaluateEase(t, ease)));
+			}
+			dl->PushClipRect(p0, p1, true);
+			dl->AddPolyline(pts, EASE_CURVE_SEGMENTS + 1, IM_COL32(255, 200, 80, 255), ImDrawFlags_None, 1.5f);
+			dl->PopClipRect();
 		}
 
 

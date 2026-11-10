@@ -17,6 +17,11 @@ namespace aq
 			EaseType ease  = EaseType::Linear;
 		};
 
+		// イージング関数。t は [0, 1]。どの種別も E(0)=0, E(1)=1 を満たす。
+		// Back / Elastic は [0, 1] の外へ出る (クランプしない)。エディタの曲線プレビューも同じ関数を呼ぶ
+		float EvaluateEase(float t, EaseType ease);
+
+
 		// 1プロパティの時系列データ。
 		// Sample() で現在時刻の補間値を返し、Apply() で UIObject に書き込む。
 		struct UIAnimationTrack

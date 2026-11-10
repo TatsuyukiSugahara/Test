@@ -68,20 +68,39 @@ namespace aq
 		{
 			switch (e)
 			{
-				case EaseType::EaseIn:    return "EaseIn";
-				case EaseType::EaseOut:   return "EaseOut";
-				case EaseType::EaseInOut: return "EaseInOut";
-				case EaseType::Bezier:    return "Bezier";
-				default:                  return "Linear";
+				case EaseType::EaseIn:        return "EaseIn";
+				case EaseType::EaseOut:       return "EaseOut";
+				case EaseType::EaseInOut:     return "EaseInOut";
+				case EaseType::Smoothstep:    return "Smoothstep";
+				case EaseType::BackIn:        return "BackIn";
+				case EaseType::BackOut:       return "BackOut";
+				case EaseType::BackInOut:     return "BackInOut";
+				case EaseType::ElasticIn:     return "ElasticIn";
+				case EaseType::ElasticOut:    return "ElasticOut";
+				case EaseType::ElasticInOut:  return "ElasticInOut";
+				case EaseType::BounceIn:      return "BounceIn";
+				case EaseType::BounceOut:     return "BounceOut";
+				case EaseType::BounceInOut:   return "BounceInOut";
+				default:                      return "Linear";
 			}
 		}
 
 		EaseType UIAnimationSerializer::StrToEase(std::string_view s)
 		{
-			if (s == "EaseIn")    return EaseType::EaseIn;
-			if (s == "EaseOut")   return EaseType::EaseOut;
-			if (s == "EaseInOut") return EaseType::EaseInOut;
-			if (s == "Bezier")    return EaseType::Bezier;
+			if (s == "EaseIn")             return EaseType::EaseIn;
+			if (s == "EaseOut")            return EaseType::EaseOut;
+			if (s == "EaseInOut")          return EaseType::EaseInOut;
+			if (s == "Smoothstep")         return EaseType::Smoothstep;
+			if (s == "BackIn")             return EaseType::BackIn;
+			if (s == "BackOut")            return EaseType::BackOut;
+			if (s == "BackInOut")          return EaseType::BackInOut;
+			if (s == "ElasticIn")          return EaseType::ElasticIn;
+			if (s == "ElasticOut")         return EaseType::ElasticOut;
+			if (s == "ElasticInOut")       return EaseType::ElasticInOut;
+			if (s == "BounceIn")           return EaseType::BounceIn;
+			if (s == "BounceOut")          return EaseType::BounceOut;
+			if (s == "BounceInOut")        return EaseType::BounceInOut;
+			if (s == "Bezier")             return EaseType::Smoothstep; // 旧名 (P8 で Smoothstep へ改名)
 			return EaseType::Linear;
 		}
 

@@ -61,7 +61,16 @@ namespace aq
 			EaseIn,
 			EaseOut,
 			EaseInOut,
-			Bezier,
+			Smoothstep,   // 旧 Bezier (実体は smoothstep。制御点は持たない)
+			BackIn,
+			BackOut,
+			BackInOut,
+			ElasticIn,
+			ElasticOut,
+			ElasticInOut,
+			BounceIn,
+			BounceOut,
+			BounceInOut,
 		};
 
 

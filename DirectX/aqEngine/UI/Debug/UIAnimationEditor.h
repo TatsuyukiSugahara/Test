@@ -1,6 +1,7 @@
 #pragma once
 #ifdef AQ_DEBUG_IMGUI
 #include "UI/Animation/UIAnimatedProperty.h"
+#include "UI/UITypes.h"
 #include <initializer_list>
 #include <string>
 #include <unordered_map>
@@ -137,6 +138,7 @@ namespace aq
 			 */
 		private:
 			void DrawKeyframeInspector(UIAnimationClip& clip);
+			void DrawEaseCurvePreview(EaseType ease);   // Ease の曲線 (EvaluateEase を呼んで描く。設計書 §18.3)
 			void DrawPreviewControls(UIObject* obj, UIAnimationComponent* anim, UIAnimationClip& clip, float dt);
 
 

@@ -252,13 +252,51 @@ namespace aq
 
 
 			// time にキーを追加する (既存の重複チェックはしない。従来の Add Key 系と同じ)。
-			// 値は Sample(time)。Track にキーが 1 本も無ければ現在値 (ReadFrom) を使う (設計書 §15.2)
-			void AddKeyAtTime(UIAnimationTrack& track, UIObject* obj, float time)
+			// 値は Sample(time)。Track にキーが 1 本も無ければ現在値 (ReadFrom) を使う (設計書 §15.2)。
+			// 相対 Track の空 Track は「現在値 - 静止値」(スクラブしていなければ 0。設計書 §19.5)。
+			// キーがあるときは差分同士の補間なので Sample のまま。
+			// restValueOf はプロパティの静止値を返す呼び出し可能体 (UIAnimationEditor::RestValue)。
+			// 必要なときだけ呼ぶ (呼ぶとスナップショットの補完が起きるため)
+			template <typename TRestFn>
+			void AddKeyAtTime(UIAnimationTrack& track, UIObject* obj, float time, TRestFn&& restValueOf)
 			{
-				const float value = !track.keyframes.empty() ? track.Sample(time)
-				                                              : (obj ? track.ReadFrom(obj) : 0.f);
+				float value = 0.f;
+				if (!track.keyframes.empty())
+				{
+					value = track.Sample(time);
+				}
+				else if (obj)
+				{
+					value = track.ReadFrom(obj);
+					if (track.relative)
+						value -= restValueOf(track.property);
+				}
 				track.keyframes.push_back(UIKeyframe{ time, value, EaseType::Linear });
 				SortKeyframes(track.keyframes);
+			}
+
+
+			// 相対にできないプロパティ (Active は 0 / 1 の論理値、TextCharCount は -1 = 全表示の特別値。設計書 §19.4)
+			bool CanBeRelative(UIAnimatedProperty property)
+			{
+				return property != UIAnimatedProperty::Active && property != UIAnimatedProperty::TextCharCount;
+			}
+
+
+			// Track 一覧に Hold の注意書きを出すか (設計書 §19.3 / §19.5)。
+			// 相対 Track の最後のキーが 0 でなく、Clip が Hold で終わるとき。
+			// 「最後」は時刻が最大のキー (ドラッグ途中などで並びが崩れていても判定を誤らないように)
+			bool ShowsRelativeHoldNote(const UIAnimationClip& clip, const UIAnimationTrack& track)
+			{
+				if (!track.relative || track.keyframes.empty()) return false;
+				if (clip.finish != UIAnimationFinishMode::Hold) return false;
+
+				const UIKeyframe* last = &track.keyframes.front();
+				for (const auto& kf : track.keyframes)
+				{
+					if (kf.time >= last->time) last = &kf;
+				}
+				return last->value != 0.f;
 			}
 
 
@@ -289,11 +327,10 @@ namespace aq
 
 			// オートキー用。time に「編集後の現在値」のキーを置く。AddKeyAtTime() と違い
 			// Sample() は使わない (録画は曲線を現在の見た目へ合わせる操作なので)。
+			// 値は呼び出し側が求める (相対 Track は「現在値 - 静止値」。設計書 §19.5)。
 			// 同時刻にキーがあれば value だけ上書きし ease は保つ (1 回のドラッグで増えるキーは 1 本)
-			void SetKeyAtTime(UIAnimationTrack& track, UIObject* obj, float time)
+			void SetKeyAtTime(UIAnimationTrack& track, float value, float time)
 			{
-				const float value = obj ? track.ReadFrom(obj) : 0.f;
-
 				const int idx = FindKeyIndexAtTime(track.keyframes, time);
 				if (idx >= 0)
 				{
@@ -306,13 +343,15 @@ namespace aq
 			}
 
 
-			// Row の両 Track (単独行なら片方) に time のキーを追加する (設計書 §15.2)
-			void AddKeyToRow(UIAnimationClip& clip, UIObject* obj, const TimelineRow& row, float time)
+			// Row の両 Track (単独行なら片方) に time のキーを追加する (設計書 §15.2)。
+			// 相対・絶対は Track ごとに AddKeyAtTime() が見る (X/Y で混在してよい)
+			template <typename TRestFn>
+			void AddKeyToRow(UIAnimationClip& clip, UIObject* obj, const TimelineRow& row, float time, TRestFn&& restValueOf)
 			{
 				for (const int idx : { row.trackIdx[0], row.trackIdx[1] })
 				{
 					if (idx < 0 || idx >= (int)clip.tracks.size()) continue;
-					AddKeyAtTime(clip.tracks[idx], obj, time);
+					AddKeyAtTime(clip.tracks[idx], obj, time, restValueOf);
 				}
 			}
 
@@ -551,12 +590,9 @@ namespace aq
 			auto* anim = obj->GetComponent<UIAnimationComponent>();
 			if (!anim) return;
 
-			// 選択 Clip が範囲外なら解除 (Clip 削除直後など)
+			// 選択 Clip が範囲外なら解除 (Clip 削除直後など)。選択の変更なので SelectClip を通す (設計書 §19.5 規則 1)
 			if (selClipIdx_ >= (int)anim->GetClips().size())
-			{
-				selClipIdx_     = -1;
-				prevSelClipIdx_ = -1;
-			}
+				SelectClip(obj, -1);
 
 			const auto& clips = anim->GetClips();
 
@@ -595,9 +631,7 @@ namespace aq
 				// AddClip は group を引き直さない (groupName 空 = 未解決のまま)。
 				// SetClipGroup("") で group = aqHash32(name) を確定させる (§4.3)
 				anim->SetClipGroup(newIdx, "");
-				selClipIdx_ = static_cast<int>(newIdx);
-				selRowIdx_  = -1;
-				selKeyTime_ = -1.f;
+				SelectClip(obj, static_cast<int>(newIdx));
 				UIEditorSession::Get().dirty = true;
 			}
 			ImGui::SameLine();
@@ -606,12 +640,10 @@ namespace aq
 				if (!canRemove) ImGui::BeginDisabled();
 				if (ImGui::SmallButton("- Clip"))
 				{
-					if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
-					anim->RemoveClip(static_cast<size_t>(selClipIdx_));
-					selClipIdx_     = -1;
-					prevSelClipIdx_ = -1;
-					selRowIdx_      = -1;
-					selKeyTime_     = -1.f;
+					// 先に選択を外して obj を静止状態へ戻してから消す
+					const auto removeIdx = static_cast<size_t>(selClipIdx_);
+					SelectClip(obj, -1);
+					anim->RemoveClip(removeIdx);
 					UIEditorSession::Get().dirty = true;
 				}
 				if (!canRemove) ImGui::EndDisabled();
@@ -625,6 +657,9 @@ namespace aq
 				{
 					if (ImGui::MenuItem(PRESET_LABELS[i]))
 					{
+						// プリセットは「今の値」から作るので、スクラブ中の値を拾わないよう先に静止状態へ戻す
+						DiscardSnapshot(obj);
+
 						const auto kind = static_cast<PresetKind>(i);
 						UIAnimationClip nc = MakePresetClip(kind, obj, UniqueClipName(clips, PRESET_LABELS[i]));
 						const size_t newIdx = anim->AddClip(std::move(nc));
@@ -633,9 +668,7 @@ namespace aq
 						auto& newClip = anim->EditClip(newIdx);
 						ApplyPlayWhenSelection(anim, static_cast<int>(newIdx), newClip, PresetPlayWhenOption(kind));
 
-						selClipIdx_ = static_cast<int>(newIdx);
-						selRowIdx_  = -1;
-						selKeyTime_ = -1.f;
+						SelectClip(obj, static_cast<int>(newIdx));
 						UIEditorSession::Get().dirty = true;
 					}
 				}
@@ -653,14 +686,7 @@ namespace aq
 				if (ImGui::Selectable(clips[i].name.c_str(), sel))
 				{
 					if (selClipIdx_ != i)
-					{
-						selClipIdx_ = i;
-						selRowIdx_  = -1;
-						selKeyTime_ = -1.f;
-						scrubTime_  = 0.f;
-						isPlaying_  = false;
-						if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
-					}
+						SelectClip(obj, i);
 				}
 				if (err) ImGui::PopStyleColor();
 				ImGui::PopID();
@@ -911,12 +937,9 @@ namespace aq
 			auto* anim = obj->GetComponent<UIAnimationComponent>();
 			if (!anim) return;
 
-			// 選択 Clip が範囲外なら解除
+			// 選択 Clip が範囲外なら解除 (選択の変更なので SelectClip を通す。設計書 §19.5 規則 1)
 			if (selClipIdx_ >= (int)anim->GetClips().size())
-			{
-				selClipIdx_     = -1;
-				prevSelClipIdx_ = -1;
-			}
+				SelectClip(obj, -1);
 
 			const float leftW  = 260.f;
 			const float totalH = ImGui::GetContentRegionAvail().y - BOTTOM_PANE_H; // 下部パネル分を確保
@@ -983,8 +1006,16 @@ namespace aq
 						const int   trackRows = (int)clip.tracks.size();
 						const int   viewRows  = (int)BuildTimelineRows(clip).size();
 
+						// 相対 Track の Hold の注意書き (Track 行の下に 1 行ずつ。設計書 §19.5)
+						int holdNotes = 0;
+						for (const auto& track : clip.tracks)
+						{
+							if (ShowsRelativeHoldNote(clip, track)) ++holdNotes;
+						}
+
 						contentH = ImGui::GetFrameHeightWithSpacing()             // "Tracks" + [+ Track]
 						         + trackRows * ImGui::GetFrameHeightWithSpacing() // Track 一覧
+						         + holdNotes * ImGui::GetTextLineHeightWithSpacing() // Hold の注意書き
 						         + style.ItemSpacing.y * 2.f                      // Separator
 						         + ImGui::GetTextLineHeightWithSpacing()          // 操作ヒント
 						         + RULER_H + viewRows * ROW_H + 10.f;             // ルーラ + Row
@@ -1006,22 +1037,26 @@ namespace aq
 		// 旧オブジェクトのプレビュースナップショットを戻し、Clip / Keyframe 選択を捨てる。
 		void UIAnimationEditor::OnTargetChanged(UIObject* prevObj)
 		{
-			selClipIdx_     = -1;
+			// 旧オブジェクトへ復元してからスナップショットと録画を捨てる (設計書 §19.5 規則 1 / 3)。
+			// 録画は選択オブジェクトに紐づくので必ず落ちる
+			SelectClip(prevObj, -1);
+			wantOpenAdvanced_ = false;
+		}
+
+
+		// Clip 選択の変更はすべてここを通す (一覧のクリック / + Clip / + Preset / - Clip / 範囲外の解除 /
+		// 対象の変更。設計書 §19.5 規則 1)。復元 -> 破棄 -> 録画停止 -> 選択の更新 の順。
+		// 新しい Clip の静止値を古い Clip のスナップショットから読まないようにするため
+		void UIAnimationEditor::SelectClip(UIObject* obj, const int index)
+		{
+			DiscardSnapshot(obj);
+
+			selClipIdx_     = index;
+			// Name / Param / Group のバッファを必ず同期し直させる (同じ index に別 Clip が入った場合も)
 			prevSelClipIdx_ = -1;
 			selRowIdx_      = -1;
 			selKeyTime_     = -1.f;
-			wantOpenAdvanced_ = false;
-			if (hasSnapshot_)
-			{
-				if (prevObj)
-					RestoreSnapshot(prevObj);
-				hasSnapshot_ = false;
-			}
-			isPlaying_ = false;
-
-			// 録画は選択オブジェクトに紐づくので落とす
-			isRecording_ = false;
-			recBaseline_.clear();
+			scrubTime_      = 0.f;
 		}
 
 
@@ -1121,14 +1156,7 @@ namespace aq
 					if (ImGui::Selectable(clip.name.c_str(), sel))
 					{
 						if (selClipIdx_ != i)
-						{
-							selClipIdx_     = i;
-							selRowIdx_  = -1;
-							selKeyTime_ = -1.f;
-							scrubTime_      = 0.f;
-							isPlaying_      = false;
-							if (hasSnapshot_) { RestoreSnapshot(obj); hasSnapshot_ = false; }
-						}
+							SelectClip(obj, i);
 					}
 
 					// 要約: Play when / Duration / Loop
@@ -1145,7 +1173,7 @@ namespace aq
 		}
 
 
-		void UIAnimationEditor::DrawTrackList(UIAnimationClip& clip)
+		void UIAnimationEditor::DrawTrackList(UIObject* obj, UIAnimationClip& clip)
 		{
 			ImGui::Text("Tracks");
 			ImGui::SameLine();
@@ -1268,6 +1296,34 @@ namespace aq
 					UIEditorSession::Get().dirty = true;
 				}
 
+				// Rel: キー値を静止値からの差分にする (設計書 §19.5)。切り替え時はキー値を換算して見た目を保つ。
+				// 相対にできないプロパティでは Disabled。ただし既に立っている (手書き JSON・プロパティ変更) なら
+				// 外せるように押せるままにする (検証エラーを直す手段を残すため)
+				ImGui::SameLine();
+				{
+					const bool relDisabled = !CanBeRelative(track.property) && !track.relative;
+					if (relDisabled) ImGui::BeginDisabled();
+					bool rel = track.relative;
+					if (ImGui::Checkbox("Rel##rel", &rel))
+					{
+						// 絶対 -> 相対は各キーから静止値を引き、相対 -> 絶対は足す
+						const float rest = RestValue(obj, track.property);
+						const float sign = rel ? -1.f : 1.f;
+						for (auto& kf : track.keyframes)
+							kf.value += sign * rest;
+						track.relative = rel;
+						UIEditorSession::Get().dirty = true;
+					}
+					if (relDisabled) ImGui::EndDisabled();
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					{
+						if (!CanBeRelative(track.property))
+							ImGui::SetTooltip("Active (0/1 flag) and TextCharCount (-1 = show all) cannot be relative");
+						else
+							ImGui::SetTooltip("Relative: key values are offsets from the node's rest value");
+					}
+				}
+
 				ImGui::SameLine();
 				if (ImGui::SmallButton("-##track"))
 				{
@@ -1280,6 +1336,10 @@ namespace aq
 					break; // 残りは次フレームで描く (erase 後に ++ti すると 1 本飛ばすため continue にしない)
 				}
 
+				// Hold で終わる相対 Track は再生のたびに最後のキーぶん進む (仕様。設計書 §19.3)
+				if (ShowsRelativeHoldNote(clip, track))
+					ImGui::TextDisabled("Hold: moves by the last key each play");
+
 				ImGui::PopID();
 			}
 		}
@@ -1291,8 +1351,11 @@ namespace aq
 		{
 			auto* anim = obj->GetComponent<UIAnimationComponent>();
 
+			// 空の相対 Track へキーを足すときの静止値 (設計書 §19.5)
+			auto restValueOf = [this, obj](UIAnimatedProperty prop) { return RestValue(obj, prop); };
+
 			// Track の追加 / 削除 / プロパティ選択 (Timeline の一部として扱う)
-			DrawTrackList(clip);
+			DrawTrackList(obj, clip);
 			ImGui::Separator();
 
 			const float totalDur = clip.duration;
@@ -1387,7 +1450,7 @@ namespace aq
 			    selRowIdx_ >= 0 && selRowIdx_ < totalRows)
 			{
 				const float t = std::clamp((mouse.x - tlX) / zoomPxPerSec_, 0.f, totalDur);
-				AddKeyToRow(clip, obj, rows[selRowIdx_], t);
+				AddKeyToRow(clip, obj, rows[selRowIdx_], t, restValueOf);
 				selKeyTime_ = t;
 				UIEditorSession::Get().dirty = true;
 			}
@@ -1452,10 +1515,12 @@ namespace aq
 
 					if (xi >= 0 || yi >= 0)
 					{
+						// 単独行は値も出す。相対 Track は差分なので符号付き (設計書 §19.5)
 						if (trackY)
 							ImGui::TextDisabled("%s  t=%.3f", row.label, selKeyTime_);
 						else
-							ImGui::TextDisabled("%s  t=%.3f  v=%.3f", row.label, selKeyTime_, trackX.keyframes[xi].value);
+							ImGui::TextDisabled(trackX.relative ? "%s  t=%.3f  v=%+.3f" : "%s  t=%.3f  v=%.3f",
+							                    row.label, selKeyTime_, trackX.keyframes[xi].value);
 						ImGui::Separator();
 
 						// Ease (表は EASE_TABLE。最後のキーでは効く区間が無いので Disabled)
@@ -1527,13 +1592,13 @@ namespace aq
 					ImGui::Separator();
 					if (ImGui::MenuItem("Add Key here"))
 					{
-						AddKeyToRow(clip, obj, row, ctxClickTime_);
+						AddKeyToRow(clip, obj, row, ctxClickTime_, restValueOf);
 						selKeyTime_ = ctxClickTime_;
 						UIEditorSession::Get().dirty = true;
 					}
 					if (ImGui::MenuItem("Add Key at Scrub"))
 					{
-						AddKeyToRow(clip, obj, row, scrubTime_);
+						AddKeyToRow(clip, obj, row, scrubTime_, restValueOf);
 						selKeyTime_ = scrubTime_;
 						UIEditorSession::Get().dirty = true;
 					}
@@ -1696,12 +1761,13 @@ namespace aq
 				if (inKf && !isDraggingKf_)
 				{
 					anyKfHovered = true;
+					// 相対 Track の値は差分なので符号付きで出す。X/Y で相対・絶対が混在してよいので軸ごとに出し分ける (設計書 §19.5)
 					ImGui::BeginTooltip();
 					if (trackY)
 					{
 						ImGui::Text("t=%.3f", uk.time);
-						if (uk.inX) ImGui::Text("X=%.3f", trackX.Sample(uk.time)); else ImGui::TextDisabled("X=-");
-						if (uk.inY) ImGui::Text("Y=%.3f", trackY->Sample(uk.time)); else ImGui::TextDisabled("Y=-");
+						if (uk.inX) ImGui::Text(trackX.relative ? "X=%+.3f" : "X=%.3f", trackX.Sample(uk.time)); else ImGui::TextDisabled("X=-");
+						if (uk.inY) ImGui::Text(trackY->relative ? "Y=%+.3f" : "Y=%.3f", trackY->Sample(uk.time)); else ImGui::TextDisabled("Y=-");
 					}
 					else
 					{
@@ -1709,7 +1775,7 @@ namespace aq
 						if (ki >= 0)
 						{
 							const auto& kf = trackX.keyframes[ki];
-							ImGui::Text("t=%.3f  v=%.3f  ease=%s",
+							ImGui::Text(trackX.relative ? "t=%.3f  v=%+.3f  ease=%s" : "t=%.3f  v=%.3f  ease=%s",
 							            kf.time, kf.value,
 							            UIAnimationSerializer::EaseToStr(kf.ease));
 						}
@@ -1810,13 +1876,14 @@ namespace aq
 				if (yi >= 0) SortKeyframes(trackY->keyframes);
 			}
 
-			// X / Y (組の行) または Value (単独行)。片方だけの時刻では無い側を Disabled にする
+			// X / Y (組の行) または Value (単独行)。片方だけの時刻では無い側を Disabled にする。
+			// 相対 Track はラベルに (offset) を付け、差分をそのまま編集する (換算しない。設計書 §19.5)
 			if (trackY)
 			{
 				if (xi < 0) ImGui::BeginDisabled();
 				float xVal = (xi >= 0) ? trackX.keyframes[xi].value : trackX.Sample(selKeyTime_);
 				ImGui::SetNextItemWidth(100.f);
-				ImGui::DragFloat("X", &xVal, 0.01f, -9999.f, 9999.f, "%.3f");
+				ImGui::DragFloat(trackX.relative ? "X (offset)" : "X", &xVal, 0.01f, -9999.f, 9999.f, "%.3f");
 				if (xi >= 0 && ImGui::IsItemEdited())
 				{
 					trackX.keyframes[xi].value = xVal;
@@ -1827,7 +1894,7 @@ namespace aq
 				if (yi < 0) ImGui::BeginDisabled();
 				float yVal = (yi >= 0) ? trackY->keyframes[yi].value : trackY->Sample(selKeyTime_);
 				ImGui::SetNextItemWidth(100.f);
-				ImGui::DragFloat("Y", &yVal, 0.01f, -9999.f, 9999.f, "%.3f");
+				ImGui::DragFloat(trackY->relative ? "Y (offset)" : "Y", &yVal, 0.01f, -9999.f, 9999.f, "%.3f");
 				if (yi >= 0 && ImGui::IsItemEdited())
 				{
 					trackY->keyframes[yi].value = yVal;
@@ -1839,7 +1906,7 @@ namespace aq
 			{
 				float val = trackX.keyframes[xi].value;
 				ImGui::SetNextItemWidth(100.f);
-				ImGui::DragFloat("Value", &val, 0.01f, -9999.f, 9999.f, "%.3f");
+				ImGui::DragFloat(trackX.relative ? "Value (offset)" : "Value", &val, 0.01f, -9999.f, 9999.f, "%.3f");
 				if (ImGui::IsItemEdited())
 				{
 					trackX.keyframes[xi].value = val;
@@ -2083,7 +2150,8 @@ namespace aq
 			if (!canAddKey) ImGui::BeginDisabled();
 			if (ImGui::Button("+ Key"))
 			{
-				AddKeyToRow(clip, obj, rows[selRowIdx_], scrubTime_);
+				auto restValueOf = [this, obj](UIAnimatedProperty prop) { return RestValue(obj, prop); };
+				AddKeyToRow(clip, obj, rows[selRowIdx_], scrubTime_, restValueOf);
 				selKeyTime_ = scrubTime_;
 				UIEditorSession::Get().dirty = true;
 			}
@@ -2133,10 +2201,9 @@ namespace aq
 				ImGui::SameLine();
 				if (ImGui::Button("Reset"))
 				{
-					isPlaying_ = false;
-					RestoreSnapshot(obj);
-					hasSnapshot_ = false;
-					scrubTime_   = 0.f;
+					// 復元してスナップショットを中身ごと捨て、録画も止める (設計書 §19.5 規則 1 / 3)
+					DiscardSnapshot(obj);
+					scrubTime_ = 0.f;
 				}
 			}
 
@@ -2176,11 +2243,56 @@ namespace aq
 
 		void UIAnimationEditor::ApplyScrub(UIObject* obj, const UIAnimationClip& clip)
 		{
+			// 書き込む前に全 Track の静止値を補完する (設計書 §19.5 規則 2)。スナップショット後に足した Track は
+			// まだ一度も書いていないので今の値が静止値。書きながら補完すると、同じプロパティの 2 本目が
+			// 1 本目の書いた値を静止値として拾ってしまう
+			for (const auto& track : clip.tracks)
+				RestValue(obj, track.property);
+
+			// 相対 Track は「静止値 + Sample」(設計書 §19.5)
 			for (const auto& track : clip.tracks)
 			{
 				float v = track.Sample(scrubTime_);
+				if (track.relative)
+					v += RestValue(obj, track.property);
 				track.Apply(obj, v);
 			}
+		}
+
+
+		// スナップショットへ復元してから中身ごと捨て、録画も止める (設計書 §19.5 規則 1 / 3)。
+		// obj が null なら復元だけ飛ばす。スクラブ再生も止める
+		void UIAnimationEditor::DiscardSnapshot(UIObject* obj)
+		{
+			if (hasSnapshot_ && obj)
+				RestoreSnapshot(obj);
+			hasSnapshot_ = false;
+			snapshot_.clear();
+			isPlaying_   = false;
+
+			isRecording_ = false;
+			recBaseline_.clear();
+		}
+
+
+		// プロパティの静止値 (エディタでの基準値。設計書 §19.5)。静止値はここからだけ読む。
+		// スナップショットがあればその値で、無いプロパティはこの時点の値を足してから返す (規則 2)。
+		// スナップショットが無ければ obj は静止状態なので今の値
+		float UIAnimationEditor::RestValue(UIObject* obj, const UIAnimatedProperty prop)
+		{
+			if (hasSnapshot_)
+			{
+				const auto it = snapshot_.find(prop);
+				if (it != snapshot_.end()) return it->second;
+			}
+			if (!obj) return 0.f;
+
+			UIAnimationTrack tmp;
+			tmp.property = prop;
+			const float value = tmp.ReadFrom(obj);
+			if (hasSnapshot_)
+				snapshot_[prop] = value;
+			return value;
 		}
 
 
@@ -2245,7 +2357,13 @@ namespace aq
 					clip.tracks.push_back(std::move(track));
 				}
 
-				SetKeyAtTime(clip.tracks[trackIdx], obj, scrubTime_);
+				// 相対 Track は「編集後の値 - 静止値」。録画中は規則 3 によりスナップショットが必ずあるので
+				// 静止値は Rec ON 時点の値 (設計書 §19.5)。新しく作った Track は絶対のまま
+				auto& track = clip.tracks[trackIdx];
+				float value = track.ReadFrom(obj);
+				if (track.relative)
+					value -= RestValue(obj, prop);
+				SetKeyAtTime(track, value, scrubTime_);
 				touched = true;
 			}
 

@@ -425,7 +425,14 @@ namespace aq
 				for (const auto& track : clips_[winner.clipIndex].tracks)
 				{
 					if (track.property != property) continue;
-					track.Apply(obj, track.Sample(winner.sampleTime));
+					// 相対 Track は基準値からの差分 (レイヤー同士の加算はしない。手順 2 で基準値は必ずある)
+					float value = track.Sample(winner.sampleTime);
+					if (track.relative)
+					{
+						const auto base = baseValues_.find(property);
+						if (base != baseValues_.end()) value += base->second;
+					}
+					track.Apply(obj, value);
 					break;
 				}
 			}
@@ -444,8 +451,20 @@ namespace aq
 		void UIAnimationComponent::CommitHold(const size_t index)
 		{
 			const UIAnimationClip& clip = clips_[index];
+			UIObject* obj = GetOwner();
 			for (const auto& track : clip.tracks)
-				baseValues_[track.property] = track.Sample(clip.duration);
+			{
+				float value = track.Sample(clip.duration);
+				if (track.relative)
+				{
+					// 基準値が無いときは先に現在値を取る (防御。通常は Play / Trigger の ApplyLayers() で取得済み。§19.3)
+					auto base = baseValues_.find(track.property);
+					if (base == baseValues_.end() && obj)
+						base = baseValues_.emplace(track.property, track.ReadFrom(obj)).first;
+					if (base != baseValues_.end()) value += base->second;
+				}
+				baseValues_[track.property] = value;
+			}
 		}
 
 	} // namespace ui

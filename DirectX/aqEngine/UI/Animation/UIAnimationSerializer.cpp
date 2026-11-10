@@ -162,6 +162,7 @@ namespace aq
 		{
 			JV j = JV::MakeObject();
 			j.Set("property", JV(std::string(PropertyToStr(track.property))));
+			if (track.relative) j.Set("relative", JV(true)); // false のときは書かない (既存出力とバイト一致)
 			JV kfs = JV::MakeArray();
 			for (const auto& kf : track.keyframes)
 				kfs.PushBack(SaveKeyframe(kf));
@@ -173,6 +174,7 @@ namespace aq
 		{
 			UIAnimationTrack t;
 			t.property = StrToProperty(json["property"].AsString());
+			t.relative = json["relative"].AsBool(false);
 			const auto& kfs = json["keyframes"];
 			if (kfs.IsArray())
 			{
@@ -281,6 +283,13 @@ namespace aq
 							break;
 						}
 					}
+				}
+
+				// Active (論理値) / TextCharCount (-1 = 全表示の特別値) は相対にできない
+				for (const auto& track : clip.tracks)
+				{
+					if (track.relative && (track.property == UIAnimatedProperty::Active || track.property == UIAnimatedProperty::TextCharCount))
+						errors.push_back({ i, "clip '" + clip.name + "': property '" + PropertyToStr(track.property) + "' cannot be relative" });
 				}
 
 				// Exit グループの Manual クリップに loopFrom >= 0 を許さない (画面遷移が止まるため)

@@ -29,6 +29,9 @@ namespace aq
 			UIAnimatedProperty      property = UIAnimatedProperty::PositionX;
 			std::vector<UIKeyframe> keyframes;
 
+			// true ならキー値は「基準値からの差分」。適用値は 基準値 + Sample(t) (設計書 §19)
+			bool                    relative = false;
+
 			// 時刻 t (秒) での補間値を返す
 			float Sample(float t) const;
 

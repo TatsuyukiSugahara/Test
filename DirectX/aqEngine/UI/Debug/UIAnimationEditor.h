@@ -117,7 +117,12 @@ namespace aq
 			 */
 		private:
 			void DrawTimelineClipList(UIObject* obj, UIAnimationComponent* anim);
-			void DrawTrackList(UIAnimationClip& clip);
+			// Rel トグルの換算に静止値を使うので obj を取る (設計書 §19.5)
+			void DrawTrackList(UIObject* obj, UIAnimationClip& clip);
+
+			// Clip 選択の変更はすべてここを通す。復元 -> スナップショット破棄 -> 録画停止 -> 選択の更新 (設計書 §19.5 規則 1)。
+			// index = -1 で選択解除。obj は復元先 (null なら復元を飛ばす)
+			void SelectClip(UIObject* obj, const int index);
 
 
 			/**
@@ -149,6 +154,10 @@ namespace aq
 			void TakeSnapshot(UIObject* obj, const UIAnimationClip& clip);
 			void RestoreSnapshot(UIObject* obj);
 			void ApplyScrub(UIObject* obj, const UIAnimationClip& clip);
+			// 復元してスナップショットを中身ごと捨て、録画も止める (設計書 §19.5 規則 1 / 3)
+			void DiscardSnapshot(UIObject* obj);
+			// プロパティの静止値。静止値はここからだけ読む。スナップショットに無ければ補完する (設計書 §19.5 規則 2)
+			float RestValue(UIObject* obj, const UIAnimatedProperty prop);
 
 
 			/**

@@ -55,7 +55,7 @@ namespace aq
 			bool        GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const override;
 
 			// アプリ終了を要求する(ウィンドウデリゲートから呼ぶ)。
-			inline void RequestExit() { exitRequested_ = true; }
+			inline void RequestExit() override { exitRequested_ = true; }
 		};
 	}
 }

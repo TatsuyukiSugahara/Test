@@ -62,6 +62,10 @@ namespace aq
 		public:
 			bool        CreateMainWindow(const WindowDesc& desc, aq::graphics::NativeWindowHandle& out) override;
 			bool        PumpEvents() override;
+
+			/** 終了を要求する(次の PumpEvents が false を返す。Activity の終了までは行わない) */
+			void        RequestExit() override { exitRequested_ = true; }
+
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
 			bool        ImGuiInit() override;

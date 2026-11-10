@@ -38,6 +38,12 @@ namespace aq
 			virtual bool PumpEvents() = 0;
 
 			/**
+			 * アプリの終了を要求する。次の PumpEvents() が false を返すようになる(メインスレッドから呼ぶ)。
+			 * iOS だけは終了しない(プログラムからアプリを終了しない決まりのため、ログを出して無視する)。
+			 */
+			virtual void RequestExit() = 0;
+
+			/**
 			 * フレーム駆動をプラットフォームへ委譲する。
 			 *
 			 * 既定実装はデスクトップ相当:PumpEvents() が false を返すまで frame() を回す。

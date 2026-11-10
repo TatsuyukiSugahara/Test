@@ -119,6 +119,13 @@ namespace aq
 		/** サウンドを鳴らしてよい状態か(= 前面にいるか)。前回の判定を持って変化点だけ叩く */
 		bool              soundActive_      = true;
 
+		/** 終了コード(最初の RequestExit の値)と、記録済みかどうか */
+		int               exitCode_         = 0;
+		bool              exitCodeSet_      = false;
+
+		/** リサイズの致命失敗で止まった。以後 FrameStep は何も処理しない(GPU を触らない) */
+		bool              fatalStopped_     = false;
+
 
 	private:
 		Engine();
@@ -142,6 +149,16 @@ namespace aq
 		 * 破棄する前に呼ぶための窓口。アプリ生成前は何もしない。
 		 */
 		void WaitForRenderIdle();
+
+		/**
+		 * 終了を要求する(ゲームコードと Engine 内部の両方から呼ぶ)。要求したフレームは最後まで回り、
+		 * 次の PumpEvents() でループを抜ける(iOS は終了しない)。
+		 * 終了コードは最初に要求された値を保つ(後から 0 で上書きしない)。
+		 */
+		void RequestExit(int exitCode = 0);
+
+		/** RequestExit で記録された終了コード(要求が無ければ 0) */
+		inline int GetExitCode() const { return exitCode_; }
 
 
 	private:

@@ -138,8 +138,8 @@ namespace aq
 			/** ドロウアブルの高さ(CreateMainWindow 成功後に有効) */
 			inline int32_t GetDrawableHeight() const { return drawableHeight_; }
 
-			/** アプリ終了を要求する */
-			inline void RequestExit() { exitRequested_ = true; }
+			/** 終了要求は受け付けない(iOS アプリはプログラムから終了しない決まり。ログを 1 回出して無視する) */
+			void RequestExit() override;
 		};
 	}
 }

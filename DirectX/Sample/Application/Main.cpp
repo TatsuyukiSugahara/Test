@@ -33,6 +33,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		// 初期化に失敗したら終了コード 1 を返す(エディタなど起動した側が失敗を判別できるように)。
 		if (engineInstance.Initialize(initializeParameter)) {
 			engineInstance.RunGame();
+			// RequestExit で記録された終了コード(正常終了は 0、実行中の致命失敗は 2)。Release の前に読む。
+			exitCode = engineInstance.GetExitCode();
 		} else {
 			exitCode = 1;
 		}

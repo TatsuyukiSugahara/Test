@@ -196,8 +196,19 @@ namespace aq
 		}
 
 
+		void PlatformWin32::RequestExit()
+		{
+			// PostQuitMessage は使わない(埋め込み時に親ウィンドウへ影響させないため)。
+			exitRequested_ = true;
+		}
+
+
 		bool PlatformWin32::PumpEvents()
 		{
+			if (exitRequested_) {
+				return false;
+			}
+
 			MSG msg = { 0 };
 			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 			{

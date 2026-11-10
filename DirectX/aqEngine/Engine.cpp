@@ -290,6 +290,13 @@ namespace aq
 		// 背面に回ったらサウンドも止める。描画と違ってフレームを飛ばすだけでは鳴り続ける。
 		SyncSoundActivity();
 
+		// リサイズの致命失敗後は、デバイスが壊れている可能性があるので Update・描画・リサイズ・
+		// サーフェス再作成をせず、終了(Finalize)を待つ。
+		if (fatalStopped_) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(16));
+			return;
+		}
+
 		// 描画対象が差し替わったらサーフェスを作り直してから描く。
 		// Android ではバックグラウンド復帰・回転のたびにここへ来る。
 		if (!EnsureSurfaceUpToDate()) {
@@ -327,6 +334,19 @@ namespace aq
 		++updatedFrames_;
 
 		Update();
+	}
+
+
+	void Engine::RequestExit(int exitCode)
+	{
+		if (!exitCodeSet_)
+		{
+			exitCode_    = exitCode;
+			exitCodeSet_ = true;
+		}
+		if (platform_) {
+			platform_->RequestExit();
+		}
 	}
 
 
@@ -470,9 +490,10 @@ namespace aq
 			if (resizeRetries_ >= RESIZE_MAX_RETRIES)
 			{
 				// リサイズで確保できないのはデバイスロスト / メモリ枯渇に相当し、描画を続けても壊れた画面になる。
-				// Engine に終了要求の API が無いので、ログを残して止める(設計書の「終了を要求する」からの逸脱。README の課題に記録)。
+				// 終了コード 2 で終了を要求し、以後のフレームは何もしない(Finalize は通常どおり走る。設計書 エンジン課題解消設計 §9.2)。
 				aq::StartupMark("[engine] FATAL: リサイズを諦める(再試行の上限)");
-				std::abort();
+				fatalStopped_ = true;
+				RequestExit(2);
 			}
 			return false;   // 保留のまま。このフレームは Update を飛ばす
 		};

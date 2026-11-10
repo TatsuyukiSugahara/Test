@@ -29,6 +29,9 @@ namespace aq
 			std::string userDataDirectory_;
 			bool        userDataDirectoryResolved_;
 
+			/** 終了要求(RequestExit で立つ。PumpEvents が false を返す) */
+			bool        exitRequested_ = false;
+
 		public:
 			PlatformWin32(HINSTANCE hInstance, int nCmdShow);
 			~PlatformWin32() override;
@@ -36,6 +39,7 @@ namespace aq
 		public:
 			bool CreateMainWindow(const WindowDesc& desc, aq::graphics::NativeWindowHandle& out) override;
 			bool PumpEvents() override;
+			void RequestExit() override;
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
 			bool HasInputFocus() const override;

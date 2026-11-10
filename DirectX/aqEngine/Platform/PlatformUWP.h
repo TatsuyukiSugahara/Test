@@ -39,7 +39,7 @@ namespace aq
 			const char* GetUserDataDirectory() override;
 
 			// アプリ終了を要求する(PLM の閉じ要求などから呼ぶ)。
-			void RequestExit() { exitRequested_ = true; }
+			void RequestExit() override { exitRequested_ = true; }
 
 			// CoreWindow の物理ピクセルサイズを返す(スワップチェーン初期サイズ用)。
 			void GetPixelSize(uint32_t& outWidth, uint32_t& outHeight) const;

@@ -145,7 +145,9 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   クリップが `active` のまま進まない。ボタンの callback で自身を非表示にし、同じノードに Exit クリップを付けた構成で観測した。
   Click 側(`IsTriggerPlaying`)は非アクティブな階層を飛ばして避けた([UIアニメーション階層統合設計](UIアニメーション階層統合設計.md) §20.3)。
   `IsAnimationGroupPlaying` も同じく非アクティブな階層を飛ばすようにして解消(Mac で、非アクティブなボタンの Exit が同じフレームで ExitDone、アクティブなら従来どおり 0.3 秒待つことを確認)。
-- **Engine に終了要求の API が無い**。リサイズの致命的な失敗は `std::abort()` で止めている(上の設計書 P4-A)。
+- (解決済 2026-11-10)**Engine に終了要求の API が無い**件は、`IPlatform::RequestExit()`(純粋仮想)と `Engine::RequestExit(int)` / `GetExitCode()` を足して解消し、
+  リサイズの致命失敗は `std::abort()` をやめて終了コード 2 で `Finalize` を通すようにした([エンジン課題解消設計](エンジン課題解消設計.md) P5)。
+  Vulkan のスワップチェーン生成失敗の注入と、Windows / UWP / Android のビルドは未確認。
 - (解決済 2026-11-10)**初期化失敗でもプロセスの終了コードが 0 になる**件は、Mac の `MacMain.mm`(Game / Sample)だけが原因だった
   (Win32 の `Main.cpp` は失敗時 1 を返していた)。同じ形に揃えた。Mac の Sample で、`-app=` に存在しないモジュールを渡すと 1、
   ウィンドウを閉じて正常終了すると 0 を確認。iOS / Android / UWP はプロセスの終了コードを使わない起動形態なので対象外。

@@ -348,9 +348,20 @@ namespace aq
 		bool PlatformiOS::PumpEvents()
 		{
 			// イベントの配送は UIKit の run loop が行うので、ここで汲み出すものは無い。
-			// iOS に「閉じるボタン」に相当するアプリ終了の概念も無いため、実質常に true を
-			// 返す。IPlatform の契約(終了要求で false)は保つ(設計書 §3.3)。
+			// iOS に「閉じるボタン」に相当するアプリ終了の概念も無く、終了要求(RequestExit)も
+			// 受け付けないため、実質常に true を返す(設計書 エンジン課題解消設計 §9.2)。
 			return !exitRequested_;
+		}
+
+
+		void PlatformiOS::RequestExit()
+		{
+			// iOS アプリはプログラムから終了しない決まり。exitRequested_ は立てず、ログを 1 回だけ出す。
+			static bool logged = false;
+			if (!logged) {
+				aq::StartupMark("[ios] RequestExit は受け付けない(iOS はプログラムから終了しない)");
+				logged = true;
+			}
 		}
 
 

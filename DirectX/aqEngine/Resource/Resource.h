@@ -779,11 +779,21 @@ public:\
 			 * 指定パスをキャッシュから外す。除去できたら true。
 			 * 既存の shared_ptr 保持者があっても寿命は shared_ptr が管理するため安全
 			 * (bank が参照を手放すだけで、以後のロードは再取得になる)。
+			 * 読み込み中のものは外さず false を返す。外すと、続く Load が同じパスを
+			 * もう一度デコードしてしまう(読み込み中の結果はローダが持ち続けるため無駄になる)。
 			 */
 			bool UnloadOne(const std::string& path)
 			{
 				std::lock_guard<std::mutex> lock(mutex_);
-				return resourceMap_.erase(path) > 0;
+				auto it = resourceMap_.find(path);
+				if (it == resourceMap_.end()) {
+					return false;
+				}
+				if (it->second && it->second->IsLoading()) {
+					return false;
+				}
+				resourceMap_.erase(it);
+				return true;
 			}
 		};
 

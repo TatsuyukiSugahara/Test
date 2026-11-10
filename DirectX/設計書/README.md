@@ -149,7 +149,9 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 - (解決済 2026-11-10)**初期化失敗でもプロセスの終了コードが 0 になる**件は、Mac の `MacMain.mm`(Game / Sample)だけが原因だった
   (Win32 の `Main.cpp` は失敗時 1 を返していた)。同じ形に揃えた。Mac の Sample で、`-app=` に存在しないモジュールを渡すと 1、
   ウィンドウを閉じて正常終了すると 0 を確認。iOS / Android / UWP はプロセスの終了コードを使わない起動形態なので対象外。
-- **`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする。
+- (解決済 2026-11-10)**`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする件は、
+  読み込み中(`IsLoading()`)なら外さず false を返すようにした。Mac の Sample で、読み込み中の `Unload` が false を返して続く `Load` が同じオブジェクトを返すこと、
+  読み終えた後は true で作り直されることを確認(`Unload<T>` の呼び出し元はリポジトリ内に無い)。
 - **`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む。**
 - (解決済 2026-11-10)**`Graphics/GPUBuffer.cpp` は D3D11 型を直接使う旧実装**で、どこでもコンパイルされないまま残っていた件は、
   `.cpp` と転送だけの `GPUBuffer.h`(include 元なし)を削除し、vcxproj / filters の登録と CMake の除外指定も外した(Mac の Debug / Release ビルドで確認。Windows は未確認)。

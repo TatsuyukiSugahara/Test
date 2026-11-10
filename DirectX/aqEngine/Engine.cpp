@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include <algorithm>
 #include <chrono>
+#include <thread>
 #include <cstdlib>
 #include "Resource/AssetPath.h"
 #include "Core/IAppModule.h"
@@ -306,6 +307,9 @@ namespace aq
 		// 失敗経路でだけ false が返り、Update を飛ばす(サウンドの供給だけは続ける)。
 		if (!HandleRenderResize()) {
 			UpdateSoundOnly();
+			// Present もイベント待ちも無いので、待たないと再試行の間隔(200 ms)のあいだ CPU を使い切る。
+			// サウンドの供給(バッファは最大約 680 ms)に影響しない短さで譲る。
+			std::this_thread::sleep_for(std::chrono::milliseconds(2));
 			return;
 		}
 

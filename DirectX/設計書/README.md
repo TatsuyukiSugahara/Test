@@ -152,7 +152,10 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 - (解決済 2026-11-10)**`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする件は、
   読み込み中(`IsLoading()`)なら外さず false を返すようにした。Mac の Sample で、読み込み中の `Unload` が false を返して続く `Load` が同じオブジェクトを返すこと、
   読み終えた後は true で作り直されることを確認(`Unload<T>` の呼び出し元はリポジトリ内に無い)。
-- **`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む。**
+- (解決済 2026-11-10)**`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む**件は、対象 Chunk のインデックスを
+  `GetView` ではなく `ForEach` がリードロックを取った後に求めるようにした(`GetView` にロックを足すと、入れ子の ForEach と同じく
+  共有ロックの二重取得が増えるので避けた)。ビューを作ってから ForEach までの間に増えた Chunk も拾うようになる。
+  Mac で Sample の画面が変更前後で一致、AquaDash でステージ走行まで動作。`FindFirstComponent` もロック外で読むが、こちらは GetComponent と同じ扱いとして残す。
 - (解決済 2026-11-10)**`Graphics/GPUBuffer.cpp` は D3D11 型を直接使う旧実装**で、どこでもコンパイルされないまま残っていた件は、
   `.cpp` と転送だけの `GPUBuffer.h`(include 元なし)を削除し、vcxproj / filters の登録と CMake の除外指定も外した(Mac の Debug / Release ビルドで確認。Windows は未確認)。
   残る作業: [Graphics/RenderContext.cpp](../aqEngine/Graphics/RenderContext.cpp) の D3D11 具象リソース実装も `Graphics/D3D11/` へ移す。

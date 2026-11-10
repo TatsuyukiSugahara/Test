@@ -222,7 +222,7 @@ namespace aq
 			template <typename... Cs>
 			EntityView<Cs...> GetView()
 			{
-				return EntityView<Cs...>(this, GetChunkIndices<Cs...>());
+				return EntityView<Cs...>(this); // 対象 Chunk は ForEach がロックを取ってから求める
 			}
 
 
@@ -569,7 +569,9 @@ namespace aq
 				explicit IterationGuard(EntityManager* m) : lock(m->BeginIteration()) {}
 			} guard(manager_);
 
-			for (const uint32_t idx : chunkIndices_) {
+			// 対象 Chunk はロックを取った後に求める (ロック外で chunkList_ を読まない)
+			const std::vector<uint32_t> chunkIndices = manager_->template GetChunkIndices<Components...>();
+			for (const uint32_t idx : chunkIndices) {
 				Chunk* chunk = manager_->GetChunkByIndex(idx);
 				if (!chunk) { continue; }
 

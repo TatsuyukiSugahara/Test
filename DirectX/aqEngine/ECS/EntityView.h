@@ -13,18 +13,17 @@ namespace aq
 
 
 		// 対象 Component セットを持つ Chunk の軽量クエリビュー。
-		// GetView<T...>() 呼び出し時点の chunkIndices スナップショットを保持する。
-		// Chunk* ではなくインデックスを保持することで、CreateEntity 等による
-		// chunkList_ の再確保後も dangling pointer にならない。
+		// 対象 Chunk のインデックスは ForEach が iterationMutex_ のリードロックを取った後に求める
+		// (GetView の時点では chunkList_ を読まない。ロック外で読むと CreateEntity 等の
+		// chunkList_ 再確保と競合するため)。Chunk* ではなくインデックスで走査する。
 		// ForEach 中に AddComponent / Destroy を呼んでも Chunk 構造は変わらない
 		// （FlushCommands で反映）。
 		template <typename... Components>
 		class EntityView
 		{
 		public:
-			EntityView(EntityManager* manager, std::vector<uint32_t> indices)
+			explicit EntityView(EntityManager* manager)
 				: manager_(manager)
-				, chunkIndices_(std::move(indices))
 			{
 			}
 
@@ -34,7 +33,6 @@ namespace aq
 
 		private:
 			EntityManager* manager_;
-			std::vector<uint32_t> chunkIndices_;
 		};
 	}
 }

@@ -1,7 +1,7 @@
 # UIアニメーション統合設計
 
 > 対象コミット: 3ff20bf(P6 まで)/ 最終更新: 2026-11-10 / **再開するときは §16 から読む**
-> ⚠ 鮮度: P7(`7bf1bc7` / `e49c34a`)は §11・§16.1 に反映済み。§18(P8)は Codex レビュー 2 回を経て 2026-11-10 に実装・Mac 評価済み(§11 P8)。§19(P9 相対値)は Codex レビューを経て 2026-11-10 に実装・Mac 評価済み(§11 P9)。§16.1 以外の §16 は 2026-09-17 時点。
+> ⚠ 鮮度: P7(`7bf1bc7` / `e49c34a`)は §11・§16.1 に反映済み。§18(P8)は Codex レビュー 2 回を経て 2026-11-10 に実装・Mac 評価済み(§11 P8)。§19(P9 相対値)は Codex レビューを経て 2026-11-10 に実装・Mac 評価済み(§11 P9)。§20(P10)は 2026-11-10 に `9a9350d` の実コードを読んで設計し、Codex レビュー済み(未実装)。§16.1 以外の §16 は 2026-09-17 時点。
 
 UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定できる」状態にする。
 2026-09-16 に階層統合(`Clip → ClipTrack → PropTrack → Keyframe` の 4 階層を
@@ -21,7 +21,8 @@ UI アニメーションを「JSON だけで動き、UI Editor 1 つで設定で
 | 第 6 部 | P7 | オートキー(§17) |
 | 第 7 部 | P8 | Ease 拡充(§18) |
 | 第 8 部 | P9 | 相対値(§19) |
-| 後続 | — | Click 演出後の遷移 / Pause |
+| 第 9 部 | P10 | Click 演出後の遷移(§20) |
+| 後続 | — | Pause |
 
 ---
 
@@ -569,7 +570,7 @@ ExitDone    : OnDestroy() → ルート破棄 → 次画面生成(Push / Replace
 
 クリック callback が `Pop()` / `Replace()` を積むと、同フレームの `ExitStart` で Exit が始まる。
 Click の Trigger は Exit と別 serial で先に起動しているので、Exit グループが ColorA を持たなければ Click 演出はそのまま最後まで見える。
-「Click 演出が終わってから Exit を始める」は今回作らない。必要なら Click クリップの長さ分だけ遷移を遅らせる仕組みを後続で足す。
+「Click 演出が終わってから Exit を始める」は P2B では作らず、**P10(§20)で足した**(ExitStart の前に ClickWait を挟む)。
 
 ---
 
@@ -1166,6 +1167,42 @@ P9 の実装で決めたこと(実装担当の判断を採用):
 
 ---
 
+### P10: Click 演出後の遷移(第 9 部、§20)
+
+設計レビュー(Codex、2026-11-10): 1 回目 重大 1・中 2 → 全件反映 → 2 回目「指摘なし」。反映したもの: ClickWait の起点 op を残り op と一緒に
+pending 列の先頭へ戻し、`clickWaitDone_` はその op だけが消費する / 非アクティブな階層の Click は待たない(更新されず必ずタイムアウトするため)/
+タイムアウト・1 回消費・非アクティブの評価項目。不採用は無し。
+
+実装
+
+- `UIAnimationComponent::IsTriggerPlaying(trigger)` と `UIAnimationSystem::IsTriggerPlaying(root, trigger)` を足す(§20.3)
+- `UIScreenManager` に ClickWait 状態(`clickWaiting_` / `clickElapsed_` / `clickWaitDone_`)を足し、Pop / Replace の `BeginExit` の前で待つ(§20.2)
+- `UIScreen` に入力ロックを足し(`IsInputLocked()` = Exit 待機中または ClickWait 中)、`UIInputSystem` の判定を `IsExiting()` から置き換える(§20.4)
+- 検証: Click(Trigger の `conditionParam` が `Click`)のクリップに `loopFrom >= 0` を許さない(§20.5)
+
+評価
+
+確認の方法: Mac(Metal / Debug)の Game で、タイトル画面 JSON に一時ノード(ボタン + Click クリップ)と、ルートに Exit クリップを足す。
+`UIInputSystem::FireClick` に一時フック(環境変数で、callback の後に `Replace(<次画面>)` を積む)と、`UIScreenManager` に状態遷移のログ
+(ClickWait 開始 / 終了、ExitStart、ExitDone と、クリックからの経過時間)を入れる。どちらもコミットしない。時刻の許容差は ±1 フレーム(60 FPS で ±17 ms)。
+
+- [ ] **待ってから Exit**: Click クリップ 0.6 秒、Exit クリップ 0.3 秒。クリックから ExitStart まで 0.6 秒、ExitDone まで 0.9 秒(ログ)
+- [ ] **Click クリップが無ければ従来どおり**: Click クリップを外すと、クリックと同じフレームで ExitStart(P2B と同じ)。ClickWait のログが出ない
+- [ ] **待っている間の入力**: ClickWait 中にもう一度クリックしても Click の Trigger も `Replace` も起きない(ログ)。Hover の Bool は ClickWait 開始で false になる
+- [ ] **待っている間も画面は動く**: ClickWait 中は画面の `OnUpdate` が呼ばれ続け、ExitStart 以降は止まる(ログ)
+- [ ] **後から積んだ操作**: ClickWait 中にゲームコードが `Push` を積んでも、Click → Exit → 次画面 → `Push` の順に処理される(ログ)
+- [ ] **タイムアウト**: ループしない 2.5 秒の Click クリップ。クリックから 2.0 秒でタイムアウトの警告ログが出て、**同じフレームで** ExitStart(再び ClickWait に入らない)
+- [ ] **`clickWaitDone_` は 1 回で消える**: 上の遷移先の画面にも Click クリップ付きのボタンを置き、そこから `Replace` すると、改めて ClickWait に入る(ログ)
+- [ ] **非アクティブな階層は待たない**: callback でボタン自身を非アクティブにする一時フックを入れると、ClickWait に入らず同じフレームで ExitStart(ログ)
+- [ ] **検証**: Click のクリップにループを付けると `Validate` でエラー(メッセージにクリップ名)
+- [ ] **回帰**: 既存の 3 画面の表示と、タイトル → ゲームの遷移(Space。Click を使わない経路)が従来どおり(撮影とログ。ClickWait のログが出ない)
+- [ ] Mac(Metal)の Debug / Release ビルドが通り、警告が増えていない
+
+ユーザー確認(この Mac ではできない):
+- [ ] Windows / D3D11・D3D12・Vulkan の Debug ビルドが通り、警告が増えていない
+
+---
+
 ## 12. 後続改善(本書の範囲外。この順で続ける)
 
 本書が入ってから着手する。逆順にすると全部書き直しになる。
@@ -1175,7 +1212,7 @@ P9 の実装で決めたこと(実装担当の判断を採用):
 3. ~~**オートキー**~~ → **P7 として本書に取り込んだ(§17)**
 4. ~~**Ease 拡充**~~ → **P8 として本書に取り込んだ(§18)**
 5. ~~**相対値モード**~~ → **P9 として本書に取り込んだ(§19)**
-6. **Click 演出完了後の遷移** — §9.3 で見送った「Click クリップが終わってから Exit を始める」
+6. ~~**Click 演出完了後の遷移**~~ → **P10 として本書に取り込んだ(§20)**
 7. **`Pause()`** — 途中値を保持したまま止める要求が出たら
 
 ---
@@ -1791,3 +1828,88 @@ Bool が残る構成では `StopAll()` → 移動 → `Play()` でも基準値�
 - **乗算モード**(§19.2)
 - **既存プリセットの相対化**。`SlideIn` は相対の方が素直だが、P9 は「選べるようにする」までにする(§18.6 と同じ判断)
 - **Hold の累積を止める仕組み**(§19.3。仕様として残し、注意書きだけ出す)
+
+---
+
+# 第 9 部: Click 演出後の遷移
+
+## 20. Click 演出後の遷移(P10)
+
+### 20.1 やること
+
+今は、ボタンの callback が `Pop()` / `Replace()` を積むと、同じフレームで ExitStart が始まる(§9.3)。
+Click 演出(押した瞬間の縮み・光りなど)は Exit と並んで再生されるが、Exit が早く終わると途中で画面ごと消える。
+「押した手応えを見せてから画面を出る」を JSON だけで作れるように、**Click 演出が終わるまで Exit の開始を待つ**。
+
+**待つかどうかは JSON で決まる**。先頭画面に再生中の Click クリップが無ければ、今までどおり同じフレームで Exit を始める。
+Click クリップを持たない画面(AquaDash の全画面)は挙動が変わらない。
+
+### 20.2 状態機械(§9.2 に 1 段足す)
+
+```
+Pending(Pop / Replace が積まれた)
+  ↓
+ClickWait   : 先頭画面に再生中の Click クリップがあれば入る。無ければ素通り
+  ↓          入力をロック(Hover などの Bool は false に)。画面の OnUpdate は止めない(まだ OnExit 前)
+  ↓          IsTriggerPlaying(root, Click) が false になるか、2.0 秒でタイムアウト(警告ログ)
+ExitStart   : 以降は §9.2 のとおり
+```
+
+- 判定するのは **Pop と Replace だけ**(`Back` から変換された Pop を含む)。`Push` は先頭画面を消さないので待たない。
+  ただし ClickWait 中に積まれた op は(`Push` も含めて)pending 列に残り、ClickWait → Exit が終わってから順に処理される(§9.2 と同じ規則)
+- **どのクリックの演出かは区別しない**。その画面で再生中の Click クリップが 1 本でもあれば待つ。
+  ゲームコードがクリックと無関係に `Replace` を積んでも、直前のクリック演出が残っていれば待つことになる。
+  「callback から積まれた op だけ待つ」にすると、callback の外で遷移を積む構成(状態機械経由など)で待たなくなるので採らない
+- **起点の op を失わない**。ClickWait に入るとき、起点の Pop / Replace **自身も含めて**、未処理の残り op を順序どおり `pendingOps_` の先頭へ戻す
+  (`BeginExit` が待機に入るときは起点を `exitOp_` に持ち、残りだけ戻す。ClickWait はまだ Exit を始めていないので起点も戻す)。
+  ClickWait 中は `FlushPendingOps` が何もせず戻る(`exitWaiting_` と同じ)
+- ClickWait を抜けたら、**同じフレームの Flush でそのまま ExitStart へ進む**。抜けた直後に Click を再判定しない(タイムアウトで抜けた場合に再び待たないように)。
+  `clickWaitDone_` を立て、**Flush の中で最初に処理される Pop / Replace(= 先頭へ戻した起点の op)だけがそれを消費する**(判定を飛ばして false に戻す)。
+  以後の Pop / Replace(次の画面に対するもの)は改めて Click を判定する
+- タイムアウトは Exit と同じ 2.0 秒(`kClickWaitTimeoutSec`)。ループする Click は §20.5 で弾くので、通常は届かない保険
+- `ReloadTopDocument()`(§3.3)は従来どおりこの状態機械を通さない。ただし ClickWait 中に積まれた Reload は、他の op と同じく待ってから処理される
+
+### 20.3 再生中の Click を調べる
+
+`UIAnimationSystem::IsAnimationGroupPlaying` は Manual のグループしか見ない。Click は Trigger(`conditionParam` = `Click`)なので、別に足す:
+
+| 追加 | 内容 |
+| --- | --- |
+| `UIAnimationComponent::IsTriggerPlaying(uint32_t trigger) const` | `condition == Trigger && conditionParam == trigger && runtime.active` のクリップが 1 本でもあれば true |
+| `UIAnimationSystem::IsTriggerPlaying(const UIObject* root, uint32_t trigger)` | root 以下を再帰で調べる(`IsAnimationGroupPlaying` と同じ形) |
+
+Trigger クリップは完了すると Hold / Restore のどちらでも `active = false` になる(§5.3)ので、「再生中」= `active` で足りる。
+**非アクティブな階層は調べない**(`IsActiveInHierarchy()` が false のノードとその子は飛ばす)。`UIAnimationSystem::Update` はその階層を更新しないので、
+callback や `OnUpdate` がボタンを非表示にすると Click の `active` が残ったまま時刻が進まず、待つと必ずタイムアウトまで止まってしまう。
+更新の対象と待つ対象をそろえる(`UpdateObject` と同じ条件)。
+
+### 20.4 入力のロック
+
+ClickWait 中は `OnExit()` 前なので `exiting_` は立てない(立てると `OnUpdate` が止まり、Exit の意味も変わる)。
+代わりに `UIScreen` に `inputLocked_` を足し、**`IsInputLocked()` = `exiting_ || inputLocked_`** とする。
+`UIInputSystem` が `IsExiting()` で入力を止めている 2 か所(フォーカス入力と HitTest)を `IsInputLocked()` に置き換える。
+ClickWait の開始で `inputLocked_ = true` と `UIInputSystem::ClearState()`(Bool 条件を false に)、ExitStart 以降は従来どおり `exiting_` が効く。
+
+### 20.5 検証
+
+`ValidateDetailed` に 1 規則足す: `condition == Trigger` かつ `conditionParam == Click` のクリップに `loopFrom >= 0` があればエラー
+(`clip '<name>': Click clips must not loop`。Exit グループのループ禁止と同じ理由)。
+
+### 20.6 責務
+
+| ファイル | 追加・変更 |
+| --- | --- |
+| `UI/Component/UIAnimationComponent.h` / `.cpp` | `IsTriggerPlaying` |
+| `UI/Animation/UIAnimationSystem.h` / `.cpp` | `IsTriggerPlaying(root, trigger)` |
+| `UI/Screen/UIScreen.h` | `inputLocked_` と `IsInputLocked()` |
+| `UI/Screen/UIScreenManager.h` / `.cpp` | ClickWait の状態と `Update` / `FlushPendingOps` / `BeginExit` の分岐、`kClickWaitTimeoutSec` |
+| `UI/Input/UIInputSystem.cpp` | `IsExiting()` → `IsInputLocked()`(2 か所) |
+| `UI/Animation/UIAnimationSerializer.cpp` | 検証規則 |
+
+エディタ・JSON の形式・既存の Exit 待機の挙動(Click クリップが無い場合)は変えない。
+
+### 20.7 やらないこと
+
+- **クリック単位での待ち分け**(§20.2)
+- **待たずに遷移する指定**(op ごとの `immediate` 等)。要求が出たら足す
+- **Click 以外の Trigger を待つこと**。待つのは `Click` だけ

@@ -562,6 +562,7 @@ ExitDone    : OnDestroy() → ルート破棄 → 次画面生成(Push / Replace
   Bool 条件をすべて false にする。以後、破棄まで新しい Bool 条件を送らない(これで Exit 中に Hover が割り込まない)
 - `OnUpdate()` を止める理由: Exit 中にゲーム状態を動かし続けないため。アニメーションだけ進める
 - タイムアウト: `ExitPlaying` が既定 2.0 秒を超えたら警告ログを出して `ExitDone` へ進む(ループ Exit の保険。§4.5 で検証もする)
+- 非アクティブな階層(`IsActiveInHierarchy()` が false)の Exit クリップは待たない。その階層は Update されないため(2026-11-10。§20.3 と同じ扱い)
 - **ExitPlaying 中に積まれた新しい op は pending 列に残し、ExitDone 後に順に処理する。** 待機中の遷移は捨てない、打ち切らない
 - `Back` は従来どおり `OnBack()` の結果で Pop に変換され、その Pop が上の状態機械を通る
 - `ReloadTopDocument()`(§3.3)はこの状態機械を**通さない**
@@ -1204,7 +1205,7 @@ pending 列の先頭へ戻し、`clickWaitDone_` はその op だけが消費す
 評価は Mac(Metal / Debug)の Game で実施(2026-11-10)。タイトル画面 JSON に一時ノード `Btn`(ボタン + Click クリップ + Exit クリップ)を足し、
 `FireClick` の一時フック(環境変数で `Replace("AquaDashTitle")` / `Push("Loading")` / ボタンの非アクティブ化)と `UIScreenManager` の時刻ログで確かめた。いずれもコミットしていない。
 
-**評価で見つけた既存の課題**(P10 では直さない。README「既知の課題」に記録): Exit グループのクリップが**非アクティブなノード**にあると、
+**評価で見つけた既存の課題**(P10 の後に別コミットで解消。README「既知の課題」): Exit グループのクリップが**非アクティブなノード**にあると、
 `IsAnimationGroupPlaying` は非アクティブな階層も調べるが更新はされないので、Exit 待機が必ず 2.0 秒のタイムアウトまで続く。
 P10 の `IsTriggerPlaying` で避けたのと同じ穴(callback でボタン自身を非アクティブにし、同じボタンに Exit クリップを付けた構成で観測)。
 

@@ -31,7 +31,8 @@ namespace aq
 
 		bool UIAnimationSystem::IsAnimationGroupPlaying(const UIObject* root, uint32_t group)
 		{
-			if (!root) return false;
+			// 非アクティブな階層は Update されず、クリップが active のまま進まない。調べると Exit 待機が必ずタイムアウトまで続くので飛ばす
+			if (!root || !root->IsActiveInHierarchy()) return false;
 
 			if (auto* anim = root->GetComponent<UIAnimationComponent>())
 			{

@@ -8,6 +8,8 @@
 
 int main(int argc, const char* argv[])
 {
+	int exitCode = 0;
+
 	@autoreleasepool
 	{
 		// NSWindow を作る前に NSApplication を用意する。run を呼ばず自前でループを
@@ -33,8 +35,11 @@ int main(int argc, const char* argv[])
 		// 起動引数(-app= / -mode= / -editor-port=)。argv[0] はプログラム名として読み飛ばされる
 		initializeParameter.launch = aq::LaunchOptions::Parse(argc, argv);
 
+		// 初期化に失敗したら終了コード 1 を返す(起動した側が失敗を判別できるように。Main.cpp と同じ)。
 		if (engineInstance.Initialize(initializeParameter)) {
 			engineInstance.RunGame();
+		} else {
+			exitCode = 1;
 		}
 		engineInstance.Finalize();
 		aq::Engine::Release();
@@ -42,6 +47,6 @@ int main(int argc, const char* argv[])
 
 	// Engine もプラットフォームも壊れた後に畳む。
 	aq::ShutdownMemory();
-	return 0;
+	return exitCode;
 }
 #endif // AQ_PLATFORM_MAC

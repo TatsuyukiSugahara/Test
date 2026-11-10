@@ -146,7 +146,9 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   Click 側(`IsTriggerPlaying`)は非アクティブな階層を飛ばして避けた([UIアニメーション階層統合設計](UIアニメーション階層統合設計.md) §20.3)。
   `IsAnimationGroupPlaying` も同じく非アクティブな階層を飛ばすようにして解消(Mac で、非アクティブなボタンの Exit が同じフレームで ExitDone、アクティブなら従来どおり 0.3 秒待つことを確認)。
 - **Engine に終了要求の API が無い**。リサイズの致命的な失敗は `std::abort()` で止めている(上の設計書 P4-A)。
-- **初期化失敗でもプロセスの終了コードが 0 になる**(P2 の確認で観測。`Main` / `MacMain` の戻り値の扱いは未調査)。
+- (解決済 2026-11-10)**初期化失敗でもプロセスの終了コードが 0 になる**件は、Mac の `MacMain.mm`(Game / Sample)だけが原因だった
+  (Win32 の `Main.cpp` は失敗時 1 を返していた)。同じ形に揃えた。Mac の Sample で、`-app=` に存在しないモジュールを渡すと 1、
+  ウィンドウを閉じて正常終了すると 0 を確認。iOS / Android / UWP はプロセスの終了コードを使わない起動形態なので対象外。
 - **`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする。
 - **`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む。**
 - **[Graphics/GPUBuffer.cpp](../aqEngine/Graphics/GPUBuffer.cpp) は D3D11 型を直接使う旧実装**で、

@@ -540,7 +540,6 @@
     <ClInclude Include="Graphics\Vulkan\VulkanResources.h" />
     <ClInclude Include="Graphics\Vulkan\VulkanDepthMap.h" />
     <ClInclude Include="Graphics\Vulkan\VulkanImGui.h" />
-    <ClInclude Include="Graphics\GPUBuffer.h" />
     <ClInclude Include="Graphics\GraphicsDevice.h" />
     <ClInclude Include="Graphics\GraphicsTypes.h" />
     <ClInclude Include="Graphics\IBuffer.h" />

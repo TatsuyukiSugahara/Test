@@ -1114,9 +1114,6 @@
     <ClInclude Include="Graphics\D3D12\D3D12Shader.h">
       <Filter>Graphics\D3D12</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\GPUBuffer.h">
-      <Filter>Graphics</Filter>
-    </ClInclude>
     <ClInclude Include="Graphics\GraphicsDevice.h">
       <Filter>Graphics</Filter>
     </ClInclude>

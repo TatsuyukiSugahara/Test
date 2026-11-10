@@ -2,8 +2,7 @@
 #  aqEngine(静的ライブラリ)
 #
 #  ソースは file(GLOB_RECURSE ... CONFIGURE_DEPENDS) で拾い、プラットフォーム
-#  別に除外する。除外なしの GLOB 結果は Engine.vcxproj の ClCompile 集合と
-#  Graphics/GPUBuffer.cpp の 1 本だけ差があるので、それも明示的に落とす。
+#  別に除外する。
 # ============================================================================
 
 file(GLOB_RECURSE AQ_ENGINE_SOURCES CONFIGURE_DEPENDS
@@ -21,9 +20,6 @@ file(GLOB_RECURSE AQ_ENGINE_HEADERS CONFIGURE_DEPENDS
 #
 #  x64/ … MSBuild の中間出力。cppwinrt の生成ヘッダが 5000 本以上あるため、
 #      ヘッダの GLOB がこれを拾うと生成が極端に遅くなる。build/ と .vs/ も同様。
-#  Graphics/GPUBuffer.cpp … D3D11 のデバイスを直接触る旧実装。Engine.vcxproj の
-#      ClCompile に無く現在はビルドされていない(参照元も無い)。GLOB では拾って
-#      しまうため落とす。
 #  Platform/PlatformUWP.cpp … UWP 専用。UWP は vcxproj 専用経路なので扱わない。
 # ----------------------------------------------------------------------------
 set(AQ_ENGINE_BUILD_DIR_PATTERNS
@@ -49,7 +45,6 @@ aq_exclude_sources(AQ_ENGINE_SOURCES "/Assets/")
 aq_exclude_sources(AQ_ENGINE_HEADERS "/Assets/")
 
 aq_exclude_sources(AQ_ENGINE_SOURCES
-	"/Graphics/GPUBuffer\\.cpp$"
 	"/Platform/PlatformUWP\\.cpp$"
 )
 

@@ -151,9 +151,9 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   ウィンドウを閉じて正常終了すると 0 を確認。iOS / Android / UWP はプロセスの終了コードを使わない起動形態なので対象外。
 - **`TResourceBank::UnloadOne` が参照数を見ずに消す**ため、進行中ロードと競合すると同じパスを二重にデコードする。
 - **`EntityManager::GetView` が `iterationMutex_` の外で `chunkList_` を読む。**
-- **[Graphics/GPUBuffer.cpp](../aqEngine/Graphics/GPUBuffer.cpp) は D3D11 型を直接使う旧実装**で、
-  vcxproj 未登録 + CMake の明示除外により「どこでもコンパイルされない」まま抽象層のディレクトリに残っている。削除候補。
-  [Graphics/RenderContext.cpp](../aqEngine/Graphics/RenderContext.cpp) の D3D11 具象リソース実装も `Graphics/D3D11/` へ移す。
+- (解決済 2026-11-10)**`Graphics/GPUBuffer.cpp` は D3D11 型を直接使う旧実装**で、どこでもコンパイルされないまま残っていた件は、
+  `.cpp` と転送だけの `GPUBuffer.h`(include 元なし)を削除し、vcxproj / filters の登録と CMake の除外指定も外した(Mac の Debug / Release ビルドで確認。Windows は未確認)。
+  残る作業: [Graphics/RenderContext.cpp](../aqEngine/Graphics/RenderContext.cpp) の D3D11 具象リソース実装も `Graphics/D3D11/` へ移す。
 - 小さいもの: 描画系コンポーネントがリソース所有と状態機械を抱える(設計書の「データのみ」と不一致)、
   `MaterialDef.h` の実体が `Lighting.h` にある、~~`DeferredDecalCommand` が深度モードを復元しない~~(解決済 2026-11-10。コマンドの最後と途中で抜ける経路で `ReadWrite` に戻す。直後のライティングが設定し直すので従来も実害は無かった。Sample にデカールを置き、変更前後の画面が一致)、
   ドローのソート / バッチングが無い、`TypeInfo::Create(hash, size)` が `ConstructFn` 無しで残る、

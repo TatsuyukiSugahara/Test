@@ -125,9 +125,6 @@ namespace aq
 					}
 				}
 
-				// GBuffer を持たない(フォワードのみ)。Depth が無いので全アイテムをここで描く。
-				builder.Add<ForwardPass>();
-
 				// 空。ロードに失敗しても続行する(背景はクリア色のまま)。
 				if (preset.enableSky)
 				{
@@ -139,6 +136,10 @@ namespace aq
 						aq::StartupMark("[pipeline] 空の生成に失敗したので空なしで続行");
 					}
 				}
+
+				// GBuffer を持たない(フォワードのみ)。Depth が無いので全アイテムをここで描く。
+				// 空より後ろに置く: 半透明が空と合成されるため(Standard() と同じ順。Skybox設計 §4 課題 5)。
+				builder.Add<ForwardPass>();
 
 				// パーティクル(半透明ビルボード。先頭ビューのみ)。
 				builder.Add<ParticlePass>();

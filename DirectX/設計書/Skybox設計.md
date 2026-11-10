@@ -1,6 +1,6 @@
 # スカイキューブ(スカイボックス)設計
 
-> 対象コミット: feed446(実装)/ 文書更新: 92b6c54 以降 / 最終更新: 2026-11-09(P1/P2 完了。Codex レビューの 7 件を実コードで裏取りして反映。§4 課題 5 は Mobile の半透明が空でなくクリア色と合成される不具合。修正案は確認済み・未適用)
+> 対象コミット: feed446(実装)/ 文書更新: 92b6c54 以降 / 最終更新: 2026-11-09(P1/P2 完了。Codex レビューの 7 件を実コードで裏取りして反映。§4 課題 5 は Mobile の半透明が空でなくクリア色と合成される不具合。修正案は確認済み。2026-11-10 に Mobile の順序を入れ替えて適用)
 
 対象: `aqEngine/Rendering/Sky/` + `aqEngine/Assets/Shader/Skybox.fx` + `aqEngine/Assets/Sky/DefaultSkyCube.dds` +
 `aqEngine/Rendering/Pipeline/Passes/SkyPass.*` + キューブマップ生成ツール。
@@ -39,7 +39,7 @@ DirectXTex の `IsCubemap()` から立て、D3D11 / D3D12 / Vulkan / Metal の�
 | 絵の出所 | **手続き的に生成した DDS キューブマップ**を同梱 | リポジトリにキューブマップが 1 本も無い。生成しておけば外部依存なしで見た目が出せ、後から市販の HDRI や自作画像へ差し替えられる |
 | ファイル形式 | **DDS(BGRA8 / 非圧縮 / キューブマップ)** | `Resource.cpp` の既存経路がそのまま通る唯一の形式。6 面バラの PNG だと組み立てコードの新規実装が要る |
 | 描画方法 | **フルスクリーン三角形 1 枚**(頂点バッファ無し) | 立方体メッシュを持つ必要がない。`DeferredLightingCommand.cpp:80-84` に `ctx.Draw(3, 0)` の前例がある |
-| 挿す位置 | **ディファードライティングの直後・フォワードの直前**(設計時は `Renderer.cpp:106` の `SetRenderTargetWithDepthCommand` の直後) | その時点で「シーン RT(色)+ GBuffer0(深度)」がバインド済み。半透明より前なので順序も正しい。**現行(Standard)**: `PipelinePresets.cpp` の `Standard()` が Lighting の後・`ForwardPass` の前に `SkyPass` を追加する。ただし `SkyPass` は自分で RT をバインドし直す(パス間契約 3)ので「RT 設定を一切せずに済む」は成り立たない。**Mobile は順序が逆(§4 課題 5)** |
+| 挿す位置 | **ディファードライティングの直後・フォワードの直前**(設計時は `Renderer.cpp:106` の `SetRenderTargetWithDepthCommand` の直後) | その時点で「シーン RT(色)+ GBuffer0(深度)」がバインド済み。半透明より前なので順序も正しい。**現行(Standard)**: `PipelinePresets.cpp` の `Standard()` が Lighting の後・`ForwardPass` の前に `SkyPass` を追加する。ただし `SkyPass` は自分で RT をバインドし直す(パス間契約 3)ので「RT 設定を一切せずに済む」は成り立たない。Mobile も 2026-11-10 に同じ順へ揃えた(§4 課題 5) |
 | 深度 | **`DepthMode::ReadOnly`**(テスト有効・書き込み無し) | G-Buffer が書いた深度はライティング後も残っている(ライティングは `Disabled` で描くだけで書き込まない)。ジオメトリのある画素は深度テストで落ちる |
 | 所有者 | 設計時: `SkyRenderer` を `Renderer` が持つ。**現行: `SkyPass` が `SkyRenderer` を `unique_ptr` で所有し、`PipelinePresets` が `preset.enableSky` のとき生成して `SkyPass` を追加する** | 空はフォワードでも要るので `DeferredRenderer` には載せない。パス列方式への置き換え(`c60d345`)で `Renderer` から `SkyPass` へ移った。ゲームは `SkyPass::GetSkyRenderer()` から色調を触る |
 | シェーダ | `Skybox.fx`(`VSMain` / `PSMain`)。`.fx` は新規 1 本のみ | 既存 `.fx` は無改変 |
@@ -131,7 +131,7 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
 - [ ] **同一カメラ状態での 2 構成の画素比較は未実施**(ゲーム進行が揃わないため)
 - [ ] 半透明(パーティクル・海)が空の手前に正しく出る — **未確認**
       (この区間に半透明が出てこなかった)。Standard では Sky が Forward より前なので Forward 内の半透明も
-      空の手前に出るはずだが、**Mobile は Sky が Forward の後ろ**(§4 課題 5)なので別に確認が要る。
+      空の手前に出るはずだが、**Mobile は当初 Sky が Forward の後ろだった**(§4 課題 5。2026-11-10 に入れ替え済み)。
       確認対象は「パーティクル・海」に加えて「Forward 内の半透明」と「Mobile 構成」
 - 補足: 上の「平行移動で空がずれない」は走行中の**目視**による確認で、条件(固定した回転・投影)と
   許容差を持たない。実装側は平行移動成分を 0 にしている(`SkyCommand.cpp`)ので設計としては正しいが、
@@ -219,7 +219,7 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
    - **ただし Mobile の半透明は、空ではなくクリア色(明るい背景)と合成される。** Sky が Forward の後ろにあり、
      半透明を描く時点では背景にまだ空が無いため。見た目が白っぽくなる**実際の不具合**。
    - **直し方は Mobile を `Sky → Forward` の順にすること**。入れ替えで Standard と一致することを確認済み。
-     未適用(`PipelinePresets.cpp` の `Mobile()`。`レンダーパイプライン設計.md` の Mobile の列の記述も合わせて直す)。
+     **2026-11-10 適用済み**(`PipelinePresets.cpp` の `Mobile()`。`レンダーパイプライン設計.md` の Mobile の列も更新)。
    - 確認していないこと: Vulkan 構成、Android / iOS 実機、Forward 内の半透明が SkeletalMesh の場合
      (今回は StaticMesh の箱に一時的に `translucent` を立てた)、Particle との前後関係。
    **Mobile 構成を選ぶのは `Auto` のとき Android / iOS**(`ForCurrentPlatform`)。
@@ -232,7 +232,7 @@ CB は `fc.perDrawCBPool->Allocate()` から確保する(`ParticleDrawCommand` �
 
 - [ ] 既存の `.fx` が無改変(`Skybox.fx` の新規追加のみ)
 - [ ] `aqEngine/Assets/Shader/shader_entries.txt` に 2 行登録されている
-- [ ] Mobile の順序を `Sky → Forward` に直し、Mobile でも半透明が空と合成される(課題 5。Metal / Sample では入れ替えで確認済み)
+- [x] Mobile の順序を `Sky → Forward` に直し、Mobile でも半透明が空と合成される(課題 5。2026-11-10 適用。列 `ShadowPass > SkyPass > ForwardPass > ...` をログで確認。画素は 2026-11-09 の入れ替え検証で Standard と全点一致)
 - [ ] 抽象IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本
 - [ ] 新規 `.h/.cpp` が `.vcxproj` / `.filters` に登録されている
 - [ ] 空の生成が失敗しても**起動できる**(デカールと同じ「失敗しても続行」)

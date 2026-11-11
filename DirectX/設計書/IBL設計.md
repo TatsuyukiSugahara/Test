@@ -1,6 +1,6 @@
 # IBL(Image Based Lighting)設計
 
-> 対象コミット: b2c0e69 / 最終更新: 2026-11-11(設計のみ。未実装)
+> 対象コミット: b82f314(P1 実装はこの次のコミット) / 最終更新: 2026-11-11(P1 完了。P2 以降は未実装)
 
 対象: `Tools/IBLGen/` + `aqEngine/Assets/Sky/` の IBL 用 DDS 3 本 + `aqEngine/Rendering/IBL/` +
 `aqEngine/Assets/Shader/PBRLighting.fx` / `PBRFunctions.fx` + `DeferredRenderer` / `DeferredLightingCommand` + `PipelinePresets`。
@@ -75,7 +75,7 @@
 
 | ファイル | 責務 |
 |---|---|
-| `Tools/IBLGen/gen_ibl.py` **(新規)** | スカイキューブ DDS(BGRA8 / RGBA8 の非圧縮キューブ。`gen_skycube.py` の出力形式)を読み、§2 の 3 本を DDS(DX10 ヘッダ、`R16G16B16A16_FLOAT`)で書き出す。`--selftest` で §2.4 の自己テストを実行する。ビルドには組み込まず、生成物をコミットする(`gen_skycube.py` と同じ理由)。空を差し替えたら手で再実行する |
+| `Tools/IBLGen/gen_ibl.py` **(新規)** | スカイキューブ DDS(BGRA8 / RGBA8 の非圧縮キューブ。`gen_skycube.py` の出力形式)を読み、§2 の 3 本を DDS(DX10 ヘッダ、`R16G16B16A16_FLOAT`)で書き出す。`--selftest` で §2.5 の自己テストを実行する。ビルドには組み込まず、生成物をコミットする(`gen_skycube.py` と同じ理由)。空を差し替えたら手で再実行する |
 | `aqEngine/Assets/Sky/DefaultSkyCube_Irradiance.dds` **(新規・生成物)** | 32² × 6 面 / ミップ 1 / `R16G16B16A16_FLOAT`。値は `E / π` |
 | `aqEngine/Assets/Sky/DefaultSkyCube_Specular.dds` **(新規・生成物)** | 128² × 6 面 / ミップ 6(128, 64, 32, 16, 8, 4)/ `R16G16B16A16_FLOAT`。mip k は roughness = k / 5 |
 | `aqEngine/Assets/Sky/BRDF_LUT.dds` **(新規・生成物)** | 128² の 2D / ミップ 1 / `R16G16B16A16_FLOAT`。u = NdotV、v = roughness、rg = (A, B)(`F0 × A + B`) |
@@ -221,15 +221,29 @@ return (diffIBL + specIBL) * intensity;
 実装:
 - `Tools/IBLGen/gen_ibl.py` と §1 の DDS 3 本(生成物をコミット)。エンジンのコードは触らない。
 
-評価(自動):
-- [ ] `--selftest` が §2.5 の全項目を通る
-- [ ] 鏡面 mip 0 と入力の空を、6 面それぞれの中央と 4 隅付近の方向で比べ、差が 2/255 以内(面の向きの取り違えが無い)
-- [ ] 実際の空から作った鏡面キューブで、**+Y 面(空の上半分)の画素分散が mip 1 → 5 で単調に減る**(roughness が上がるほどぼける。
-      直接光や Fresnel が混ざらないツールの段階で確かめる)
-- [ ] 生成時間を記録する(目安: 全体で 5 分以内。超えるならサンプル数か並列化を見直す)
+評価(自動)(2026-11-11):
+- [x] `--selftest` が §2.5 の全項目を通る(一様な空の最大相対誤差 0.0244% = half の丸め / 半球の空 +Y 1.0000・−Y 0.0000 /
+      LUT max(A+B) 1.00037 / 行 0 最右列 A+B 1.00000 / DDS ヘッダ 3 本一致。加えて `gen_skycube.py` の `face_direction` と 30 点照合して不一致 0)
+- [x] 鏡面 mip 0 と入力の空を、6 面それぞれの中央と 4 隅付近の方向で比べ、差が 2/255 以内(面の向きの取り違えが無い)
+      → 最大 0.062/255(`--verify`)
+- [x] 実際の空から作った鏡面キューブで、**+Y 面(空の上半分)の画素分散が mip 1 → 5 で単調に減る**(roughness が上がるほどぼける。
+      直接光や Fresnel が混ざらないツールの段階で確かめる)→ 4.87e-3 → 4.41e-3 → 3.35e-3 → 2.05e-3 → 1.24e-3
+- [x] 生成時間を記録する(目安: 全体で 5 分以内。超えるならサンプル数か並列化を見直す)
+      → 鏡面 + irradiance 3.8 秒、LUT 1.8 秒(10 並列)。再生成でバイト一致(決定的)
 
 評価(ユーザー確認):
 - [ ] ツールが書き出す確認用 PNG(各ミップの 6 面展開図。スクラッチパッドへ出し、コミットしない)を見て、ミップが進むほど滑らかにぼけ、太陽が点々になっていない
+      (`--png DIR` で出力する。Claude の目視では問題なし。ユーザー確認待ち)
+
+#### P1 で決めたこと・分かったこと
+
+- **面の向き**は `gen_skycube.py` の `face_direction` をそのまま写し、逆写像 `direction_to_face_uv` を足した。自己テストで実体と照合している。
+- **ミップ選択**(§2.3)は `lod = 0.5·log2(Ωs/Ωp) + 1`(Ωp は入力 512² のテクセル立体角、pdf = D/4)。隣接 2 段を線形補間。
+  入力の参照は面内の双線形で、**面の端はクランプして隣の面へ跨がない**(荒いミップの継ぎ目は今のところ目立たない)。
+- irradiance の SH 打ち切りで負になる値は 0 で止める(実データでは発生しない)。
+- **LUT は roughness 1 の浅い角度で A+B が大きい**(NdotV 0.05 で 0.85、NdotV 1 で 0.31)。半球の総当たり積分と 3 桁一致したので
+  生成の誤りではなく、シェーダの BRDF(height-correlated Smith の `V_SmithGGX` + GGX)そのものの性質。
+- ツールの追加オプション: `--verify <sky> <prefix> [--lut PATH] [--png DIR]`、`--png DIR`、`--jobs N`。
 
 ### P2: 実行時の組み込み
 

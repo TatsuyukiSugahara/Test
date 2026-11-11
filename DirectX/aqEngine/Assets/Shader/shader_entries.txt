@@ -12,7 +12,7 @@
 #  内容は aqEngine/Assets/Shader/*.fx の実体 (エントリ関数の定義) を全走査して作成した。
 #  .fx = 38 本 / うちエントリを持つもの 33 本 / インクルード専用 5 本
 #  (Common.fx, Lighting.fx, PBRFunctions.fx, ShadowSampling.fx, Tonemap.fx)。
-#  エントリ総数 = 54。
+#  エントリ総数 = 55。
 #
 #  ここに載っていないエントリは .spv が生成されない。実行時コンパイルを持たない
 #  Mac / iOS ではそのシェーダを作れないので、**.fx にエントリを足したらこの表にも足すこと**。
@@ -60,6 +60,7 @@ PBRGBuffer.fx         VSMain     vs   # [未参照]
 PBRGBuffer.fx         PSMain     ps   # [参照] Graphics/StaticMesh.cpp
 PBRLighting.fx        VSMain     vs   # [参照] Rendering/Deferred/DeferredRenderer.cpp
 PBRLighting.fx        PSMain     ps   # [参照] Rendering/Deferred/DeferredRenderer.cpp
+PBRLighting.fx        PSMainIBL  ps   # [参照] Rendering/Deferred/DeferredRenderer.cpp
 Particle.fx           VSMain     vs   # [参照] Component/ParticleComponentSystem.cpp
 Particle.fx           PSMain     ps   # [参照] Component/ParticleComponentSystem.cpp
 Particle.fx           PSTextured ps   # [参照] Component/ParticleComponentSystem.cpp

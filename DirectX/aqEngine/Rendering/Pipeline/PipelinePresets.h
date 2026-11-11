@@ -53,6 +53,16 @@ namespace aq
 			/** Hi-Z(オクリュージョン基盤)。enableDeferred が false のときは意味を持たない */
 			bool enableHiZ = true;
 
+			/**
+			 * IBL(設計書/IBL設計.md)。enableDeferred が false のときは意味を持たない。
+			 * 既定 false(true にするとディファードの環境光が変わり、従来の絵と変わる)。
+			 * 3 本は Tools/IBLGen/gen_ibl.py の生成物。既定はエンジン所有
+			 */
+			bool        enableIBL         = false;
+			const char* iblIrradiancePath = "aqEngine/Assets/Sky/DefaultSkyCube_Irradiance.dds";
+			const char* iblSpecularPath   = "aqEngine/Assets/Sky/DefaultSkyCube_Specular.dds";
+			const char* iblBrdfLutPath    = "aqEngine/Assets/Sky/BRDF_LUT.dds";
+
 			/** ポストプロセス(MotionBlur / Bloom / Tonemap)。false で素通し */
 			bool     enablePostProcess = true;
 			float    bloomThreshold    = 1.0f;

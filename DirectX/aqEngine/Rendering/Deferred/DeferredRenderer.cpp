@@ -5,6 +5,7 @@
 #include "DeferredDecalCommand.h"
 #include "Rendering/SetBlendModeCommand.h"
 #include "Graphics/GraphicsTypes.h"
+#include "Rendering/IBL/IBLEnvironment.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Deferred/Debug/DeferredDebugPanel.h"
 #endif
@@ -77,6 +78,14 @@ namespace aq
 
 			lightingVS_ = std::move(vs);
 			lightingPS_ = std::move(ps);
+
+			// IBL 用の PS (任意機能: 失敗しても PSMain で継続し、IBL を使わない)。
+			// PSMain と別エントリにするのは、未バインドの TextureCube を PSMain に持ち込まないため (IBL設計 §0.2)。
+			lightingIBLPS_ = gd.CreateShader("aqEngine/Assets/Shader/PBRLighting.fx", "PSMainIBL",
+			                                 graphics::IShader::ShaderType::PS);
+			if (!lightingIBLPS_) {
+				aq::StartupMark("[ibl] PBRLighting.fx PSMainIBL load FAILED -> ibl disabled");
+			}
 
 			// 投影デカール用シェーダー・サンプラー (任意機能: 失敗してもライティングは継続)
 			decalVS_ = gd.CreateShader("aqEngine/Assets/Shader/Decal.fx", "VSMain",
@@ -184,6 +193,18 @@ namespace aq
 		{
 			// シーン RT を GBuffer0 の depth と組み合わせてバインド
 			outList.Enqueue<SetRenderTargetWithDepthCommand>(sceneRT, gbuffer0Handle_);
+
+			// IBL が使えるときだけ PSMainIBL と環境を渡す。環境は shared_ptr のままコマンドへ持たせ、
+			// 実行待ちの間も資源を生かす (IBL設計 §1.1)。強度は値で写す。
+			if (ibl_ && lightingIBLPS_ && ibl_->IsReady())
+			{
+				outList.Enqueue<DeferredLightingCommand>(
+					*lightingVS_, *lightingIBLPS_,
+					gbuffer0Handle_, gbuffer1Handle_, gbuffer2Handle_, gbuffer3Handle_,
+					frame.camera,
+					std::shared_ptr<const IBLEnvironment>(ibl_), ibl_->GetIntensity());
+				return;
+			}
 
 			// GBuffer ハンドルをそのまま渡す（Execute() 時に解決）
 			outList.Enqueue<DeferredLightingCommand>(

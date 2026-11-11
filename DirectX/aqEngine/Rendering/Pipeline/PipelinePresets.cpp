@@ -15,6 +15,7 @@
 // aq.h が供給済み。HiZRenderer と SkyRenderer は供給されないのでここで足す。
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Sky/SkyRenderer.h"
+#include "Rendering/IBL/IBLEnvironment.h"
 
 
 namespace aq
@@ -51,6 +52,18 @@ namespace aq
 					auto deferred = std::make_shared<DeferredRenderer>();
 					if (deferred->Create(renderW, renderH))
 					{
+						// IBL。生成に失敗したら従来の環境光(PSMain)で続行する。
+						// ロード完了は DeferredRenderer が毎フレーム IsReady() で見る(完了までは PSMain)。
+						if (preset.enableIBL)
+						{
+							auto ibl = std::make_shared<IBLEnvironment>();
+							if (ibl->Create(preset.iblIrradiancePath, preset.iblSpecularPath, preset.iblBrdfLutPath)) {
+								deferred->SetIBLEnvironment(std::move(ibl));
+							} else {
+								aq::StartupMark("[pipeline] IBL の生成に失敗したので IBL なしで続行");
+							}
+						}
+
 						builder.Add<GBufferPass>(deferred);
 
 						// Hi-Z(オクリュージョン基盤)。worldPos (GBuffer2) 確定後に構築する。

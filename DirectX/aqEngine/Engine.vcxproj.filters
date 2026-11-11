@@ -127,6 +127,9 @@
     <Filter Include="Rendering\Sky">
       <UniqueIdentifier>{c50e4da4-0c2b-424d-99dd-45e7eb5d22c8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\IBL">
+      <UniqueIdentifier>{0ba0717a-0942-4434-abea-af9c15cb9fd9}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Resource">
       <UniqueIdentifier>{0dd3f527-688b-4000-a85f-54637f175461}</UniqueIdentifier>
     </Filter>
@@ -679,6 +682,9 @@
     </ClCompile>
     <ClCompile Include="Rendering\Sky\SkyCommand.cpp">
       <Filter>Rendering\Sky</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\IBL\IBLEnvironment.cpp">
+      <Filter>Rendering\IBL</Filter>
     </ClCompile>
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
@@ -1617,6 +1623,9 @@
     </ClInclude>
     <ClInclude Include="Rendering\Sky\SkyCommand.h">
       <Filter>Rendering\Sky</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\IBL\IBLEnvironment.h">
+      <Filter>Rendering\IBL</Filter>
     </ClInclude>
     <ClInclude Include="UI\UITypes.h">
       <Filter>UI</Filter>

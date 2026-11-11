@@ -6,12 +6,24 @@
 #include "Graphics/GraphicsTypes.h"
 #include "Graphics/IRenderTarget.h"
 #include "Graphics/Lighting.h"
+#include "Rendering/IBL/IBLEnvironment.h"
 
 
 namespace aq
 {
 	namespace rendering
 	{
+		namespace
+		{
+			/** IBL のスロット (t4=シャドウ / t8-t11=GBuffer の間の空き。設計書/IBL設計.md §0.1) */
+			static constexpr uint32_t IBL_IRRADIANCE_SLOT = 5;
+			static constexpr uint32_t IBL_SPECULAR_SLOT   = 6;
+			static constexpr uint32_t IBL_BRDF_LUT_SLOT   = 7;
+			static constexpr uint32_t IBL_SAMPLER_SLOT    = 0;
+			static constexpr uint32_t IBL_CB_SLOT         = 2;
+		}
+
+
 		DeferredLightingCommand::DeferredLightingCommand(
 			graphics::IShader& lightingVS,
 			graphics::IShader& lightingPS,
@@ -19,7 +31,9 @@ namespace aq
 			RenderTargetHandle  gbuffer1Handle,
 			RenderTargetHandle  gbuffer2Handle,
 			RenderTargetHandle  gbuffer3Handle,
-			const CameraData&  camera)
+			const CameraData&  camera,
+			std::shared_ptr<const IBLEnvironment> ibl,
+			const float                           iblIntensity)
 			: lightingVS_(&lightingVS)
 			, lightingPS_(&lightingPS)
 			, gbuffer0Handle_(gbuffer0Handle)
@@ -27,6 +41,8 @@ namespace aq
 			, gbuffer2Handle_(gbuffer2Handle)
 			, gbuffer3Handle_(gbuffer3Handle)
 			, camera_(camera)
+			, ibl_(std::move(ibl))
+			, iblIntensity_(iblIntensity)
 		{
 		}
 
@@ -40,6 +56,27 @@ namespace aq
 			auto* gbuffer2 = gd.GetRenderTarget(gbuffer2Handle_);
 			auto* gbuffer3 = gd.GetRenderTarget(gbuffer3Handle_);
 			if (!gbuffer0 || !gbuffer1 || !gbuffer2 || !gbuffer3) return;
+
+			// IBL の資源を先にそろえる。lightingPS は PSMainIBL なので、1 つでも欠けたら描かない
+			// (未バインドのまま描くと Metal / Vulkan で型の合わないフォールバックが刺さる)。
+			// 状態を変える前に判定し、途中で抜けても DepthMode 等を汚さない。
+			graphics::IShaderResourceView* iblIrradiance = nullptr;
+			graphics::IShaderResourceView* iblSpecular   = nullptr;
+			graphics::IShaderResourceView* iblBrdfLut    = nullptr;
+			graphics::ISamplerState*       iblSampler    = nullptr;
+			graphics::IConstantBuffer*     iblCB         = nullptr;
+			if (ibl_)
+			{
+				iblIrradiance = ibl_->GetIrradianceSRV();
+				iblSpecular   = ibl_->GetSpecularSRV();
+				iblBrdfLut    = ibl_->GetBrdfLutSRV();
+				iblSampler    = ibl_->GetSampler();
+				if (!iblIrradiance || !iblSpecular || !iblBrdfLut || !iblSampler) return;
+
+				// CB はフレームスロットごとのプールから取る (GPU 実行中の CB を上書きしない。§1.1)
+				iblCB = fc.perDrawCBPool->Allocate();
+				if (!iblCB) return;
+			}
 
 			// DepthEnable を FALSE にしてフルスクリーン描画（デプスバッファに書き込まない）
 			ctx.OMSetDepthMode(graphics::DepthMode::Disabled);
@@ -77,6 +114,21 @@ namespace aq
 			ctx.PSSetShaderResource(10, gbuffer2->GetRenderTargetSRV());
 			ctx.PSSetShaderResource(11, gbuffer3->GetRenderTargetSRV());
 
+			// b2 / t5-t7 / s0: IBL (PSMainIBL のときだけ。PSMain はこれらを参照しない)
+			if (ibl_)
+			{
+				IBLCBData iblData;
+				iblData.intensity      = iblIntensity_;
+				iblData.specularMaxMip = ibl_->GetSpecularMaxMip();
+				ctx.UpdateSubresource(*iblCB, iblData);
+				ctx.PSSetConstantBuffer(IBL_CB_SLOT, *iblCB);
+
+				ctx.PSSetShaderResource(IBL_IRRADIANCE_SLOT, *iblIrradiance);
+				ctx.PSSetShaderResource(IBL_SPECULAR_SLOT,   *iblSpecular);
+				ctx.PSSetShaderResource(IBL_BRDF_LUT_SLOT,   *iblBrdfLut);
+				ctx.PsSetSampler(IBL_SAMPLER_SLOT, *iblSampler);
+			}
+
 			// フルスクリーントライアングル (SV_VertexID ベース: 頂点バッファ不要)
 			ctx.IASetPrimitiveTopology(graphics::PrimitiveTopology::TriangleList);
 			ctx.VSSetShader(*lightingVS_);
@@ -88,6 +140,14 @@ namespace aq
 			ctx.PSUnsetShaderResource(9);
 			ctx.PSUnsetShaderResource(10);
 			ctx.PSUnsetShaderResource(11);
+
+			// t5-t7 アンバインド（後続の空パスが t5 を別のキューブで使う）
+			if (ibl_)
+			{
+				ctx.PSUnsetShaderResource(IBL_IRRADIANCE_SLOT);
+				ctx.PSUnsetShaderResource(IBL_SPECULAR_SLOT);
+				ctx.PSUnsetShaderResource(IBL_BRDF_LUT_SLOT);
+			}
 
 			// DepthMode を既定値に戻す
 			ctx.OMSetDepthMode(graphics::DepthMode::ReadWrite);

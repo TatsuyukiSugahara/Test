@@ -8,6 +8,11 @@
 //   GBuffer2: worldPos.xyz + specular(F0 scale)
 //   GBuffer3: emissive*scale + pixelTag
 // フルスクリーントライアングル: Draw(3, 0) で呼ぶ（頂点バッファ不要）。
+//
+// エントリ:
+//   PSMain   : 環境光は簡易 ambient（AmbientLight の 1 色）。t5-t7 / s0 / b2 を参照しない
+//   PSMainIBL: 環境光は IBL（設計書/IBL設計.md §3）。t5-t7 / s0 / b2 を参照する
+//   2 つの差は環境光の 1 項だけ。GBuffer 読み取りと影は LoadSurface に括り出してある。
 
 struct VSOutput
 {
@@ -20,6 +25,21 @@ Texture2D gbuffer0 : register(t8);   // baseColor.rgb + metallic
 Texture2D gbuffer1 : register(t9);   // N.xyz + roughness
 Texture2D gbuffer2 : register(t10);  // worldPos.xyz + specular
 Texture2D gbuffer3 : register(t11);  // emissive*scale + pixelTag
+
+// IBL（PSMainIBL だけが参照する。PSMain から参照すると、IBL 無効時に未バインドの
+// TextureCube が Metal の 2D フォールバックと型が合わない。設計書/IBL設計.md §0.2）
+TextureCube  gIblIrradiance : register(t5);
+TextureCube  gIblSpecular   : register(t6);
+Texture2D    gIblBrdfLut    : register(t7);
+SamplerState gIblSampler    : register(s0);
+
+// IBLEnvironment.h の IBLCBData と先頭を一致させること（C++ 側は 192B に詰める）
+cbuffer IBLCB : register(b2)
+{
+    float  iblIntensity;
+    float  iblSpecularMaxMip;
+    float2 _iblPad;
+};
 
 cbuffer PerDrawCB : register(b0)
 {
@@ -36,9 +56,23 @@ VSOutput VSMain(uint vertexID : SV_VertexID)
     return o;
 }
 
-float4 PSMain(VSOutput input) : SV_TARGET
+// GBuffer から読んだ 1 画素分の表面情報（PSMain / PSMainIBL 共通）
+struct PBRSurface
 {
-    int2 coord = int2(input.svPos.xy);
+    float3 baseColor;
+    float  metallic;
+    float3 N;
+    float  roughness;
+    float3 worldPos;
+    float  specular;
+    float3 preScaledEmissive;
+    float4 dirShadow;
+};
+
+// GBuffer 読み取りと影。空背景の画素はここで clip する。
+PBRSurface LoadSurface(float4 svPos)
+{
+    int2 coord = int2(svPos.xy);
 
     float4 g0 = gbuffer0.Load(int3(coord, 0));
     float4 g1 = gbuffer1.Load(int3(coord, 0));
@@ -52,26 +86,54 @@ float4 PSMain(VSOutput input) : SV_TARGET
     // +4 はデカール非対象マーカー。シャドウ判定では下位値 (1/2) に戻す。
     float shadowTag = (pixelTag >= 4.5) ? (pixelTag - 4.0) : pixelTag;
 
-    float3 baseColor        = g0.rgb;
-    float  metallic         = g0.a;
-    float3 N                = normalize(g1.xyz);
-    float  roughness        = g1.w;
-    float3 worldPos         = g2.xyz;
-    float  specular         = g2.w;
-    float3 preScaledEmissive = g3.rgb;
+    PBRSurface surf;
+    surf.baseColor         = g0.rgb;
+    surf.metallic          = g0.a;
+    surf.N                 = normalize(g1.xyz);
+    surf.roughness         = g1.w;
+    surf.worldPos          = g2.xyz;
+    surf.specular          = g2.w;
+    surf.preScaledEmissive = g3.rgb;
 
-    float4 dirShadow = float4(1.0, 1.0, 1.0, 1.0);
+    surf.dirShadow = float4(1.0, 1.0, 1.0, 1.0);
     if (shadowTag >= 1.5)
     {
-        if (directionalLightCount > 0) dirShadow.x = SampleShadowForLight(worldPos, 0);
-        if (directionalLightCount > 1) dirShadow.y = SampleShadowForLight(worldPos, 1);
-        if (directionalLightCount > 2) dirShadow.z = SampleShadowForLight(worldPos, 2);
-        if (directionalLightCount > 3) dirShadow.w = SampleShadowForLight(worldPos, 3);
+        if (directionalLightCount > 0) surf.dirShadow.x = SampleShadowForLight(surf.worldPos, 0);
+        if (directionalLightCount > 1) surf.dirShadow.y = SampleShadowForLight(surf.worldPos, 1);
+        if (directionalLightCount > 2) surf.dirShadow.z = SampleShadowForLight(surf.worldPos, 2);
+        if (directionalLightCount > 3) surf.dirShadow.w = SampleShadowForLight(surf.worldPos, 3);
     }
+    return surf;
+}
 
-    float3 lit = ComputePBRLighting(worldPos, N, baseColor, metallic,
-                                    roughness, specular, preScaledEmissive,
-                                    dirShadow);
+float4 PSMain(VSOutput input) : SV_TARGET
+{
+    PBRSurface surf = LoadSurface(input.svPos);
+
+    // 簡易 ambient（従来と同じ式・同じ演算順。出力を変えない）
+    float3 environment = ambient.color * ambient.intensity * surf.baseColor * (1.0 - surf.metallic);
+
+    float3 lit = ComputePBRLighting(surf.worldPos, surf.N, surf.baseColor, surf.metallic,
+                                    surf.roughness, surf.specular, surf.preScaledEmissive,
+                                    surf.dirShadow, environment);
+
+    return float4(lit, 1.0);
+}
+
+float4 PSMainIBL(VSOutput input) : SV_TARGET
+{
+    PBRSurface surf = LoadSurface(input.svPos);
+
+    // IBL が AmbientLight を置き換える（二重に足さない）
+    float3 V = normalize(cameraPosition - surf.worldPos);
+    float3 environment = EvalIBL(surf.N, V, surf.baseColor, surf.metallic,
+                                 surf.roughness, surf.specular,
+                                 gIblIrradiance, gIblSpecular, gIblBrdfLut, gIblSampler,
+                                 iblSpecularMaxMip, iblIntensity);
+
+    float3 lit = ComputePBRLighting(surf.worldPos, surf.N, surf.baseColor, surf.metallic,
+                                    surf.roughness, surf.specular, surf.preScaledEmissive,
+                                    surf.dirShadow, environment);
 
     return float4(lit, 1.0);
 }

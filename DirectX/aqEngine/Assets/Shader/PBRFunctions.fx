@@ -78,17 +78,42 @@ float PBR_Attenuation(float dist, float range)
     return x * x;
 }
 
+// IBL（split-sum 近似。設計書/IBL設計.md §3）の環境光の寄与。
+// テクスチャは引数で受け、宣言は持たない（宣言は使うエントリのファイル側。PSMain に持ち込まないため）。
+//   irrCube : irradiance キューブ（E / π を格納）
+//   specCube: 前置フィルタ済み鏡面キューブ（mip = roughness × maxMip）
+//   brdfLut : u = NdotV, v = roughness, rg = (A, B)
+// specular（引数）= 材質の F0 スケール（GBuffer2.w）。F0 は直接光（EvalDisneyBRDF）と同じ定義。
+float3 EvalIBL(float3 N, float3 V,
+               float3 baseColor, float metallic, float roughness, float specular,
+               TextureCube irrCube, TextureCube specCube, Texture2D brdfLut, SamplerState s,
+               float maxMip, float intensity)
+{
+    float3 F0      = lerp(0.08 * specular * globalSpecularScale, baseColor, metallic);
+    float  NdotV   = max(dot(N, V), 1e-5);
+    float3 R       = reflect(-V, N);
+    float2 ab      = brdfLut.SampleLevel(s, float2(NdotV, roughness), 0).rg;
+    float3 specEnv = specCube.SampleLevel(s, R, roughness * maxMip).rgb;
+    float3 Fr      = F0 + (max(1.0 - roughness, F0) - F0) * SchlickFresnel(NdotV);  // roughness 考慮の Fresnel
+    float3 kD      = (1.0 - Fr) * (1.0 - metallic);
+    float3 diffIBL = irrCube.SampleLevel(s, N, 0).rgb * baseColor * kD;
+    float3 specIBL = specEnv * (F0 * ab.x + ab.y);
+    return (diffIBL + specIBL) * intensity;
+}
+
 // Deferred Lighting パス用: 全ライト合算。
-// dirShadow: 各ディレクショナルライトのシャドウ係数 (float4, x=light0 ... w=light3)
+// dirShadow  : 各ディレクショナルライトのシャドウ係数 (float4, x=light0 ... w=light3)
+// environment: 環境光の寄与（PSMain は簡易 ambient、PSMainIBL は EvalIBL の結果）。
+//              ライトより先に足す（従来の簡易 ambient と同じ加算順。PSMain の出力を変えないため）
 float3 ComputePBRLighting(float3 worldPos, float3 N,
                           float3 baseColor, float metallic, float roughness, float specular,
                           float3 preScaledEmissive,
-                          float4 dirShadow)
+                          float4 dirShadow,
+                          float3 environment)
 {
     float3 V = normalize(cameraPosition - worldPos);
 
-    // 簡易 ambient（Phase 3 で IBL に置換予定）
-    float3 color = ambient.color * ambient.intensity * baseColor * (1.0 - metallic);
+    float3 color = environment;
 
     float dirShadowArr[4] = { dirShadow.x, dirShadow.y, dirShadow.z, dirShadow.w };
     for (uint di = 0; di < directionalLightCount; ++di)

@@ -1,6 +1,6 @@
 # IBL(Image Based Lighting)設計
 
-> 対象コミット: b82f314(P1 実装はこの次のコミット) / 最終更新: 2026-11-11(P1 完了。P2 以降は未実装)
+> 対象コミット: 6661f59(P2 実装はこの次のコミット) / 最終更新: 2026-11-11(P1・P2-0・P2 完了。P3 は未実装)
 
 対象: `Tools/IBLGen/` + `aqEngine/Assets/Sky/` の IBL 用 DDS 3 本 + `aqEngine/Rendering/IBL/` +
 `aqEngine/Assets/Shader/PBRLighting.fx` / `PBRFunctions.fx` + `DeferredRenderer` / `DeferredLightingCommand` + `PipelinePresets`。
@@ -296,16 +296,25 @@ P2 と別にコミットし、P2 の画素比較の基準をこのコミット�
 - **FPS オーバーレイ(`AppHost.cpp` の `##FPSOverlay`。左上 (10,10) から始まる自動サイズの窓)の矩形は比較から除く**。
   除く矩形は撮影画像から実測して評価記録に書く。オーバーレイ以外の全画素で差 0 を合格とする。
 
-評価(自動。Mac / Metal と Mac / Vulkan の両構成):
-- [ ] ビルドが通り、警告が増えない
-- [ ] ロードログで 3 本とも `srv=ok`、2 本のキューブが `isCubemap=1`、鏡面が `mips=6`、irradiance と LUT の mips を記録する(§0.3-1)
-- [ ] **`enableIBL = false` で、基準画像と画素一致**(上の比較条件。オーバーレイ以外で差 0)
-- [ ] `enableIBL = true` で、金属の箱に空が映る(箱の上面が空の天頂色に、側面が地平の色に寄る。撮影して画素の色相で確認)
-- [ ] IBL のファイルを一時的に存在しないパスへ向けても起動し、従来の絵(`PSMain`)で描かれる。ログに失敗が 1 回だけ出る
-- [ ] Metal API Validation エラー 0(`METAL_DEVICE_WRAPPER_TYPE=1`)/ VK の validation エラー 0 / 終了コード 0
+評価(自動。Mac / Metal と Mac / Vulkan の両構成。2026-11-11):
+- [x] ビルドが通り、警告が増えない(変更したファイルに警告なし)
+- [x] ロードログで 3 本とも `srv=ok`、2 本のキューブが `isCubemap=1`、鏡面が `mips=6`、irradiance と LUT の mips を記録する(§0.3-1)
+      → irradiance 32² `isCubemap=1 mips=6`(float16 キューブの自動ミップ生成は Mac で通った)/ 鏡面 128² `isCubemap=1 mips=6` /
+      LUT 128² `isCubemap=0 mips=8`(自動生成。ミップ 0 しか読まないので害なし)/ `[ibl] ready (specularMaxMip=5)`
+- [x] **`enableIBL = false` で、基準画像と画素一致**(上の比較条件。オーバーレイ以外で差 0)
+      → Metal・Vulkan とも 3,758,240 画素が差 0
+- [x] `enableIBL = true` で、金属の箱に空が映る(箱の上面が空の天頂色に、側面が地平の色に寄る。撮影して画素の色相で確認)
+      → IBL なしでは 3 面とも (0,0,0)(従来の環境光は金属に乗らない)。IBL ありで上面 (35,115,180)、側面 (28,123,179)・(41,127,179)。
+      上面は G が低い濃い青(天頂)、側面は明るい青(地平)。差は箱の矩形の中だけで、背景は不変。Vulkan も各面 0.2 以内で一致
+- [x] IBL のファイルを一時的に存在しないパスへ向けても起動し、従来の絵(`PSMain`)で描かれる。ログに失敗が 1 回だけ出る
+      → 鏡面を存在しないパスにして、`[ibl] specular load FAILED` と `[ibl] not usable -> ibl disabled` が各 1 回。画は IBL なしと差 0
+- [x] Metal API Validation エラー 0(`METAL_DEVICE_WRAPPER_TYPE=1`)/ VK の validation エラー 0 / 終了コード 0
+      → VK の validation は **Debug 構成でしか有効にならない**(`VulkanGraphicsDeviceImpl.cpp` の `#ifdef _DEBUG`)ので Debug で確認。
+      ERROR 0、WARN 10 件は全て Bloom の compute(`g_Bright` / `g_Output` の Rgba32f)で既存のもの。終了コードは閉じるボタンで 0
 
 評価(ユーザー確認):
-- [ ] 金属・非金属の箱の見た目が破綻していない(真っ白に飛ぶ・真っ黒に沈む・面ごとに色が不連続、が無い)
+- [x] 金属・非金属の箱の見た目が破綻していない(真っ白に飛ぶ・真っ黒に沈む・面ごとに色が不連続、が無い)
+      → 2026-11-11 ユーザー確認済み。**非金属は IBL で影側も明るくなり、面の明暗差が小さく平板に見える**(強度 1.0、空が明るいため)。P3 の強度調整で扱う
 
 ### P3: 調整と見本
 

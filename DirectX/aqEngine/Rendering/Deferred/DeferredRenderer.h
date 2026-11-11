@@ -12,6 +12,9 @@ namespace aq
 {
 	namespace rendering
 	{
+		class IBLEnvironment;
+
+
 		/**
 		 * ディファードレンダラー実装。
 		 *
@@ -21,6 +24,7 @@ namespace aq
 		 *   - GBuffer2: RGBA16F (worldPos XYZ + specularIntensity)
 		 *   - GBuffer3: RGBA16F (emissive RGB + pixelTag)
 		 *   - PBRLighting の VS/PS シェーダー(と、デカール用の Decal VS/PS)
+		 *   - PBRLighting の PSMainIBL と IBL 環境(任意。設計書/IBL設計.md)
 		 */
 		class DeferredRenderer final : public IDeferredRenderer
 		{
@@ -55,6 +59,14 @@ namespace aq
 			RenderTargetHandle GetGBuffer2Handle() const { return gbuffer2Handle_; }
 			RenderTargetHandle GetGBuffer3Handle() const { return gbuffer3Handle_; }
 
+			/**
+			 * IBL 環境を設定する(設計書/IBL設計.md §1.1)。パイプライン構築時に 1 回だけ呼ぶ前提
+			 * (実行時の差し替えは範囲外)。null で IBL を使わない。
+			 * 環境が IsReady() で、PSMainIBL の生成に成功しているときだけライティングが IBL を使う。
+			 */
+			void SetIBLEnvironment(std::shared_ptr<IBLEnvironment> ibl) { ibl_ = std::move(ibl); }
+			const std::shared_ptr<IBLEnvironment>& GetIBLEnvironment() const { return ibl_; }
+
 #ifdef AQ_DEBUG_IMGUI
 			std::unique_ptr<IDebugRenderable> CreateDebugPanel(IShadowRenderer* shadow = nullptr);
 #endif
@@ -86,6 +98,10 @@ namespace aq
 
 			std::shared_ptr<graphics::IShader> lightingVS_;
 			std::shared_ptr<graphics::IShader> lightingPS_;
+
+			// IBL 用 (任意: 生成・ロード失敗時は従来の PSMain で続行)
+			std::shared_ptr<graphics::IShader> lightingIBLPS_;
+			std::shared_ptr<IBLEnvironment>    ibl_;
 
 			// 投影デカールパス用 (任意: ロード失敗時はデカールパスをスキップ)
 			std::shared_ptr<graphics::IShader>       decalVS_;

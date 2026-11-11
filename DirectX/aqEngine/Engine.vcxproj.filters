@@ -130,6 +130,9 @@
     <Filter Include="Rendering\IBL">
       <UniqueIdentifier>{0ba0717a-0942-4434-abea-af9c15cb9fd9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\SSR">
+      <UniqueIdentifier>{88d37bea-fafc-4e6b-a2c6-d62e1c8cbc8b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Resource">
       <UniqueIdentifier>{0dd3f527-688b-4000-a85f-54637f175461}</UniqueIdentifier>
     </Filter>
@@ -593,6 +596,9 @@
     <ClCompile Include="Rendering\Pipeline\Passes\SkyPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\SSRPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Pipeline\Passes\ForwardPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
@@ -685,6 +691,12 @@
     </ClCompile>
     <ClCompile Include="Rendering\IBL\IBLEnvironment.cpp">
       <Filter>Rendering\IBL</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\SSR\SSRRenderer.cpp">
+      <Filter>Rendering\SSR</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\SSR\SSRCompositeCommand.cpp">
+      <Filter>Rendering\SSR</Filter>
     </ClCompile>
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
@@ -1462,6 +1474,9 @@
     <ClInclude Include="Rendering\Pipeline\Passes\SkyPass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\SSRPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\ForwardPass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
@@ -1626,6 +1641,12 @@
     </ClInclude>
     <ClInclude Include="Rendering\IBL\IBLEnvironment.h">
       <Filter>Rendering\IBL</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\SSR\SSRRenderer.h">
+      <Filter>Rendering\SSR</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\SSR\SSRCompositeCommand.h">
+      <Filter>Rendering\SSR</Filter>
     </ClInclude>
     <ClInclude Include="UI\UITypes.h">
       <Filter>UI</Filter>

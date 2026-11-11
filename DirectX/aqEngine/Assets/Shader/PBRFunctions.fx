@@ -78,26 +78,50 @@ float PBR_Attenuation(float dist, float range)
     return x * x;
 }
 
+// IBL の鏡面部分（split-sum 近似。設計書/IBL設計.md §3、設計書/SSR設計.md §1）。
+// EvalIBL と SSRComposite.fx が共用する（SSR はライティングが足した鏡面キューブの項を差し引くため、
+// 同じ式で求める必要がある）。強度は掛けない（呼び出し側が掛ける）。
+//   prefiltered: 前置フィルタ済み鏡面キューブの色（mip = roughness × maxMip）
+//   specWeight : F0·A + B（A, B は BRDF LUT）
+// 鏡面の項は prefiltered × specWeight。F0 は直接光（EvalDisneyBRDF）と同じ定義。
+void EvalIBLSpecular(float3 N, float3 V,
+                     float3 baseColor, float metallic, float roughness, float specular,
+                     TextureCube specCube, Texture2D brdfLut, SamplerState s,
+                     float maxMip,
+                     out float3 prefiltered, out float3 specWeight)
+{
+    float3 F0    = lerp(0.08 * specular * globalSpecularScale, baseColor, metallic);
+    float  NdotV = max(dot(N, V), 1e-5);
+    float3 R     = reflect(-V, N);
+    float2 ab    = brdfLut.SampleLevel(s, float2(NdotV, roughness), 0).rg;
+    prefiltered  = specCube.SampleLevel(s, R, roughness * maxMip).rgb;
+    specWeight   = F0 * ab.x + ab.y;
+}
+
 // IBL（split-sum 近似。設計書/IBL設計.md §3）の環境光の寄与。
 // テクスチャは引数で受け、宣言は持たない（宣言は使うエントリのファイル側。PSMain に持ち込まないため）。
 //   irrCube : irradiance キューブ（E / π を格納）
 //   specCube: 前置フィルタ済み鏡面キューブ（mip = roughness × maxMip）
 //   brdfLut : u = NdotV, v = roughness, rg = (A, B)
 // specular（引数）= 材質の F0 スケール（GBuffer2.w）。F0 は直接光（EvalDisneyBRDF）と同じ定義。
+// 鏡面部分は EvalIBLSpecular に括り出してある。式と演算順は括り出す前と同じ
+// （F0 / NdotV は Fr のために同じ式でもう一度求める。PSMainIBL の出力を変えないため）。
 float3 EvalIBL(float3 N, float3 V,
                float3 baseColor, float metallic, float roughness, float specular,
                TextureCube irrCube, TextureCube specCube, Texture2D brdfLut, SamplerState s,
                float maxMip, float intensity)
 {
+    float3 specEnv;
+    float3 specWeight;
+    EvalIBLSpecular(N, V, baseColor, metallic, roughness, specular,
+                    specCube, brdfLut, s, maxMip, specEnv, specWeight);
+
     float3 F0      = lerp(0.08 * specular * globalSpecularScale, baseColor, metallic);
     float  NdotV   = max(dot(N, V), 1e-5);
-    float3 R       = reflect(-V, N);
-    float2 ab      = brdfLut.SampleLevel(s, float2(NdotV, roughness), 0).rg;
-    float3 specEnv = specCube.SampleLevel(s, R, roughness * maxMip).rgb;
     float3 Fr      = F0 + (max(1.0 - roughness, F0) - F0) * SchlickFresnel(NdotV);  // roughness 考慮の Fresnel
     float3 kD      = (1.0 - Fr) * (1.0 - metallic);
     float3 diffIBL = irrCube.SampleLevel(s, N, 0).rgb * baseColor * kD;
-    float3 specIBL = specEnv * (F0 * ab.x + ab.y);
+    float3 specIBL = specEnv * specWeight;
     return (diffIBL + specIBL) * intensity;
 }
 

@@ -1,6 +1,6 @@
 # SSR(Screen Space Reflection)設計
 
-> 対象コミット: 71cbd34 / 最終更新: 2026-11-11(設計のみ。未実装。Codex レビュー 2 回分を反映。1 回目で合成方式を差分加算に変えた)
+> 対象コミット: cc4c915(P1 実装はこの次のコミット) / 最終更新: 2026-11-11(P1 完了。P2 以降は未実装)
 
 対象: `aqEngine/Rendering/SSR/` + `aqEngine/Rendering/Pipeline/Passes/SSRPass.*` + `aqEngine/Assets/Shader/SSRTrace.fx` / `SSRComposite.fx` +
 `PBRFunctions.fx`(IBL の鏡面部分の括り出し)+ `DeferredRenderer`(そのビューで IBL を使ったかの記録)+ `PipelinePresets` + Sample の床。
@@ -135,23 +135,40 @@ HLSL の cbuffer と static_assert で一致させる。
 - この段階では**トレースの代わりに、合成シェーダへ固定の入力を与えるテスト用の切り替え**(`SSRRenderer` の `testMode`。
   0 = 通常(P1 ではトレースが無いので ssr = (0,0,0,0) 扱い)、1 = `ssr = (0,0,0,1)`)を持たせる。P2 で残すかは実装時に判断し、残すならデバッグ用と明記する。
 
-評価(自動。Mac / Metal と Vulkan):
-- [ ] ビルドが通り、警告が増えない
-- [ ] **`EvalIBL` の括り出しで `PSMainIBL` の画が変わらない**: `enableSSR = false` で、P1 前のコミット(+ Sample の一時差分)と画素一致
+評価(自動。Mac / Metal と Vulkan。2026-11-11):
+- [x] ビルドが通り、警告が増えない(SSR の新規・変更ファイルに警告なし)
+- [x] **`EvalIBL` の括り出しで `PSMainIBL` の画が変わらない**: `enableSSR = false` で、P1 前のコミット(+ Sample の一時差分)と画素一致
       ([IBL設計](IBL設計.md) P2 と同じ比較条件。オーバーレイ (0,0)-(460,200) を除いて差 0)
-- [ ] **差分が 0 のとき何も変わらない**: `enableSSR = true`・`testMode = 0` で、`enableSSR = false` と画素一致(差 0。足すのは 0 × … = 0)
-- [ ] **負の加算が効く(float RT でクランプされない)**: ポストプロセスを切った一時差分(`enablePostProcess = false`。Bloom が段をまたいで
+      → Metal で P1 前(`cc4c915` の worktree)と 3,758,240 画素が差 0
+- [x] **差分が 0 のとき何も変わらない**: `enableSSR = true`・`testMode = 0` で、`enableSSR = false` と画素一致(差 0。足すのは 0 × … = 0)
+      → Metal・Vulkan とも差 0
+- [x] **負の加算が効く(float RT でクランプされない)**: ポストプロセスを切った一時差分(`enablePostProcess = false`。Bloom が段をまたいで
       明るさを広げないように)で、次の 2 つを比べる。見本列の**金属の段**の各面の中央 16×16 の平均を使う。
       - `testMode = 1`(当たった色 = 黒、確信度 1 = キューブ由来の鏡面を全部差し引く)の金属の段が、**IBL なし(`enableIBL = false`)と各面 2/255 以内**
         (金属は IBL の拡散が 0 なので、差し引けば直接光だけが残る)
       - 誤合格の防止: `testMode = 0` の金属の段は IBL なしと **20/255 以上**違う(差し引く前は鏡面キューブの分だけ明るい)
       非金属の段は IBL の拡散が残るので比べない
-- [ ] **IBL が使えない間は合成しない**: IBL の鏡面ファイルを存在しないパスにした起動で、`testMode = 1` でも画が `enableIBL = false` と画素一致
+      → 金属の段 5 箱の正面中央 16×16: `testMode = 1` と IBL なしの差は最大 0.14/255(Metal・Vulkan とも)。
+      `testMode = 0` と IBL なしの差は 30〜88/255。**float RT の負の加算はクランプされない**ことを両バックエンドで実測した
+- [x] **IBL が使えない間は合成しない**: IBL の鏡面ファイルを存在しないパスにした起動で、`testMode = 1` でも画が `enableIBL = false` と画素一致
       (`WasIBLUsed()` が false なので合成しない)
-- [ ] **ロード境界で判断が食い違わない**: 一時ログ(評価後に外す)で、起動から 120 フレームの各ビューについて
+      → 差 0。パス列には `SSRPass` が入ったまま(`[pipeline] 確定: ... DeferredLightingPass > SSRPass > SkyPass ...`)
+- [x] **ロード境界で判断が食い違わない**: 一時ログ(評価後に外す)で、起動から 120 フレームの各ビューについて
       「ライティングが `PSMainIBL` を積んだか」と「SSR が合成を積んだか」を 1 行ずつ出し、**全フレームで一致**し、かつ
       **0 → 1 に切り替わるフレームが含まれる**(IBL のロード完了をまたいでいる)ことを確かめる
-- [ ] Metal API Validation エラー 0 / VK validation(Debug)エラー 0 / 終了コード 0
+      → 実際の起動では 1 フレーム目からロード済みで切り替わりが起きなかったので、`IsReady` が最初の 40 回 false を返す一時コードで
+      ロードの遅れを作った。120 フレームすべて一致し、40 フレーム目で 0 → 1。一時コードは評価後に外した
+- [x] Metal API Validation エラー 0 / VK validation(Debug)エラー 0 / 終了コード 0
+      → VK は `testMode = 1`(合成を実際に描く)で ERROR 0。WARN は Bloom の既存 10 件だけ
+
+#### P1 で決めたこと・分かったこと
+
+- **合成用の CB は `SSRCompositeCBData` として別にした**(先頭は `IBLCB` と同じ並び、続けて `ssrTestValue`)。§1 の `SSRCBData` はトレース用。
+- **合成した画素の Scene の α は 2 になる**(加算の α 側が全バックエンドで ONE + ONE。抽象 IF は変えない方針)。MotionBlur は α を
+  通すが、BloomComposite が出力 α を 1 に固定するので最終画面には出ない。`enablePostProcess = false` で比べるときは α を比較に含めない
+  (今回の比較は RGB だけ)。
+- `SSRPass` の `ResizePolicy::Resizable` は P1 では中身が空(RT を持たない)。P2 で出力 RT を足すときに実装する。
+- ゲームから `testMode` / `SetEnabled` を触るには `RenderPipeline::Find<SSRPass>()` → `GetSSRRenderer()`(GameModule の ShadowPass と同じ口)。
 
 ### P2: トレース
 
@@ -223,7 +240,7 @@ Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む。
 
 ## 6. チェックポイント
 
-- [ ] P1 の評価を全て満たした
+- [x] P1 の評価を全て満たした
 - [ ] P2 の評価を全て満たした
 - [ ] P3 の評価を全て満たした
 - [ ] 抽象 IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本

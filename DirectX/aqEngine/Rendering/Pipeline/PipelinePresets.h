@@ -65,6 +65,12 @@ namespace aq
 			const char* iblSpecularPath   = "aqEngine/Assets/Sky/DefaultSkyCube_Specular.dds";
 			const char* iblBrdfLutPath    = "aqEngine/Assets/Sky/BRDF_LUT.dds";
 
+			/**
+			 * SSR(設計書/SSR設計.md)。enableDeferred && enableIBL が前提(どちらかが false なら意味を持たない)。
+			 * 既定 false(true にすると IBL の鏡面反射が画面上の映り込みに置き換わり、従来の絵と変わる)
+			 */
+			bool enableSSR = false;
+
 			/** ポストプロセス(MotionBlur / Bloom / Tonemap)。false で素通し */
 			bool     enablePostProcess = true;
 			float    bloomThreshold    = 1.0f;
@@ -90,7 +96,7 @@ namespace aq
 		{
 			/**
 			 * 今の Application::SetupStandardRenderers と同じ構成
-			 * (Shadow / ClusterCull / GBuffer / Hi-Z / Decal / Lighting / Sky / Forward / Ocean /
+			 * (Shadow / ClusterCull / GBuffer / Hi-Z / Decal / Lighting / SSR(preset.enableSSR)/ Sky / Forward / Ocean /
 			 *  Particle / MotionBlur / Bloom / Tonemap / UI)。ClusterCull は GBuffer の前に置く。
 			 * 動かない機能(compute 非対応など)は PipelineBuilder::Build() の IsSupported() 検証で
 			 * 自動的に除外される。

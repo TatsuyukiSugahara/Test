@@ -10,9 +10,9 @@
 #  "#" 始まりの行と空行は無視される。
 #
 #  内容は aqEngine/Assets/Shader/*.fx の実体 (エントリ関数の定義) を全走査して作成した。
-#  .fx = 38 本 / うちエントリを持つもの 33 本 / インクルード専用 5 本
+#  .fx = 39 本 / うちエントリを持つもの 34 本 / インクルード専用 5 本
 #  (Common.fx, Lighting.fx, PBRFunctions.fx, ShadowSampling.fx, Tonemap.fx)。
-#  エントリ総数 = 55。
+#  エントリ総数 = 57。
 #
 #  ここに載っていないエントリは .spv が生成されない。実行時コンパイルを持たない
 #  Mac / iOS ではそのシェーダを作れないので、**.fx にエントリを足したらこの表にも足すこと**。
@@ -64,6 +64,8 @@ PBRLighting.fx        PSMainIBL  ps   # [参照] Rendering/Deferred/DeferredRend
 Particle.fx           VSMain     vs   # [参照] Component/ParticleComponentSystem.cpp
 Particle.fx           PSMain     ps   # [参照] Component/ParticleComponentSystem.cpp
 Particle.fx           PSTextured ps   # [参照] Component/ParticleComponentSystem.cpp
+SSRComposite.fx       VSMain     vs   # [参照] Rendering/SSR/SSRRenderer.cpp
+SSRComposite.fx       PSMain     ps   # [参照] Rendering/SSR/SSRRenderer.cpp
 ShadowDepth.fx        VSMain     vs   # [参照] Rendering/Shadow/HardShadowRenderer.cpp
 SimpleBox.fx          VSMain     vs   # [参照] Graphics/StaticMesh.cpp
 SimpleBox.fx          PSMain     ps   # [参照] Graphics/StaticMesh.cpp

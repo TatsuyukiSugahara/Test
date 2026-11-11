@@ -7,6 +7,7 @@
 #include "Passes/DecalPass.h"
 #include "Passes/DeferredLightingPass.h"
 #include "Passes/SkyPass.h"
+#include "Passes/SSRPass.h"
 #include "Passes/ForwardPass.h"
 #include "Passes/OceanPass.h"
 #include "Passes/ParticlePass.h"
@@ -16,6 +17,7 @@
 #include "Rendering/Occlusion/HiZRenderer.h"
 #include "Rendering/Sky/SkyRenderer.h"
 #include "Rendering/IBL/IBLEnvironment.h"
+#include "Rendering/SSR/SSRRenderer.h"
 
 
 namespace aq
@@ -76,6 +78,20 @@ namespace aq
 						builder.Add<DecalPass>(deferred);
 						// ディファードライティング(シーン RT に書き込む)。
 						builder.Add<DeferredLightingPass>(deferred);
+
+						// SSR(ライティングの直後・空の前。設計書/SSR設計.md §0.2)。IBL の生成に成功したときだけ足す
+						// (SSR は IBL の鏡面キューブの項を差し引くので、IBL が無いと意味を持たない)。
+						// 生成に失敗したら足さない(IBL だけの絵で続行する)。
+						if (preset.enableIBL && preset.enableSSR && deferred->GetIBLEnvironment())
+						{
+							auto ssr = std::make_unique<SSRRenderer>();
+							if (ssr->Create()) {
+								builder.Add<SSRPass>(std::move(ssr), deferred, deferred->GetIBLEnvironment());
+							} else {
+								// 生成に失敗すると SSRPass は列へ入らない(パス側の Setup は走らない)ので、ここで残す。
+								aq::StartupMark("[pipeline] SSR の生成に失敗したので SSR なしで続行");
+							}
+						}
 					}
 				}
 

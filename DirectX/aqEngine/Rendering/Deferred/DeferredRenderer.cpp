@@ -196,7 +196,10 @@ namespace aq
 
 			// IBL が使えるときだけ PSMainIBL と環境を渡す。環境は shared_ptr のままコマンドへ持たせ、
 			// 実行待ちの間も資源を生かす (IBL設計 §1.1)。強度は値で写す。
-			if (iblEnabled_ && ibl_ && lightingIBLPS_ && ibl_->IsReady())
+			// 判断の結果は WasIBLUsed() で同じビューの SSRPass が見る (SSR設計 §0.2)。
+			// IsReady() を 2 つのパスで別々に見ると、間で切り替わったフレームに食い違うため、ここで 1 回だけ決める。
+			lastIBLUsed_ = iblEnabled_ && ibl_ && lightingIBLPS_ && ibl_->IsReady();
+			if (lastIBLUsed_)
 			{
 				outList.Enqueue<DeferredLightingCommand>(
 					*lightingVS_, *lightingIBLPS_,

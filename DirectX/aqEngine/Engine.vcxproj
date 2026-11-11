@@ -342,6 +342,7 @@
     <ClCompile Include="Rendering\Pipeline\Passes\DecalPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\DeferredLightingPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\SkyPass.cpp" />
+    <ClCompile Include="Rendering\Pipeline\Passes\SSRPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\ForwardPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\OceanPass.cpp" />
     <ClCompile Include="Rendering\Pipeline\Passes\ParticlePass.cpp" />
@@ -373,6 +374,8 @@
     <ClCompile Include="Rendering\Sky\SkyRenderer.cpp" />
     <ClCompile Include="Rendering\Sky\SkyCommand.cpp" />
     <ClCompile Include="Rendering\IBL\IBLEnvironment.cpp" />
+    <ClCompile Include="Rendering\SSR\SSRRenderer.cpp" />
+    <ClCompile Include="Rendering\SSR\SSRCompositeCommand.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Terrain\HeightmapPainter.cpp" />
     <ClCompile Include="Terrain\SplatmapPainter.cpp" />
@@ -655,6 +658,7 @@
     <ClInclude Include="Rendering\Pipeline\Passes\DecalPass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\DeferredLightingPass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\SkyPass.h" />
+    <ClInclude Include="Rendering\Pipeline\Passes\SSRPass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\ForwardPass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\OceanPass.h" />
     <ClInclude Include="Rendering\Pipeline\Passes\ParticlePass.h" />
@@ -710,6 +714,8 @@
     <ClInclude Include="Rendering\Sky\SkyRenderer.h" />
     <ClInclude Include="Rendering\Sky\SkyCommand.h" />
     <ClInclude Include="Rendering\IBL\IBLEnvironment.h" />
+    <ClInclude Include="Rendering\SSR\SSRRenderer.h" />
+    <ClInclude Include="Rendering\SSR\SSRCompositeCommand.h" />
     <ClInclude Include="UI\UITypes.h" />
     <ClInclude Include="UI\UIContext.h" />
     <ClInclude Include="UI\UIObject.h" />

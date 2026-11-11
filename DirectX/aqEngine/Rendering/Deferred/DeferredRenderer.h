@@ -74,6 +74,14 @@ namespace aq
 			void SetIBLEnabled(const bool enabled) { iblEnabled_ = enabled; }
 			bool IsIBLEnabled() const { return iblEnabled_; }
 
+			/**
+			 * 直近の BuildLightingCommandList が PSMainIBL を積んだか(設計書/SSR設計.md §0.2)。
+			 * 同じビューの後続パス(SSRPass)が、ライティングに鏡面キューブの項が入っているかを判断するのに使う。
+			 * ビューごとに DeferredLightingPass → 後続パスの順に Build されるので、そのビューの値になる。
+			 * メインスレッド(コマンド生成)だけで読み書きする。
+			 */
+			bool WasIBLUsed() const { return lastIBLUsed_; }
+
 #ifdef AQ_DEBUG_IMGUI
 			std::unique_ptr<IDebugRenderable> CreateDebugPanel(IShadowRenderer* shadow = nullptr);
 #endif
@@ -111,6 +119,8 @@ namespace aq
 			std::shared_ptr<IBLEnvironment>    ibl_;
 			/** IBL の ON/OFF (SetIBLEnabled) */
 			bool                               iblEnabled_ = true;
+			/** 直近の BuildLightingCommandList が PSMainIBL を積んだか (WasIBLUsed)。const の経路から更新する */
+			mutable bool                       lastIBLUsed_ = false;
 
 			// 投影デカールパス用 (任意: ロード失敗時はデカールパスをスキップ)
 			std::shared_ptr<graphics::IShader>       decalVS_;

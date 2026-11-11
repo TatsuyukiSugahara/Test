@@ -17,6 +17,7 @@ namespace aq
 			/** スロット (PBRLighting.fx の PSMainIBL と同じ配置。SSRComposite.fx と一致させる) */
 			static constexpr uint32_t LIGHTING_CB_SLOT  = 1;
 			static constexpr uint32_t COMPOSITE_CB_SLOT = 2;
+			static constexpr uint32_t SSR_TRACE_SLOT    = 0;
 			static constexpr uint32_t IBL_SPECULAR_SLOT = 6;
 			static constexpr uint32_t IBL_BRDF_LUT_SLOT = 7;
 			static constexpr uint32_t IBL_SAMPLER_SLOT  = 0;
@@ -34,18 +35,22 @@ namespace aq
 			RenderTargetHandle                    gbuffer1Handle,
 			RenderTargetHandle                    gbuffer2Handle,
 			RenderTargetHandle                    gbuffer3Handle,
+			RenderTargetHandle                    ssrTraceHandle,
 			std::shared_ptr<const IBLEnvironment> ibl,
 			const float                           iblIntensity,
-			const math::Vector4&                  ssrTestValue)
+			const uint32_t                        testMode,
+			const bool                            debugView)
 			: compositeVS_(&compositeVS)
 			, compositePS_(&compositePS)
 			, gbuffer0Handle_(gbuffer0Handle)
 			, gbuffer1Handle_(gbuffer1Handle)
 			, gbuffer2Handle_(gbuffer2Handle)
 			, gbuffer3Handle_(gbuffer3Handle)
+			, ssrTraceHandle_(ssrTraceHandle)
 			, ibl_(std::move(ibl))
 			, iblIntensity_(iblIntensity)
-			, ssrTestValue_(ssrTestValue)
+			, testMode_(testMode)
+			, debugView_(debugView)
 		{
 		}
 
@@ -59,7 +64,8 @@ namespace aq
 			auto* gbuffer1 = gd.GetRenderTarget(gbuffer1Handle_);
 			auto* gbuffer2 = gd.GetRenderTarget(gbuffer2Handle_);
 			auto* gbuffer3 = gd.GetRenderTarget(gbuffer3Handle_);
-			if (!gbuffer0 || !gbuffer1 || !gbuffer2 || !gbuffer3) { return; }
+			auto* ssrTrace = gd.GetRenderTarget(ssrTraceHandle_);
+			if (!gbuffer0 || !gbuffer1 || !gbuffer2 || !gbuffer3 || !ssrTrace) { return; }
 
 			if (!ibl_) { return; }
 			graphics::IShaderResourceView* iblSpecular = ibl_->GetSpecularSRV();
@@ -75,19 +81,24 @@ namespace aq
 			if (!compositeCB) { return; }
 
 			// 差分の加算 (src.rgb × src.a + dst。PS の α は 1 固定)。深度は使わない。
-			ctx.OMSetBlendMode(graphics::BlendMode::Additive);
+			// デバッグ表示は確信度のグレーで G-Buffer の画素を上書きする。
+			ctx.OMSetBlendMode(debugView_ ? graphics::BlendMode::Opaque : graphics::BlendMode::Additive);
 			ctx.OMSetDepthMode(graphics::DepthMode::Disabled);
 
 			// b1: per-frame lighting
 			ctx.PSSetConstantBuffer(LIGHTING_CB_SLOT, *fc.lightingCB);
 
-			// b2: 強度・ミップ数・テスト用の ssr
+			// b2: 強度・ミップ数・testMode・デバッグ表示
 			SSRCompositeCBData cbData;
 			cbData.iblIntensity      = iblIntensity_;
 			cbData.iblSpecularMaxMip = ibl_->GetSpecularMaxMip();
-			cbData.ssrTestValue      = ssrTestValue_;
+			cbData.testMode          = testMode_;
+			cbData.debugView         = debugView_ ? 1u : 0u;
 			ctx.UpdateSubresource(*compositeCB, cbData);
 			ctx.PSSetConstantBuffer(COMPOSITE_CB_SLOT, *compositeCB);
+
+			// t0: トレースの出力 RT
+			ctx.PSSetShaderResource(SSR_TRACE_SLOT, ssrTrace->GetRenderTargetSRV());
 
 			// t6 / t7 / s0: 鏡面キューブと BRDF LUT
 			ctx.PSSetShaderResource(IBL_SPECULAR_SLOT, *iblSpecular);
@@ -113,6 +124,7 @@ namespace aq
 			ctx.PSUnsetShaderResource(GBUFFER3_SLOT);
 			ctx.PSUnsetShaderResource(IBL_SPECULAR_SLOT);
 			ctx.PSUnsetShaderResource(IBL_BRDF_LUT_SLOT);
+			ctx.PSUnsetShaderResource(SSR_TRACE_SLOT);
 
 			// パス契約 2: 入った状態 (Opaque / ReadWrite) に戻して終わる
 			ctx.OMSetBlendMode(graphics::BlendMode::Opaque);

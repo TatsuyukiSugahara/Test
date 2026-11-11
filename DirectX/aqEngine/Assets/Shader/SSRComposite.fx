@@ -14,9 +14,13 @@
 // フルスクリーントライアングル: Draw(3, 0) で呼ぶ（頂点バッファ不要）。VS は PBRLighting.fx と同じく
 // z = 0（深度無効パス専用）。G-Buffer の画素だけを描く（空の画素は pixelTag で clip）。
 //
-// スロット（PBRLighting.fx の PSMainIBL と同じ配置）:
+// ssr（当たった色 rgb + 確信度 a）はトレース（SSRTrace.fx）の出力 RT を同じ画素で Load する。
+// デバッグ表示（debugView）が有効なら、確信度をグレー（rgb = a）で返す。そのときコマンドは
+// BlendMode::Opaque で描く（G-Buffer の画素を上書き。空は clip されるので Sky が描く）。
+//
+// スロット（IBL と G-Buffer は PBRLighting.fx の PSMainIBL と同じ配置）:
 //   b1 = LightingCB（cameraPosition / globalSpecularScale）、b2 = SSRCompositeCB
-//   t6 = 鏡面キューブ、t7 = BRDF LUT、s0 = IBL のサンプラ、t8-t11 = GBuffer0-3
+//   t0 = トレースの出力 RT、t6 = 鏡面キューブ、t7 = BRDF LUT、s0 = IBL のサンプラ、t8-t11 = GBuffer0-3
 
 struct VSOutput
 {
@@ -30,20 +34,26 @@ Texture2D gbuffer1 : register(t9);   // N.xyz + roughness
 Texture2D gbuffer2 : register(t10);  // worldPos.xyz + specular
 Texture2D gbuffer3 : register(t11);  // emissive*scale + pixelTag
 
+// トレースの出力（rgb = 当たった画素の Scene の色、a = 確信度。外れは 0）
+Texture2D gSSRTrace : register(t0);
+
 // IBL（PBRLighting.fx と同じスロット。irradiance は使わないので宣言しない）
 TextureCube  gIblSpecular : register(t6);
 Texture2D    gIblBrdfLut  : register(t7);
 SamplerState gIblSampler  : register(s0);
 
+// testMode の値（SSRRenderer::TEST_MODE_*。デバッグ用）
+static const uint TEST_MODE_FULL_BLACK = 1;  // 当たった色を黒・確信度 1 として扱う（鏡面キューブの項を全部差し引く）
+
 // SSRCompositeCommand.h の SSRCompositeCBData と先頭を一致させること（C++ 側は 192B に詰める）
 cbuffer SSRCompositeCB : register(b2)
 {
-    float  iblIntensity;
-    float  iblSpecularMaxMip;
-    float2 _ssrPad0;
-    // P1 のテスト用（SSRRenderer の testMode）。トレースがまだ無いので、ssr（当たった色 + 確信度）を
-    // CB の固定値で与える。P2 でトレースの出力 RT（テクスチャ入力）に置き換える。
-    float4 ssrTestValue;
+    float iblIntensity;
+    float iblSpecularMaxMip;
+    // デバッグ用（SSRRenderer の testMode）。TEST_MODE_FULL_BLACK ならトレースの出力を読まず (0,0,0,1) とする
+    uint  testMode;
+    // デバッグ表示（SSRRenderer の debugView）。0 以外なら確信度をグレーで返す
+    uint  debugView;
 };
 
 VSOutput VSMain(uint vertexID : SV_VertexID)
@@ -77,8 +87,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
     float  specular  = g2.w;
     float3 V         = normalize(cameraPosition - worldPos);
 
-    // P1: トレースが無いので CB の固定値。P2 でトレースの出力 RT の Load に置き換える。
-    float4 ssr = ssrTestValue;
+    // トレースの出力（同じ画素）。testMode はデバッグ用の固定入力
+    float4 ssr = (testMode == TEST_MODE_FULL_BLACK)
+        ? float4(0.0, 0.0, 0.0, 1.0)
+        : gSSRTrace.Load(int3(coord, 0));
+
+    // デバッグ表示: 確信度をグレーで返す（コマンド側は Opaque で上書きする）
+    if (debugView != 0) {
+        return float4(ssr.aaa, 1.0);
+    }
 
     float3 prefiltered;
     float3 specWeight;

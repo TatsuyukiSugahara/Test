@@ -9,9 +9,11 @@ namespace sample
 	bool SampleModule::OnInitialize(aq::AppHost& host)
 	{
 		// 影 / ディファード / ポストプロセス / 空を既定構成で組む。
-		// 個別に設定したいときは aq::RendererPreset を渡す。ここでは IBL(環境光の反射)を有効にする。
+		// 個別に設定したいときは aq::RendererPreset を渡す。ここでは IBL(環境光の反射)と
+		// SSR(画面に映っている物の映り込み。IBL が前提)を有効にする。
 		aq::RendererPreset preset;
 		preset.enableIBL = true;
+		preset.enableSSR = true;
 		if (!host.SetupStandardRenderers(preset)) {
 			return false;
 		}
@@ -56,6 +58,23 @@ namespace sample
 					box->SetPBRMaterial(metallic, roughness);
 				}
 			}
+		}
+
+		// SSR の見本の床。見本列の下に、ほぼ鏡面の金属の板を敷き、列の箱が床に映るのを見る。
+		// 箱(下段の底は y = -1.25)から少し離して置く。単位キューブを平たく伸ばして板にする。
+		{
+			auto entity = aq::ecs::EntityContext::Get().CreateEntity<
+				aq::ecs::TransformComponent,
+				aq::ecs::HierarchicalTransformComponent,
+				aq::ecs::BoxStaticMeshComponent>();
+
+			auto* transform = entity.GetComponent<aq::ecs::TransformComponent>();
+			transform->position.Set(0.0f, -1.6f, 0.0f);
+			transform->scale.Set(10.0f, 0.1f, 6.0f);
+
+			auto* box = entity.GetComponent<aq::ecs::BoxStaticMeshComponent>();
+			box->SetColor(aq::math::Vector4(0.8f, 0.8f, 0.8f, 1.0f));
+			box->SetPBRMaterial(1.0f, 0.05f);
 		}
 
 		return true;

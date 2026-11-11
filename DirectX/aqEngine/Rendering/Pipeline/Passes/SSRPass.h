@@ -20,6 +20,7 @@ namespace aq
 		 *
 		 * SSR が有効、かつ同じビューのライティングが IBL(PSMainIBL)で描いた(DeferredRenderer::WasIBLUsed)ビューでだけ
 		 * コマンドを積む。IBL が使えない間はライティングに鏡面キューブの項が無く、差し引くと誤るため(§0.2)。
+		 * 積む順はトレース(compute。RTV を外す)→ シーン RT のバインド → 合成。
 		 */
 		class SSRPass final : public IRenderPass
 		{
@@ -46,17 +47,25 @@ namespace aq
 			void DeclareResources(PassDeclaration& decl) const override;
 
 			/**
-			 * リサイズ。トレースの出力 RT(画面寸法)を持つので Resizable(設計書 §1)。
-			 * P1 ではまだ RT を持たないので、PrepareResize / CommitResize / AbortResize は既定の何もしない実装のまま。
-			 * P2 で出力 RT を足すときに SSRRenderer へ委ねる。
+			 * トレースの出力 RT を作る。作れなくても false は返さない
+			 * (Setup の失敗はパイプライン全体の失敗になるため。SSR は何も積まず、IBL だけの絵で続行する)。
+			 */
+			bool Setup(PassResources& res, const uint32_t width, const uint32_t height) override;
+
+			/**
+			 * リサイズ。トレースの出力 RT(画面寸法)を持つので Resizable(設計書 §1)。SSRRenderer へ委ねる。
+			 * 掲示板には何も登録しないので、CommitResize で取り直す入力は無い。
 			 */
 			inline ResizePolicy GetResizePolicy() const override { return ResizePolicy::Resizable; }
+			bool PrepareResize(const uint32_t width, const uint32_t height) override;
+			void CommitResize(PassResources& res) override;
+			void AbortResize() override;
 
 			void Build(RenderFrame& frame, const PassViewInfo& view,
 			           PassResources& res, RenderCommandList& outList) override;
 
 
-			/** ゲームが SSR の ON/OFF・testMode 等を触るための入口。 */
+			/** ゲームが SSR の ON/OFF・パラメータ・デバッグ表示・testMode を触るための入口。 */
 		public:
 			inline SSRRenderer* GetSSRRenderer() const { return ssr_.get(); }
 		};

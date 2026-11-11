@@ -120,6 +120,12 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   `ShadowCBData::lightViewProj[MaxShadowCascades]` / `cascadeCount` を
   [HardShadowRenderer.cpp](../aqEngine/Rendering/Shadow/HardShadowRenderer.cpp) の `FillShadowCBData` はライト数で埋めており、
   `cascadeSplits` は x に farPlane を入れるだけで使っていない。CSM を足すときは名前の整理から([エンジン不足機能メモ](エンジン不足機能メモ.md) §3)。
+- (2026-11-11 発見)**Metal の `CreateShader` は読み込みに失敗しても null を返さない。**
+  [MetalGraphicsDeviceImpl.mm](../aqEngine/Graphics/Metal/MetalGraphicsDeviceImpl.mm) の `CreateShader` が `MetalShader::Load` の戻り値を見ずに
+  オブジェクトを返す(D3D11 / D3D12 / Vulkan は `Load` が false なら nullptr)。そのため「シェーダが作れなければ機能を外して続行」という
+  作りが Metal では発動せず、空のシェーダで描画が黙って失敗する。SSR のシェーダ名を一時的に壊して確かめた
+  ([SSR設計](SSR設計.md) チェックポイント。Vulkan は SSR を外して続行、Metal は SSR パスが残り映り込みだけ消える)。
+  他のバックエンドに揃えるなら `if (!shader->Load(...)) return nullptr;` にするが、既存の全シェーダの失敗時の挙動が変わるので要判断。
 - **D3D11 でインスタンス描画が無言で消える。** `IRenderContextImpl::DrawIndexedInstanced` /
   `IASetVertexBufferSlot` の no-op 既定を D3D11 だけ override しておらず、
   [Renderer.cpp](../aqEngine/Rendering/Renderer.cpp) も機能ゲート無しで `instancedItems` を積む。

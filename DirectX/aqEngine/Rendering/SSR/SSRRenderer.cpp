@@ -4,6 +4,9 @@
 #include "SSRCompositeCommand.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Rendering/IBL/IBLEnvironment.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "SSRDebugPanel.h"
+#endif
 
 
 namespace aq
@@ -160,5 +163,13 @@ namespace aq
 				outputRTHandle_,
 				ibl, ibl->GetIntensity(), testMode_, debugView_);
 		}
+
+
+#ifdef AQ_DEBUG_IMGUI
+		std::unique_ptr<IDebugRenderable> SSRRenderer::CreateDebugPanel()
+		{
+			return std::make_unique<SSRDebugPanel>(*this);
+		}
+#endif
 	}
 }

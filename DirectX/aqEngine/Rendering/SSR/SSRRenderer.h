@@ -4,6 +4,7 @@
 #include "Rendering/RenderCommandList.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Graphics/IShader.h"
+#include "Core/IDebugRenderable.h"
 
 
 namespace aq
@@ -126,6 +127,11 @@ namespace aq
 			void BuildCompositeCommandList(const DeferredRenderer& deferred,
 			                               const std::shared_ptr<const IBLEnvironment>& ibl,
 			                               RenderCommandList& outList) const;
+
+#ifdef AQ_DEBUG_IMGUI
+			/** デバッグパネル ("SSR" タブ) を作る。パネルはこのレンダラーを参照するので、先に破棄すること */
+			std::unique_ptr<IDebugRenderable> CreateDebugPanel();
+#endif
 
 
 			/**

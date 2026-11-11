@@ -701,6 +701,9 @@
     <ClCompile Include="Rendering\SSR\SSRTraceCommand.cpp">
       <Filter>Rendering\SSR</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\SSR\SSRDebugPanel.cpp">
+      <Filter>Rendering\SSR</Filter>
+    </ClCompile>
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
     </ClCompile>
@@ -1652,6 +1655,9 @@
       <Filter>Rendering\SSR</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\SSR\SSRTraceCommand.h">
+      <Filter>Rendering\SSR</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\SSR\SSRDebugPanel.h">
       <Filter>Rendering\SSR</Filter>
     </ClInclude>
     <ClInclude Include="UI\UITypes.h">

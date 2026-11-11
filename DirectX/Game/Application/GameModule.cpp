@@ -93,6 +93,9 @@ namespace app
 			preset.shadow.sceneCenter = aq::math::Vector3(0.0f, 3.0f, 0.0f);
 			preset.shadow.softness    = 2.0f;
 
+			// IBL(空からの環境光と映り込み。エンジンの既定は無効)。強度はエンジンの既定 0.5 のまま。
+			preset.enableIBL = true;
+
 			// 輪郭線 (エンジンの任意パス。Standard() には入っていないのでここで挿す)。
 			// UI の手前 = トーンマップ後の LDR に乗るので、露出やブルームの影響を受けない。
 			auto builder = host.BuildStandardPipeline(preset);

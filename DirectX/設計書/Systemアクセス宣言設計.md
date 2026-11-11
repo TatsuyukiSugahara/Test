@@ -4,6 +4,9 @@
 
 **保留中の扱い**: ②(wave の待ち合わせをやめる方式)は、本書の検証が無いと依存の経路が無い System 同士が重なり得る(1.2)。
 ②に着手する場合は、先に本書を再開すること。1.3 の競合候補は README の「既知の課題」にも記録してある。
+保留中に、同じ wave で並走していた #1・#4 だけは依存の追加で解消した(2026-11-11)。
+どちらも後ろの System の level が 1 上がるだけで、`HierarcicalTransformSystem` 以降の level と wave 数(7)は変わらない。
+P2 の表のうち #1 は実施済み、#4 は「除外」ではなく依存で解消済みとして読むこと。
 
 各 System が**何を読み、何を書くか**を宣言させ、起動時に
 「競合する System 同士に依存の経路があるか」を検証する設計。
@@ -68,10 +71,10 @@ wave が違う System 同士は、依存の経路が無くても今は順番に�
 
 | # | 組(level) | 対象 | 状況 |
 | --- | --- | --- | --- |
-| 1 | `ActorStateMachineSystem`(1)↔ `SpeedCharacterSystem`(1) | `TransformComponent` 書き / 書き | **同じ wave で並列に走っている**。AquaDash には `StateMachineComponent` を持つ Entity が無いので実害は出ていない |
+| 1 | `ActorStateMachineSystem`(1)↔ `SpeedCharacterSystem`(1) | `TransformComponent` 書き / 書き | **同じ wave で並列に走っていた**。AquaDash には `StateMachineComponent` を持つ Entity が無いので実害は出ていない。**2026-11-11 に依存で解消**(ActorStateMachine を後にし level 2 へ) |
 | 2 | `ActorStateMachineSystem`(1)↔ `CoinSystem`(2) | `TransformComponent` 書き / 読み書き | wave が違うので今は順番に走る |
 | 3 | `ActorStateMachineSystem`(1)↔ `AutoCameraSystem`(2) | `TransformComponent` 書き / 読み | 同上 |
-| 4 | `CoinSystem`(2)↔ `AutoCameraSystem`(2) | `TransformComponent` 書き(取得演出の Entity)/ 読み(プレイヤー) | **同じ wave で並列に走っている**。触る Entity は別なので実際のデータ競合は無い |
+| 4 | `CoinSystem`(2)↔ `AutoCameraSystem`(2) | `TransformComponent` 書き(取得演出の Entity)/ 読み(プレイヤー) | **同じ wave で並列に走っていた**。触る Entity は別なので実際のデータ競合は無い。**2026-11-11 に依存で解消**(AutoCamera を後にし level 3 へ。P2 の案「除外」ではなく、保留中でも効く依存を選んだ) |
 | 5 | `AutoCameraSystem`(2)↔ `CameraSteeringSystem`(4) | カメラ 書き / 書き | wave の順で後者が上書きしている |
 | 6 | `CharacterSteeringSystem`(0)↔ `AutoCameraSystem`(2) | カメラ 読み / 書き | wave が違うので今は順番に走る |
 | 7 | `CharacterSteeringSystem`(0)↔ `SpeedCharacterSystem` / `CoinSystem` | 入力 読み / パッド出力 書き | 入力状態とパッドの出力バッファは別データ。資源を分けて宣言すれば競合しない |

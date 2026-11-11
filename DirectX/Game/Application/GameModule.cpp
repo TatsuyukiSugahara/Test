@@ -219,6 +219,9 @@ namespace app
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::HierarcicalTransformSystem, app::ecs::SpeedCharacterSystem>();
 		// AquaDash: 走行状態からアニメを切り替えるため、アニメ更新は走行更新の後段に固定する。
 		aq::ecs::EntityContext::Get().AddDependency<aq::ecs::AnimationSystem, app::ecs::SpeedCharacterSystem>();
+		// どちらも TransformComponent を書くので並走させない(Systemアクセス宣言設計 §1.3 #1)。
+		// この向きなら ActorStateMachine が level 2 になるだけで、ワールド変換以降の level は変わらない。
+		aq::ecs::EntityContext::Get().AddDependency<app::ecs::ActorStateMachineSystem, app::ecs::SpeedCharacterSystem>();
 
 		// AquaDash: コイン判定は走行結果の位置を使うため SpeedCharacterSystem の後、ワールド変換の前。
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CoinSystem,
@@ -230,6 +233,9 @@ namespace app
 		// AquaDash: 自動カメラは走行結果の distance を使うため SpeedCharacterSystem の後。
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::AutoCameraSystem,
 			app::ecs::SpeedCharacterSystem>();
+		// Coin は取得演出の Entity の TransformComponent を書き、AutoCamera はプレイヤーのものを読むので並走させない
+		// (Systemアクセス宣言設計 §1.3 #4)。この向きなら AutoCamera が level 3 になるだけで、後段の level は変わらない。
+		aq::ecs::EntityContext::Get().AddDependency<app::ecs::AutoCameraSystem, app::ecs::CoinSystem>();
 		aq::ecs::EntityContext::Get().AddSystem<app::ecs::CameraEffectSystem,
 			app::ecs::CameraSteeringSystem>();
 		aq::ecs::EntityContext::Get().AddDependency<app::ecs::CameraEffectSystem, app::ecs::AutoCameraSystem>();

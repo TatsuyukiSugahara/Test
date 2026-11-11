@@ -111,10 +111,10 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 - (解決済 2026-09-16)`SpawnSystem` と `HierarcicalTransformSystem` が同一 wave で `parentHandle` を
   読み書きしていた件は、[Core/AppHost.cpp](../aqEngine/Core/AppHost.cpp)(旧 Application.cpp)で依存を宣言して解消。
 - (2026-09-30 発見)**依存の経路が無いまま同じ Component やカメラを触る System の組が 7 件ある。**
-  うち `ActorStateMachineSystem` ↔ `SpeedCharacterSystem`(`TransformComponent` を両方が書く)と
-  `CoinSystem` ↔ `AutoCameraSystem`(`TransformComponent` の書きと読み)は、同じ wave で実際に並列に走っている。
-  前者は AquaDash に StateMachine を持つ Entity が無く、後者は触る Entity が別なので、今は実害が無い。
-  残りは wave が違うので偶然順番に走っているだけ。依存の追加で level がずれたときや、
+  うち同じ wave で実際に並列に走っていた `ActorStateMachineSystem` ↔ `SpeedCharacterSystem`(`TransformComponent` を両方が書く)と
+  `CoinSystem` ↔ `AutoCameraSystem`(`TransformComponent` の書きと読み)の 2 組は、2026-11-11 に
+  [GameModule.cpp](../Game/Application/GameModule.cpp) で依存を宣言して直列にした(ActorStateMachine を SpeedCharacter の後、AutoCamera を Coin の後)。
+  残る 5 件は wave が違うので偶然順番に走っているだけ。依存の追加で level がずれたときや、
   wave の待ち合わせをやめたときに表面化し得る。一覧と対策案は [Systemアクセス宣言設計](Systemアクセス宣言設計.md) §1.3(保留中)。
 - **D3D11 でインスタンス描画が無言で消える。** `IRenderContextImpl::DrawIndexedInstanced` /
   `IASetVertexBufferSlot` の no-op 既定を D3D11 だけ override しておらず、

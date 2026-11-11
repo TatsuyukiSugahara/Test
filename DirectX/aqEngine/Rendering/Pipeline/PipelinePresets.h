@@ -59,6 +59,8 @@ namespace aq
 			 * 3 本は Tools/IBLGen/gen_ibl.py の生成物。既定はエンジン所有
 			 */
 			bool        enableIBL         = false;
+			/** IBL の強度(IBLEnvironment::SetIntensity。デバッグパネルで実行時調整できる) */
+			float       iblIntensity      = 0.5f;
 			const char* iblIrradiancePath = "aqEngine/Assets/Sky/DefaultSkyCube_Irradiance.dds";
 			const char* iblSpecularPath   = "aqEngine/Assets/Sky/DefaultSkyCube_Specular.dds";
 			const char* iblBrdfLutPath    = "aqEngine/Assets/Sky/BRDF_LUT.dds";

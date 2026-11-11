@@ -9,33 +9,53 @@ namespace sample
 	bool SampleModule::OnInitialize(aq::AppHost& host)
 	{
 		// 影 / ディファード / ポストプロセス / 空を既定構成で組む。
-		// 個別に設定したいときは aq::RendererPreset を渡す。
-		if (!host.SetupStandardRenderers()) {
+		// 個別に設定したいときは aq::RendererPreset を渡す。ここでは IBL(環境光の反射)を有効にする。
+		aq::RendererPreset preset;
+		preset.enableIBL = true;
+		if (!host.SetupStandardRenderers(preset)) {
 			return false;
 		}
 
-		// カメラ。斜め上から原点を見る。
+		// カメラ。10 個の箱の列全体が収まるよう、斜め上やや遠くから原点を見る。
 		aq::Camera* camera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main);
-		camera->SetPosition(aq::math::Vector3(3.0f, 3.0f, -5.0f));
+		camera->SetPosition(aq::math::Vector3(1.5f, 2.5f, -6.0f));
 		camera->SetTarget(aq::math::Vector3(0.0f, 0.0f, 0.0f));
 		camera->SetViewportSize(
 			static_cast<float>(aq::Engine::Get().GetRenderWidth()),
 			static_cast<float>(aq::Engine::Get().GetRenderHeight()));
 
-		// 箱を 1 個。BoxStaticMeshComponent はエンジンが持つ単位キューブを描くので、
-		// アセットを 1 個も用意しなくても絵が出る。
+		// PBR マテリアルの見本列。metallic(上段 0 / 下段 1)× roughness(左から 0, 0.25, 0.5, 0.75, 1)の
+		// 10 個の箱を並べ、IBL の反射が金属度と粗さでどう変わるかを見る。
+		// BoxStaticMeshComponent はエンジンが持つ単位キューブを描くので、アセットを 1 個も用意しなくても絵が出る。
 		{
-			auto entity = aq::ecs::EntityContext::Get().CreateEntity<
-				aq::ecs::TransformComponent,
-				aq::ecs::HierarchicalTransformComponent,
-				aq::ecs::BoxStaticMeshComponent>();
+			static constexpr int   ROUGHNESS_COUNT = 5;
+			static constexpr float SPACING         = 1.5f;
 
-			auto* transform = entity.GetComponent<aq::ecs::TransformComponent>();
-			transform->position.Set(0.0f, 0.0f, 0.0f);
-			transform->scale.Set(1.0f);
+			for (int row = 0; row < 2; ++row)
+			{
+				const float metallic = static_cast<float>(row);
+				for (int col = 0; col < ROUGHNESS_COUNT; ++col)
+				{
+					const float roughness = static_cast<float>(col) / static_cast<float>(ROUGHNESS_COUNT - 1);
 
-			entity.GetComponent<aq::ecs::BoxStaticMeshComponent>()
-				->SetColor(aq::math::Vector4(0.2f, 0.6f, 1.0f, 1.0f));
+					auto entity = aq::ecs::EntityContext::Get().CreateEntity<
+						aq::ecs::TransformComponent,
+						aq::ecs::HierarchicalTransformComponent,
+						aq::ecs::BoxStaticMeshComponent>();
+
+					// 原点を中心に 5 列 × 2 段。上段が metallic 0、下段が metallic 1
+					auto* transform = entity.GetComponent<aq::ecs::TransformComponent>();
+					transform->position.Set(
+						(static_cast<float>(col) - 2.0f) * SPACING,
+						(row == 0 ? 0.5f : -0.5f) * SPACING,
+						0.0f);
+					transform->scale.Set(1.0f);
+
+					auto* box = entity.GetComponent<aq::ecs::BoxStaticMeshComponent>();
+					box->SetColor(aq::math::Vector4(0.2f, 0.6f, 1.0f, 1.0f));
+					box->SetPBRMaterial(metallic, roughness);
+				}
+			}
 		}
 
 		return true;

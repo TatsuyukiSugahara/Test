@@ -1,6 +1,6 @@
 # IBL(Image Based Lighting)設計
 
-> 対象コミット: 6661f59(P2 実装はこの次のコミット) / 最終更新: 2026-11-11(P1・P2-0・P2 完了。P3 は未実装)
+> 対象コミット: 3ece117(P3 実装はこの次のコミット) / 最終更新: 2026-11-11(P1〜P3 完了。Windows の確認は宿題)
 
 対象: `Tools/IBLGen/` + `aqEngine/Assets/Sky/` の IBL 用 DDS 3 本 + `aqEngine/Rendering/IBL/` +
 `aqEngine/Assets/Shader/PBRLighting.fx` / `PBRFunctions.fx` + `DeferredRenderer` / `DeferredLightingCommand` + `PipelinePresets`。
@@ -96,7 +96,7 @@
 | `aqEngine/Assets/Shader/PBRFunctions.fx` | `ComputePBRLighting` の冒頭の簡易 ambient を外し、引数 `float3 environment`(環境光の寄与)を足す。IBL の評価関数 `EvalIBL`(§3)を足す(テクスチャは引数で受け、宣言は持たない) |
 | `aqEngine/Assets/Shader/PBRLighting.fx` | t5〜t7・s0・b2(`IBLCB`)を宣言し、エントリ `PSMainIBL` を足す。`PSMain` は従来の簡易 ambient を計算して `environment` に渡す(**出力は変更前と同じ**) |
 | `aqEngine/Assets/Shader/shader_entries.txt` | `PBRLighting.fx PSMainIBL ps` を 1 行足す(ヘッダコメントのエントリ総数も更新) |
-| `aqEngine/Rendering/Deferred/Debug/`(既存の `DeferredDebugPanel`) | P3: IBL の ON/OFF・強度のスライダ |
+| `aqEngine/Rendering/Deferred/Debug/`(既存の `DeferredDebugPanel`) | P3: IBL の ON/OFF・強度のスライダ。ON/OFF は `DeferredRenderer::SetIBLEnabled(bool)`(P3 で追加。既定 true。false なら `PSMain`) |
 | `aqEngine/Component/BodyComponentSystem.{h,cpp}`(`BoxStaticMeshComponent`) | P2-0: `SetPBRMaterial(float metallic, float roughness)` を足す。**初期化前(最初の `Update` より前)に呼んだときだけ**、`SimpleBox` の代わりに `StaticMesh::ShaderType::PBRLit` で初期化し、`SetMetallic` / `SetRoughness` を反映する。基本色は `color_` の 1x1 テクスチャ(`R8G8B8A8_Unorm`、`GraphicsDevice::CreateTexture2D`)を作り `SetTextureOverride(TextureSlot::Albedo, ...)`(t0)で差す(PBR の G-Buffer シェーダは基本色を必ず t0 から読むため。§0.4)。PBR モードで初期化後に `SetColor` したら 1x1 テクスチャを作り直して差し替える。**箱を集める処理(`BodyComponentSystem.cpp` の `Foreach<BoxStaticMeshComponent>`。現状は無条件に `frame.forwardItems` へ積む)を、`StaticMeshComponent` と同じ振り分けにする**: `PBRLit` は `item.gbufferPS` があるときだけ `frame.items`、無い間(ロード中)は積まない。それ以外は従来どおり `forwardItems`。呼ばなければ従来どおり `SimpleBox`(既存の利用者の絵は変わらない) |
 | `Sample/Application/SampleModule.cpp` | P3: metallic × roughness を振った PBR の箱の列(見本) |
 | `Engine.vcxproj` / `.filters` | `IBLEnvironment.{h,cpp}` の登録(`vs-project-files` スキル。**フィルターは実装前にユーザーへ確認する**) |
@@ -321,41 +321,50 @@ P2 と別にコミットし、P2 の画素比較の基準をこのコミット�
 実装:
 - `DeferredDebugPanel` に IBL の ON/OFF(`PSMain` / `PSMainIBL` の切り替え)と強度スライダ。
 - Sample に metallic(0 / 1)× roughness(0, 0.25, 0.5, 0.75, 1)の PBR の箱(`SetPBRMaterial`)の列を置き、`enableIBL = true` にする。
-- 強度の既定値を決める。
+- 強度の既定値を決める。`RendererPreset::iblIntensity`(P3 で追加)で渡せるようにし、既定値はここに置く。
 - `RendererPreset::enableIBL` の既定を true にするか(= AquaDash の絵が変わる)をユーザーに確認し、決めた方を反映する。
 
-評価(自動):
-- [ ] デバッグ UI で OFF にした画と、`enableIBL = false` で起動した画が画素一致する(P2 の比較条件。どちらも見本列の状態で撮る)
+評価(自動。Mac / Metal / Debug。2026-11-11):
+- [x] デバッグ UI で OFF にした画と、`enableIBL = false` で起動した画が画素一致する(P2 の比較条件。どちらも見本列の状態で撮る)
+      → パネルとメニューバーの範囲を除く 3,221,040 画素が差 0。UI で ON に戻した画との差は箱の範囲だけ(切り替えが効いていることの確認)
 
-評価(ユーザー確認):
-- [ ] Sample の見本列の見た目(roughness を上げるほど映り込みがぼけ、質感の段階が分かる。
+評価(ユーザー確認。2026-11-11):
+- [x] Sample の見本列の見た目(roughness を上げるほど映り込みがぼけ、質感の段階が分かる。
       画面上の分散は直接光のハイライトや Fresnel も混ざるので自動判定にしない。ぼけの単調性は P1 でツール側に確かめてある)
-- [ ] AquaDash のステージで、既定を true にした場合の見た目(明るさ・コントラストの変化を許容できるか)
+      → 強度 0.25 / 0.5 / 1.0 と IBL なしの 4 枚を見て、**ユーザー判断で強度の既定値を 0.5 に決めた**(1.0 は非金属が平板、0.25 は効果が弱い)。
+      カメラは見本列が収まるよう (1.5, 2.5, -6) に寄せた
+- [x] AquaDash のステージで、既定を true にした場合の見た目(明るさ・コントラストの変化を許容できるか)
+      → 強度 0.5 で、変わるのは主にキャラクター(平均で 15〜25 明るく白寄り)、草はわずかに明るく、道路は不変。
+      **ユーザー判断: `RendererPreset::enableIBL` の既定は false のまま(「既定値なら従来と同じ絵」を保つ)、AquaDash は `GameModule.cpp` で true にする**
 
 Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む(`windows-regression-pending` と同じ扱い)。
+確認すること: Sample の見本列が Mac と同じ見え方になる / IBL 無効で画が変わらない / `PSMainIBL` が実行時コンパイルで通る(`EvalIBL` がテクスチャを引数で受ける形)。
 
 ---
 
 ## 5. オープン課題
 
 1. **空の色調(`SkyRenderer::SetTint`)に IBL が追従しない。** 空の rgb を変えても映り込みは生成時の色のまま。
-   合わせるなら `IBLCB` に tint を足して掛ける(線形なので掛けるだけで一致する)。P3 で要否を判断。
+   合わせるなら `IBLCB` に tint を足して掛ける(線形なので掛けるだけで一致する)。今のところ tint を変えている利用者が無いので見送った(P3)。
 2. **IBL は遮蔽されない**(§0.3-5)。SSAO を入れたら拡散と鏡面の両方に掛ける(鏡面は specular occlusion の近似)。
 3. **Mobile / フォワードは対象外。** フォワードの PBR 化は別件。
 4. **実行時生成(GPU)。** 動的な空・時間帯変化をやるなら必要。キューブ RT かミップ別 UAV の抽象を 4 バックエンドに足すのが前提。
 5. **入力が LDR(BGRA8)。** 太陽が 1.0 で頭打ちになり、映り込みのハイライトが弱い。空を HDR にする話(Skybox設計 §4 課題 3)と一緒に扱う。
 6. **太陽の向きとディレクショナルライトの不一致**(Skybox設計 §4 課題 1)が、IBL で映り込みとしても見えるようになる。
+7. **荒い金属が暗く沈む。** split-sum の単散乱 GGX は roughness が高いほどエネルギーを失う(LUT の A+B が roughness 1・正面で 0.31。P1)。
+   見本列の右下(金属・roughness 1)がほぼ黒紺になる。直すなら多重散乱の補正(Fdez-Agüera 2019 / Kulla-Conty)を `EvalIBL` に足す。
+8. **Sample と AquaDash 以外の確認**(Windows、iOS / Android は Standard 構成なら対象)は未実施。
 
 ---
 
 ## 6. チェックポイント
 
-- [ ] P1 の評価を全て満たした
-- [ ] P2 の評価を全て満たした
-- [ ] P3 の評価を全て満たした
-- [ ] 抽象 IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本
-- [ ] `shader_entries.txt` に `PSMainIBL` が登録されている
-- [ ] 新規 `.h/.cpp` が `.vcxproj` / `.filters` に登録されている
-- [ ] IBL の生成・ロードに失敗しても起動できる
+- [x] P1 の評価を全て満たした
+- [x] P2 の評価を全て満たした
+- [x] P3 の評価を全て満たした
+- [x] 抽象 IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本
+- [x] `shader_entries.txt` に `PSMainIBL` が登録されている
+- [x] 新規 `.h/.cpp` が `.vcxproj` / `.filters` に登録されている
+- [x] IBL の生成・ロードに失敗しても起動できる
 - [x] [エンジン不足機能メモ.md](エンジン不足機能メモ.md) §5 の IBL の行を本書へのリンクに置き換えた(2026-11-11)
-- [ ] 設計と実装の食い違いを本書へ反映し、`対象コミット` を更新した
+- [x] 設計と実装の食い違いを本書へ反映し、`対象コミット` を更新した

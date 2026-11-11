@@ -2,6 +2,7 @@
 #include "DeferredDebugPanel.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Shadow/IShadowRenderer.h"
+#include "Rendering/IBL/IBLEnvironment.h"
 #include "Graphics/IRenderTarget.h"
 #include <imgui/imgui.h>
 
@@ -19,6 +20,24 @@ namespace aq
 
 		void DeferredDebugPanel::RenderContent()
 		{
+			// IBL (環境が未設定なら設定方法だけ示す)
+			if (const auto& ibl = deferred_.GetIBLEnvironment())
+			{
+				ImGui::Text("IBL");
+				bool iblEnabled = deferred_.IsIBLEnabled();
+				if (ImGui::Checkbox("IBL Enabled", &iblEnabled)) {
+					deferred_.SetIBLEnabled(iblEnabled);
+				}
+				float intensity = ibl->GetIntensity();
+				if (ImGui::SliderFloat("IBL Intensity", &intensity, 0.0f, 3.0f, "%.2f")) {
+					ibl->SetIntensity(intensity);
+				}
+				ImGui::Text("State: %s", ibl->IsReady() ? "Ready" : "Loading / not ready");
+			} else {
+				ImGui::TextUnformatted("IBL: not configured (RendererPreset::enableIBL)");
+			}
+			ImGui::Separator();
+
 			ImGui::SliderFloat("Preview Size", &previewSize_, 80.0f, 400.0f, "%.0f");
 			ImGui::Separator();
 

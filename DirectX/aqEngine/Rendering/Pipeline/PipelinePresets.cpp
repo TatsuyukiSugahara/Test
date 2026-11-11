@@ -58,6 +58,7 @@ namespace aq
 						{
 							auto ibl = std::make_shared<IBLEnvironment>();
 							if (ibl->Create(preset.iblIrradiancePath, preset.iblSpecularPath, preset.iblBrdfLutPath)) {
+								ibl->SetIntensity(preset.iblIntensity);
 								deferred->SetIBLEnvironment(std::move(ibl));
 							} else {
 								aq::StartupMark("[pipeline] IBL の生成に失敗したので IBL なしで続行");

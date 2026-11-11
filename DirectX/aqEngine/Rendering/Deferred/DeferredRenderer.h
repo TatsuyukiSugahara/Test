@@ -67,6 +67,13 @@ namespace aq
 			void SetIBLEnvironment(std::shared_ptr<IBLEnvironment> ibl) { ibl_ = std::move(ibl); }
 			const std::shared_ptr<IBLEnvironment>& GetIBLEnvironment() const { return ibl_; }
 
+			/**
+			 * IBL の ON/OFF(既定 true)。false なら環境が使える状態でも従来の PSMain で描く。
+			 * メインスレッド(デバッグパネル・コマンド生成と同じ)から呼ぶ。
+			 */
+			void SetIBLEnabled(const bool enabled) { iblEnabled_ = enabled; }
+			bool IsIBLEnabled() const { return iblEnabled_; }
+
 #ifdef AQ_DEBUG_IMGUI
 			std::unique_ptr<IDebugRenderable> CreateDebugPanel(IShadowRenderer* shadow = nullptr);
 #endif
@@ -102,6 +109,8 @@ namespace aq
 			// IBL 用 (任意: 生成・ロード失敗時は従来の PSMain で続行)
 			std::shared_ptr<graphics::IShader> lightingIBLPS_;
 			std::shared_ptr<IBLEnvironment>    ibl_;
+			/** IBL の ON/OFF (SetIBLEnabled) */
+			bool                               iblEnabled_ = true;
 
 			// 投影デカールパス用 (任意: ロード失敗時はデカールパスをスキップ)
 			std::shared_ptr<graphics::IShader>       decalVS_;

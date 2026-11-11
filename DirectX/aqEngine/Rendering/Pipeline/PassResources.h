@@ -95,6 +95,9 @@ namespace aq
 			/** 登録済みか */
 			bool Has(const PassResourceKey key) const;
 
+			/** 削除。無ければ何もしない */
+			void Remove(const PassResourceKey key);
+
 			/** 全消去 */
 			inline void Clear() { entries_.clear(); }
 		};

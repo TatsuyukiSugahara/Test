@@ -40,6 +40,17 @@ namespace aq
 		}
 
 
+		void PassResources::Remove(const PassResourceKey key)
+		{
+			for (auto it = entries_.begin(); it != entries_.end(); ++it) {
+				if (it->key == key) {
+					entries_.erase(it);
+					return;
+				}
+			}
+		}
+
+
 		const char* DescribePassKey(const PassResourceKey key)
 		{
 			if (key == PassResourceKeys::Scene)        { return "Scene"; }

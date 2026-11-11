@@ -12,6 +12,7 @@
 #include "Passes/OceanPass.h"
 #include "Passes/ParticlePass.h"
 #include "Passes/UIPass.h"
+#include "Passes/DoFPass.h"
 // HardShadowRenderer / DeferredRenderer / MotionBlurPass / BloomPass / TonemapPass は
 // aq.h が供給済み。HiZRenderer と SkyRenderer は供給されないのでここで足す。
 #include "Rendering/Occlusion/HiZRenderer.h"
@@ -114,11 +115,17 @@ namespace aq
 				// パーティクル(半透明ビルボード。先頭ビューのみ)。
 				builder.Add<ParticlePass>();
 
-				// ポストプロセス(MotionBlur → Bloom → Tonemap)。compute 必須(各パスの IsSupported() で判定)。
-				// worldPos (GBuffer2) の配線は MotionBlurPass::Build が掲示板(WorldPos キー)から行う。
+				// ポストプロセス(MotionBlur → DoF → Bloom → Tonemap)。compute 必須(各パスの IsSupported() で判定)。
+				// worldPos (GBuffer2) の配線は MotionBlurPass::Build / DoFPass::Build が掲示板(WorldPos キー)から行う。
 				if (preset.enablePostProcess)
 				{
 					builder.Add<MotionBlurPass>();
+
+					// 被写界深度(MotionBlur の直後・Bloom の前。設計書/被写界深度設計.md §0.2)。
+					// 生成に失敗してもパスは列に残り、入力を素通しする(DoFEffect::Initialize が成功を返す)。
+					if (preset.enableDoF) {
+						builder.Add<DoFPass>();
+					}
 
 					auto bloom = std::make_unique<BloomPass>();
 					bloom->GetEffect()->SetThreshold(preset.bloomThreshold);

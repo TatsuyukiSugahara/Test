@@ -126,6 +126,11 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   作りが Metal では発動せず、空のシェーダで描画が黙って失敗する。SSR のシェーダ名を一時的に壊して確かめた
   ([SSR設計](SSR設計.md) チェックポイント。Vulkan は SSR を外して続行、Metal は SSR パスが残り映り込みだけ消える)。
   他のバックエンドに揃えるなら `if (!shader->Load(...)) return nullptr;` にするが、既存の全シェーダの失敗時の挙動が変わるので要判断。
+- (2026-11-11 発見)**モーションブラーが分割画面でも動いている。**
+  [MotionBlurPass.cpp](../aqEngine/Rendering/Pipeline/Passes/MotionBlurPass.cpp) は `view.IsSingleView()` で「分割画面では無効」のつもりでいるが、
+  [RenderPipeline.cpp](../aqEngine/Rendering/Pipeline/RenderPipeline.cpp) の `BuildViews` は後段(ポストプロセス・UI)に分割画面でも `viewCount = 1` の全画面 view を渡すため、
+  実際には分割画面でもビュー 0 のカメラで画面全体にブラーが掛かる。分割画面の判定は `PassViewInfo::frameViewCount`(被写界深度 P1 で追加)で行える
+  ([被写界深度設計](被写界深度設計.md) §0.1)。直すと分割画面の絵が変わるので、本件は記録のみ。
 - **D3D11 でインスタンス描画が無言で消える。** `IRenderContextImpl::DrawIndexedInstanced` /
   `IASetVertexBufferSlot` の no-op 既定を D3D11 だけ override しておらず、
   [Renderer.cpp](../aqEngine/Rendering/Renderer.cpp) も機能ゲート無しで `instancedItems` を積む。

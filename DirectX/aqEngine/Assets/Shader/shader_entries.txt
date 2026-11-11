@@ -10,9 +10,9 @@
 #  "#" 始まりの行と空行は無視される。
 #
 #  内容は aqEngine/Assets/Shader/*.fx の実体 (エントリ関数の定義) を全走査して作成した。
-#  .fx = 40 本 / うちエントリを持つもの 35 本 / インクルード専用 5 本
+#  .fx = 41 本 / うちエントリを持つもの 36 本 / インクルード専用 5 本
 #  (Common.fx, Lighting.fx, PBRFunctions.fx, ShadowSampling.fx, Tonemap.fx)。
-#  エントリ総数 = 58。
+#  エントリ総数 = 59。
 #
 #  ここに載っていないエントリは .spv が生成されない。実行時コンパイルを持たない
 #  Mac / iOS ではそのシェーダを作れないので、**.fx にエントリを足したらこの表にも足すこと**。
@@ -35,6 +35,7 @@ ClusterCull.fx        main       cs   # [参照] Rendering/Occlusion/GpuClusterC
 ClusterCullReset.fx   main       cs   # [参照] Rendering/Occlusion/GpuClusterCuller.cpp
 Decal.fx              VSMain     vs   # [参照] Rendering/Deferred/DeferredRenderer.cpp
 Decal.fx              PSMain     ps   # [参照] Rendering/Deferred/DeferredRenderer.cpp
+DoF.fx                main       cs   # [参照] Rendering/PostProcess/Effects/DoFEffect.cpp
 DualBlurDown.fx       main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp
 DualBlurUp.fx         main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp
 DualBlurUpAccum.fx    main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp

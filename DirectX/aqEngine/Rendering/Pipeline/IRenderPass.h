@@ -47,6 +47,12 @@ namespace aq
 			uint32_t viewIndex = 0;
 			uint32_t viewCount = 1;
 
+			/**
+			 * そのフレームの全ビュー数(設計書/被写界深度設計.md §0.2)。
+			 * Frame scope のパスには viewCount = 1 が渡るので、分割画面かどうかはこちらで見る
+			 */
+			uint32_t frameViewCount = 1;
+
 			/** このビューのビューポート(ピクセル) */
 			float x = 0.0f;
 			float y = 0.0f;

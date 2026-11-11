@@ -96,12 +96,16 @@ namespace aq
 		void RenderPipeline::Build(RenderFrame& frame, RenderCommandList& outList,
 		                           const RenderTargetHandle sceneRT, const float viewportW, const float viewportH)
 		{
+			// 掲示板は毎フレーム消えないので、中継のキーは前フレームの値を消してから始める
+			// (そのフレームのうちに書いた値だけを有効にする。設計書/被写界深度設計.md §0.2)。
+			resources_.Remove(PassResourceKeys::PostInput);
 			resources_.Set(PassResourceKeys::Scene, sceneRT);
 			lastSceneRT_ = sceneRT;
 
 			PassViewInfo view;
-			view.viewIndex  = 0;
-			view.viewCount  = 1;
+			view.viewIndex      = 0;
+			view.viewCount      = 1;
+			view.frameViewCount = 1;
 			view.x = 0.0f;
 			view.y = 0.0f;
 			view.w = viewportW;
@@ -119,6 +123,9 @@ namespace aq
 		                                RenderCommandList& outList, const RenderTargetHandle sceneRT,
 		                                const float viewportW, const float viewportH)
 		{
+			// 掲示板は毎フレーム消えないので、中継のキーは前フレームの値を消してから始める
+			// (そのフレームのうちに書いた値だけを有効にする。設計書/被写界深度設計.md §0.2)。
+			resources_.Remove(PassResourceKeys::PostInput);
 			resources_.Set(PassResourceKeys::Scene, sceneRT);
 			lastSceneRT_ = sceneRT;
 
@@ -137,9 +144,11 @@ namespace aq
 			const size_t preEnd  = hasView ? firstView       : passes_.size();
 			const size_t postBeg = hasView ? (lastView + 1)  : passes_.size();
 
+			// 後段の viewCount は 1 のまま。分割画面かどうかは frameViewCount(全パス共通の実ビュー数)で見る。
 			PassViewInfo fullView;
-			fullView.viewIndex  = 0;
-			fullView.viewCount  = 1;
+			fullView.viewIndex      = 0;
+			fullView.viewCount      = 1;
+			fullView.frameViewCount = viewCount;
 			fullView.x = 0.0f;
 			fullView.y = 0.0f;
 			fullView.w = viewportW;
@@ -158,8 +167,9 @@ namespace aq
 				outList.Enqueue<SetViewportCommand>(rect.x, rect.y, rect.w, rect.h);
 
 				PassViewInfo view;
-				view.viewIndex  = v;
-				view.viewCount  = viewCount;
+				view.viewIndex      = v;
+				view.viewCount      = viewCount;
+				view.frameViewCount = viewCount;
 				view.x = rect.x;
 				view.y = rect.y;
 				view.w = rect.w;

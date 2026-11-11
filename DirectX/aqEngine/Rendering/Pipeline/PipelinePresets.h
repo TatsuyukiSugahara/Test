@@ -77,6 +77,12 @@ namespace aq
 			float    bloomIntensity    = 0.45f;
 			uint32_t bloomBlurPasses   = 4;
 
+			/**
+			 * 被写界深度(設計書/被写界深度設計.md)。enablePostProcess が false のときは意味を持たない。
+			 * 既定 false(既定値なら従来と同じ絵)。パラメータは DoFPass の setter(ゲームは Find<DoFPass>())
+			 */
+			bool enableDoF = false;
+
 			/** 空。false で背景はクリア色のまま */
 			bool        enableSky = true;
 			/** キューブマップ。既定はエンジン所有 */
@@ -97,7 +103,7 @@ namespace aq
 			/**
 			 * 今の Application::SetupStandardRenderers と同じ構成
 			 * (Shadow / ClusterCull / GBuffer / Hi-Z / Decal / Lighting / SSR(preset.enableSSR)/ Sky / Forward / Ocean /
-			 *  Particle / MotionBlur / Bloom / Tonemap / UI)。ClusterCull は GBuffer の前に置く。
+			 *  Particle / MotionBlur / DoF(preset.enableDoF)/ Bloom / Tonemap / UI)。ClusterCull は GBuffer の前に置く。
 			 * 動かない機能(compute 非対応など)は PipelineBuilder::Build() の IsSupported() 検証で
 			 * 自動的に除外される。
 			 * @param uiCallback UIPass にそのまま渡す UI 描画コールバック

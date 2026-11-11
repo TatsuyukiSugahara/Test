@@ -611,6 +611,9 @@
     <ClCompile Include="Rendering\Pipeline\Passes\MotionBlurPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\DoFPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Pipeline\Passes\BloomPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
@@ -629,6 +632,9 @@
     <ClCompile Include="Rendering\PostProcess\Effects\MotionBlurEffect.cpp">
       <Filter>Rendering\PostProcess\Effects</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Effects\DoFEffect.cpp">
+      <Filter>Rendering\PostProcess\Effects</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\PostProcess\Effects\BloomEffect.cpp">
       <Filter>Rendering\PostProcess\Effects</Filter>
     </ClCompile>
@@ -636,6 +642,9 @@
       <Filter>Rendering\PostProcess\Effects</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.cpp">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Commands\DoFPassCommand.cpp">
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClCompile>
     <ClCompile Include="Rendering\PostProcess\Commands\BloomPassCommand.cpp">
@@ -1420,6 +1429,9 @@
     <ClInclude Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.h">
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Commands\DoFPassCommand.h">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClInclude>
     <ClInclude Include="Rendering\PostProcess\Commands\BloomPassCommand.h">
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClInclude>
@@ -1430,6 +1442,9 @@
       <Filter>Rendering\PostProcess\Effects</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\Effects\MotionBlurEffect.h">
+      <Filter>Rendering\PostProcess\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Effects\DoFEffect.h">
       <Filter>Rendering\PostProcess\Effects</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\Effects\BloomEffect.h">
@@ -1493,6 +1508,9 @@
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\MotionBlurPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\DoFPass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\BloomPass.h">

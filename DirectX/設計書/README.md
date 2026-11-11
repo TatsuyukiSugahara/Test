@@ -116,6 +116,10 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   [GameModule.cpp](../Game/Application/GameModule.cpp) で依存を宣言して直列にした(ActorStateMachine を SpeedCharacter の後、AutoCamera を Coin の後)。
   残る 5 件は wave が違うので偶然順番に走っているだけ。依存の追加で level がずれたときや、
   wave の待ち合わせをやめたときに表面化し得る。一覧と対策案は [Systemアクセス宣言設計](Systemアクセス宣言設計.md) §1.3(保留中)。
+- (2026-11-11 発見)**影の「cascade」は名前だけで、中身はディレクショナルライトごとのスライス。**
+  `ShadowCBData::lightViewProj[MaxShadowCascades]` / `cascadeCount` を
+  [HardShadowRenderer.cpp](../aqEngine/Rendering/Shadow/HardShadowRenderer.cpp) の `FillShadowCBData` はライト数で埋めており、
+  `cascadeSplits` は x に farPlane を入れるだけで使っていない。CSM を足すときは名前の整理から([エンジン不足機能メモ](エンジン不足機能メモ.md) §3)。
 - **D3D11 でインスタンス描画が無言で消える。** `IRenderContextImpl::DrawIndexedInstanced` /
   `IASetVertexBufferSlot` の no-op 既定を D3D11 だけ override しておらず、
   [Renderer.cpp](../aqEngine/Rendering/Renderer.cpp) も機能ゲート無しで `instancedItems` を積む。

@@ -147,7 +147,15 @@ namespace aq
 					std::shared_ptr<aq::graphics::IIndexBuffer>  ib;
 					GetSharedBoxMesh(vb, ib);
 					staticMesh_.InitializeShared(vb, ib, ArraySize(BOX_INDEX_BUFFER),
-						aq::graphics::StaticMesh::ShaderType::SimpleBox);
+						usePBR_ ? aq::graphics::StaticMesh::ShaderType::PBRLit
+						        : aq::graphics::StaticMesh::ShaderType::SimpleBox);
+					if (usePBR_)
+					{
+						// PBR の材質値は InitializeShared (= SetShaderType) の後に入れる
+						staticMesh_.SetMetallic(pbrMetallic_);
+						staticMesh_.SetRoughness(pbrRoughness_);
+						ApplyPBRBaseColor();
+					}
 					// 共有箱は ±0.5 の単位キューブ。MeshResource 経由ではないので明示指定する
 					// (これでフラスタムカリングの対象になる)。
 					staticMesh_.SetLocalBounds(aq::math::AABB(
@@ -173,6 +181,53 @@ namespace aq
 			if (componentState_ == ComponentState::Completed)
 			{
 				staticMesh_.SetParameter(0, color_);
+				if (usePBR_)
+				{
+					ApplyPBRBaseColor();
+				}
+			}
+		}
+
+
+		void BoxStaticMeshComponent::SetPBRMaterial(const float metallic, const float roughness)
+		{
+			// シェーダ種別は初期化時にしか決められない (StaticMesh::InitializeShared)
+			if (componentState_ != ComponentState::Loading)
+			{
+				return;
+			}
+			usePBR_       = true;
+			pbrMetallic_  = metallic;
+			pbrRoughness_ = roughness;
+		}
+
+
+		void BoxStaticMeshComponent::ApplyPBRBaseColor()
+		{
+			auto toByte = [](const float v)
+				{
+					const float c = std::fmin(std::fmax(v, 0.0f), 1.0f);
+					return static_cast<uint8_t>(c * 255.0f + 0.5f);
+				};
+			const uint8_t pixel[4] = { toByte(color_.x), toByte(color_.y), toByte(color_.z), toByte(color_.w) };
+
+			aq::graphics::Texture2DDesc desc;
+			desc.width     = 1;
+			desc.height    = 1;
+			desc.mipLevels = 1;
+			desc.format    = aq::graphics::PixelFormat::R8G8B8A8_Unorm;
+
+			aq::graphics::ImageData data;
+			data.pixels     = pixel;
+			data.rowPitch   = 4;
+			data.slicePitch = 4;
+
+			// 描画項目は shared_ptr で SRV を写すので、差し替えても実行待ちのコマンドは古いテクスチャを保持できる
+			std::shared_ptr<aq::graphics::IShaderResourceView> srv =
+				aq::graphics::GraphicsDevice::Get().CreateTexture2D(desc, data);
+			if (srv)
+			{
+				staticMesh_.SetTextureOverride(aq::rendering::TextureSlot::Albedo, std::move(srv));
 			}
 		}
 
@@ -731,14 +786,20 @@ namespace aq
 				}
 			};
 
-			// SimpleBox は forward-only（G-Buffer パスなし）
+			// SimpleBox は forward-only（G-Buffer パスなし）。PBR モードの箱は G-Buffer へ
+			// (StaticMeshComponent の PBRLit と同じく、gbufferPS がない間はスキップ)
 			aq::ecs::Foreach<BoxStaticMeshComponent>([&frame, &isVisible](const aq::ecs::Entity&, BoxStaticMeshComponent* comp)
 				{
 					if (!comp->IsCompleted() || !comp->IsVisible()) return;
 					aq::rendering::RenderItem item;
-					if (comp->GetStaticMesh()->FillRenderItem(item) && isVisible(item)) {
-						frame.forwardItems.push_back(item);
+					if (!comp->GetStaticMesh()->FillRenderItem(item) || !isVisible(item)) return;
+					if (comp->IsPBR())
+					{
+						if (item.gbufferPS)
+							frame.items.push_back(item);
+						return;
 					}
+					frame.forwardItems.push_back(item);
 				});
 
 			// 点群インスタンス gather: InstancedStaticMeshComponent の mesh を PointList の各点へ

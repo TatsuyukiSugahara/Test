@@ -33,8 +33,13 @@ namespace aq
 
 			aq::graphics::StaticMesh staticMesh_;
 
-			/** 箱の単色 (SimpleBox.fx の params[0])。既定は赤 */
+			/** 箱の単色 (SimpleBox.fx の params[0]、PBR モードでは基本色)。既定は赤 */
 			aq::math::Vector4 color_ = aq::math::Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+
+			/** PBR モード (SetPBRMaterial。設計書/IBL設計.md P2-0) */
+			bool  usePBR_       = false;
+			float pbrMetallic_  = 0.0f;
+			float pbrRoughness_ = 0.5f;
 
 
 		public:
@@ -43,6 +48,18 @@ namespace aq
 
 			/** 箱の単色を設定する。初期化前に呼んだ場合は初期化完了時にまとめて反映される */
 			void SetColor(const aq::math::Vector4& color);
+
+			/**
+			 * ディファード PBR (StaticMesh::ShaderType::PBRLit) で描くようにする。
+			 * 初期化前 (最初の Update より前) に呼んだときだけ効く。呼ばなければ従来どおり SimpleBox。
+			 * 基本色は SetColor の色を 1x1 テクスチャにして t0 に差す (PBR の G-Buffer PS は基本色を t0 から読むため)。
+			 * @param metallic  [0,1] 0=誘電体, 1=金属
+			 * @param roughness [0,1] 0=鏡面, 1=粗面
+			 */
+			void SetPBRMaterial(float metallic, float roughness);
+
+			/** PBR モードか */
+			inline bool IsPBR() const { return usePBR_; }
 
 
 		public:
@@ -58,6 +75,11 @@ namespace aq
 		public:
 			inline aq::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
 
+		private:
+			/** PBR モードの基本色テクスチャ (color_ の 1x1) を作り、t0 に差す */
+			void ApplyPBRBaseColor();
+
+		public:
 #ifdef AQ_DEBUG_IMGUI
 			template <typename V>
 			void Inspect(V& visitor)

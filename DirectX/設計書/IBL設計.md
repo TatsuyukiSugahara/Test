@@ -69,6 +69,16 @@
 4. **`ComputePBRLighting` のシグネチャを変える**ので、呼び出し元(`PBRLighting.fx` のみ。§0.1)を同時に直す。
 5. IBL は**影も遮蔽も受けない**。軒下や車体の下も空の明るさで照らされる。遮蔽は SSAO(不足機能メモ §5)で掛ける前提とし、本書では扱わない(§5 課題 2)。
 
+### 0.4 確認対象(P2 着手後に判明。2026-11-11)
+
+- **Sample の箱はディファード PBR を通らない。** `BoxStaticMeshComponent` は `StaticMesh::ShaderType::SimpleBox`
+  (`SimpleBox.fx`。ライティングなしのフォワード、G-Buffer PS なし)で初期化する(`BodyComponentSystem.cpp`)。
+  IBL はディファードライティングにしか掛からないので、Sample では IBL の有無で絵が変わらない。
+- **PBR の G-Buffer PS は基本色を必ず t0 から読む**(`PBRGBuffer.fx` の `baseColorTex.Sample`。単色の CB 値は無い)。
+  エンジンのアセットに既定の白テクスチャも球などのモデルも無い(`aqEngine/Assets/` は Shader と Sky だけ)。
+- そこで箱に PBR モードを足し(§1、P2-0)、基本色は 1x1 テクスチャで与える。`StaticMesh::SetTextureOverride` と
+  `GraphicsDevice::CreateTexture2D` は既に在るので、抽象 IF への追加は要らない。
+
 ---
 
 ## 1. 責務
@@ -87,7 +97,8 @@
 | `aqEngine/Assets/Shader/PBRLighting.fx` | t5〜t7・s0・b2(`IBLCB`)を宣言し、エントリ `PSMainIBL` を足す。`PSMain` は従来の簡易 ambient を計算して `environment` に渡す(**出力は変更前と同じ**) |
 | `aqEngine/Assets/Shader/shader_entries.txt` | `PBRLighting.fx PSMainIBL ps` を 1 行足す(ヘッダコメントのエントリ総数も更新) |
 | `aqEngine/Rendering/Deferred/Debug/`(既存の `DeferredDebugPanel`) | P3: IBL の ON/OFF・強度のスライダ |
-| `Sample/Application/SampleModule.cpp` | P3: metallic × roughness を振った箱の列(見本) |
+| `aqEngine/Component/BodyComponentSystem.{h,cpp}`(`BoxStaticMeshComponent`) | P2-0: `SetPBRMaterial(float metallic, float roughness)` を足す。**初期化前(最初の `Update` より前)に呼んだときだけ**、`SimpleBox` の代わりに `StaticMesh::ShaderType::PBRLit` で初期化し、`SetMetallic` / `SetRoughness` を反映する。基本色は `color_` の 1x1 テクスチャ(`R8G8B8A8_Unorm`、`GraphicsDevice::CreateTexture2D`)を作り `SetTextureOverride(TextureSlot::Albedo, ...)`(t0)で差す(PBR の G-Buffer シェーダは基本色を必ず t0 から読むため。§0.4)。PBR モードで初期化後に `SetColor` したら 1x1 テクスチャを作り直して差し替える。**箱を集める処理(`BodyComponentSystem.cpp` の `Foreach<BoxStaticMeshComponent>`。現状は無条件に `frame.forwardItems` へ積む)を、`StaticMeshComponent` と同じ振り分けにする**: `PBRLit` は `item.gbufferPS` があるときだけ `frame.items`、無い間(ロード中)は積まない。それ以外は従来どおり `forwardItems`。呼ばなければ従来どおり `SimpleBox`(既存の利用者の絵は変わらない) |
+| `Sample/Application/SampleModule.cpp` | P3: metallic × roughness を振った PBR の箱の列(見本) |
 | `Engine.vcxproj` / `.filters` | `IBLEnvironment.{h,cpp}` の登録(`vs-project-files` スキル。**フィルターは実装前にユーザーへ確認する**) |
 
 `IBLCBData`(`IBLEnvironment.h` に置く。**192 byte 固定**):
@@ -232,8 +243,8 @@ return (diffIBL + specIBL) * intensity;
       → 鏡面 + irradiance 3.8 秒、LUT 1.8 秒(10 並列)。再生成でバイト一致(決定的)
 
 評価(ユーザー確認):
-- [ ] ツールが書き出す確認用 PNG(各ミップの 6 面展開図。スクラッチパッドへ出し、コミットしない)を見て、ミップが進むほど滑らかにぼけ、太陽が点々になっていない
-      (`--png DIR` で出力する。Claude の目視では問題なし。ユーザー確認待ち)
+- [x] ツールが書き出す確認用 PNG(各ミップの 6 面展開図。スクラッチパッドへ出し、コミットしない)を見て、ミップが進むほど滑らかにぼけ、太陽が点々になっていない
+      (`--png DIR` で出力する。2026-11-11 ユーザー確認済み)
 
 #### P1 で決めたこと・分かったこと
 
@@ -245,15 +256,39 @@ return (diffIBL + specIBL) * intensity;
   生成の誤りではなく、シェーダの BRDF(height-correlated Smith の `V_SmithGGX` + GGX)そのものの性質。
 - ツールの追加オプション: `--verify <sky> <prefix> [--lut PATH] [--png DIR]`、`--png DIR`、`--jobs N`。
 
+### P2-0: 箱の PBR モード(確認用の土台)
+
+P2 の実装中に、**Sample の箱が `SimpleBox`(ライティングなしのフォワード)で描かれ、ディファード PBR を通らない**ことが分かった
+(§0.4)。このままでは IBL の効果も回帰も Sample で確かめられないので、P2 の前に箱へ PBR モードを足す(2026-11-11 ユーザー判断)。
+P2 と別にコミットし、P2 の画素比較の基準をこのコミットで撮る。
+
+実装:
+- `BoxStaticMeshComponent::SetPBRMaterial` と、箱の描画項目の振り分け(§1 の該当行)。
+
+評価(自動。Mac / Metal。2026-11-11):
+- [x] ビルドが通り、警告が増えない(`BodyComponentSystem` に警告なし)
+- [x] `SetPBRMaterial` を呼ばない Sample(現状のまま)が、P2-0 の前のコミットと画素一致する(P2 の比較条件のうち、オーバーレイの除外と撮影タイミング)
+      → 2560×1504 の撮影でオーバーレイ矩形 (0,0)-(460,200) を除く 3,758,240 画素が差 0。同じビルドの撮り直しも差 0(撮影の揺らぎなし)
+- [x] Sample の箱に一時的に `SetPBRMaterial(0.0f, 0.5f)` を与えると、見えている 3 面の平均色が互いに異なり(ライティングが効く)、
+      3 面とも成分の大小が `SetColor` の色と同じ順になる(Sample の色 (0.2, 0.6, 1.0) なら B > G > R)
+      → 上面 (23,88,134)・左面 (12,52,92)・右面 (2,16,32)
+- [x] **G-Buffer を通っていることの確認**(ディファード有効のまま): Debug 構成でデバッグパネルの Deferred(`DeferredDebugPanel`)を開き、
+      GBuffer0 のプレビューに箱(基本色 (0.2, 0.6, 1.0) の領域)が出る。一時差分を外した `SimpleBox` のままではプレビューに箱が出ない。
+      **この確認だけ一時差分を `SetPBRMaterial(1.0f, 0.5f)` にする**(プレビューは GBuffer0 をそのまま `ImGui::Image` に渡すので、A = metallic が透明度になり metallic 0 の箱は見えない)。
+      プレビューの撮影と操作は memory の ImGui 検証手順に従う。
+      (`enableDeferred = false` で消えることは確認に使えない: `ForwardPass` は深度が無い構成で `frame.items` も描くため)
+      → PBR の箱はプレビューの箱の画素が (52,153,255) = 基本色 ×255 と一致。`SimpleBox` のままではプレビューに箱が出ない
+- [x] Metal API Validation エラー 0 / 終了コード 0(ウィンドウの閉じるボタンで終了。`kill` や System Events の Cmd+Q では測れない)
+
 ### P2: 実行時の組み込み
 
 実装:
 - `IBLEnvironment`・`RendererPreset` の項目・`DeferredRenderer` / `DeferredLightingCommand` の配線・
   `PBRFunctions.fx` / `PBRLighting.fx`・`shader_entries.txt`・`.vcxproj` 登録。
-- 確認のため、Sample の箱に一時的に `enableIBL = true` と metallic 1 / roughness 0.2 を与える(P3 で正式な見本に置き換える)。
+- 確認のため、Sample の箱に一時的に `enableIBL = true` と `SetPBRMaterial(1.0f, 0.2f)` を与える(P3 で正式な見本に置き換える)。
 
 **画素一致の比較条件**(P2・P3 共通):
-- 基準画像は **P2 着手前のコミット**に、「Sample の材質だけを変える一時差分」(metallic 1 / roughness 0.2)を当てて撮る。
+- 基準画像は **P2-0 のコミット**に、「Sample の箱を PBR にする一時差分」(`SetPBRMaterial(1.0f, 0.2f)`)を当てて撮る。
   比較対象は P2 の実装に**同じ一時差分**を当て、`enableIBL = false` にして撮る。材質の差が比較に混ざらないようにする。
 - Sample は固定カメラ・同じ解像度・同じバックエンドで撮る。撮影は非同期ロードの完了後に行う。完了の目印は、
   基準画像と `enableIBL = false` では `[sky] cubemap ... srv=ok` の 1 行(IBL は生成されないので `[ibl]` は出ない)、
@@ -276,7 +311,7 @@ return (diffIBL + specIBL) * intensity;
 
 実装:
 - `DeferredDebugPanel` に IBL の ON/OFF(`PSMain` / `PSMainIBL` の切り替え)と強度スライダ。
-- Sample に metallic(0 / 1)× roughness(0, 0.25, 0.5, 0.75, 1)の箱の列を置き、`enableIBL = true` にする。
+- Sample に metallic(0 / 1)× roughness(0, 0.25, 0.5, 0.75, 1)の PBR の箱(`SetPBRMaterial`)の列を置き、`enableIBL = true` にする。
 - 強度の既定値を決める。
 - `RendererPreset::enableIBL` の既定を true にするか(= AquaDash の絵が変わる)をユーザーに確認し、決めた方を反映する。
 

@@ -30,8 +30,7 @@ namespace aq
 			float           farTransition;    // 奥側で CoC が 0 → +1 になる距離
 			float           maxRadius;        // 最大のぼけ半径 (画素)
 			uint32_t        debugView;        // 1 なら CoC を色で出す
-			uint32_t        blurEnabled;      // 0 ならぼかさない (P1 は常に 0)
-			uint32_t        pad[3];
+			uint32_t        pad[4];
 		};
 		static_assert(sizeof(DoFCBData) == 112, "DoFCBData must be 112 bytes (16B aligned, DoF.fx と一致)");
 

@@ -123,7 +123,6 @@ namespace aq
 			cb.farTransition  = farTransition_;
 			cb.maxRadius      = maxRadius_;
 			cb.debugView      = debugView_ ? 1u : 0u;
-			cb.blurEnabled    = 0u;   // P1 はぼかしを持たない
 
 			outList.Enqueue<DoFPassCommand>(
 				shader_.get(), constantBuffer_.get(),

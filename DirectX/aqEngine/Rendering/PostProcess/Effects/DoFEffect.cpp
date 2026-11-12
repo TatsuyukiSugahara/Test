@@ -34,6 +34,13 @@ namespace aq
 				return true;
 			}
 
+			cocRTHandle_ = CreateCoCRT(width, height);
+			if (!cocRTHandle_.IsValid())
+			{
+				aq::StartupMark("[dof] CoC RT create FAILED -> dof disabled");
+				return true;
+			}
+
 			DoFCBData init{};
 			constantBuffer_ = gd.CreateConstantBuffer(&init, sizeof(init));
 			if (!constantBuffer_)
@@ -58,17 +65,31 @@ namespace aq
 		}
 
 
+		RenderTargetHandle DoFEffect::CreateCoCRT(const uint32_t width, const uint32_t height)
+		{
+			graphics::RenderTargetDesc desc;
+			desc.width       = width;
+			desc.height      = height;
+			desc.colorFormat = graphics::PixelFormat::R32_Float;  // 符号付きぼけ半径 (画素)
+			desc.hasDepth    = false;
+			return graphics::GraphicsDevice::Get().CreateOffscreenRenderTarget(desc);
+		}
+
+
 		bool DoFEffect::PrepareResize(const uint32_t width, const uint32_t height)
 		{
 			AbortResize();
 
 			// Initialize でシェーダーか RT が作れなかった(DoF 無効の)ときは RT を持たないので何もしない。
-			if (!shader_ || !outputRTHandle_.IsValid()) { return true; }
+			if (!shader_ || !outputRTHandle_.IsValid() || !cocRTHandle_.IsValid()) { return true; }
 
 			pendingOutputRTHandle_ = CreateOutputRT(width, height);
-			if (!pendingOutputRTHandle_.IsValid())
+			pendingCoCRTHandle_    = CreateCoCRT(width, height);
+			if (!pendingOutputRTHandle_.IsValid() || !pendingCoCRTHandle_.IsValid())
 			{
+				// 片方だけ作れたときも、入れ替えの途中で寸法が食い違わないよう両方片付ける。
 				EngineAssertMsg(false, "DoF RT のリサイズ用生成に失敗しました");
+				AbortResize();
 				return false;
 			}
 			return true;
@@ -83,6 +104,13 @@ namespace aq
 			if (outputRTHandle_.IsValid()) { gd.ReleaseOffscreenRenderTarget(outputRTHandle_); }
 			outputRTHandle_        = pendingOutputRTHandle_;
 			pendingOutputRTHandle_ = RenderTargetHandle();
+
+			if (pendingCoCRTHandle_.IsValid())
+			{
+				if (cocRTHandle_.IsValid()) { gd.ReleaseOffscreenRenderTarget(cocRTHandle_); }
+				cocRTHandle_        = pendingCoCRTHandle_;
+				pendingCoCRTHandle_ = RenderTargetHandle();
+			}
 		}
 
 
@@ -93,6 +121,12 @@ namespace aq
 				graphics::GraphicsDevice::Get().ReleaseOffscreenRenderTarget(pendingOutputRTHandle_);
 			}
 			pendingOutputRTHandle_ = RenderTargetHandle();
+
+			if (pendingCoCRTHandle_.IsValid())
+			{
+				graphics::GraphicsDevice::Get().ReleaseOffscreenRenderTarget(pendingCoCRTHandle_);
+			}
+			pendingCoCRTHandle_ = RenderTargetHandle();
 		}
 
 
@@ -104,6 +138,7 @@ namespace aq
 			    && shader_
 			    && constantBuffer_
 			    && outputRTHandle_.IsValid()
+			    && cocRTHandle_.IsValid()
 			    && context.worldPosRT.IsValid();
 		}
 
@@ -126,7 +161,7 @@ namespace aq
 
 			outList.Enqueue<DoFPassCommand>(
 				shader_.get(), constantBuffer_.get(),
-				input, context.worldPosRT, outputRTHandle_, cb);
+				input, context.worldPosRT, outputRTHandle_, cocRTHandle_, cb);
 
 			return outputRTHandle_;
 		}

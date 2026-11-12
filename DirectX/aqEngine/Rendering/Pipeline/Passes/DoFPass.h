@@ -13,6 +13,7 @@ namespace aq
 		 * DoFEffect を薄く包む。入力は PostInput(無ければ Scene)。
 		 * 有効 && frameViewCount == 1 && WorldPos があるときだけ積んで PostInput を自分の出力に、
 		 * それ以外は読んだ入力を PostInput に登録する(毎フレーム必ず登録する。RenderPipeline がフレームの始めに消すため)。
+		 * 積んだフレームは CoC RT を DoFCoC に登録し、積まないフレームは DoFCoC を消す(OutlinePass が読む。設計書 §0.5)。
 		 */
 		class DoFPass final : public IRenderPass
 		{

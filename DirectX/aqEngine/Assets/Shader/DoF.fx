@@ -2,6 +2,8 @@
 // worldPos (GBuffer2) からビュー空間の z を作り、画素ごとの符号付き CoC
 // (-1 = 手前に最大、0 = ピント内、+1 = 奥に最大) を求める。
 // ぼかしは 1 パスの集め方式 (scatter-as-gather)。デバッグ表示なら、ぼかしの代わりに CoC を色で出す。
+// 2 つ目の出力 (u1) には全画素の符号付きぼけ半径 (画素) を書く。OutlinePass が輪郭線のぼかしに読む
+// (設計書/被写界深度設計.md §0.5)。
 // DoFCBData (Rendering/PostProcess/Commands/DoFPassCommand.h) とレイアウトを一致させること。
 
 cbuffer DoFCB : register(b0)
@@ -23,6 +25,7 @@ cbuffer DoFCB : register(b0)
 Texture2D<float4>   g_Input    : register(t0);   // HDR (PostInput か Scene)
 Texture2D<float4>   g_WorldPos : register(t1);   // GBuffer2 (worldPos)
 RWTexture2D<float4> g_Out      : register(u0);
+RWTexture2D<float>  g_CoCOut   : register(u1);   // 符号付きぼけ半径 (画素。CoC × maxRadius)
 
 // 遷移幅が 0 のときの割り算を避ける (0 なら段差で切り替わる)。
 static const float MIN_TRANSITION = 1e-4f;
@@ -73,6 +76,13 @@ CoCSample ComputeCoC(int3 coord)
 }
 
 
+// CoC を符号付きぼけ半径 (画素) にする。maxRadius が 0 以下ならぼかさないので 0。
+float CoCToRadius(float coc)
+{
+	return (g_MaxRadius > 0.0f) ? coc * g_MaxRadius : 0.0f;
+}
+
+
 // 奥側のサンプルが中心に被さってよいか。サンプルが中心より手前か同じくらいのときだけ可。
 // 背景 (無限遠) どうしは常に可。中心が背景なら、有限の z のサンプルは常に手前なので可。
 bool IsFarSampleAllowed(CoCSample center, CoCSample s)
@@ -104,15 +114,18 @@ void main(uint3 id : SV_DispatchThreadID)
 		g_Out[id.xy] = (coc < 0.0f)
 			? float4(-coc, 0.0f, 0.0f, color.a)
 			: float4(0.0f, 0.0f, coc, color.a);
+		g_CoCOut[id.xy] = CoCToRadius(coc);
 		return;
 	}
 
 	if (g_MaxRadius <= 0.0f) {
-		g_Out[id.xy] = color;
+		g_Out[id.xy]    = color;
+		g_CoCOut[id.xy] = 0.0f;
 		return;
 	}
 
 	const CoCSample center = ComputeCoC(coord);
+	g_CoCOut[id.xy] = CoCToRadius(center.coc);
 
 	// 中心は必ず重み 1。総和は 1 以上なので割り算で 0 にならない。
 	float3 sum       = color.rgb;

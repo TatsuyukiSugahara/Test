@@ -18,7 +18,8 @@ namespace aq
 		 * 被写界深度のエフェクト(設計書/被写界深度設計.md)。
 		 * worldPos (GBuffer2) からビュー空間の z を作り、画素ごとの符号付き CoC で入力をぼかす。
 		 * ぼかしは 1 パスの集め方式。デバッグ表示ではぼかしの代わりに CoC を色で出す。
-		 * シェーダーか出力 RT が用意できない環境では Initialize は成功を返し、無効のまま入力を素通しする
+		 * 画素ごとの符号付きぼけ半径(画素)を CoC RT にも書く(OutlinePass が読む。設計書 §0.5)。
+		 * シェーダーか出力 RT / CoC RT が用意できない環境では Initialize は成功を返し、無効のまま入力を素通しする
 		 * (MotionBlurEffect と同じ作法)。
 		 */
 		class DoFEffect final : public IPostProcessEffect
@@ -29,9 +30,12 @@ namespace aq
 
 			/** DoF の出力(次段の入力になる) */
 			RenderTargetHandle outputRTHandle_;
+			/** 符号付きぼけ半径(画素、R32_Float、全解像度)。DoFPass が DoFCoC として掲示板に載せる */
+			RenderTargetHandle cocRTHandle_;
 
 			/** リサイズ用の一時領域(PrepareResize で作り、CommitResize で本体へ入れ替える) */
 			RenderTargetHandle pendingOutputRTHandle_;
+			RenderTargetHandle pendingCoCRTHandle_;
 
 			/** このフレームのカメラのワールド → ビュー行列(SetFrameCamera で受け取る) */
 			math::Matrix4x4 view_;
@@ -49,6 +53,8 @@ namespace aq
 		private:
 			/** 出力 RT の生成(Initialize / PrepareResize 共用) */
 			static RenderTargetHandle CreateOutputRT(const uint32_t width, const uint32_t height);
+			/** CoC RT の生成(Initialize / PrepareResize 共用) */
+			static RenderTargetHandle CreateCoCRT(const uint32_t width, const uint32_t height);
 
 
 		public:
@@ -62,7 +68,7 @@ namespace aq
 
 			/**
 			 * リサイズ(設計書/エンジン課題解消設計.md P4)。ゲームスレッドで WaitIdle 済みの区間にだけ呼ぶ。
-			 * PrepareResize は新寸法の出力 RT を一時領域へ作る(失敗したら片付けて false)。
+			 * PrepareResize は新寸法の出力 RT と CoC RT を一時領域へ作る(どちらかが失敗したら両方片付けて false)。
 			 * CommitResize は旧 RT を解放して入れ替える。AbortResize は一時領域を解放する(何度呼んでも安全)。
 			 */
 			bool PrepareResize(const uint32_t width, const uint32_t height);
@@ -79,6 +85,9 @@ namespace aq
 			 * @param camera このフレームのカメラ
 			 */
 			void SetFrameCamera(const CameraData& camera);
+
+			/** CoC RT(符号付きぼけ半径。Build を積んだフレームだけ中身が有効) */
+			inline RenderTargetHandle GetCoCRT() const { return cocRTHandle_; }
 
 
 			/**

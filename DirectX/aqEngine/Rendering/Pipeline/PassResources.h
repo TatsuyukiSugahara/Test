@@ -56,6 +56,8 @@ namespace aq
 			constexpr PassResourceKey BloomTexture = MakePassKey("aq.BloomTexture");
 			/** 最終出力。RenderThread::Submit の displayRT に渡す。最後に書いたパスの RT が採用される */
 			constexpr PassResourceKey Output       = MakePassKey("aq.Output");
+			/** DoFPass が書く画素ごとの符号付きぼけ半径(画素、R32_Float)。DoF が動かないフレームは登録されない */
+			constexpr PassResourceKey DoFCoC       = MakePassKey("aq.DoFCoC");
 		}
 
 

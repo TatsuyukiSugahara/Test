@@ -40,6 +40,7 @@ namespace aq
 		/**
 		 * 被写界深度の CS パス(MotionBlur の後段、Bloom の前段)。
 		 * 入力(HDR)と worldPos を読み、CoC に応じて出力 RT へ書く。
+		 * あわせて符号付きぼけ半径(画素)を CoC RT(u1)へ書く(OutlinePass が読む。設計書 §0.5)。
 		 * RT はハンドルで持ち Execute で解決する。CB の値はゲームスレッドのコマンド構築時に値で確定させる
 		 * (MotionBlurPassCommand と同じ)。
 		 */
@@ -52,6 +53,7 @@ namespace aq
 			RenderTargetHandle inputRTHandle_;
 			RenderTargetHandle worldPosRTHandle_;
 			RenderTargetHandle outputRTHandle_;
+			RenderTargetHandle cocRTHandle_;
 
 			DoFCBData cbData_;
 
@@ -63,6 +65,7 @@ namespace aq
 				RenderTargetHandle         inputRT,
 				RenderTargetHandle         worldPosRT,
 				RenderTargetHandle         outputRT,
+				RenderTargetHandle         cocRT,
 				const DoFCBData&           cbData);
 
 			void Execute(graphics::RenderContext& ctx, FrameContext& fc) const override;

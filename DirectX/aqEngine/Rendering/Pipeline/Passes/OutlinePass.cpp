@@ -21,6 +21,8 @@ namespace aq
 			decl.ReadsOptional(PassResourceKeys::Output);
 			// GBuffer を持たない列でも組めるように任意にする(無ければ何もしない)。
 			decl.ReadsOptional(PassResourceKeys::GBuffer1);
+			// DoF を使う列だけにある(無ければ線をぼかさない)。
+			decl.ReadsOptional(PassResourceKeys::DoFCoC);
 			decl.Writes(PassResourceKeys::Output);
 		}
 
@@ -131,11 +133,21 @@ namespace aq
 
 			// ポストプロセスが無い列では Scene(毎フレーム差し替わる)をそのまま読む。
 			const RenderTargetHandle input = inputRT_.IsValid() ? inputRT_ : res.Get(PassResourceKeys::Scene);
-			const RenderTargetHandle inputs[2] = { input, normalRT_ };
+
+			// DoFCoC は DoF が動いたフレームだけ掲示板にあるので、毎フレーム見直す(設計書/被写界深度設計.md §0.5)。
+			// CB は FullscreenComputeCommand が値でコピーするので、params_ を書き換えずにコピーへ入れて渡す。
+			const bool    useCoC = res.Has(PassResourceKeys::DoFCoC);
+			OutlineCBData cb     = params_;
+			cb.useCoC = useCoC ? 1u : 0u;
+
+			// DoFCoC が無いフレームも t2 を未バインドにしない(API によっては未バインドの SRV が
+			// 検証エラーや不定値になる)ため、ダミーとして法線を入れる。useCoC = 0 なのでシェーダは読まない。
+			const RenderTargetHandle cocRT     = useCoC ? res.Get(PassResourceKeys::DoFCoC) : normalRT_;
+			const RenderTargetHandle inputs[3] = { input, normalRT_, cocRT };
 
 			outList.Enqueue<FullscreenComputeCommand>(
-				shader_.get(), inputs, 2u, outputRT_,
-				constantBuffer_.get(), &params_, static_cast<uint32_t>(sizeof(params_)),
+				shader_.get(), inputs, 3u, outputRT_,
+				constantBuffer_.get(), &cb, static_cast<uint32_t>(sizeof(cb)),
 				static_cast<uint32_t>(view.fullWidth), static_cast<uint32_t>(view.fullHeight));
 
 			// 後続の UI が描けるように出力を RTV として戻す(契約 2)。

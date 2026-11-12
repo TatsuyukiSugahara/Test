@@ -22,6 +22,9 @@ namespace aq
 		 * 比例し(|座標| 2360m のコースでは 2m)、距離の差分を見ると平坦な路面や地形に
 		 * 刻みの境目が等間隔の線として出てしまう。
 		 *
+		 * 掲示板に DoFCoC(DoFPass が書くぼけ半径)があれば、線をぼけ半径で広げてぼかす
+		 * (設計書/被写界深度設計.md §0.5)。無ければ今までと同じ計算。
+		 *
 		 * **`PipelinePresets::Standard()` には入らない任意パス**。使うゲームが自分で挿す:
 		 *   auto builder = BuildStandardPipeline(preset);
 		 *   auto outline = std::make_unique<OutlinePass>();
@@ -43,7 +46,10 @@ namespace aq
 				uint32_t      width     = 0;
 				uint32_t      height    = 0;
 				int32_t       thickness = 1;
+				uint32_t      useCoC    = 0;   // 1 なら t2 の DoFCoC で線をぼかす(Build が毎フレーム決める)
+				uint32_t      pad[3]    = { 0, 0, 0 };
 			};
+			static_assert(sizeof(OutlineCBData) == 48, "OutlineCBData must be 48 bytes (16B aligned, Outline.fx と一致)");
 
 			std::unique_ptr<graphics::IShader>         shader_;
 			std::unique_ptr<graphics::IConstantBuffer> constantBuffer_;

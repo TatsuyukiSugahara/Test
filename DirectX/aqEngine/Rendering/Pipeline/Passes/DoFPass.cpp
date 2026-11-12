@@ -28,6 +28,7 @@ namespace aq
 			decl.ReadsOptional(PassResourceKeys::PostInput);
 			decl.ReadsOptional(PassResourceKeys::WorldPos);
 			decl.Writes(PassResourceKeys::PostInput);
+			decl.Writes(PassResourceKeys::DoFCoC);
 		}
 
 
@@ -85,10 +86,14 @@ namespace aq
 			context.worldPosRT = res.Get(PassResourceKeys::WorldPos);   // 未登録なら INVALID なハンドル
 
 			// 毎フレーム必ず PostInput を登録する(実行したら自分の出力、しなかったら読んだ入力)。
+			// DoFCoC は動いたフレームだけ登録し、動かないフレームは消す
+			// (前フレームの CoC が残ると、DoF を止めても輪郭線がぼけ続けるため。設計書 §0.5)。
 			if (effect_->IsEnabled(context)) {
 				res.Set(PassResourceKeys::PostInput, effect_->Build(outList, context, input));
+				res.Set(PassResourceKeys::DoFCoC, effect_->GetCoCRT());
 			} else {
 				res.Set(PassResourceKeys::PostInput, input);
+				res.Remove(PassResourceKeys::DoFCoC);
 			}
 		}
 	}

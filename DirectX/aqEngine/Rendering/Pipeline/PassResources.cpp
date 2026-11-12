@@ -65,6 +65,7 @@ namespace aq
 			if (key == PassResourceKeys::PostOutput)   { return "PostOutput"; }
 			if (key == PassResourceKeys::BloomTexture) { return "BloomTexture"; }
 			if (key == PassResourceKeys::Output)       { return "Output"; }
+			if (key == PassResourceKeys::DoFCoC)       { return "DoFCoC"; }
 
 			// ゲーム独自キー (MakePassKey("Game.Xxx") 等)。名前を持たないので 16 進表示にする。
 			static char unknown[16];

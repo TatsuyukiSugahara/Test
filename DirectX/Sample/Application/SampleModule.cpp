@@ -3,6 +3,8 @@
 #include "ECS/EntityContext.h"
 #include "Component/TransformComponentSystem.h"
 #include "Component/BodyComponentSystem.h"
+#include "Rendering/Pipeline/RenderPipeline.h"
+#include "Rendering/Pipeline/Passes/DoFPass.h"
 
 namespace sample
 {
@@ -10,12 +12,31 @@ namespace sample
 	{
 		// 影 / ディファード / ポストプロセス / 空を既定構成で組む。
 		// 個別に設定したいときは aq::RendererPreset を渡す。ここでは IBL(環境光の反射)と
-		// SSR(画面に映っている物の映り込み。IBL が前提)を有効にする。
+		// SSR(画面に映っている物の映り込み。IBL が前提)と DoF(被写界深度)を有効にする。
 		aq::RendererPreset preset;
 		preset.enableIBL = true;
 		preset.enableSSR = true;
-		if (!host.SetupStandardRenderers(preset)) {
-			return false;
+		preset.enableDoF = true;
+
+		// DoF のピント位置などは preset ではなくパスの setter で決めるので、
+		// SetupStandardRenderers を使わずに組み、設定してから渡す。
+		{
+			auto pipeline = host.BuildStandardPipeline(preset).Build(
+				aq::Engine::Get().GetRenderWidth(), aq::Engine::Get().GetRenderHeight());
+
+			// ピントは見本列(原点)に合わせる。カメラから原点までの距離 ≒ 6.67。
+			// 列の前後はくっきり、手前の床と奥の空がぼける。
+			if (auto* dof = pipeline ? pipeline->Find<aq::rendering::DoFPass>() : nullptr) {
+				dof->SetFocusDistance(6.67f);
+				dof->SetFocusRange(1.5f);
+				dof->SetNearTransition(3.0f);
+				dof->SetFarTransition(3.0f);
+				dof->SetMaxRadius(12.0f);
+			}
+
+			if (!host.SetRenderPipeline(std::move(pipeline))) {
+				return false;
+			}
 		}
 
 		// カメラ。10 個の箱の列全体が収まるよう、斜め上やや遠くから原点を見る。

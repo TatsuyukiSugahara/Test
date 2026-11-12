@@ -358,6 +358,7 @@
     <ClCompile Include="Rendering\PostProcess\Effects\BloomEffect.cpp" />
     <ClCompile Include="Rendering\PostProcess\Effects\TonemapEffect.cpp" />
     <ClCompile Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.cpp" />
+    <ClCompile Include="Rendering\PostProcess\Commands\DoFFocusCommand.cpp" />
     <ClCompile Include="Rendering\PostProcess\Commands\DoFPassCommand.cpp" />
     <ClCompile Include="Rendering\PostProcess\Commands\BloomPassCommand.cpp" />
     <ClCompile Include="Rendering\PostProcess\Commands\TonemapPassCommand.cpp" />
@@ -643,6 +644,7 @@
     <ClInclude Include="Rendering\PostProcess\Debug\PostProcessDebugPanel.h" />
     <ClInclude Include="Rendering\PostProcess\Commands\PostProcessCB.h" />
     <ClInclude Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.h" />
+    <ClInclude Include="Rendering\PostProcess\Commands\DoFFocusCommand.h" />
     <ClInclude Include="Rendering\PostProcess\Commands\DoFPassCommand.h" />
     <ClInclude Include="Rendering\PostProcess\Commands\BloomPassCommand.h" />
     <ClInclude Include="Rendering\PostProcess\Commands\TonemapPassCommand.h" />

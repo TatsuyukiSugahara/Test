@@ -644,6 +644,9 @@
     <ClCompile Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.cpp">
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\PostProcess\Commands\DoFFocusCommand.cpp">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\PostProcess\Commands\DoFPassCommand.cpp">
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClCompile>
@@ -1427,6 +1430,9 @@
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\Commands\MotionBlurPassCommand.h">
+      <Filter>Rendering\PostProcess\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\PostProcess\Commands\DoFFocusCommand.h">
       <Filter>Rendering\PostProcess\Commands</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\PostProcess\Commands\DoFPassCommand.h">

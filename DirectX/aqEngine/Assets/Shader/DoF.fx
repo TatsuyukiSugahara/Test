@@ -4,19 +4,20 @@
 // ぼかしは 1 パスの集め方式 (scatter-as-gather)。デバッグ表示なら、ぼかしの代わりに CoC を色で出す。
 // 2 つ目の出力 (u1) には全画素の符号付きぼけ半径 (画素) を書く。OutlinePass が輪郭線のぼかしに読む
 // (設計書/被写界深度設計.md §0.5)。
+// オートフォーカスを使うフレームは、ピント位置を DoFFocus.fx が更新したフォーカス RT (t2、1×1) から読む。
 // DoFCBData (Rendering/PostProcess/Commands/DoFPassCommand.h) とレイアウトを一致させること。
 
 cbuffer DoFCB : register(b0)
 {
 	float4x4 g_View;             // ワールド → ビュー (z はカメラから前方へ正。列ベクトル規約: mul(M, v))
 	float2   g_ScreenSize;
-	float    g_FocusDistance;    // ピント位置 (ビュー空間の z)
+	float    g_FocusDistance;    // 手動のピント位置 (ビュー空間の z。g_UseAutoFocus == 0 のとき使う)
 	float    g_FocusRange;       // ピント位置の前後でぼけない幅 (片側)
 	float    g_NearTransition;   // 手前側で CoC が 0 → -1 になる距離
 	float    g_FarTransition;    // 奥側で CoC が 0 → +1 になる距離
 	float    g_MaxRadius;        // 最大のぼけ半径 (画素)
 	uint     g_DebugView;        // 1 なら CoC を色で出す
-	uint     g_Pad0;
+	uint     g_UseAutoFocus;     // 1 ならピント位置を t2 (フォーカス RT) から読む
 	uint     g_Pad1;
 	uint     g_Pad2;
 	uint     g_Pad3;
@@ -24,6 +25,7 @@ cbuffer DoFCB : register(b0)
 
 Texture2D<float4>   g_Input    : register(t0);   // HDR (PostInput か Scene)
 Texture2D<float4>   g_WorldPos : register(t1);   // GBuffer2 (worldPos)
+Texture2D<float>    g_FocusTex : register(t2);   // フォーカス RT (1×1)。g_UseAutoFocus == 0 のときはダミーが入り、読まない
 RWTexture2D<float4> g_Out      : register(u0);
 RWTexture2D<float>  g_CoCOut   : register(u1);   // 符号付きぼけ半径 (画素。CoC × maxRadius)
 
@@ -48,7 +50,8 @@ struct CoCSample
 
 
 // 画素の符号付き CoC とビュー空間の z。worldPos が 0 の画素 (背景) は無限遠として扱う。
-CoCSample ComputeCoC(int3 coord)
+// focus はピント位置 (ビュー空間の z。手動の g_FocusDistance かフォーカス RT の値)。
+CoCSample ComputeCoC(int3 coord, float focus)
 {
 	CoCSample result;
 	result.coc        = 0.0f;
@@ -64,8 +67,8 @@ CoCSample ComputeCoC(int3 coord)
 	}
 
 	const float z     = mul(g_View, float4(wp, 1.0f)).z;
-	const float nearZ = g_FocusDistance - g_FocusRange;
-	const float farZ  = g_FocusDistance + g_FocusRange;
+	const float nearZ = focus - g_FocusRange;
+	const float farZ  = focus + g_FocusRange;
 	result.z = z;
 	if (z < nearZ) {
 		result.coc = -saturate((nearZ - z) / max(g_NearTransition, MIN_TRANSITION));
@@ -108,9 +111,12 @@ void main(uint3 id : SV_DispatchThreadID)
 	const int3   coord = int3(id.xy, 0);
 	const float4 color = g_Input.Load(coord);
 
+	// ピント位置。オートフォーカスなら DoFFocus.fx が書いた値、そうでなければ手動の値。
+	const float focus = (g_UseAutoFocus != 0) ? g_FocusTex.Load(int3(0, 0, 0)) : g_FocusDistance;
+
 	// デバッグ表示: 手前 = 赤、奥 = 青、ピント内 = 黒。
 	if (g_DebugView != 0) {
-		const float coc = ComputeCoC(coord).coc;
+		const float coc = ComputeCoC(coord, focus).coc;
 		g_Out[id.xy] = (coc < 0.0f)
 			? float4(-coc, 0.0f, 0.0f, color.a)
 			: float4(0.0f, 0.0f, coc, color.a);
@@ -124,7 +130,7 @@ void main(uint3 id : SV_DispatchThreadID)
 		return;
 	}
 
-	const CoCSample center = ComputeCoC(coord);
+	const CoCSample center = ComputeCoC(coord, focus);
 	g_CoCOut[id.xy] = CoCToRadius(center.coc);
 
 	// 中心は必ず重み 1。総和は 1 以上なので割り算で 0 にならない。
@@ -145,7 +151,7 @@ void main(uint3 id : SV_DispatchThreadID)
 		}
 
 		const int3      sampleCoord = int3(pos, 0);
-		const CoCSample s           = ComputeCoC(sampleCoord);
+		const CoCSample s           = ComputeCoC(sampleCoord, focus);
 
 		// ピント内のサンプルは自分の円が 0 なので広がらない。
 		if (s.coc == 0.0f) {

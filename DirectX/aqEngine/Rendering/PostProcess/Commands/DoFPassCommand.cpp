@@ -19,6 +19,7 @@ namespace aq
 			RenderTargetHandle         worldPosRT,
 			RenderTargetHandle         outputRT,
 			RenderTargetHandle         cocRT,
+			RenderTargetHandle         focusRT,
 			const DoFCBData&           cbData)
 			: shader_(shader)
 			, constantBuffer_(constantBuffer)
@@ -26,6 +27,7 @@ namespace aq
 			, worldPosRTHandle_(worldPosRT)
 			, outputRTHandle_(outputRT)
 			, cocRTHandle_(cocRT)
+			, focusRTHandle_(focusRT)
 			, cbData_(cbData)
 		{
 		}
@@ -40,6 +42,12 @@ namespace aq
 			auto* cocRT      = gd.GetRenderTarget(cocRTHandle_);
 			if (!shader_ || !constantBuffer_ || !inputRT || !worldPosRT || !outputRT || !cocRT) { return; }
 
+			// オートフォーカスを使わないフレームも t2 を未バインドにしない(API によっては未バインドの SRV が
+			// 検証エラーや不定値になる)ため、ダミーとして worldPos を入れる。useAutoFocus = 0 なのでシェーダは読まない。
+			auto* focusRT = (cbData_.useAutoFocus != 0) ? gd.GetRenderTarget(focusRTHandle_) : nullptr;
+			if (cbData_.useAutoFocus != 0 && !focusRT) { return; }
+			auto* focusOrDummyRT = focusRT ? focusRT : worldPosRT;
+
 			// SRV/UAV ハザード回避のため RTV を外してから compute を回す。
 			ctx.OMSetRenderTargets(0, nullptr);
 
@@ -49,6 +57,7 @@ namespace aq
 			ctx.CSSetShader(*shader_);
 			ctx.CSSetShaderResource(0, inputRT->GetRenderTargetSRV());
 			ctx.CSSetShaderResource(1, worldPosRT->GetRenderTargetSRV());
+			ctx.CSSetShaderResource(2, focusOrDummyRT->GetRenderTargetSRV());
 			ctx.CSSetUnorderedAccessView(0, outputRT->GetRenderTargetUAV());
 			ctx.CSSetUnorderedAccessView(1, cocRT->GetRenderTargetUAV());
 
@@ -58,6 +67,7 @@ namespace aq
 
 			ctx.CSUnsetShaderResource(0);
 			ctx.CSUnsetShaderResource(1);
+			ctx.CSUnsetShaderResource(2);
 			ctx.CSUnsetUnorderedAccessView(0);
 			ctx.CSUnsetUnorderedAccessView(1);
 			ctx.CSUnsetShader();

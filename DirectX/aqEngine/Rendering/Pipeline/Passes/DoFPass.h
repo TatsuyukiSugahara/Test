@@ -53,6 +53,8 @@ namespace aq
 			inline void SetFarTransition(const float transition)  { if (effect_) { effect_->SetFarTransition(transition); } }
 			inline void SetMaxRadius(const float radius)          { if (effect_) { effect_->SetMaxRadius(radius); } }
 			inline void SetDebugView(const bool debugView)        { if (effect_) { effect_->SetDebugView(debugView); } }
+			inline void SetAutoFocusEnabled(const bool enabled)   { if (effect_) { effect_->SetAutoFocusEnabled(enabled); } }
+			inline void SetAutoFocusSpeed(const float speed)      { if (effect_) { effect_->SetAutoFocusSpeed(speed); } }
 			inline DoFEffect* GetEffect() const { return effect_.get(); }
 		};
 	}

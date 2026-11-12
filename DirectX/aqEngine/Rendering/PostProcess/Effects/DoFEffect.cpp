@@ -1,6 +1,7 @@
 #include "aq.h"
 #include "DoFEffect.h"
 #include "Rendering/PostProcess/Commands/DoFPassCommand.h"
+#include "Rendering/PostProcess/Commands/DoFFocusCommand.h"
 #include "Graphics/GraphicsTypes.h"
 
 
@@ -10,7 +11,8 @@ namespace aq
 	{
 		namespace
 		{
-			static constexpr const char* DOF_SHADER_PATH = "aqEngine/Assets/Shader/DoF.fx";
+			static constexpr const char* DOF_SHADER_PATH       = "aqEngine/Assets/Shader/DoF.fx";
+			static constexpr const char* DOF_FOCUS_SHADER_PATH = "aqEngine/Assets/Shader/DoFFocus.fx";
 		}
 
 
@@ -50,7 +52,51 @@ namespace aq
 			}
 
 			aq::StartupMark("[dof] created (CS ok)");
+
+			// オートフォーカスは DoF 本体が揃ったときだけ用意する。失敗してもオートフォーカスだけ使えなくなる。
+			InitializeFocus();
 			return true;
+		}
+
+
+		void DoFEffect::InitializeFocus()
+		{
+			auto& gd = graphics::GraphicsDevice::Get();
+
+			focusShader_ = gd.CreateShader(DOF_FOCUS_SHADER_PATH, "main", graphics::IShader::ShaderType::CS);
+			if (!focusShader_)
+			{
+				aq::StartupMarkf("[dof] focus shader load FAILED (%s) -> autofocus disabled", DOF_FOCUS_SHADER_PATH);
+				return;
+			}
+
+			DoFFocusCBData init{};
+			focusConstantBuffer_ = gd.CreateConstantBuffer(&init, sizeof(init));
+			if (!focusConstantBuffer_)
+			{
+				aq::StartupMark("[dof] focus constant buffer create FAILED -> autofocus disabled");
+				focusShader_.reset();
+				return;
+			}
+
+			// 1×1 のピント位置。画面の寸法に依らないので、リサイズでは作り直さない。
+			graphics::RenderTargetDesc desc;
+			desc.width       = 1;
+			desc.height      = 1;
+			desc.colorFormat = graphics::PixelFormat::R32_Float;  // ピント位置 (ビュー空間の z)
+			desc.hasDepth    = false;
+			focusRTHandle_ = gd.CreateOffscreenRenderTarget(desc);
+			if (!focusRTHandle_.IsValid())
+			{
+				aq::StartupMark("[dof] focus RT create FAILED -> autofocus disabled");
+				focusConstantBuffer_.reset();
+				focusShader_.reset();
+				return;
+			}
+
+			// 中身は未定義なので、最初の更新では前の値を使わずに書き直す。
+			focusResetPending_ = true;
+			aq::StartupMark("[dof] focus created (CS ok)");
 		}
 
 
@@ -99,6 +145,9 @@ namespace aq
 		void DoFEffect::CommitResize()
 		{
 			if (!pendingOutputRTHandle_.IsValid()) { return; }   // 無効(シェーダー / RT 無し)なら何もしない
+
+			// フォーカス RT(1×1)は作り直さないが、画面が変わったので次の更新では前の値から寄せずに書き直す。
+			focusResetPending_ = true;
 
 			auto& gd = graphics::GraphicsDevice::Get();
 			if (outputRTHandle_.IsValid()) { gd.ReleaseOffscreenRenderTarget(outputRTHandle_); }
@@ -158,10 +207,35 @@ namespace aq
 			cb.farTransition  = farTransition_;
 			cb.maxRadius      = maxRadius_;
 			cb.debugView      = debugView_ ? 1u : 0u;
+			cb.useAutoFocus   = 0u;
+
+			// オートフォーカス: DoF より前にフォーカス RT を更新し、DoF はピント位置をそこから読む。
+			// 更新(UAV)と読み取り(SRV)は別コマンドの別 dispatch にする(設計書 §0.4 の 5)。
+			// 間の UAV → SRV の同期は、他の連続する compute(HiZ のダウンサンプルの連鎖や MotionBlur → DoF)と同じく
+			// バインド時の各バックエンドの遷移に任せる(D3D12 は SRV のバインドで遷移バリア、Vulkan は dispatch 前のレイアウト遷移)。
+			RenderTargetHandle focusRT;
+			if (autoFocusEnabled_ && IsAutoFocusAvailable())
+			{
+				DoFFocusCBData focusCB{};
+				focusCB.view          = view_;
+				focusCB.screenWidth   = cb.screenWidth;
+				focusCB.screenHeight  = cb.screenHeight;
+				focusCB.focusDistance = focusDistance_;
+				focusCB.speed         = autoFocusSpeed_;
+				focusCB.reset         = focusResetPending_ ? 1u : 0u;
+
+				outList.Enqueue<DoFFocusCommand>(
+					focusShader_.get(), focusConstantBuffer_.get(),
+					context.worldPosRT, focusRTHandle_, focusCB);
+				focusResetPending_ = false;
+
+				cb.useAutoFocus = 1u;
+				focusRT         = focusRTHandle_;
+			}
 
 			outList.Enqueue<DoFPassCommand>(
 				shader_.get(), constantBuffer_.get(),
-				input, context.worldPosRT, outputRTHandle_, cocRTHandle_, cb);
+				input, context.worldPosRT, outputRTHandle_, cocRTHandle_, focusRT, cb);
 
 			return outputRTHandle_;
 		}

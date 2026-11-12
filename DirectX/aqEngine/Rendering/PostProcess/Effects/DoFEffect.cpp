@@ -3,6 +3,10 @@
 #include "Rendering/PostProcess/Commands/DoFPassCommand.h"
 #include "Rendering/PostProcess/Commands/DoFFocusCommand.h"
 #include "Graphics/GraphicsTypes.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Core/IDebugRenderable.h"
+#include <imgui/imgui.h>
+#endif
 
 
 namespace aq
@@ -245,5 +249,94 @@ namespace aq
 		{
 			view_ = camera.viewMatrix;
 		}
+
+#ifdef AQ_DEBUG_IMGUI
+		namespace
+		{
+			/** DoF のパラメータを触るデバッグパネル (RenderingDebugPanel のタブ "DoF") */
+			class DoFDebugPanel final : public IDebugRenderable
+			{
+			private:
+				DoFEffect& dof_;
+
+
+			public:
+				explicit DoFDebugPanel(DoFEffect& dof) : dof_(dof) {}
+
+				void        DebugRenderMenu()     override {}
+				void        DebugRender()         override {}
+				const char* GetDebugLabel() const override { return "DoF"; }
+
+				void RenderContent() override
+				{
+					const bool autoAvailable = dof_.IsAutoFocusAvailable();
+
+					bool enabled = dof_.GetEnabled();
+					if (ImGui::Checkbox("DoF Enabled", &enabled)) {
+						dof_.SetEnabled(enabled);
+					}
+					ImGui::Text("Auto Focus: %s", autoAvailable ? "Available" : "Unavailable");
+
+					bool debugView = dof_.GetDebugView();
+					if (ImGui::Checkbox("Show CoC", &debugView)) {
+						dof_.SetDebugView(debugView);
+					}
+					ImGui::Separator();
+
+					// オートフォーカス中の手動のピント位置は、リセット時の初期値にだけ使われる
+					const bool autoFocusing = autoAvailable && dof_.GetAutoFocusEnabled();
+					if (autoFocusing) { ImGui::BeginDisabled(); }
+					float focusDistance = dof_.GetFocusDistance();
+					if (ImGui::SliderFloat("Focus Distance", &focusDistance, 0.1f, 100.0f, "%.2f", ImGuiSliderFlags_Logarithmic)) {
+						dof_.SetFocusDistance(focusDistance);
+					}
+					if (autoFocusing) { ImGui::EndDisabled(); }
+					if (autoFocusing) {
+						ImGui::SameLine();
+						ImGui::TextUnformatted("(auto)");
+					}
+
+					float focusRange = dof_.GetFocusRange();
+					if (ImGui::SliderFloat("Focus Range", &focusRange, 0.0f, 20.0f, "%.2f")) {
+						dof_.SetFocusRange(focusRange);
+					}
+
+					float nearTransition = dof_.GetNearTransition();
+					if (ImGui::SliderFloat("Near Transition", &nearTransition, 0.0f, 20.0f, "%.2f")) {
+						dof_.SetNearTransition(nearTransition);
+					}
+
+					float farTransition = dof_.GetFarTransition();
+					if (ImGui::SliderFloat("Far Transition", &farTransition, 0.0f, 20.0f, "%.2f")) {
+						dof_.SetFarTransition(farTransition);
+					}
+
+					float maxRadius = dof_.GetMaxRadius();
+					if (ImGui::SliderFloat("Max Radius", &maxRadius, 0.0f, 32.0f, "%.1f")) {
+						dof_.SetMaxRadius(maxRadius);
+					}
+					ImGui::Separator();
+
+					// オートフォーカスの資源が無いときは触れなくする
+					if (!autoAvailable) { ImGui::BeginDisabled(); }
+					bool autoFocus = dof_.GetAutoFocusEnabled();
+					if (ImGui::Checkbox("Auto Focus", &autoFocus)) {
+						dof_.SetAutoFocusEnabled(autoFocus);
+					}
+					float autoFocusSpeed = dof_.GetAutoFocusSpeed();
+					if (ImGui::SliderFloat("Auto Focus Speed", &autoFocusSpeed, 0.01f, 1.0f, "%.2f")) {
+						dof_.SetAutoFocusSpeed(autoFocusSpeed);
+					}
+					if (!autoAvailable) { ImGui::EndDisabled(); }
+				}
+			};
+		}
+
+
+		std::unique_ptr<IDebugRenderable> DoFEffect::CreateDebugPanel()
+		{
+			return std::make_unique<DoFDebugPanel>(*this);
+		}
+#endif
 	}
 }

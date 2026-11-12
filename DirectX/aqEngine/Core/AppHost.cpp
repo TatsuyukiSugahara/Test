@@ -22,6 +22,7 @@
 #include "Rendering/Occlusion/GpuClusterCuller.h"
 #include "Rendering/Occlusion/ClusterCull.h"   // SetClusterCullEnabled
 #include "Rendering/Pipeline/Passes/SSRPass.h"       // SSR デバッグパネルの配線に使う
+#include "Rendering/Pipeline/Passes/DoFPass.h"       // DoF デバッグパネルの配線に使う
 #include "Rendering/SSR/SSRRenderer.h"
 #include "Rendering/Pipeline/Passes/HiZPass.h"      // Hi-Z オクリュージョンの配線に使う
 #include "Rendering/Pipeline/Passes/ShadowPass.h"   // デバッグパネルの配線に使う
@@ -549,6 +550,20 @@ namespace aq
 					if (auto* ssr = ssrPass->GetSSRRenderer())
 					{
 						auto panel = ssr->CreateDebugPanel();
+						renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
+						renderingDebugPanel_->TakeOwnership(std::move(panel));
+					}
+				}
+			}
+
+			// DoF タブ — パイプラインに DoFPass があるときだけ(生成失敗で無効でもタブは出す)
+			if (auto* pipeline = renderer_.GetPipeline())
+			{
+				if (auto* dofPass = pipeline->Find<rendering::DoFPass>())
+				{
+					if (auto* dof = dofPass->GetEffect())
+					{
+						auto panel = dof->CreateDebugPanel();
 						renderingDebugPanel_->AddTab(panel->GetDebugLabel(), panel.get());
 						renderingDebugPanel_->TakeOwnership(std::move(panel));
 					}

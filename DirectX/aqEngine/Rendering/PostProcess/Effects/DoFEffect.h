@@ -5,6 +5,9 @@
 #include "Graphics/IShader.h"
 #include "Graphics/IBuffer.h"
 #include "Math/Matrix.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "Core/IDebugRenderable.h"
+#endif
 
 
 namespace aq
@@ -110,6 +113,11 @@ namespace aq
 
 			/** オートフォーカスの資源(シェーダー・CB・フォーカス RT)が揃っているか */
 			inline bool IsAutoFocusAvailable() const { return focusShader_ && focusConstantBuffer_ && focusRTHandle_.IsValid(); }
+
+#ifdef AQ_DEBUG_IMGUI
+			/** デバッグパネル ("DoF" タブ) を作る。パネルはこのエフェクトを参照するので、先に破棄すること */
+			std::unique_ptr<IDebugRenderable> CreateDebugPanel();
+#endif
 
 
 			/**

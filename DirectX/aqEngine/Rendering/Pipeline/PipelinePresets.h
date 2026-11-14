@@ -71,6 +71,13 @@ namespace aq
 			 */
 			bool enableSSR = false;
 
+			/**
+			 * SSAO(設計書/SSAO設計.md)。enableDeferred が前提(IBL は不要)。Mobile 構成は対象外。
+			 * 既定 false(true にすると拡散の環境光が遮蔽で暗くなり、従来の絵と変わる)。
+			 * パラメータは SSAOPass の setter(ゲームは Find<SSAOPass>())
+			 */
+			bool enableSSAO = false;
+
 			/** ポストプロセス(MotionBlur / Bloom / Tonemap)。false で素通し */
 			bool     enablePostProcess = true;
 			float    bloomThreshold    = 1.0f;
@@ -102,7 +109,7 @@ namespace aq
 		{
 			/**
 			 * 今の Application::SetupStandardRenderers と同じ構成
-			 * (Shadow / ClusterCull / GBuffer / Hi-Z / Decal / Lighting / SSR(preset.enableSSR)/ Sky / Forward / Ocean /
+			 * (Shadow / ClusterCull / GBuffer / Hi-Z / Decal / Lighting / SSAO(preset.enableSSAO)/ SSR(preset.enableSSR)/ Sky / Forward / Ocean /
 			 *  Particle / MotionBlur / DoF(preset.enableDoF)/ Bloom / Tonemap / UI)。ClusterCull は GBuffer の前に置く。
 			 * 動かない機能(compute 非対応など)は PipelineBuilder::Build() の IsSupported() 検証で
 			 * 自動的に除外される。

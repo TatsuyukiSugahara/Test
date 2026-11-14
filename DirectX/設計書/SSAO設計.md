@@ -1,6 +1,6 @@
 # SSAO(Screen Space Ambient Occlusion)設計
 
-> 対象コミット: 1fd4004 / 最終更新: 2026-11-14(設計。承認済み。P1 から実装)
+> 対象コミット: 6f57ebe(P1 はこの次のコミット)/ 最終更新: 2026-11-14(P1 完了。次は P2)
 
 対象: `aqEngine/Rendering/SSAO/` + `aqEngine/Rendering/Pipeline/Passes/SSAOPass.*` + `aqEngine/Assets/Shader/SSAO.fx` / `SSAOBlur.fx` /
 `SSAOComposite.fx` + `PBRFunctions.fx`(IBL の拡散部分の括り出し)+ `PipelinePresets` + デバッグパネル。
@@ -156,20 +156,34 @@ CB:
   評価に使う固定入力で、P2 以降もデバッグ用として残す(SSR の `testMode` と同じ扱い)。
 - README「既知の課題」に D3D12 の compute の SRV の件を記録。
 
-評価(自動。Mac / Metal と Vulkan):
-- [ ] ビルドが通り、警告が増えない(SSAO の新規・変更ファイルに警告なし)
-- [ ] **`EvalIBL` の括り出しで `PSMainIBL` の画が変わらない**: `enableSSAO = false` で、P1 前のコミットと画素一致(差 0)
-- [ ] **差分が 0 のとき何も変わらない**: `enableSSAO = true`・`testMode = 1` で、`enableSSAO = false` と画素一致(差 0)。パス列に `DeferredLightingPass > SSAOPass > SSRPass` が出る
+評価(自動。Mac / Metal と Vulkan。2026-11-14):
+- [x] ビルドが通り、警告が増えない(SSAO の新規・変更ファイルに警告なし)
+      → SSAO の .cpp と `PipelinePresets.cpp` を再コンパイルして警告 0
+- [x] **`EvalIBL` の括り出しで `PSMainIBL` の画が変わらない**: `enableSSAO = false` で、P1 前のコミットと画素一致(差 0)
+      → Metal で P1 前(`6f57ebe` の worktree)と 3,758,240 画素が差 0(P1 前どうしの撮り直しも差 0)
+- [x] **差分が 0 のとき何も変わらない**: `enableSSAO = true`・`testMode = 1` で、`enableSSAO = false` と画素一致(差 0)。パス列に `DeferredLightingPass > SSAOPass > SSRPass` が出る
+      → Metal・Vulkan とも差 0。`[pipeline] 確定: ... DeferredLightingPass > SSAOPass > SSRPass > SkyPass ...`
 - [ ] **IBL の拡散を正しく差し引く**: `enablePostProcess = false`・`testMode = 2` の画の**上段(非金属)の 5 箱の正面中央 16×16 の平均**が、
       `PBRLighting.fx` の `EvalIBL` で拡散を 0 にした一時差分(`enableSSAO = false`)の同じ範囲と、各 2/255 以内。
       誤合格の防止: `testMode = 1` の同じ範囲は、拡散 0 の一時差分と 10/255 以上違う
+      → 比較は SSR も切った一時差分(§2 共通条件)。上段 5 箱(原寸 (960,690)〜(1630,744))で `testMode = 2` と拡散 0 の差は最大 1/255、
+      `testMode = 1` とは 約 (11, 38, 82)/255 違う。Vulkan の `testMode = 2` も Metal と同じ値
 - [ ] **ambient を正しく差し引く**: `enableIBL = false`・`enablePostProcess = false` で、`testMode = 2` の上段 5 箱の正面中央 16×16 の平均が、
       ゲーム側の一時コードで環境光の強度を 0 にした画(`enableSSAO = false`)と各 2/255 以内。誤合格の防止: `testMode = 1` とは 10/255 以上違う
-- [ ] **ロード境界で判断が食い違わない**: 一時コードで `DeferredRenderer::BuildLightingCommandList` の IBL の判断に「呼び出し回数が 60 未満なら false」を足し
+      → 5 箱とも差 0。`testMode = 1` とは 約 (6, 15, 25)/255 違う
+- [x] **ロード境界で判断が食い違わない**: 一時コードで `DeferredRenderer::BuildLightingCommandList` の IBL の判断に「呼び出し回数が 60 未満なら false」を足し
       (一時の static カウンタ。単一ビューの Sample では `BuildLightingCommandList` は 1 フレームに 1 回なので回数 = フレーム番号。エンジンに共通のフレーム番号の口は無い)、一時ログで起動から 120 フレームの各ビューについて「ライティングが `PSMainIBL` を積んだか」と「合成が `PSMainIBL` を選んだか」を 1 行ずつ出す。
       全フレームで一致し、かつ 0 → 1 に切り替わるフレームが含まれる(`IsReady()` を偽るのではなく判断の側で区切る。`IsReady()` は実際のロード完了も待つので、
       切り替わるのは 60 フレーム目か、ロード完了がそれより遅ければそのフレーム)。`testMode = 2` で行う
-- [ ] Metal API Validation エラー 0 / VK validation(Debug。`testMode = 2`)エラー 0 / 終了コード 0
+      → 120 フレームすべて一致、60 フレーム目で 0 → 1。一時コードは評価後に外した
+- [x] Metal API Validation エラー 0 / VK validation(Debug。`testMode = 2`)エラー 0 / 終了コード 0
+      → Metal(`METAL_DEVICE_WRAPPER_TYPE=1`)・Vulkan Debug とも閉じるボタンで終了コード 0。VK は ERROR 0、WARN 10 件は既知の Rgba32f の種類(`g_Bright` / `g_Out` / `g_Output`)
+
+#### P1 で決めたこと
+
+- `PSMainIBL` だけが作れないときは `SSAORenderer::Create()` を成功にし、IBL を使うビューでは合成しない(ログ `[ssao] PSMainIBL load FAILED`)。
+- RT 2 枚のうち片方の生成に失敗したら、もう片方も解放して無効にする。
+- P1 の `SSAOPass::Build` は、`testMode = 0` でも RT のバインドだけは積む(合成は積まない。絵は変わらない)。
 
 ### P2: AO の計算とぼかし
 
@@ -245,7 +259,7 @@ Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む。
 
 ## 6. チェックポイント
 
-- [ ] P1 の評価を全て満たした
+- [x] P1 の評価を全て満たした
 - [ ] P2 の評価を全て満たした
 - [ ] P3 の評価を全て満たした
 - [ ] 抽象 IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本

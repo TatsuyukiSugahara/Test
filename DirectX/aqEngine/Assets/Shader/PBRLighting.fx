@@ -111,6 +111,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
     PBRSurface surf = LoadSurface(input.svPos);
 
     // 簡易 ambient（従来と同じ式・同じ演算順。出力を変えない）
+    // ★この式は SSAOComposite.fx の PSMain と一致させること（SSAO が同じ式で差し引く。設計書/SSAO設計.md §0.2）
     float3 environment = ambient.color * ambient.intensity * surf.baseColor * (1.0 - surf.metallic);
 
     float3 lit = ComputePBRLighting(surf.worldPos, surf.N, surf.baseColor, surf.metallic,

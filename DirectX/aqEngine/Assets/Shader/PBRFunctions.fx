@@ -98,13 +98,27 @@ void EvalIBLSpecular(float3 N, float3 V,
     specWeight   = F0 * ab.x + ab.y;
 }
 
+// IBL の拡散部分（irradiance × baseColor × kD。強度は掛けない。設計書/SSAO設計.md §0.2）。
+// EvalIBL と SSAOComposite.fx が共用する（SSAO はライティングが足した拡散の環境光を差し引くため、
+// 同じ式で求める必要がある）。F0 / NdotV / Fr / kD の式と演算順は括り出す前の EvalIBL と同じ。
+float3 EvalIBLDiffuse(float3 N, float3 V,
+                      float3 baseColor, float metallic, float roughness, float specular,
+                      TextureCube irrCube, SamplerState s)
+{
+    float3 F0    = lerp(0.08 * specular * globalSpecularScale, baseColor, metallic);
+    float  NdotV = max(dot(N, V), 1e-5);
+    float3 Fr    = F0 + (max(1.0 - roughness, F0) - F0) * SchlickFresnel(NdotV);  // roughness 考慮の Fresnel
+    float3 kD    = (1.0 - Fr) * (1.0 - metallic);
+    return irrCube.SampleLevel(s, N, 0).rgb * baseColor * kD;
+}
+
 // IBL（split-sum 近似。設計書/IBL設計.md §3）の環境光の寄与。
 // テクスチャは引数で受け、宣言は持たない（宣言は使うエントリのファイル側。PSMain に持ち込まないため）。
 //   irrCube : irradiance キューブ（E / π を格納）
 //   specCube: 前置フィルタ済み鏡面キューブ（mip = roughness × maxMip）
 //   brdfLut : u = NdotV, v = roughness, rg = (A, B)
 // specular（引数）= 材質の F0 スケール（GBuffer2.w）。F0 は直接光（EvalDisneyBRDF）と同じ定義。
-// 鏡面部分は EvalIBLSpecular に括り出してある。式と演算順は括り出す前と同じ
+// 鏡面部分は EvalIBLSpecular、拡散部分は EvalIBLDiffuse に括り出してある。式と演算順は括り出す前と同じ
 // （F0 / NdotV は Fr のために同じ式でもう一度求める。PSMainIBL の出力を変えないため）。
 float3 EvalIBL(float3 N, float3 V,
                float3 baseColor, float metallic, float roughness, float specular,
@@ -116,11 +130,7 @@ float3 EvalIBL(float3 N, float3 V,
     EvalIBLSpecular(N, V, baseColor, metallic, roughness, specular,
                     specCube, brdfLut, s, maxMip, specEnv, specWeight);
 
-    float3 F0      = lerp(0.08 * specular * globalSpecularScale, baseColor, metallic);
-    float  NdotV   = max(dot(N, V), 1e-5);
-    float3 Fr      = F0 + (max(1.0 - roughness, F0) - F0) * SchlickFresnel(NdotV);  // roughness 考慮の Fresnel
-    float3 kD      = (1.0 - Fr) * (1.0 - metallic);
-    float3 diffIBL = irrCube.SampleLevel(s, N, 0).rgb * baseColor * kD;
+    float3 diffIBL = EvalIBLDiffuse(N, V, baseColor, metallic, roughness, specular, irrCube, s);
     float3 specIBL = specEnv * specWeight;
     return (diffIBL + specIBL) * intensity;
 }

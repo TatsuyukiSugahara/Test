@@ -133,6 +133,9 @@
     <Filter Include="Rendering\SSR">
       <UniqueIdentifier>{88d37bea-fafc-4e6b-a2c6-d62e1c8cbc8b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rendering\SSAO">
+      <UniqueIdentifier>{12a89240-2955-4b2b-9466-38c2e1513de7}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Resource">
       <UniqueIdentifier>{0dd3f527-688b-4000-a85f-54637f175461}</UniqueIdentifier>
     </Filter>
@@ -599,6 +602,9 @@
     <ClCompile Include="Rendering\Pipeline\Passes\SSRPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\Pipeline\Passes\SSAOPass.cpp">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClCompile>
     <ClCompile Include="Rendering\Pipeline\Passes\ForwardPass.cpp">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClCompile>
@@ -715,6 +721,12 @@
     </ClCompile>
     <ClCompile Include="Rendering\SSR\SSRDebugPanel.cpp">
       <Filter>Rendering\SSR</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\SSAO\SSAORenderer.cpp">
+      <Filter>Rendering\SSAO</Filter>
+    </ClCompile>
+    <ClCompile Include="Rendering\SSAO\SSAOCompositeCommand.cpp">
+      <Filter>Rendering\SSAO</Filter>
     </ClCompile>
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
@@ -1504,6 +1516,9 @@
     <ClInclude Include="Rendering\Pipeline\Passes\SSRPass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
+    <ClInclude Include="Rendering\Pipeline\Passes\SSAOPass.h">
+      <Filter>Rendering\Pipeline\Passes</Filter>
+    </ClInclude>
     <ClInclude Include="Rendering\Pipeline\Passes\ForwardPass.h">
       <Filter>Rendering\Pipeline\Passes</Filter>
     </ClInclude>
@@ -1683,6 +1698,12 @@
     </ClInclude>
     <ClInclude Include="Rendering\SSR\SSRDebugPanel.h">
       <Filter>Rendering\SSR</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\SSAO\SSAORenderer.h">
+      <Filter>Rendering\SSAO</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\SSAO\SSAOCompositeCommand.h">
+      <Filter>Rendering\SSAO</Filter>
     </ClInclude>
     <ClInclude Include="UI\UITypes.h">
       <Filter>UI</Filter>

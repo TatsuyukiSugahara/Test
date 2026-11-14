@@ -203,6 +203,9 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   (01_レンダリング設計.md §2.6 / §7)。
 - (解決済 2026-09-06) `aq::math::Quaternion::SetRotation` の代入ミス(`z` に入れるべき値を `y` へ二重代入)を修正。
   利用箇所ゼロのまま壊れていた。ゲーム側の回避実装(CoinSystem の自前 Y 軸回転)も削除し本 API 使用に統一。
+- (2026-11-14 発見)**D3D12 の compute は SRV が t0〜t2 の 3 枚しか届かない。** ルートシグネチャの SRV テーブルが `CS_SRV_TABLE_SIZE = 3`([D3D12RootSignature.h](../aqEngine/Graphics/D3D12/D3D12RootSignature.h))で、`D3D12RenderContextImpl::CSSetShaderResource` は範囲外のスロットを黙って捨てる。
+  SSR のトレース(`SSRTraceCommand` が t3 に GBuffer3 を置く)は D3D12 で t3 が届かない(Windows 未確認、記録のみ。直していない)。
+  Vulkan は t0〜t11、Metal は t0〜t15 で届く。詳細は [SSAO設計](SSAO設計.md) §0.1。
 
 ## 文書管理方針
 

@@ -8,6 +8,7 @@
 #include "Passes/DeferredLightingPass.h"
 #include "Passes/SkyPass.h"
 #include "Passes/SSRPass.h"
+#include "Passes/SSAOPass.h"
 #include "Passes/ForwardPass.h"
 #include "Passes/OceanPass.h"
 #include "Passes/ParticlePass.h"
@@ -19,6 +20,7 @@
 #include "Rendering/Sky/SkyRenderer.h"
 #include "Rendering/IBL/IBLEnvironment.h"
 #include "Rendering/SSR/SSRRenderer.h"
+#include "Rendering/SSAO/SSAORenderer.h"
 
 
 namespace aq
@@ -79,6 +81,19 @@ namespace aq
 						builder.Add<DecalPass>(deferred);
 						// ディファードライティング(シーン RT に書き込む)。
 						builder.Add<DeferredLightingPass>(deferred);
+
+						// SSAO(ライティングの直後・SSR の前。設計書/SSAO設計.md §0.2)。IBL は不要(IBL が無ければ簡易 ambient を差し引く)。
+						// 生成に失敗したら足さない(SSAO なしの絵で続行する)。
+						if (preset.enableSSAO)
+						{
+							auto ssao = std::make_unique<SSAORenderer>();
+							if (ssao->Create()) {
+								builder.Add<SSAOPass>(std::move(ssao), deferred, deferred->GetIBLEnvironment());
+							} else {
+								// 生成に失敗すると SSAOPass は列へ入らない(パス側の Setup は走らない)ので、ここで残す。
+								aq::StartupMark("[pipeline] SSAO の生成に失敗したので SSAO なしで続行");
+							}
+						}
 
 						// SSR(ライティングの直後・空の前。設計書/SSR設計.md §0.2)。IBL の生成に成功したときだけ足す
 						// (SSR は IBL の鏡面キューブの項を差し引くので、IBL が無いと意味を持たない)。

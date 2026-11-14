@@ -386,6 +386,7 @@
     <ClCompile Include="Rendering\SSAO\SSAORenderer.cpp" />
     <ClCompile Include="Rendering\SSAO\SSAOCompositeCommand.cpp" />
     <ClCompile Include="Rendering\SSAO\SSAOComputeCommand.cpp" />
+    <ClCompile Include="Rendering\SSAO\SSAODebugPanel.cpp" />
     <ClCompile Include="Terrain\HeightmapChunk.cpp" />
     <ClCompile Include="Terrain\HeightmapPainter.cpp" />
     <ClCompile Include="Terrain\SplatmapPainter.cpp" />
@@ -736,6 +737,7 @@
     <ClInclude Include="Rendering\SSAO\SSAORenderer.h" />
     <ClInclude Include="Rendering\SSAO\SSAOCompositeCommand.h" />
     <ClInclude Include="Rendering\SSAO\SSAOComputeCommand.h" />
+    <ClInclude Include="Rendering\SSAO\SSAODebugPanel.h" />
     <ClInclude Include="UI\UITypes.h" />
     <ClInclude Include="UI\UIContext.h" />
     <ClInclude Include="UI\UIObject.h" />

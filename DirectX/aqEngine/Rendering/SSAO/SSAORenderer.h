@@ -4,6 +4,7 @@
 #include "Rendering/RenderCommandList.h"
 #include "Rendering/RenderTargetHandle.h"
 #include "Graphics/IShader.h"
+#include "Core/IDebugRenderable.h"
 
 
 namespace aq
@@ -132,6 +133,14 @@ namespace aq
 			                               const bool useIBL,
 			                               const std::shared_ptr<const IBLEnvironment>& ibl,
 			                               RenderCommandList& outList) const;
+
+			/** ぼかした AO の RT (デバッグパネルの縮小表示用。無効なら INVALID なハンドル) */
+			inline RenderTargetHandle GetBlurredAOHandle() const { return blurredAORTHandle_; }
+
+#ifdef AQ_DEBUG_IMGUI
+			/** デバッグパネル ("SSAO" タブ) を作る。パネルはこのレンダラーを参照するので、先に破棄すること */
+			std::unique_ptr<IDebugRenderable> CreateDebugPanel();
+#endif
 
 
 			/**

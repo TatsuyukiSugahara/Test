@@ -5,6 +5,9 @@
 #include "Graphics/GraphicsTypes.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
 #include "Rendering/IBL/IBLEnvironment.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "SSAODebugPanel.h"
+#endif
 
 
 namespace aq
@@ -203,5 +206,13 @@ namespace aq
 					nullptr, 1.0f, testMode_, debugView_);
 			}
 		}
+
+
+#ifdef AQ_DEBUG_IMGUI
+		std::unique_ptr<IDebugRenderable> SSAORenderer::CreateDebugPanel()
+		{
+			return std::make_unique<SSAODebugPanel>(*this);
+		}
+#endif
 	}
 }

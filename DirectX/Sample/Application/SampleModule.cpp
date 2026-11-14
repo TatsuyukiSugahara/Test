@@ -12,11 +12,13 @@ namespace sample
 	{
 		// 影 / ディファード / ポストプロセス / 空を既定構成で組む。
 		// 個別に設定したいときは aq::RendererPreset を渡す。ここでは IBL(環境光の反射)と
-		// SSR(画面に映っている物の映り込み。IBL が前提)と DoF(被写界深度)を有効にする。
+		// SSR(画面に映っている物の映り込み。IBL が前提)と DoF(被写界深度)と
+		// SSAO(物の接地や隙間の環境光の陰)を有効にする。
 		aq::RendererPreset preset;
-		preset.enableIBL = true;
-		preset.enableSSR = true;
-		preset.enableDoF = true;
+		preset.enableIBL  = true;
+		preset.enableSSR  = true;
+		preset.enableDoF  = true;
+		preset.enableSSAO = true;
 
 		// DoF のピント位置などは preset ではなくパスの setter で決めるので、
 		// SetupStandardRenderers を使わずに組み、設定してから渡す。
@@ -96,6 +98,37 @@ namespace sample
 			auto* box = entity.GetComponent<aq::ecs::BoxStaticMeshComponent>();
 			box->SetColor(aq::math::Vector4(0.8f, 0.8f, 0.8f, 1.0f));
 			box->SetPBRMaterial(1.0f, 0.05f);
+		}
+
+		// SSAO の見本の台。床と下段の箱は金属(拡散の環境光が無い)で AO が見えないので、
+		// 見本列の左手前に非金属の台を置き、その上に小さな箱を載せて接地の陰を見る。
+		{
+			auto pedestal = aq::ecs::EntityContext::Get().CreateEntity<
+				aq::ecs::TransformComponent,
+				aq::ecs::HierarchicalTransformComponent,
+				aq::ecs::BoxStaticMeshComponent>();
+
+			auto* transform = pedestal.GetComponent<aq::ecs::TransformComponent>();
+			transform->position.Set(-3.8f, -1.35f, -2.0f);   // 床の上面(y = -1.55)に置く。上面は y = -1.15
+			transform->scale.Set(1.6f, 0.4f, 1.6f);
+
+			auto* box = pedestal.GetComponent<aq::ecs::BoxStaticMeshComponent>();
+			box->SetColor(aq::math::Vector4(0.8f, 0.75f, 0.7f, 1.0f));
+			box->SetPBRMaterial(0.0f, 0.8f);
+		}
+		{
+			auto small = aq::ecs::EntityContext::Get().CreateEntity<
+				aq::ecs::TransformComponent,
+				aq::ecs::HierarchicalTransformComponent,
+				aq::ecs::BoxStaticMeshComponent>();
+
+			auto* transform = small.GetComponent<aq::ecs::TransformComponent>();
+			transform->position.Set(-3.8f, -0.85f, -2.0f);   // 台の上面に接する(底は y = -1.15)
+			transform->scale.Set(0.6f);
+
+			auto* box = small.GetComponent<aq::ecs::BoxStaticMeshComponent>();
+			box->SetColor(aq::math::Vector4(0.8f, 0.75f, 0.7f, 1.0f));
+			box->SetPBRMaterial(0.0f, 0.8f);
 		}
 
 		return true;

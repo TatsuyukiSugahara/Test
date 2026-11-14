@@ -1,6 +1,6 @@
 # SSAO(Screen Space Ambient Occlusion)設計
 
-> 対象コミット: 4b97352(P2 はこの次のコミット)/ 最終更新: 2026-11-14(P1・P2 完了。次は P3)
+> 対象コミット: 4edaf1d(P3 はこの次のコミット)/ 最終更新: 2026-11-14(P1〜P3 完了。Sample で既定有効・AquaDash は不使用。残りは Windows の確認と §5)
 
 対象: `aqEngine/Rendering/SSAO/` + `aqEngine/Rendering/Pipeline/Passes/SSAOPass.*` + `aqEngine/Assets/Shader/SSAO.fx` / `SSAOBlur.fx` /
 `SSAOComposite.fx` + `PBRFunctions.fx`(IBL の拡散部分の括り出し)+ `PipelinePresets` + デバッグパネル。
@@ -120,6 +120,7 @@
 | `aqEngine/Rendering/Pipeline/Passes/SSAOPass.{h,cpp}` **(新規)** | `SSAORenderer` を包むパス。View scope。`IsSupported()` は `IsComputeSupported()`。宣言は `Reads(GBuffer0..3)`・`Writes(Scene)`。`DeferredRenderer` と `IBLEnvironment`(null 可)を `shared_ptr` で共有する。`Build` は compute → シーン RT のバインド → 合成(`WasIBLUsed()` を渡す)。`ResizePolicy::Resizable`。`Setup` で RT を作り、作れなくても false を返さない |
 | `aqEngine/Rendering/Pipeline/PipelinePresets.{h,cpp}` | `RendererPreset::enableSSAO`(既定 false)。`Standard()` の `DeferredLightingPass` の直後(`SSRPass` の前)に、生成に成功したら `SSAOPass` を足す |
 | `aqEngine/Core/AppHost.cpp` | P3: `Find<SSAOPass>()` で「SSAO」タブを登録(SSR と同じ) |
+| `Sample/Application/SampleModule.cpp` | P3: `enableSSAO = true` と、AO の見本の非金属の台と箱 |
 | `aqEngine/Assets/Shader/shader_entries.txt` | `SSAOComposite.fx` の `VSMain vs` / `PSMain ps` / `PSMainIBL ps`(P1)、`SSAO.fx main cs` / `SSAOBlur.fx main cs`(P2) |
 | `Engine.vcxproj` / `.filters` | 新規ファイルの登録(`vs-project-files`。**フィルターは実装前にユーザーへ確認する**) |
 | `設計書/README.md`(既知の課題) | D3D12 の compute が t0〜t2 しか届かず、SSR のトレースの t3 が捨てられる件(§0.1)(P1) |
@@ -163,12 +164,12 @@ CB:
       → Metal で P1 前(`6f57ebe` の worktree)と 3,758,240 画素が差 0(P1 前どうしの撮り直しも差 0)
 - [x] **差分が 0 のとき何も変わらない**: `enableSSAO = true`・`testMode = 1` で、`enableSSAO = false` と画素一致(差 0)。パス列に `DeferredLightingPass > SSAOPass > SSRPass` が出る
       → Metal・Vulkan とも差 0。`[pipeline] 確定: ... DeferredLightingPass > SSAOPass > SSRPass > SkyPass ...`
-- [ ] **IBL の拡散を正しく差し引く**: `enablePostProcess = false`・`testMode = 2` の画の**上段(非金属)の 5 箱の正面中央 16×16 の平均**が、
+- [x] **IBL の拡散を正しく差し引く**: `enablePostProcess = false`・`testMode = 2` の画の**上段(非金属)の 5 箱の正面中央 16×16 の平均**が、
       `PBRLighting.fx` の `EvalIBL` で拡散を 0 にした一時差分(`enableSSAO = false`)の同じ範囲と、各 2/255 以内。
       誤合格の防止: `testMode = 1` の同じ範囲は、拡散 0 の一時差分と 10/255 以上違う
       → 比較は SSR も切った一時差分(§2 共通条件)。上段 5 箱(原寸 (960,690)〜(1630,744))で `testMode = 2` と拡散 0 の差は最大 1/255、
       `testMode = 1` とは 約 (11, 38, 82)/255 違う。Vulkan の `testMode = 2` も Metal と同じ値
-- [ ] **ambient を正しく差し引く**: `enableIBL = false`・`enablePostProcess = false` で、`testMode = 2` の上段 5 箱の正面中央 16×16 の平均が、
+- [x] **ambient を正しく差し引く**: `enableIBL = false`・`enablePostProcess = false` で、`testMode = 2` の上段 5 箱の正面中央 16×16 の平均が、
       ゲーム側の一時コードで環境光の強度を 0 にした画(`enableSSAO = false`)と各 2/255 以内。誤合格の防止: `testMode = 1` とは 10/255 以上違う
       → 5 箱とも差 0。`testMode = 1` とは 約 (6, 15, 25)/255 違う
 - [x] **ロード境界で判断が食い違わない**: 一時コードで `DeferredRenderer::BuildLightingCommandList` の IBL の判断に「呼び出し回数が 60 未満なら false」を足し
@@ -245,15 +246,29 @@ CB:
 - デバッグ UI(「SSAO」タブ。ON/OFF・AO の表示・各パラメータ)と `AppHost` の登録。
 - Sample で既定で有効にするか、Sample の床(金属)をどうするか、AquaDash で使うかをユーザーに確認し、決めた方を反映する。
 
-評価(自動。Mac / Metal / Debug):
-- [ ] デバッグ UI で OFF にした画と、`enableSSAO = false` で起動した画が画素一致する(パネル・メニュー・Inspector の範囲を除く)
-- [ ] デバッグ UI でパラメータ(`radius`)を変えると、AO の表示が変わる(変える前の画と、接地の帯の平均が 10/255 以上違う)
+評価(自動。Mac / Metal / Debug。2026-11-14):
+- [x] デバッグ UI で OFF にした画と、`enableSSAO = false` で起動した画が画素一致する(パネル・メニュー・Inspector の範囲を除く)
+      → Rendering パネルの「SSAO」タブで SSAO Enabled を外した画が、`enableSSAO = false` の起動と、パネル等の範囲(原寸 (0,0)-(1120,1000))を除く
+      2,730,240 画素で差 0。ON の画との差は 18,603 画素(切り替えが効いている)
+- [x] デバッグ UI でパラメータ(`radius`)を変えると、AO の表示が変わる(変える前の画と、接地の帯の平均が 10/255 以上違う)
+      → Show AO を入れ、Radius のスライダーを 1.00 → 0.33 にすると、P2 の接地の帯(原寸 (1238,934) 64×16)が 202.8 → 214.8(差 12)。
+      このときの Sample は SSR とポストプロセスが有効なので、AO の表示には床の映り込みとトーンマップが重なる(§2 共通条件)。値の比較は同じ条件どうし
+      → ぼかした AO の RT の縮小表示は `R32_Float` の r だけなので赤の濃淡で出る(ImGui の Image は rgba をそのまま描く)
 
 評価(ユーザー確認):
-- [ ] Sample で既定で有効にするか。有効にするなら床の材質(SSR の見本の金属のままか、AO が見える非金属の台を足すか)
-- [ ] AquaDash で有効にした場合の見た目(キャラクターと地形の AO、フォワードの道路が AO を受けない点)と、使うかどうか。走行中のちらつきは
+- [x] Sample で既定で有効にするか。有効にするなら床の材質(SSR の見本の金属のままか、AO が見える非金属の台を足すか)
+      → **有効にし、非金属の台を足す**(ユーザー判断。2026-11-14)。床は SSR の見本の金属のまま。見本列の左手前 (-3.8, -1.35, -2.0) に台(1.6 × 0.4 × 1.6、
+      metallic 0・roughness 0.8)を置き、上面に 0.6 の箱を接して載せた。SSAO の ON/OFF で、台の上の箱の下側と台の側面が暗くなる(最大差 49/255)
+- [x] AquaDash で有効にした場合の見た目(キャラクターと地形の AO、フォワードの道路が AO を受けない点)と、使うかどうか。走行中のちらつきは
       Space(加速)を押しっぱなしにして走らせながら、`screencapture -l <窓 ID>` で 0.2 秒おきに 10 枚撮って並べる
       (窓 ID は `CGWindowListCopyWindowInfo` で取る。この Mac では押しっぱなしを個人の補助ツール `evthold` で合成しているが、別 PC では手で押してよい)
+      → **AquaDash では使わない**(ユーザー判断。2026-11-14)。走行中の画(P2 の FPS の計測時)では、画面の大半を占める道路がフォワード描画で AO を受けず、
+      地形とキャラクターの差もほとんど見えない。負荷だけ増えるので、SSR・DoF と同じく有効にしない。走行中のちらつきは、有効にするゲームが出たときに見る(§5 課題 3)
+
+#### P3 で決めたこと
+
+- Sample は `enableSSAO = true` と非金属の台(上の記録)。パラメータは既定値のまま。
+- デバッグパネルは SSR と同じく、`SSAOPass` があり `SSAORenderer` が生成できているときだけ「SSAO」タブを出す(`AppHost.cpp`)。
 
 Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む。
 
@@ -289,11 +304,11 @@ Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む。
 
 - [x] P1 の評価を全て満たした
 - [x] P2 の評価を全て満たした
-- [ ] P3 の評価を全て満たした
-- [ ] 抽象 IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本
+- [x] P3 の評価を全て満たした
+- [x] 抽象 IF(`IRenderContextImpl` / `IGraphicsDeviceImpl`)への追加が 0 本
 - [x] `shader_entries.txt` に 5 行が登録されている(P1 で 3 行、P2 で 2 行)
-- [ ] 新規 `.h/.cpp` が `.vcxproj` / `.filters` に登録されている
+- [x] 新規 `.h/.cpp` が `.vcxproj` / `.filters` に登録されている(`Rendering\SSAO` 4 組 + `SSAOPass`)
 - [x] SSAO の生成に失敗しても起動できる(SSAO なしの絵で続行する)
   → P2 の「生成失敗」(Vulkan)。Metal は `CreateShader` が失敗でも null を返さないので確かめられない(README「既知の課題」)
 - [x] [エンジン不足機能メモ.md](エンジン不足機能メモ.md) §5 の SSAO の行を本書へのリンクに置き換え、被写界深度の行を「済」にした(2026-11-14)
-- [ ] 設計と実装の食い違いを本書へ反映し、`対象コミット` を更新した
+- [x] 設計と実装の食い違いを本書へ反映し、`対象コミット` を更新した

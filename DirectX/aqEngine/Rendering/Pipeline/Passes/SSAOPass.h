@@ -20,7 +20,7 @@ namespace aq
 		 *
 		 * SSAO が有効なビューでだけコマンドを積む。拡散の環境光の差し引きは、同じビューのライティングが
 		 * IBL(PSMainIBL)で描いたか(DeferredRenderer::WasIBLUsed)でエントリを選ぶ(§0.2)。
-		 * 積む順は AO の計算(compute。P2)→ シーン RT のバインド → 合成。P1 では compute を持たない。
+		 * 積む順は AO の計算とぼかし(compute)→ シーン RT のバインド → 合成。
 		 */
 		class SSAOPass final : public IRenderPass
 		{

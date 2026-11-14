@@ -12,16 +12,19 @@ namespace aq
 	{
 		class DeferredRenderer;
 		class IBLEnvironment;
+		struct CameraData;
+		struct PassViewInfo;
 
 
 		/**
 		 * SSAO (Screen Space Ambient Occlusion) のレンダラー (設計書/SSAO設計.md §1)。
 		 *
-		 * 合成の VS/PS/PSIBL (SSAOComposite.fx)・AO の RT 2 枚 (生の AO・ぼかした AO。R32_Float、全解像度) を所有し、
-		 * パラメータを保持する。RT のリサイズは PrepareResize / CommitResize / AbortResize (SSRRenderer と同じ作法)。
-		 * P1 では AO の CS (SSAO.fx / SSAOBlur.fx) を持たない (P2 で足す)。
+		 * AO の CS (SSAO.fx)・ぼかしの CS (SSAOBlur.fx)・合成の VS/PS/PSIBL (SSAOComposite.fx)・
+		 * AO の RT 2 枚 (生の AO・ぼかした AO。R32_Float、全解像度) を所有し、パラメータを保持する。
+		 * RT のリサイズは PrepareResize / CommitResize / AbortResize (SSRRenderer と同じ作法)。
 		 *
-		 * 生成に失敗しても落とさない (VS / PS が作れなければ Create() が false を返し、PipelinePresets は SSAOPass を足さない。
+		 * 生成に失敗しても落とさない (CS 2 本と VS / PS のどれかが作れなければ Create() が false を返し、
+		 * PipelinePresets は SSAOPass を足さない。
 		 * PSIBL だけが作れないときは IBL 経路だけ合成しない。RT が作れなかったときは何も積まない。
 		 * どれも絵は SSAO なしと同じになる)。
 		 *
@@ -38,6 +41,10 @@ namespace aq
 
 
 		private:
+			/** AO の計算 (SSAO.fx) とぼかし (SSAOBlur.fx) の CS */
+			std::unique_ptr<graphics::IShader> aoCS_;
+			std::unique_ptr<graphics::IShader> blurCS_;
+
 			/** 合成の VS/PS/PSIBL (SSAOComposite.fx) */
 			std::unique_ptr<graphics::IShader> compositeVS_;
 			std::unique_ptr<graphics::IShader> compositePS_;
@@ -55,7 +62,7 @@ namespace aq
 			bool enabled_ = true;
 
 			/** AO のパラメータ (設計書 §0.3 / §0.4) */
-			float    radius_          = 0.5f;    // サンプルの半径 (ワールド単位)
+			float    radius_          = 1.0f;    // サンプルの半径 (ワールド単位。P2 で 0.5 → 1.0。設計書 §0.3)
 			float    intensity_       = 1.0f;
 			float    power_           = 1.0f;
 			float    biasScale_       = 0.002f;
@@ -77,8 +84,9 @@ namespace aq
 
 		public:
 			/**
-			 * 合成の VS/PS/PSIBL を生成する (同期)。
-			 * @return VS と PS が作れたら true。false なら SSAO を使わない。PSIBL だけ作れないときは true (IBL 経路だけ合成しない)
+			 * AO・ぼかしの CS と、合成の VS/PS/PSIBL を生成する (同期)。
+			 * @return CS 2 本と VS・PS が作れたら true。false なら SSAO を使わない。
+			 *         PSIBL だけ作れないときは true (IBL 経路だけ合成しない)
 			 */
 			bool Create();
 
@@ -97,13 +105,26 @@ namespace aq
 			void CommitResize();
 			void AbortResize();
 
-			/** 合成を積める状態か (ON で、VS / PS と RT 2 枚がそろっている) */
+			/** コマンドを積める状態か (ON で、CS 2 本・VS / PS と RT 2 枚がそろっている) */
 			bool IsActive() const;
+
+			/**
+			 * AO の計算とぼかし (compute) のコマンドを 1 本積む。RT は設定しない
+			 * (G-Buffer と AO の RT だけを読み書きするので、シーン RT の RTV を外さない)。
+			 * パラメータ・行列・矩形は値で写す (§0.2)。testMode に関係なく積む (testMode 1 / 2 では合成が AO を読まないだけ)。
+			 * @param deferred G-Buffer のハンドルを取る
+			 * @param camera   このビューのカメラ (view 行列と射影行列の _22 / _34 / _44 を写す)
+			 * @param view     このビューの矩形
+			 */
+			void BuildComputeCommandList(const DeferredRenderer& deferred,
+			                             const CameraData&       camera,
+			                             const PassViewInfo&     view,
+			                             RenderCommandList&      outList) const;
 
 			/**
 			 * 合成のコマンドを 1 本積む。RT は設定しない (呼び出し側でシーン RT をバインド済みの前提)。
 			 * 呼び出し側 (SSAOPass) が、そのビューのライティングが IBL で描いたか (DeferredRenderer::WasIBLUsed) を useIBL で渡す。
-			 * P1 では AO を計算しないので、testMode が TEST_MODE_NONE のときは何も積まない (P2 で外す)。
+			 * testMode が TEST_MODE_NONE なら、BuildComputeCommandList が書いたぼかした AO を読む。
 			 * @param useIBL true なら PSMainIBL (ibl が null か PSIBL が無ければ積まない)、false なら PSMain
 			 * @param ibl    useIBL のとき、ライティングが使った IBL の環境 (コマンドが shared_ptr で保持する)
 			 */

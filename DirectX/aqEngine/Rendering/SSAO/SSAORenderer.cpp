@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "SSAORenderer.h"
+#include "SSAOComputeCommand.h"
 #include "SSAOCompositeCommand.h"
 #include "Graphics/GraphicsTypes.h"
 #include "Rendering/Deferred/DeferredRenderer.h"
@@ -12,6 +13,8 @@ namespace aq
 	{
 		namespace
 		{
+			static constexpr const char* SSAO_SHADER_PATH           = "aqEngine/Assets/Shader/SSAO.fx";
+			static constexpr const char* SSAO_BLUR_SHADER_PATH      = "aqEngine/Assets/Shader/SSAOBlur.fx";
 			static constexpr const char* SSAO_COMPOSITE_SHADER_PATH = "aqEngine/Assets/Shader/SSAOComposite.fx";
 		}
 
@@ -20,11 +23,26 @@ namespace aq
 		{
 			auto& gd = graphics::GraphicsDevice::Get();
 
+			// SSAO.fx / SSAOBlur.fx の CS (同期生成)
+			aoCS_ = gd.CreateShader(SSAO_SHADER_PATH, "main", graphics::IShader::ShaderType::CS);
+			if (!aoCS_) {
+				aq::StartupMarkf("[ssao] shader load FAILED (%s) -> ssao disabled", SSAO_SHADER_PATH);
+				return false;
+			}
+			blurCS_ = gd.CreateShader(SSAO_BLUR_SHADER_PATH, "main", graphics::IShader::ShaderType::CS);
+			if (!blurCS_) {
+				aq::StartupMarkf("[ssao] shader load FAILED (%s) -> ssao disabled", SSAO_BLUR_SHADER_PATH);
+				aoCS_.reset();
+				return false;
+			}
+
 			// SSAOComposite.fx の VS/PS (同期生成)
 			compositeVS_ = gd.CreateShader(SSAO_COMPOSITE_SHADER_PATH, "VSMain", graphics::IShader::ShaderType::VS);
 			compositePS_ = gd.CreateShader(SSAO_COMPOSITE_SHADER_PATH, "PSMain", graphics::IShader::ShaderType::PS);
 			if (!compositeVS_ || !compositePS_) {
 				aq::StartupMarkf("[ssao] shader load FAILED (%s) -> ssao disabled", SSAO_COMPOSITE_SHADER_PATH);
+				aoCS_.reset();
+				blurCS_.reset();
 				compositeVS_.reset();
 				compositePS_.reset();
 				return false;
@@ -36,7 +54,7 @@ namespace aq
 				aq::StartupMarkf("[ssao] PSMainIBL load FAILED (%s) -> ssao is skipped on IBL views", SSAO_COMPOSITE_SHADER_PATH);
 			}
 
-			aq::StartupMark("[ssao] created (composite VS/PS ok)");
+			aq::StartupMark("[ssao] created (AO / blur CS, composite VS/PS ok)");
 			return true;
 		}
 
@@ -117,10 +135,46 @@ namespace aq
 		bool SSAORenderer::IsActive() const
 		{
 			return enabled_
+			    && aoCS_
+			    && blurCS_
 			    && compositeVS_
 			    && compositePS_
 			    && rawAORTHandle_.IsValid()
 			    && blurredAORTHandle_.IsValid();
+		}
+
+
+		void SSAORenderer::BuildComputeCommandList(const DeferredRenderer& deferred,
+		                                           const CameraData&       camera,
+		                                           const PassViewInfo&     view,
+		                                           RenderCommandList&      outList) const
+		{
+			if (!IsActive()) { return; }
+
+			// パラメータ・行列・矩形は値で写す (デバッグ UI からの変更が実行待ちのコマンドと競合しない。§0.2)。
+			// 射影行列は DirectXMath の行優先 (行ベクトル規約) なので、クリップ空間の w = x × _14 + y × _24 + z × _34 + _44。
+			// 透視投影 (XMMatrixPerspectiveFovLH)・正射影 (XMMatrixOrthographicLH) とも _14 = _24 = 0 なので w = _34 × z + _44。
+			// 投影の種別は別に持たない (§0.3)。
+			const math::Matrix4x4& projection = camera.projectionMatrix;
+
+			SSAOCBData cbData;
+			cbData.view            = camera.viewMatrix;
+			cbData.viewRect        = math::Vector4(view.x, view.y, view.w, view.h);
+			cbData.projScaleY      = projection._22;
+			cbData.projW34         = projection._34;
+			cbData.projW44         = projection._44;
+			cbData.radius          = radius_;
+			cbData.intensity       = intensity_;
+			cbData.power           = power_;
+			cbData.biasScale       = biasScale_;
+			cbData.sampleCount     = sampleCount_;
+			cbData.maxScreenRadius = maxScreenRadius_;
+			cbData.planeTolerance  = planeTolerance_;
+
+			outList.Enqueue<SSAOComputeCommand>(
+				*aoCS_, *blurCS_,
+				deferred.GetGBuffer1Handle(), deferred.GetGBuffer2Handle(), deferred.GetGBuffer3Handle(),
+				rawAORTHandle_, blurredAORTHandle_, cbData);
 		}
 
 
@@ -130,9 +184,6 @@ namespace aq
 		                                             RenderCommandList& outList) const
 		{
 			if (!IsActive()) { return; }
-
-			// P1 は AO を計算しないので、通常 (ぼかした AO を読む) では積まない (設計書 §2 P1。P2 で外す)
-			if (testMode_ == TEST_MODE_NONE) { return; }
 
 			// 強度・testMode・デバッグ表示は値で写す (§0.2)
 			if (useIBL) {

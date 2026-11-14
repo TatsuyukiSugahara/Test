@@ -728,6 +728,9 @@
     <ClCompile Include="Rendering\SSAO\SSAOCompositeCommand.cpp">
       <Filter>Rendering\SSAO</Filter>
     </ClCompile>
+    <ClCompile Include="Rendering\SSAO\SSAOComputeCommand.cpp">
+      <Filter>Rendering\SSAO</Filter>
+    </ClCompile>
     <ClCompile Include="Terrain\HeightmapChunk.cpp">
       <Filter>Terrain</Filter>
     </ClCompile>
@@ -1703,6 +1706,9 @@
       <Filter>Rendering\SSAO</Filter>
     </ClInclude>
     <ClInclude Include="Rendering\SSAO\SSAOCompositeCommand.h">
+      <Filter>Rendering\SSAO</Filter>
+    </ClInclude>
+    <ClInclude Include="Rendering\SSAO\SSAOComputeCommand.h">
       <Filter>Rendering\SSAO</Filter>
     </ClInclude>
     <ClInclude Include="UI\UITypes.h">

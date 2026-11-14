@@ -71,14 +71,12 @@ namespace aq
 		void SSAOPass::Build(RenderFrame& frame, const PassViewInfo& view,
 		                     PassResources& res, RenderCommandList& outList)
 		{
-			(void)frame;
-			(void)view;
-
 			if (!ssao_ || !deferred_) { return; }
 			if (!ssao_->IsActive()) { return; }
 
-			// P2: ここで AO の計算とぼかし(compute)を積む。compute は RTV を外して回すことがあるので、
-			// 下の RT のバインドは compute の後に置く(契約 3)。
+			// AO の計算とぼかし(compute)。G-Buffer と AO の RT だけを読み書きするので RTV は外さない(§0.5-7)。
+			// AO の RT にはこのビューの矩形の中だけを書く。testMode に関係なく積む(1 / 2 では合成が AO を読まないだけ)。
+			ssao_->BuildComputeCommandList(*deferred_, frame.camera, view, outList);
 
 			// 契約 3: 前のパスの終わり方に依存せず、自分で RT をバインドしてから描く。
 			// 合成は深度を使わないが、ライティング・SSR と同じ組み合わせでバインドしておく。

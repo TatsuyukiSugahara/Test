@@ -66,6 +66,8 @@ PBRLighting.fx        PSMainIBL  ps   # [参照] Rendering/Deferred/DeferredRend
 Particle.fx           VSMain     vs   # [参照] Component/ParticleComponentSystem.cpp
 Particle.fx           PSMain     ps   # [参照] Component/ParticleComponentSystem.cpp
 Particle.fx           PSTextured ps   # [参照] Component/ParticleComponentSystem.cpp
+SSAO.fx               main       cs   # [参照] Rendering/SSAO/SSAORenderer.cpp
+SSAOBlur.fx           main       cs   # [参照] Rendering/SSAO/SSAORenderer.cpp
 SSAOComposite.fx      VSMain     vs   # [参照] Rendering/SSAO/SSAORenderer.cpp
 SSAOComposite.fx      PSMain     ps   # [参照] Rendering/SSAO/SSAORenderer.cpp
 SSAOComposite.fx      PSMainIBL  ps   # [参照] Rendering/SSAO/SSAORenderer.cpp

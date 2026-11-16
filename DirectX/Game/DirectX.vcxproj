@@ -374,9 +374,18 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
 if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(OutDir)" &gt;NUL</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
-  <!-- 共有ソース一覧(Game / GameUWP 共通)。ファイル追加/削除は GameSources.props を編集する。 -->
-  <Import Project="GameSources.props" />
+  <!-- ゲームロジックは GameLogic.vcxproj(静的ライブラリ)に分離。この exe はエントリ(Main.cpp)だけを持つ。
+       ソースの追加/削除は GameSources.props を編集する。
+       Main.cpp は stdafx.cpp(PCH 生成元)が GameLogic 側にあるため PCH を使わない。 -->
   <ItemGroup>
+    <ClCompile Include="Application\Main.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="GameLogic.vcxproj">
+      <Project>{6b3a9e52-4d17-4c8f-a5e0-2f91c7d84b36}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\aqEngine\Engine.vcxproj">
       <Project>{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}</Project>
     </ProjectReference>

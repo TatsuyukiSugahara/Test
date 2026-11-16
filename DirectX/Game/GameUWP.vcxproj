@@ -127,8 +127,12 @@
       <AdditionalOptions>/ignore:4099 %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
-  <!-- 共有ソース一覧(Game / GameUWP 共通)。ファイル追加/削除は GameSources.props を編集する。 -->
+  <!-- ゲームロジックのソース一覧(GameLogic と共通)。ファイル追加/削除は GameSources.props を編集する。
+       エントリ(UWPMain.cpp)はこの vcxproj が持つ。Main.cpp は UWP では空 TU のため含めない。 -->
   <Import Project="GameSources.props" />
+  <ItemGroup>
+    <ClCompile Include="Application\UWPMain.cpp" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\aqEngine\Engine.vcxproj">
       <Project>{D5A06DB3-5460-46E4-8D0D-39823C8D0D12}</Project>

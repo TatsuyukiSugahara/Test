@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Game(DirectX.vcxproj / デスクトップ)と GameUWP.vcxproj が共有するソース一覧。
+<!-- ゲームロジックのソース一覧。GameLogic.vcxproj と GameUWP.vcxproj が共有する。
      ファイルを追加/削除するときは、このファイル 1 箇所だけを編集すれば両方に反映される。
-     (相対パスは import する .vcxproj のディレクトリ基準。両プロジェクトとも Game/ にあるため成立する) -->
+     エントリ(Main.cpp / UWPMain.cpp)は含めない。各 exe の vcxproj(DirectX.vcxproj / GameUWP.vcxproj)が持つ。
+     (相対パスは import する .vcxproj のディレクトリ基準。どのプロジェクトも Game/ にあるため成立する) -->
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="Application\stdafx.cpp">
@@ -22,8 +23,6 @@
     <ClCompile Include="Application\Stage\StageData.cpp" />
     <ClCompile Include="Application\Stage\GhostData.cpp" />
     <ClCompile Include="Application\UI\AquaDashScreens.cpp" />
-    <ClCompile Include="Application\Main.cpp" />
-    <ClCompile Include="Application\UWPMain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application\Actor\StateMachine.h" />

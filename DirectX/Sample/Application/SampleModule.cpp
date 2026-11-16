@@ -117,16 +117,16 @@ namespace sample
 			box->SetPBRMaterial(0.0f, 0.8f);
 		}
 		{
-			auto small = aq::ecs::EntityContext::Get().CreateEntity<
+			auto topBox = aq::ecs::EntityContext::Get().CreateEntity<
 				aq::ecs::TransformComponent,
 				aq::ecs::HierarchicalTransformComponent,
 				aq::ecs::BoxStaticMeshComponent>();
 
-			auto* transform = small.GetComponent<aq::ecs::TransformComponent>();
+			auto* transform = topBox.GetComponent<aq::ecs::TransformComponent>();
 			transform->position.Set(-3.8f, -0.85f, -2.0f);   // 台の上面に接する(底は y = -1.15)
 			transform->scale.Set(0.6f);
 
-			auto* box = small.GetComponent<aq::ecs::BoxStaticMeshComponent>();
+			auto* box = topBox.GetComponent<aq::ecs::BoxStaticMeshComponent>();
 			box->SetColor(aq::math::Vector4(0.8f, 0.75f, 0.7f, 1.0f));
 			box->SetPBRMaterial(0.0f, 0.8f);
 		}

@@ -46,7 +46,7 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 
 | 資料 | 内容 |
 | --- | --- |
-| [エディタ全体設計](エディタ全体設計.md) | エディタ用ビルドとランタイム用ビルドの分離、ImGui Docking / Multi-Viewport、2 コンテキスト、既存 Reflect / Level / Prefab の拡張、Level の編集モデルを正本にした Play モードと Undo/Redo、コンテンツブラウザ。Edit/Play の一次資料。フェーズ E0a〜E11(2026-11-16 設計、実装未着手) |
+| [エディタ全体設計](エディタ全体設計.md) | エディタ用ビルドとランタイム用ビルドの分離、ImGui Docking / Multi-Viewport、2 コンテキスト、既存 Reflect / Level / Prefab の拡張、Level の編集モデルを正本にした Play モードと Undo/Redo、コンテンツブラウザ。Edit/Play の一次資料。フェーズ E0a〜E12。**E0 完了、E1a は詳細設計まで。冒頭の「到達点と再開手順」が現状** |
 
 ## パーティクル / アセット
 

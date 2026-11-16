@@ -1,6 +1,6 @@
 # IBL(Image Based Lighting)設計
 
-> 対象コミット: 3ece117(P3 実装はこの次のコミット) / 最終更新: 2026-11-11(P1〜P3 完了。Windows の確認は宿題)
+> 対象コミット: 3ece117(P3 実装はこの次のコミット) / 最終更新: 2026-11-16(Windows の確認を記録。P1〜P3 完了)
 
 対象: `Tools/IBLGen/` + `aqEngine/Assets/Sky/` の IBL 用 DDS 3 本 + `aqEngine/Rendering/IBL/` +
 `aqEngine/Assets/Shader/PBRLighting.fx` / `PBRFunctions.fx` + `DeferredRenderer` / `DeferredLightingCommand` + `PipelinePresets`。
@@ -337,8 +337,9 @@ P2 と別にコミットし、P2 の画素比較の基準をこのコミット�
       → 強度 0.5 で、変わるのは主にキャラクター(平均で 15〜25 明るく白寄り)、草はわずかに明るく、道路は不変。
       **ユーザー判断: `RendererPreset::enableIBL` の既定は false のまま(「既定値なら従来と同じ絵」を保つ)、AquaDash は `GameModule.cpp` で true にする**
 
-Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む(`windows-regression-pending` と同じ扱い)。
-確認すること: Sample の見本列が Mac と同じ見え方になる / IBL 無効で画が変わらない / `PSMainIBL` が実行時コンパイルで通る(`EvalIBL` がテクスチャを引数で受ける形)。
+**Windows(D3D11 / D3D12)の確認は済み(2026-11-16)。** `PSMainIBL` は両方で実行時コンパイルが通り、Sample の見本列は Windows の Vulkan と一致した。
+ただし D3D12 だけ粗さ 0 / 1 の箱の色が違っていた(`PSSetSampler` が無視され、LUT が Wrap で読まれていた。README「既知の課題」)。LUT の座標を端の texel 中心までに収めて直した。
+AquaDash(IBL 有効)も D3D11 / D3D12 でステージまで表示。「IBL 無効で画が変わらない」は Windows では見ていない。手順と結果は [エンジン不足機能メモ](エンジン不足機能メモ.md) §6。
 
 ---
 
@@ -353,7 +354,7 @@ Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む(`windows-regres
 6. **太陽の向きとディレクショナルライトの不一致**(Skybox設計 §4 課題 1)が、IBL で映り込みとしても見えるようになる。
 7. **荒い金属が暗く沈む。** split-sum の単散乱 GGX は roughness が高いほどエネルギーを失う(LUT の A+B が roughness 1・正面で 0.31。P1)。
    見本列の右下(金属・roughness 1)がほぼ黒紺になる。直すなら多重散乱の補正(Fdez-Agüera 2019 / Kulla-Conty)を `EvalIBL` に足す。
-8. **Sample と AquaDash 以外の確認**(Windows、iOS / Android は Standard 構成なら対象)は未実施。
+8. **Sample と AquaDash 以外の確認**(iOS / Android は Standard 構成なら対象)は未実施。Windows は 2026-11-16 に確認済み。
 
 ---
 

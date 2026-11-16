@@ -131,10 +131,12 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   [RenderPipeline.cpp](../aqEngine/Rendering/Pipeline/RenderPipeline.cpp) の `BuildViews` は後段(ポストプロセス・UI)に分割画面でも `viewCount = 1` の全画面 view を渡すため、
   実際には分割画面でもビュー 0 のカメラで画面全体にブラーが掛かる。分割画面の判定は `PassViewInfo::frameViewCount`(被写界深度 P1 で追加)で行える
   ([被写界深度設計](被写界深度設計.md) §0.1)。直すと分割画面の絵が変わるので、本件は記録のみ。
-- **D3D11 でインスタンス描画が無言で消える。** `IRenderContextImpl::DrawIndexedInstanced` /
-  `IASetVertexBufferSlot` の no-op 既定を D3D11 だけ override しておらず、
-  [Renderer.cpp](../aqEngine/Rendering/Renderer.cpp) も機能ゲート無しで `instancedItems` を積む。
-  草(`InstancedGrass.fx`)は D3D11 では描かれないはず。Windows 機で目視確認のうえ、D3D11 に実装する。
+- (解決済 2026-11-16)**D3D11 でインスタンス描画が無言で消える。** `IRenderContextImpl::DrawIndexedInstanced` /
+  `IASetVertexBufferSlot` の no-op 既定を D3D11 だけ override しておらず、入力レイアウトも全要素を slot0 の per-vertex にしていた。
+  Windows 機で確かめると、草・花だけでなく**道路・路肩線・中央線・コイン**(どれも `InstancedSimple`)まで AquaDash のステージから消えていた。
+  [D3D11RenderContextImpl.cpp](../aqEngine/Graphics/D3D11/D3D11RenderContextImpl.cpp) に 2 つを実装し、
+  [D3D11Shader.cpp](../aqEngine/Graphics/D3D11/D3D11Shader.cpp) で `I_` 始まりのセマンティクスを slot1 の per-instance にした(D3D12 と同じ規則)。
+  D3D11 のステージが D3D12 と同じ絵になることを確認。
 - **GPU 生成のスレッド境界が設計書と違う。** 規約は「GPU 生成はメインの `ResourceManager::Update`」だが、
   シェーダ生成は `ShaderLoader::Loading`(ワーカー)、メッシュ VB/IB は `RenderSystem::Update`(ワーカー)で
   行っている。4 バックエンドとも生成 API はスレッドセーフなので即バグではないが、規約を
@@ -203,9 +205,16 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   (01_レンダリング設計.md §2.6 / §7)。
 - (解決済 2026-09-06) `aq::math::Quaternion::SetRotation` の代入ミス(`z` に入れるべき値を `y` へ二重代入)を修正。
   利用箇所ゼロのまま壊れていた。ゲーム側の回避実装(CoinSystem の自前 Y 軸回転)も削除し本 API 使用に統一。
-- (2026-11-14 発見)**D3D12 の compute は SRV が t0〜t2 の 3 枚しか届かない。** ルートシグネチャの SRV テーブルが `CS_SRV_TABLE_SIZE = 3`([D3D12RootSignature.h](../aqEngine/Graphics/D3D12/D3D12RootSignature.h))で、`D3D12RenderContextImpl::CSSetShaderResource` は範囲外のスロットを黙って捨てる。
-  SSR のトレース(`SSRTraceCommand` が t3 に GBuffer3 を置く)は D3D12 で t3 が届かない(Windows 未確認、記録のみ。直していない)。
-  Vulkan は t0〜t11、Metal は t0〜t15 で届く。詳細は [SSAO設計](SSAO設計.md) §0.1。
+- (解決済 2026-11-16)**D3D12 の compute は SRV が t0〜t2 の 3 枚しか届かない。** ルートシグネチャの SRV テーブルが `CS_SRV_TABLE_SIZE = 3`([D3D12RootSignature.h](../aqEngine/Graphics/D3D12/D3D12RootSignature.h))で、`D3D12RenderContextImpl::CSSetShaderResource` は範囲外のスロットを黙って捨てる。
+  発見時(2026-11-14)は「SSR のトレースの t3 が捨てられる」と見ていたが、Windows 機で動かすと**捨てられる前に SSR トレースの compute PSO の生成が失敗**し
+  (シェーダが t3 を宣言していてルートシグネチャに無いため E_INVALIDARG)、Debug ではアサートで止まっていた。SSR を有効にした Sample は D3D12 で起動できなかった。
+  `CS_SRV_TABLE_SIZE` / `CS_SRV_COUNT` を 4(t0〜t3)に広げて解消。t3 以上を使う compute は今のところ SSR のトレースだけ。Vulkan は t0〜t11、Metal は t0〜t15 で届く。
+- (2026-11-16 発見)**D3D12 は `PSSetSampler` を無視し、s0 が常に Linear / Wrap になる。**
+  [D3D12RenderContextImpl.cpp](../aqEngine/Graphics/D3D12/D3D12RenderContextImpl.cpp) の `PSSetSampler` が空で、グラフィクスのサンプラは
+  ルートシグネチャの静的サンプラ(s0 = Linear / Wrap、s1 = シャドウ比較)に固定されている。他のバックエンドは呼び出し側が渡したサンプラを使う。
+  IBL の BRDF LUT を Clamp のつもりで読んでいたため、D3D12 だけ粗さ 0 / 1 の箱の色が違っていた(最大 43/255)。LUT の座標を端の texel 中心までに収めて回避した
+  ([PBRFunctions.fx](../aqEngine/Assets/Shader/PBRFunctions.fx) の `EvalIBLSpecular`)。Clamp・Point などを前提にする他の PS も D3D12 では Wrap / Linear で読まれる。
+  直すなら、よく使うサンプラを静的サンプラとして足すか、サンプラのディスクリプタテーブルを持つ。
 
 ## 文書管理方針
 

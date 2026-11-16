@@ -1,6 +1,6 @@
 # SSAO(Screen Space Ambient Occlusion)設計
 
-> 対象コミット: 4edaf1d(P3 はこの次のコミット)/ 最終更新: 2026-11-14(P1〜P3 完了。Sample で既定有効・AquaDash は不使用。残りは Windows の確認と §5)
+> 対象コミット: 4edaf1d(P3 はこの次のコミット)/ 最終更新: 2026-11-16(Windows の確認を記録。P1〜P3 完了。Sample で既定有効・AquaDash は不使用。残りは §5)
 
 対象: `aqEngine/Rendering/SSAO/` + `aqEngine/Rendering/Pipeline/Passes/SSAOPass.*` + `aqEngine/Assets/Shader/SSAO.fx` / `SSAOBlur.fx` /
 `SSAOComposite.fx` + `PBRFunctions.fx`(IBL の拡散部分の括り出し)+ `PipelinePresets` + デバッグパネル。
@@ -33,6 +33,8 @@
   `CS_SRV_TABLE_SIZE = 3`)で、`D3D12RenderContextImpl::CSSetShaderResource` は範囲外のスロットを**黙って捨てる**。Vulkan の SRV は t0〜t11
   (`VulkanRenderContextImpl.h` の `MAX_SRV = 12`。グラフィクスと compute 共通)、Metal は t0〜t15。
   → **SSR のトレース(`SSRTraceCommand` が t3 に GBuffer3 を置く)は D3D12 で t3 が届かない**。README「既知の課題」に記録する(本書では直さない)。
+  **(2026-11-16 追記)** Windows 機で確かめると、t3 は捨てられるのではなく SSR トレースの PSO の生成が失敗していた。D3D12 の compute を **t0〜t3 の 4 枚**に広げて解消した
+  (README「既知の課題」)。本書の「入力 3 枚まで」の制約は SSAO の実装時の前提として残す。
 - 使える RT の形式は `R8G8B8A8_Unorm` / `R16G16B16A16_Float` / `R32_Float` / `R32G32B32A32_Float` など(`GraphicsTypes.h` の `PixelFormat`)。1 チャンネルは `R32_Float` だけ
   (DoF の CoC が UAV で使っている)。
 - Mobile 構成(`PipelinePresets::Mobile`)は G-Buffer を持たない。
@@ -270,7 +272,7 @@ CB:
 - Sample は `enableSSAO = true` と非金属の台(上の記録)。パラメータは既定値のまま。
 - デバッグパネルは SSR と同じく、`SSAOPass` があり `SSAORenderer` が生成できているときだけ「SSAO」タブを出す(`AppHost.cpp`)。
 
-Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む。
+**Windows(D3D11 / D3D12)の確認は済み(2026-11-16)。** Sample の画が Windows の Vulkan と一致(D3D12 は IBL の LUT の修正後)。手順と結果は [エンジン不足機能メモ](エンジン不足機能メモ.md) §6。
 
 ---
 
@@ -294,7 +296,7 @@ Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む。
 1. **鏡面の遮蔽(specular occlusion)が無い。** 金属や光沢の強い面には AO が出ない。入れるなら SSR の合成の差し引きにも同じ係数を掛ける必要がある。
 2. **フォワードの物は AO を受けず、落とさない**(§0.2)。深度 SRV か、フォワードの深度・法線の書き込みが要る([被写界深度設計](被写界深度設計.md) §5 課題 1 と同じ土台)。
 3. **時間方向の安定化は無い。** カメラが動くときノイズがちらつくなら、TAA と一緒に扱う。
-4. **ぼかしは pixelTag を読まない**(D3D12 の compute の SRV が 3 枚のため)。worldPos が原点ちょうどの G-Buffer の画素を背景と誤る(実害は原点に置いた物の 1 画素程度)。
+4. **ぼかしは pixelTag を読まない**(実装時は D3D12 の compute の SRV が 3 枚だったため。2026-11-16 に 4 枚へ広げたので、t3 に GBuffer3 を足せば直せる)。worldPos が原点ちょうどの G-Buffer の画素を背景と誤る(実害は原点に置いた物の 1 画素程度)。
 5. **画面の外・手前の物の裏は遮蔽物として数えない**(画面空間の手法の一般的な限界)。
 6. **worldPos が絶対座標の half 精度**(原点から遠い場所で bias が大きくなり、細かい AO が消える)。[SSR設計](SSR設計.md) §5 課題 5 と同じ。
 

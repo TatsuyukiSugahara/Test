@@ -1,6 +1,6 @@
 # SSR(Screen Space Reflection)設計
 
-> 対象コミット: df47311(P3 はこの次のコミット) / 最終更新: 2026-11-11(P1〜P3 完了。Windows の確認は宿題)
+> 対象コミット: df47311(P3 はこの次のコミット) / 最終更新: 2026-11-16(Windows の確認を記録。P1〜P3 完了)
 
 対象: `aqEngine/Rendering/SSR/` + `aqEngine/Rendering/Pipeline/Passes/SSRPass.*` + `aqEngine/Assets/Shader/SSRTrace.fx` / `SSRComposite.fx` +
 `PBRFunctions.fx`(IBL の鏡面部分の括り出し)+ `DeferredRenderer`(そのビューで IBL を使ったかの記録)+ `PipelinePresets` + Sample の床。
@@ -227,7 +227,7 @@ HLSL の cbuffer と static_assert で一致させる。
       → 道路が G-Buffer を通らない描画なので映り込みがほぼ出ない(P2 の撮影)。**ユーザー判断: AquaDash では有効にしない**
       (負荷だけ増えるため)。走行中のちらつきと遠方の粗さは、有効にするゲームが出たときに確認する(§5 課題 8)
 
-Windows(D3D11 / D3D12)の確認は Windows 機の宿題に積む。
+**Windows(D3D11 / D3D12)の確認は済み(2026-11-16)。** D3D12 はトレースの compute PSO が作れず起動時にアサートで止まっていた(t3 がルートシグネチャに無い)。D3D12 の compute の SRV を t0〜t3 に広げて直し、Sample の画が Windows の Vulkan と一致。手順と結果は [エンジン不足機能メモ](エンジン不足機能メモ.md) §6。
 
 ---
 

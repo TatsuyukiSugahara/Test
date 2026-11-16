@@ -42,6 +42,12 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 | [System登録契約設計](System登録契約設計.md) | `SystemManager` の登録ルール(循環・未登録依存・確定後登録・確定前更新)を Release でも強制する。登録失敗を初期化失敗として伝える経路、型照合の完全一致化。フェーズ P1〜P2(2026-09-30 完了) |
 | [Systemアクセス宣言設計](Systemアクセス宣言設計.md) | System ごとに Component と共有資源(カメラ・サウンド等)の読み書きを宣言させ、競合する System 間に依存経路があるかを起動時に検証する。既存の競合候補 7 件と解消案、除外指定、Debug 限定の宣言漏れ検出。フェーズ P1〜P3(2026-09-30 設計、**保留**。問題が出たときに再検討) |
 
+## エディタ
+
+| 資料 | 内容 |
+| --- | --- |
+| [エディタ全体設計](エディタ全体設計.md) | エディタ用ビルドとランタイム用ビルドの分離、ImGui Docking / Multi-Viewport、2 コンテキスト、既存 Reflect / Level / Prefab の拡張、Level の編集モデルを正本にした Play モードと Undo/Redo、コンテンツブラウザ。Edit/Play の一次資料。フェーズ E0a〜E11(2026-11-16 設計、実装未着手) |
+
 ## パーティクル / アセット
 
 | 資料 | 内容 |
@@ -215,6 +221,12 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   IBL の BRDF LUT を Clamp のつもりで読んでいたため、D3D12 だけ粗さ 0 / 1 の箱の色が違っていた(最大 43/255)。LUT の座標を端の texel 中心までに収めて回避した
   ([PBRFunctions.fx](../aqEngine/Assets/Shader/PBRFunctions.fx) の `EvalIBLSpecular`)。Clamp・Point などを前提にする他の PS も D3D12 では Wrap / Linear で読まれる。
   直すなら、よく使うサンプラを静的サンプラとして足すか、サンプラのディスクリプタテーブルを持つ。
+- (2026-11-16 発見)**Level / Prefab エディタで保存し直すと、参照ノードの override が増える。**
+  [PrefabEditNodeOps.cpp](../aqEngine/ECS/PrefabEditNodeOps.cpp) の `PrefabNodeFromJson` は疎な override を既定値入りのコンポーネントに復元し、
+  `PrefabNodeToJson` は Reflect 対象の全フィールドを書き出す。元の Prefab の scale が 2 で override が position だけでも、往復後は scale = 1 まで override される。
+  参照ノードの `overrides.children` / `removedChildren` も読み込み時に捨てられる。[エディタ全体設計](エディタ全体設計.md) 7.2(E4)で override の生 JSON を保持して直す。
+- (2026-11-16 発見)**Level エディタの Load in World は前のプレビューを消さずに追加ロードし、in-memory 登録も残し続ける。**
+  [LevelEditor.cpp](../aqEngine/Level/LevelEditor.cpp) の `LoadInWorld`。押すたびにエンティティと `LevelRegistry` の登録が増える。エディタ全体設計 7.3(E4)で直す。
 
 ## 文書管理方針
 

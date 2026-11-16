@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- エディタ構成(Editor_Debug / Editor_Release)専用のプロパティシート。
+     AQ_EDITOR=1 と AQ_DEBUG_IMGUI をここ 1 か所で定義し、エディタ構成の全プロジェクト
+     (aqEngine / imgui / Game ほか)がこれを取り込む。vcxproj にはマクロを直書きしない。
+     AQ_EDITOR=1 のときは既存のインスペクターや Prefab / Level エディタが
+     AQ_DEBUG_IMGUI でコンパイルされるため、AQ_DEBUG_IMGUI も必ず併せて定義する。 -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>AQ_EDITOR=1;AQ_DEBUG_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

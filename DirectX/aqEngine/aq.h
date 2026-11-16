@@ -1,4 +1,10 @@
 #pragma once
+// エディタ構成(Editor_Debug / Editor_Release)では Editor.props が AQ_EDITOR=1 を定義する。
+// 未定義の構成(Game など)では 0 とし、#if AQ_EDITOR で判定できるようにする。
+#ifndef AQ_EDITOR
+#define AQ_EDITOR 0
+#endif
+
 #include "Platform/Common/PlatformDefs.h"
 
 #if defined(AQ_PLATFORM_WINDOWS_FAMILY)

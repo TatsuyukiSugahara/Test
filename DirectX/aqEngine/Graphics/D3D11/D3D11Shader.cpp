@@ -3,6 +3,7 @@
 #include "D3D11Shader.h"
 #include "D3D11GraphicsDeviceImpl.h"
 #include "Resource/AssetPath.h"
+#include <cstring>
 
 namespace aq
 {
@@ -124,13 +125,19 @@ namespace aq
 					D3D11_SIGNATURE_PARAMETER_DESC parameterDesc;
 					vertexShaderReflection->GetInputParameterDesc(i, &parameterDesc);
 
+					// セマンティクスが "I_" 始まりの要素は per-instance ストリーム(slot1)として扱う(D3D12 と同じ規則)。
+					// I_WORLD0..3 は reflection 上 SemanticName="I_WORLD"/Index=0..3 に分かれるので前方一致で見る。
+					// AlignedByteOffset は APPEND なので、オフセットはスロットごとに自動で積まれる。
+					const bool perInstance = parameterDesc.SemanticName != nullptr
+						&& std::strncmp(parameterDesc.SemanticName, "I_", 2) == 0;
+
 					D3D11_INPUT_ELEMENT_DESC elementDesc;
 					elementDesc.SemanticName         = parameterDesc.SemanticName;
 					elementDesc.SemanticIndex        = parameterDesc.SemanticIndex;
-					elementDesc.InputSlot            = 0;
+					elementDesc.InputSlot            = perInstance ? 1 : 0;
 					elementDesc.AlignedByteOffset    = D3D11_APPEND_ALIGNED_ELEMENT;
-					elementDesc.InputSlotClass       = D3D11_INPUT_PER_VERTEX_DATA;
-					elementDesc.InstanceDataStepRate = 0;
+					elementDesc.InputSlotClass       = perInstance ? D3D11_INPUT_PER_INSTANCE_DATA : D3D11_INPUT_PER_VERTEX_DATA;
+					elementDesc.InstanceDataStepRate = perInstance ? 1 : 0;
 
 					if (parameterDesc.Mask == 1) {
 						if      (parameterDesc.ComponentType == D3D_REGISTER_COMPONENT_UINT32)  elementDesc.Format = DXGI_FORMAT_R32_UINT;

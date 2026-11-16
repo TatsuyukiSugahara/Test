@@ -93,7 +93,12 @@ void EvalIBLSpecular(float3 N, float3 V,
     float3 F0    = lerp(0.08 * specular * globalSpecularScale, baseColor, metallic);
     float  NdotV = max(dot(N, V), 1e-5);
     float3 R     = reflect(-V, N);
-    float2 ab    = brdfLut.SampleLevel(s, float2(NdotV, roughness), 0).rg;
+    // LUT の座標は端の texel の中心までに収める。D3D12 は PSSetSampler を無視して s0 が静的サンプラの
+    // Wrap になるため、roughness 0 / 1 や NdotV 1 の端で反対側の端と混ざる。Clamp のバックエンドでは結果は変わらない。
+    float2 lutSize;
+    brdfLut.GetDimensions(lutSize.x, lutSize.y);
+    const float2 lutUV = clamp(float2(NdotV, roughness), 0.5 / lutSize, 1.0 - 0.5 / lutSize);
+    float2 ab    = brdfLut.SampleLevel(s, lutUV, 0).rg;
     prefiltered  = specCube.SampleLevel(s, R, roughness * maxMip).rgb;
     specWeight   = F0 * ab.x + ab.y;
 }

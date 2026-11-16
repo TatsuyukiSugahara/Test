@@ -461,7 +461,7 @@ namespace aq
 			D3D12_CPU_DESCRIPTOR_HANDLE nullUav = device_->GetSRVStagingHeap()->GetCPUDescriptorHandleForHeapStart();
 			nullUav.ptr += static_cast<SIZE_T>(device_->GetNullUAVIndex()) * size;
 
-			// t0..t1: SRV テーブル (未バインドは null SRV)
+			// t0..t3: SRV テーブル (未バインドは null SRV)
 			{
 				uint32_t base = 0;
 				if (device_->AllocateSRVTableRange(CS_SRV_COUNT, base))

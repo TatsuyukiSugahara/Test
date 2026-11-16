@@ -373,6 +373,30 @@ namespace aq
 		}
 
 
+		void D3D11RenderContextImpl::IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vb)
+		{
+			// インスタンスバッファは毎フレーム書き換える動的 VB で来る。静的 VB とは別クラスなので型で分ける。
+			ID3D11Buffer* d3dBuf = nullptr;
+			if (auto* dynamicVB = dynamic_cast<DynamicVertexBuffer*>(&vb)) {
+				d3dBuf = dynamicVB->GetBody();
+			}
+			else {
+				d3dBuf = static_cast<VertexBuffer&>(vb).GetBody();
+			}
+			uint32_t offset = 0;
+			uint32_t stride = vb.GetStride();
+			context_->IASetVertexBuffers(slot, 1, &d3dBuf, &stride, &offset);
+		}
+
+
+		void D3D11RenderContextImpl::DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount,
+		                                                  uint32_t startIndexLocation, int32_t baseVertexLocation,
+		                                                  uint32_t startInstanceLocation)
+		{
+			context_->DrawIndexedInstanced(indexCount, instanceCount, startIndexLocation, baseVertexLocation, startInstanceLocation);
+		}
+
+
 		void D3D11RenderContextImpl::Dispatch(uint32_t x, uint32_t y, uint32_t z)
 		{
 			context_->Dispatch(x, y, z);

@@ -100,7 +100,8 @@ namespace aq
 				auto* depthMap = shadow_->GetDepthMap();
 				if (depthMap && depthMap->GetSRV())
 				{
-					ImGui::Image((ImTextureID)depthMap->GetSRV()->GetNativeHandle(), sz);
+					// 深度マップは配列テクスチャで、ImGui の公式シェーダ(2D のみ)では読めないため画像は出さない
+					ImGui::Text("シャドウ深度マップの画像表示は未対応");
 					ImGui::Text("Shadow Depth Map (%u x %u)", depthMap->GetResolution(), depthMap->GetResolution());
 				}
 			}

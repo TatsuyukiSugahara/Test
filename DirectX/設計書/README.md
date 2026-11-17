@@ -227,6 +227,10 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   参照ノードの `overrides.children` / `removedChildren` も読み込み時に捨てられる。[エディタ全体設計](エディタ全体設計.md) 7.2(E4)で override の生 JSON を保持して直す。
 - (2026-11-16 発見)**Level エディタの Load in World は前のプレビューを消さずに追加ロードし、in-memory 登録も残し続ける。**
   [LevelEditor.cpp](../aqEngine/Level/LevelEditor.cpp) の `LoadInWorld`。押すたびにエンティティと `LevelRegistry` の登録が増える。エディタ全体設計 7.3(E4)で直す。
+- (2026-11-17 発見)**デバッグパネルの `ImGui::Image` で、アルファが 0 の画像が透明になって見えない。**
+  ImGui はアルファでブレンドして描くため、G-Buffer0(BaseColor + Metallic)や Bright Extract のようにアルファに別の値(Metallic など)を入れた
+  RT は、その値が 0 の部分が見えない。D3D11 / D3D12 / Vulkan で同じで、ImGui の公式バックエンドへ置き換える前(自前バックエンド)からの挙動。
+  直すなら、RGB だけを見せる表示(アルファを 1 にする ImDrawCallback か、表示用のコピー)を足す。
 
 ## 文書管理方針
 

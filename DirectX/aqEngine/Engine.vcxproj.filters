@@ -7,6 +7,9 @@
     <Filter Include="Core">
       <UniqueIdentifier>{aa2d4d26-6a4c-4be4-83f5-6492d6f0c892}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Editor">
+      <UniqueIdentifier>{6b56a548-c50b-402a-8d1b-5969334cd3a8}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ECS">
       <UniqueIdentifier>{d90cc128-47d8-4d9f-8ac5-59ba19967b65}</UniqueIdentifier>
     </Filter>
@@ -948,6 +951,9 @@
     </ClInclude>
     <ClInclude Include="Core\AppModuleRegistry.h">
       <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor\IEditorLayer.h">
+      <Filter>Editor</Filter>
     </ClInclude>
     <ClInclude Include="Link\LinkSocket.h">
       <Filter>Link</Filter>

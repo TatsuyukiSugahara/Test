@@ -15,9 +15,14 @@
 #include <memory>
 #endif
 
+// ImGui の型はポインタで持つだけなので前方宣言で足りる(ImGui を使わない構成でもコンパイルできるように)
+struct ImGuiContext;
+struct ImDrawData;
+
 namespace aq
 {
 	class Camera;
+	class IEditorLayer;
 
 
 	/**
@@ -58,6 +63,21 @@ namespace aq
 		/** 分割画面ビュー (2 個以上でマルチビュー描画。空 or 1 個は従来の単一ビュー経路) */
 		std::vector<SplitView> splitViews_;
 
+		/** BuildRenderCommands で組み、SubmitRenderCommands で RenderThread へ渡すまでのこのフレームの描画 */
+		std::unique_ptr<rendering::RenderCommandList> pendingCmdList_;
+		graphics::LightingData                        pendingLighting_;
+		rendering::ShadowCBData                       pendingShadow_;
+
+		/**
+		 * ImGui のコンテキスト。ゲーム用はデバッグ UI を描く既存のもの。
+		 * エディタ用はエディタ構成(AQ_EDITOR)でだけ作り、それ以外では nullptr のまま
+		 */
+		ImGuiContext* gameImGuiContext_   = nullptr;
+		ImGuiContext* editorImGuiContext_ = nullptr;
+
+		/** エディタの UI 層(非所有。エディタのエントリが登録する。ランタイムでは常に nullptr) */
+		IEditorLayer* editorLayer_ = nullptr;
+
 
 	public:
 		/** @param module 所有して動かすモジュール(nullptr 不可) */
@@ -77,6 +97,12 @@ namespace aq
 		/** 分割画面ビューを設定する (次フレームから有効。ステージ退出時などは Clear すること) */
 		void SetSplitViews(const std::vector<SplitView>& views) { splitViews_ = views; }
 		void ClearSplitViews() { splitViews_.clear(); }
+
+		/**
+		 * エディタの UI 層を登録する(所有しない。layer は AppHost より長く生かすこと)。
+		 * 呼び出しはエディタ構成(AQ_EDITOR)でだけ意味を持つ。ランタイムで登録してもフックは呼ばれない
+		 */
+		inline void SetEditorLayer(IEditorLayer* layer) { editorLayer_ = layer; }
 
 		/**
 		 * 提出済みの描画が CPU・GPU とも完了するまで待つ。
@@ -173,7 +199,12 @@ namespace aq
 		void CommitRenderResize(uint32_t width, uint32_t height);
 
 	private:
+		/** BuildRenderCommands → (エディタのフック) → SubmitRenderCommands の順に 1 フレームの描画を組んで渡す */
 		void Render();
+		/** ゲーム用 ImGui の構築と描画コマンドの構築(pendingCmdList_ などへ積む) */
+		void BuildRenderCommands();
+		/** 積んだ描画コマンドを RenderThread へ渡す。editorDrawData は Game では常に nullptr */
+		void SubmitRenderCommands(ImDrawData* editorDrawData);
 
 #ifdef AQ_IMGUI
 		bool imguiReady_ = false;

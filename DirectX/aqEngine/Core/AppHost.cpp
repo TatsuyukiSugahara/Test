@@ -40,6 +40,12 @@
 #include <imgui/imgui.h>
 #include "Rendering/ImGuiRenderCommand.h"
 #endif
+#if AQ_EDITOR
+#ifndef AQ_IMGUI
+#error "AQ_EDITOR=1 の構成では AQ_IMGUI も定義すること(エディタは ImGui で描く)"
+#endif
+#include "Editor/IEditorLayer.h"
+#endif
 #include "ECS/ComponentRegistry.h"   // JSON シリアライズ用。常時コンパイル（AQ_DEBUG_IMGUI 非依存）。
 #include "Level/LevelComponentRegistry.h"
 #include "Level/LevelStreamSystem.h"
@@ -59,6 +65,16 @@ namespace aq
 {
 	namespace
 	{
+#ifdef AQ_IMGUI
+		/**
+		 * ゲーム用 ImGui コンテキストにプラットフォームの入力バックエンド(win32 など)を繋ぐか。
+		 * エディタ構成ではエディタ用コンテキストにだけ繋ぎ、ゲーム用には繋がない。
+		 * 繋がないときは、NewFrame 前の DisplaySize / DeltaTime を AppHost が自前で入れる。
+		 */
+		static constexpr bool GAME_IMGUI_USES_PLATFORM_BACKEND = (AQ_EDITOR == 0);
+#endif
+
+
 		/**
 		 * エンジンが所有するリソース型のバンクとローダーを登録する。
 		 *
@@ -253,7 +269,16 @@ namespace aq
 
 #ifdef AQ_IMGUI
 		{
-			ImGui::CreateContext();
+			gameImGuiContext_ = ImGui::CreateContext();
+#if AQ_EDITOR
+			// エディタ用コンテキスト。フォントアトラスはゲーム用と共有する(この後で読むフォントが両方に効く)。
+			// CreateContext が current を変えるかに依存しないよう、明示的にゲーム用へ戻す。
+			{
+				ImFontAtlas* sharedAtlas = ImGui::GetIO().Fonts;
+				editorImGuiContext_ = ImGui::CreateContext(sharedAtlas);
+				ImGui::SetCurrentContext(gameImGuiContext_);
+			}
+#endif
 
 #if defined(AQ_PLATFORM_IOS)
 			// iOS はアプリバンドルが read-only で、カレントディレクトリも当てにできない
@@ -375,17 +400,50 @@ namespace aq
 #endif
 
 			// Platform 側の入力バックエンド。UWP など持たない実装は既定(成功)を返す。
+			// エディタ構成ではゲーム用コンテキストへは繋がない(下でエディタ用コンテキストへ繋ぐ)。
 			aq::platform::IPlatform* platform = Engine::Get().GetPlatform();
-			const bool winOk = platform && platform->ImGuiInit();
+			const bool winOk = platform && (!GAME_IMGUI_USES_PLATFORM_BACKEND || platform->ImGuiInit());
 			const bool backendOk = winOk && aq::graphics::GraphicsDevice::Get().ImGuiInit();
+			bool editorOk = true;
+#if AQ_EDITOR
+			// エディタ用コンテキストの設定とバックエンド接続(win32 と、描画はゲーム用と同じヒープを使う D3D12)。
+			// 終わったらゲーム用コンテキストへ戻す。
 			if (backendOk)
+			{
+				ImGui::SetCurrentContext(editorImGuiContext_);
+				ImGuiIO& editorIo = ImGui::GetIO();
+				editorIo.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+				// ゲーム用の imgui.ini と分ける。文字列はリテラルなのでプロセス寿命で生きている
+				editorIo.IniFilename = "editor_layout.ini";
+				ImGui::StyleColorsDark();
+
+				const bool editorWinOk = platform->ImGuiInit();
+				editorOk = editorWinOk
+				        && aq::graphics::GraphicsDevice::Get().ImGuiInitEditor(gameImGuiContext_, editorImGuiContext_);
+				if (!editorOk && editorWinOk) platform->ImGuiShutdown();
+				ImGui::SetCurrentContext(gameImGuiContext_);
+			}
+#endif
+			if (backendOk && editorOk)
 			{
 				imguiReady_ = true;
 			}
 			else
 			{
-				if (winOk) platform->ImGuiShutdown();
-				ImGui::DestroyContext();
+#if AQ_EDITOR
+				// エディタ用を先に壊す(共有アトラスの参照を 1 に落としてから、ゲーム側にフォントを解放させる)
+				if (editorImGuiContext_)
+				{
+					ImGui::DestroyContext(editorImGuiContext_);
+					editorImGuiContext_ = nullptr;
+					ImGui::SetCurrentContext(gameImGuiContext_);
+				}
+#endif
+				// ゲーム用の描画バックエンドまで繋がってから失敗した(= エディタ側の失敗)ときだけ畳む
+				if (backendOk) aq::graphics::GraphicsDevice::Get().ImGuiShutdown();
+				if (winOk && GAME_IMGUI_USES_PLATFORM_BACKEND) platform->ImGuiShutdown();
+				ImGui::DestroyContext(gameImGuiContext_);
+				gameImGuiContext_ = nullptr;
 				EngineAssertMsg(false, "ImGui backend initialization failed");
 			}
 		}
@@ -618,10 +676,27 @@ namespace aq
 #ifdef AQ_IMGUI
 		if (imguiReady_)
 		{
+			aq::platform::IPlatform* platform = Engine::Get().GetPlatform();
+#if AQ_EDITOR
+			// エディタ用を先に畳む。両コンテキストが生きている間は共有フォントアトラスの参照が 2 のままで、
+			// ゲーム側の ImGuiShutdown がフォントのテクスチャとディスクリプタを解放できないため。
+			if (editorImGuiContext_)
+			{
+				ImGui::SetCurrentContext(editorImGuiContext_);
+				aq::graphics::GraphicsDevice::Get().ImGuiShutdownEditor();
+				// win32 はエディタ用コンテキストにだけ繋いでいる。上の呼び出しが current を変えていてもよいよう指定し直す
+				ImGui::SetCurrentContext(editorImGuiContext_);
+				if (platform) platform->ImGuiShutdown();
+				ImGui::DestroyContext(editorImGuiContext_);
+				editorImGuiContext_ = nullptr;
+			}
+#endif
+			ImGui::SetCurrentContext(gameImGuiContext_);
 			aq::graphics::GraphicsDevice::Get().ImGuiShutdown();
-			if (aq::platform::IPlatform* platform = Engine::Get().GetPlatform())
+			if (platform && GAME_IMGUI_USES_PLATFORM_BACKEND)
 				platform->ImGuiShutdown();
-			ImGui::DestroyContext();
+			ImGui::DestroyContext(gameImGuiContext_);
+			gameImGuiContext_ = nullptr;
 			imguiReady_ = false;
 		}
 #endif
@@ -657,6 +732,8 @@ namespace aq
 #ifdef AQ_IMGUI
 		if (imguiReady_)
 		{
+			// 入力抑制はゲーム用コンテキストで判定する(エディタ構成ではフレームの間にエディタ用が current になっている)
+			ImGui::SetCurrentContext(gameImGuiContext_);
 			const auto& io = ImGui::GetIO();
 			aq::hid::InputManager::Get().SuppressKeyboard(io.WantCaptureKeyboard);
 			aq::hid::InputManager::Get().SuppressMouse(io.WantCaptureMouse);
@@ -713,6 +790,15 @@ namespace aq
 		// 直列: 今フレームの全描画完了を待ってから次へ進む。
 		renderThread_.WaitForCompletion();
 #endif
+#if AQ_EDITOR
+		// 次のフレームまでに来るウィンドウメッセージをエディタ用コンテキストへ届ける。
+		// win32 の WndProc ハンドラは current のコンテキストへ入力を渡すが、win32 はエディタ用にしか
+		// 繋いでいない(ゲーム用が current だと入力が捨てられる)。レンダースレッドも描画中に current を
+		// 切り替えるので、その完了を待った後のここで決める。次の Update の先頭でゲーム用へ戻す。
+		if (editorLayer_ && editorImGuiContext_) {
+			ImGui::SetCurrentContext(editorImGuiContext_);
+		}
+#endif
 	}
 
 
@@ -760,6 +846,33 @@ namespace aq
 	void AppHost::Render()
 	{
 		AQ_PROFILE_SCOPE("AppHost::Render");
+		BuildRenderCommands();
+
+		ImDrawData* editorDrawData = nullptr;
+#if AQ_EDITOR
+		// エディタの UI はゲームの描画コマンドを組んだ後、提出の前に作る。
+		// ゲーム用 ImGui の描画データは確定済みなので、ここでコンテキストを切り替えてよい。
+		if (editorLayer_ && imguiReady_ && editorImGuiContext_)
+		{
+			AQ_PROFILE_SCOPE("EditorLayer");
+			ImGui::SetCurrentContext(editorImGuiContext_);
+			if (aq::platform::IPlatform* platform = Engine::Get().GetPlatform()) {
+				platform->ImGuiNewFrame();
+			}
+			aq::graphics::GraphicsDevice::Get().ImGuiNewFrameEditor();
+			ImGui::NewFrame();
+			editorLayer_->OnBuildUI(renderer_.GetOutputRT());
+			editorLayer_->OnEndFrame();
+			editorDrawData = ImGui::GetDrawData();
+			ImGui::SetCurrentContext(gameImGuiContext_);
+		}
+#endif
+		SubmitRenderCommands(editorDrawData);
+	}
+
+
+	void AppHost::BuildRenderCommands()
+	{
 		const float renderW = static_cast<float>(Engine::Get().GetRenderWidth());
 		const float renderH = static_cast<float>(Engine::Get().GetRenderHeight());
 		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -773,14 +886,19 @@ namespace aq
 		if (imguiReady_)
 		{
 			aq::platform::IPlatform* platform = Engine::Get().GetPlatform();
-			if (!(platform && platform->ImGuiNewFrame()))
+			// エディタ構成ではゲーム用コンテキストに win32 を繋いでいないので、プラットフォームの NewFrame を
+			// 呼ばない(未接続のバックエンドを踏んで assert する)。下の自前設定の経路で埋める。
+			if (!(GAME_IMGUI_USES_PLATFORM_BACKEND && platform && platform->ImGuiNewFrame()))
 			{
 				// Platform 側のバックエンドが無い(UWP 等)ので、それが埋めるべき最低限の 2 つを自前で入れる。
 				//  - DisplaySize: 0 のままだと ImGui::NewFrame のサニティチェックで停止する
 				//  - DeltaTime  : 0 以下だと同じくアサートに掛かる(初回フレームは実測値が無い)
+				// エディタ構成のゲーム用コンテキストは displayRT へ描くので、画面ではなくレンダー解像度にする。
 				ImGuiIO& io = ImGui::GetIO();
-				io.DisplaySize = ImVec2(static_cast<float>(Engine::Get().GetScreenWidth()),
-				                        static_cast<float>(Engine::Get().GetScreenHeight()));
+				io.DisplaySize = GAME_IMGUI_USES_PLATFORM_BACKEND
+				               ? ImVec2(static_cast<float>(Engine::Get().GetScreenWidth()),
+				                        static_cast<float>(Engine::Get().GetScreenHeight()))
+				               : ImVec2(renderW, renderH);
 				const float deltaTime = Engine::GetDeltaTime();
 				io.DeltaTime = (deltaTime > 0.0f) ? deltaTime : (1.0f / 60.0f);
 			}
@@ -962,7 +1080,15 @@ namespace aq
 		if (imguiDrawData)
 			mainCmdList->Enqueue<aq::rendering::ImGuiRenderCommand>(imguiDrawData);
 #endif
-		AQ_PROFILE_SCOPE("Submit"); renderThread_.Submit(std::move(mainCmdList), renderer_.GetOutputRT(),
-		                    mainFrame.lighting, mainFrame.shadow);
+		pendingCmdList_  = std::move(mainCmdList);
+		pendingLighting_ = mainFrame.lighting;
+		pendingShadow_   = mainFrame.shadow;
+	}
+
+
+	void AppHost::SubmitRenderCommands(ImDrawData* editorDrawData)
+	{
+		AQ_PROFILE_SCOPE("Submit"); renderThread_.Submit(std::move(pendingCmdList_), renderer_.GetOutputRT(),
+		                    pendingLighting_, pendingShadow_, editorDrawData);
 	}
 }

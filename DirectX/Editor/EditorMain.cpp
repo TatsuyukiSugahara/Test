@@ -1,9 +1,10 @@
 #include "stdafx.h"
-// エディタの Win32 エントリ。E0c 時点では Game と同じ起動で GameModule を動かす。
+// エディタの Win32 エントリ。Game と同じ起動で GameModule を動かし、エディタの UI 層(EditorLayer)を AppHost へ登録する。
 // プラットフォームの起動処理なので Win32 の型を使う(パネル・コマンドなどエディタ本体のコードには書かない)。
 #if defined(AQ_PLATFORM_WIN32)
 #include "GameModule.h"
 #include "Platform/PlatformWin32.h"
+#include "EditorLayer.h"
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow)
 {
@@ -16,6 +17,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	// スコープで囲むのは、リーク報告(ShutdownMemory)を platform の破棄より後に出すため。
 	{
 		aq::platform::PlatformWin32 platform(hInstance, nCmdShow);
+		// エディタの UI 層。AppHost は所有せず参照するだけなので、Engine の Finalize より長く生かす。
+		editor::EditorLayer editorLayer;
 
 		aq::StartupMark("WinMain");
 		aq::Engine::Create();
@@ -32,6 +35,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		initializeParameter.launch = aq::LaunchOptions::ParseCommandLine(lpCmdLine);
 		// 初期化に失敗したら終了コード 1 を返す(エディタなど起動した側が失敗を判別できるように)。
 		if (engineInstance.Initialize(initializeParameter)) {
+			// AppHost は Initialize の中で生成されるので、登録は成功の後(最初のフレームより前)に行う。
+			// フックは毎フレームの更新の中で呼ばれるだけなので、初期化中に登録されている必要はない。
+			engineInstance.GetAppHost()->SetEditorLayer(&editorLayer);
 			engineInstance.RunGame();
 			// RequestExit で記録された終了コード(正常終了は 0、実行中の致命失敗は 2)。Release の前に読む。
 			exitCode = engineInstance.GetExitCode();

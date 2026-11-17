@@ -68,6 +68,14 @@ namespace aq
 		void GraphicsDevice::SetVSync(bool enabled)       { if (impl_) impl_->SetVSync(enabled); }
 		const char* GraphicsDevice::GetBackendName() const { return impl_ ? impl_->GetBackendName() : "?"; }
 
+		bool GraphicsDevice::ImGuiInitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx)
+		{
+			return impl_ ? impl_->ImGuiInitEditor(gameCtx, editorCtx) : false;
+		}
+		void GraphicsDevice::ImGuiShutdownEditor()                           { if (impl_) impl_->ImGuiShutdownEditor(); }
+		void GraphicsDevice::ImGuiNewFrameEditor()                           { if (impl_) impl_->ImGuiNewFrameEditor(); }
+		void GraphicsDevice::RenderEditorOverlay(ImDrawData* editorDrawData) { if (impl_) impl_->RenderEditorOverlay(editorDrawData); }
+
 		bool GraphicsDevice::SupportsRenderResize() const { return impl_ ? impl_->SupportsRenderResize() : false; }
 
 		bool GraphicsDevice::ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
@@ -127,6 +135,16 @@ namespace aq
 			// SRV の寿命は RT が持つ。ここで返す shared_ptr は参照するだけなので解放しない。
 			return std::shared_ptr<IShaderResourceView>(&rt->GetRenderTargetSRV(),
 			                                            [](IShaderResourceView*) {});
+		}
+
+
+		void* GraphicsDevice::GetImGuiTextureId(rendering::RenderTargetHandle rt)
+		{
+			// 対応可否と変換はバックエンドに任せる(未対応は nullptr)
+			if (!impl_) return nullptr;
+			IRenderTarget* target = GetRenderTarget(rt);
+			if (!target) return nullptr;
+			return impl_->GetImGuiTextureId(target);
 		}
 
 

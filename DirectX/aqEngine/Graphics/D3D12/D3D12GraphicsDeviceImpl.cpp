@@ -13,6 +13,7 @@
 #include "D3D12GpuBuffer.h"
 #ifdef AQ_IMGUI
 #include "D3D12ImGui.h"
+#include <imgui/imgui.h>
 #endif
 
 
@@ -84,6 +85,7 @@ namespace aq
 			aq::StartupLog("  [D3D12] swapchain ok");
 			if (!CreateBackBuffers()) { aq::StartupLog("  [D3D12] CreateBackBuffers FAILED"); return false; }
 			if (!CreateRtvDsvHeaps()) { aq::StartupLog("  [D3D12] CreateRtvDsvHeaps FAILED"); return false; }
+			if (!CreateBackBufferRTVs()) { aq::StartupLog("  [D3D12] CreateBackBufferRTVs FAILED"); return false; }
 			if (!CreateSRVHeaps()) { aq::StartupLog("  [D3D12] CreateSRVHeaps FAILED"); return false; }
 			if (!CreateMainRenderTargets(width, height)) { aq::StartupLog("  [D3D12] CreateMainRenderTargets FAILED"); return false; }
 			aq::StartupLog("  [D3D12] heaps + main RTs ok");
@@ -185,6 +187,7 @@ namespace aq
 #ifdef AQ_IMGUI
 			D3D12ImGui::Shutdown();
 #endif
+			gameImGuiCtx_ = nullptr;
 		}
 
 
@@ -199,11 +202,122 @@ namespace aq
 		void D3D12GraphicsDeviceImpl::ImGuiRender(ImDrawData* drawData)
 		{
 #ifdef AQ_IMGUI
+			// エディタ構成では公式バックエンドが current なコンテキストの状態を読むため、ゲーム用へ切り替える。
+			// ランタイムでは未設定なので切り替えない。描いた後はメインスレッドの current を戻しておく。
+			ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+			if (gameImGuiCtx_) {
+				ImGui::SetCurrentContext(gameImGuiCtx_);
+			}
+
 			// 描画パス末尾。現在のRTV(表示RT)へ ImGui を記録する。
 			BeginFrameIfNeeded();
 			D3D12ImGui::Render(drawData, GetCommandList());
+
+			if (gameImGuiCtx_) {
+				ImGui::SetCurrentContext(prevCtx);
+			}
 #else
 			(void)drawData;
+#endif
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::ImGuiInitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx)
+		{
+#ifdef AQ_IMGUI
+			if (!gameCtx || !editorCtx) return false;
+
+			// 公式バックエンドは current なコンテキストに状態を作るので、エディタ用を current にして呼ぶ。
+			// 呼び出し元の current は戻しておく。
+			ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+			ImGui::SetCurrentContext(editorCtx);
+			const bool ok = D3D12ImGui::InitEditor();
+			ImGui::SetCurrentContext(prevCtx);
+			if (!ok) return false;
+
+			gameImGuiCtx_   = gameCtx;
+			editorImGuiCtx_ = editorCtx;
+			return true;
+#else
+			(void)gameCtx;
+			(void)editorCtx;
+			return false;
+#endif
+		}
+
+
+		void D3D12GraphicsDeviceImpl::ImGuiShutdownEditor()
+		{
+#ifdef AQ_IMGUI
+			if (!editorImGuiCtx_) return;
+
+			ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+			ImGui::SetCurrentContext(editorImGuiCtx_);
+			D3D12ImGui::ShutdownEditor();
+			ImGui::SetCurrentContext(prevCtx);
+			editorImGuiCtx_ = nullptr;
+#endif
+		}
+
+
+		void D3D12GraphicsDeviceImpl::ImGuiNewFrameEditor()
+		{
+#ifdef AQ_IMGUI
+			// 公式の NewFrame は初回にパイプライン等のデバイスオブジェクトを作るので、エディタ用でも必要。
+			if (!editorImGuiCtx_) return;
+
+			ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+			ImGui::SetCurrentContext(editorImGuiCtx_);
+			D3D12ImGui::NewFrameEditor();
+			ImGui::SetCurrentContext(prevCtx);
+#endif
+		}
+
+
+		void D3D12GraphicsDeviceImpl::RenderEditorOverlay(ImDrawData* editorDrawData)
+		{
+#ifdef AQ_IMGUI
+			if (!editorDrawData || !editorImGuiCtx_) return;
+
+			BeginFrameIfNeeded();
+			ID3D12Resource* backBuf = backBuffers_[currentBackBufferIndex_];
+			if (!backBuf) return;
+
+			// バックバッファを描画先にする。PRESENT への戻しは Present() が backBufferStates_ を見て行う。
+			const D3D12_RESOURCE_STATES cur = static_cast<D3D12_RESOURCE_STATES>(backBufferStates_[currentBackBufferIndex_]);
+			if (cur != D3D12_RESOURCE_STATE_RENDER_TARGET)
+			{
+				TransitionBarrier(commandList_, backBuf, cur, D3D12_RESOURCE_STATE_RENDER_TARGET);
+				backBufferStates_[currentBackBufferIndex_] = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			}
+
+			D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+			rtv.ptr += static_cast<SIZE_T>(backBufferRtvIndex_[currentBackBufferIndex_]) * rtvDescriptorSize_;
+			commandList_->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+			// ゲームビューの外 (パネルの隙間など) に前フレームの内容が残らないよう、毎フレーム黒で消す
+			static constexpr float CLEAR_COLOR[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+			commandList_->ClearRenderTargetView(rtv, CLEAR_COLOR, 0, nullptr);
+
+			// ビューポートとシザーはバックバッファ全体。公式バックエンドも描画時に設定し直すが、
+			// 直前のシーン描画の値を引き継がないようにここでも合わせる。
+			const D3D12_RESOURCE_DESC bbDesc = backBuf->GetDesc();
+			D3D12_VIEWPORT vp = {};
+			vp.Width    = static_cast<float>(bbDesc.Width);
+			vp.Height   = static_cast<float>(bbDesc.Height);
+			vp.MaxDepth = 1.0f;
+			commandList_->RSSetViewports(1, &vp);
+			const D3D12_RECT scissor = { 0, 0, static_cast<LONG>(bbDesc.Width), static_cast<LONG>(bbDesc.Height) };
+			commandList_->RSSetScissorRects(1, &scissor);
+
+			// 公式バックエンドは current なコンテキストの状態を読むので、エディタ用へ切り替えてから描く。
+			// エディタ構成は直列実行に固定しており、メインスレッドはこの間 ImGui に触れない。
+			ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+			ImGui::SetCurrentContext(editorImGuiCtx_);
+			D3D12ImGui::Render(editorDrawData, commandList_);
+			ImGui::SetCurrentContext(prevCtx);
+#else
+			(void)editorDrawData;
 #endif
 		}
 
@@ -504,6 +618,43 @@ namespace aq
 		}
 
 
+		void* D3D12GraphicsDeviceImpl::GetImGuiTextureId(IRenderTarget* rt)
+		{
+#ifdef AQ_IMGUI
+			if (!rt) return nullptr;
+			// D3D12 の RT はすべて D3D12RenderTarget
+			auto* target = static_cast<D3D12RenderTarget*>(rt);
+			auto* srv    = static_cast<D3D12SRV*>(target->GetRenderTargetSRV().GetNativeHandle());
+			// SRV のフォーマットは RT 作成時の SRV と同じくカラーフォーマットそのもの
+			return D3D12ImGui::RegisterOpaqueTexture(target->GetResource(),
+			                                         static_cast<uint32_t>(target->GetColorFormat()), srv);
+#else
+			(void)rt;
+			return nullptr;
+#endif
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::CreateBackBufferRTVs()
+		{
+			// バックバッファの RTV。通常は CopyToBackBuffer の複写先なので使わないが、
+			// エディタ合成 (RenderEditorOverlay) ではバックバッファへ直接描く。
+			// D3D12 はレンダーリサイズ未対応で、バックバッファは起動時に 1 回しか作られないため作り直しはしない。
+			for (uint32_t i = 0; i < RENDER_TARGET_COUNT; ++i)
+			{
+				if (!backBuffers_[i]) return false;
+				if (rtvNext_ >= rtvCapacity_) { EngineAssertMsg(false, "D3D12 RTV ヒープ容量不足"); return false; }
+
+				const uint32_t rtvIdx = rtvNext_++;
+				D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+				rtv.ptr += static_cast<SIZE_T>(rtvIdx) * rtvDescriptorSize_;
+				device_->CreateRenderTargetView(backBuffers_[i], nullptr, rtv);
+				backBufferRtvIndex_[i] = rtvIdx;
+			}
+			return true;
+		}
+
+
 		bool D3D12GraphicsDeviceImpl::CreateMainRenderTargets(uint32_t width, uint32_t height)
 		{
 			// メイン RT は深度付きオフスクリーン (D3D11 backend と同じ。最後に CopyToBackBuffer)。
@@ -656,6 +807,13 @@ namespace aq
 			// ルートシグネチャを設定 (CBV ルートディスクリプタ / SRV テーブルのバインドに必要)
 			if (rootSignature_ && rootSignature_->Get())
 				commandList_->SetGraphicsRootSignature(rootSignature_->Get());
+
+#ifdef AQ_IMGUI
+			// ImGui のユーザーテクスチャ区画の書き込み位置を、このフレームの先頭へ戻す。
+			// 1 フレームに ImGui の描画が複数回 (ゲーム用とエディタ用) あっても、戻すのはここの 1 回だけ。
+			// 前回この区画を使った GPU 処理は、上のフェンス待ちで完了している。
+			D3D12ImGui::ResetUserSlots(frameIndex_);
+#endif
 
 			frameOpen_ = true;
 			++frameGeneration_;  // RenderContext がフレーム先頭で SRV テーブルを張り直す契機

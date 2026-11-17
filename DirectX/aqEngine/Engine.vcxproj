@@ -538,6 +538,7 @@
     <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Core\LaunchOptions.h" />
     <ClInclude Include="Core\AppModuleRegistry.h" />
+    <ClInclude Include="Editor\IEditorLayer.h" />
     <ClInclude Include="Link\LinkSocket.h" />
     <ClInclude Include="Link\LinkService.h" />
     <ClInclude Include="Link\LinkCommands.h" />

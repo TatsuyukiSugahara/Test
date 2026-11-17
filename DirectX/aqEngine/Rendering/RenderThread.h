@@ -11,6 +11,8 @@
 #include "Shadow/ShadowData.h"
 #include "RenderConfig.h"
 
+struct ImDrawData;
+
 namespace aq
 {
 	namespace graphics { class RenderContext; }
@@ -55,11 +57,16 @@ namespace aq
 			 *
 			 * displayRT はこのリスト実行後にバックバッファへコピーする RT を示す。
 			 * オフスクリーンやコンピュートのみのフレームでは RenderTargetHandle{} (INVALID) を渡す。
+			 *
+			 * editorDrawData はエディタ用 ImGui コンテキストの描画データ。非 null なら displayRT を
+			 * バックバッファへコピーせず、代わりにこの描画データをバックバッファへ描く(エディタ合成)。
+			 * ランタイム(Game)は常に nullptr を渡す。
 			 */
 			void Submit(std::unique_ptr<RenderCommandList> list,
 			            RenderTargetHandle                 displayRT,
 			            const graphics::LightingData&      lighting,
-			            const ShadowCBData&                shadow = {});
+			            const ShadowCBData&                shadow         = {},
+			            ImDrawData*                        editorDrawData = nullptr);
 
 			/** 提出済みの全コマンドが完了するまで待機する（直列モード用）。 */
 			void WaitForCompletion();
@@ -102,6 +109,7 @@ namespace aq
 				graphics::LightingData                     lightingData;
 				ShadowCBData                               shadowData;
 				RenderTargetHandle                         displayRT;
+				ImDrawData*                                editorDrawData = nullptr;   // 非 null ならエディタ合成
 				bool                                       ready = false;
 				bool                                       done  = true;
 

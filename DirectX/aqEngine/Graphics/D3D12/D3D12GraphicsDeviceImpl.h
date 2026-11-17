@@ -71,6 +71,12 @@ namespace aq
 			void ImGuiShutdown() override;
 			void ImGuiNewFrame() override;
 			void ImGuiRender(ImDrawData* drawData) override;   // BeginFrameIfNeeded + D3D12ImGui::Render
+			// エディタ用コンテキスト (AQ_EDITOR 構成のみ呼ばれる。呼ばれなければ何もしない)
+			bool ImGuiInitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx) override;
+			void ImGuiShutdownEditor() override;
+			void ImGuiNewFrameEditor() override;
+			void RenderEditorOverlay(ImDrawData* editorDrawData) override;  // バックバッファをクリアしてエディタ UI を描く
+			void* GetImGuiTextureId(IRenderTarget* rt) override;            // アルファを 1 に固定して読むエントリを返す
 			const char* GetBackendName() const override { return "D3D12"; }
 
 			// オフスクリーン RT (Phase 3)
@@ -156,6 +162,7 @@ namespace aq
 			bool CreateMainRenderTargets(uint32_t width, uint32_t height);
 			bool CreateSRVHeaps();
 			bool CreateRtvDsvHeaps();
+			bool CreateBackBufferRTVs();
 			void WaitForGPU();
 
 			// バッチアップロード用の共有コマンドリストを (未オープンなら Reset して) 取得する。
@@ -211,6 +218,12 @@ namespace aq
 			std::vector<std::unique_ptr<D3D12RenderTarget>> offscreenRTs_;
 			uint32_t                   currentBackBufferIndex_ = 0;
 			uint32_t                   backBufferStates_[RENDER_TARGET_COUNT] = {};  // D3D12_RESOURCE_STATES
+			uint32_t                   backBufferRtvIndex_[RENDER_TARGET_COUNT] = {};  // rtvHeap_ 内の位置 (エディタ合成で描画先にする)
+
+			// ImGui のコンテキスト (エディタ構成のみ設定される)。レンダースレッドで描く前に current にする。
+			// ランタイムでは nullptr のままで、ImGuiRender はコンテキストを切り替えない。
+			ImGuiContext*              gameImGuiCtx_   = nullptr;
+			ImGuiContext*              editorImGuiCtx_ = nullptr;
 
 			std::unique_ptr<D3D12RootSignature>     rootSignature_;
 			std::unique_ptr<D3D12PipelineStateCache> psoCache_;

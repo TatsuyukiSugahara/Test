@@ -264,6 +264,12 @@ namespace aq
 		 */
 		inline AppModuleRegistry& GetAppModuleRegistry() { return appModuleRegistry_; }
 
+		/**
+		 * アプリケーションの土台。Initialize の中で生成されるので、それより前と Finalize の後は nullptr。
+		 * エディタのエントリが AppHost::SetEditorLayer を呼ぶために使う
+		 */
+		inline AppHost* GetAppHost() const { return appHost_; }
+
 		/** Initialize で受け取った起動引数 */
 		inline const LaunchOptions& GetLaunchOptions() const { return launchOptions_; }
 

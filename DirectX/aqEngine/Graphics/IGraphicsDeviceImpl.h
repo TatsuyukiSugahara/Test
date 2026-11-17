@@ -11,6 +11,7 @@
 #include "GraphicsTypes.h"
 
 struct ImDrawData;   // 前方宣言のみ。imgui.h を引き込まない
+struct ImGuiContext;
 
 
 namespace aq
@@ -89,6 +90,30 @@ namespace aq
 			 * Vulkan / Metal は描画データを保持し、CopyToBackBuffer 後に swapchain / drawable へ描く。
 			 */
 			virtual void ImGuiRender(ImDrawData* /*drawData*/) {}
+
+			/**
+			 * エディタ用 ImGui コンテキストのバックエンド接続(AQ_EDITOR 構成のみ使う。既定 no-op)。
+			 * ImGuiInit(ゲーム用コンテキスト)の後に、メインスレッドで呼ぶ。
+			 * 両コンテキストを控え、レンダースレッドで描くときにどちらかを current にする。
+			 * ImGuiShutdownEditor は ImGuiShutdown より前に呼ぶこと。
+			 *
+			 * @return ImGuiInitEditor は未対応のバックエンドか初期化に失敗したら false
+			 */
+			virtual bool ImGuiInitEditor(ImGuiContext* /*gameCtx*/, ImGuiContext* /*editorCtx*/) { return false; }
+			virtual void ImGuiShutdownEditor() {}
+			virtual void ImGuiNewFrameEditor() {}
+
+			/**
+			 * エディタ用コンテキストの描画データをバックバッファへ描く(レンダースレッドで呼ばれる)。
+			 * バックバッファをクリアしてから描くので、CopyToBackBuffer の代わりに呼ぶ。既定 no-op。
+			 */
+			virtual void RenderEditorOverlay(ImDrawData* /*editorDrawData*/) {}
+
+			/**
+			 * RT を ImGui::Image に渡せる ID に変換する(アルファを 1 に固定して読む)。
+			 * 未対応のバックエンドは nullptr(既定)。
+			 */
+			virtual void* GetImGuiTextureId(IRenderTarget* /*rt*/) { return nullptr; }
 
 			/** VSync を実行時に切り替えられるか(現状 D3D12 のみ) */
 			virtual bool CanToggleVSync() const { return false; }

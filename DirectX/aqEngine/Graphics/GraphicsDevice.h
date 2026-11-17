@@ -78,6 +78,19 @@ namespace aq
 			void SetVSync(bool enabled);
 			const char* GetBackendName() const;
 
+			// エディタ用 ImGui コンテキストの接続と描画。実装へ委譲(詳細は IGraphicsDeviceImpl)。
+			bool ImGuiInitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx);
+			void ImGuiShutdownEditor();
+			void ImGuiNewFrameEditor();
+			void RenderEditorOverlay(ImDrawData* editorDrawData);
+
+			/**
+			 * RT を ImGui::Image に渡せる ID に変換する(呼び出し側で ImTextureID へキャストする)。
+			 * アルファは 1 に固定して読む(半透明部分が ImGui のブレンドで透けないようにするため)。
+			 * 未対応のバックエンドは nullptr を返す。ID は毎フレーム取得し直し、フレームをまたいで保持しない。
+			 */
+			void* GetImGuiTextureId(rendering::RenderTargetHandle rt);
+
 			/** 描画解像度の実行時変更(設計書/エンジン課題解消設計.md P4)。意味は IGraphicsDeviceImpl の同名関数を参照 */
 			bool SupportsRenderResize() const;
 			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH);

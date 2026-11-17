@@ -60,18 +60,20 @@ namespace aq
 		void RenderThread::Submit(std::unique_ptr<RenderCommandList> list,
 		                          RenderTargetHandle                 displayRT,
 		                          const graphics::LightingData&      lighting,
-		                          const ShadowCBData&                shadow)
+		                          const ShadowCBData&                shadow,
+		                          ImDrawData*                        editorDrawData)
 		{
 			{
 				std::unique_lock<std::mutex> lock(mutex_);
 				cvGame_.wait(lock, [this] { return slots_[writeSlot_]->done; });
 
-				slots_[writeSlot_]->list         = std::move(list);
-				slots_[writeSlot_]->displayRT    = displayRT;
-				slots_[writeSlot_]->lightingData = lighting;
-				slots_[writeSlot_]->shadowData   = shadow;
-				slots_[writeSlot_]->ready        = true;
-				slots_[writeSlot_]->done         = false;
+				slots_[writeSlot_]->list           = std::move(list);
+				slots_[writeSlot_]->displayRT      = displayRT;
+				slots_[writeSlot_]->lightingData   = lighting;
+				slots_[writeSlot_]->shadowData     = shadow;
+				slots_[writeSlot_]->editorDrawData = editorDrawData;
+				slots_[writeSlot_]->ready          = true;
+				slots_[writeSlot_]->done           = false;
 				writeSlot_ = (writeSlot_ + 1) % FRAMES_IN_FLIGHT;
 				++submittedCount_;
 			}
@@ -170,14 +172,23 @@ namespace aq
 					// このスレッド（immediate context の唯一の所有者）で実行しなければならない。
 					// メインスレッドは下の done = true が設定されるまで FlushRender() 内で
 					// ブロックしているため、コンテキストへの同時アクセスは発生しない。
-					const RenderTargetHandle displayRT = slots_[slot]->displayRT;
+					//
+					// editorDrawData があるフレーム(エディタ)は displayRT をエディタのゲームビューに貼るので、
+					// バックバッファへはコピーせず、エディタ用 ImGui の描画データをバックバッファへ描く。
+					// 構成ではなく描画データの有無で分けるので、Game は常に従来どおりコピーする。
+					const RenderTargetHandle displayRT      = slots_[slot]->displayRT;
+					ImDrawData* const        editorDrawData = slots_[slot]->editorDrawData;
 					if (displayRT.IsValid())
 					{
 						AQ_PROFILE_SCOPE("Present");
 						auto* rt = graphics::GraphicsDevice::Get().GetRenderTarget(displayRT);
 						if (rt)
 						{
-							graphics::GraphicsDevice::Get().CopyToBackBuffer(*rt);
+							if (editorDrawData) {
+								graphics::GraphicsDevice::Get().RenderEditorOverlay(editorDrawData);
+							} else {
+								graphics::GraphicsDevice::Get().CopyToBackBuffer(*rt);
+							}
 							graphics::GraphicsDevice::Get().Present();
 						}
 					}

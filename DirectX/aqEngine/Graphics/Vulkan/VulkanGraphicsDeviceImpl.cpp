@@ -1111,6 +1111,9 @@ namespace aq
 			// imgui をブリット後の swapchain (COLOR_ATTACHMENT) へ直接描画する。
 			if (imguiDrawData_)
 			{
+				// ユーザーテクスチャの遷移とディスクリプタ変換は rendering scope の外で済ませる。
+				VulkanImGui::PrepareTextures(imguiDrawData_);
+
 				VkRenderingAttachmentInfo att{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
 				att.imageView   = swapchainViews_[imageIndex_];
 				att.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;

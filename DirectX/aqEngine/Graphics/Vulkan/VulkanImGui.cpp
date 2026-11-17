@@ -2,11 +2,12 @@
 #if defined(ENGINE_GRAPHICS_VULKAN) && defined(AQ_IMGUI)
 #include "Graphics/Vulkan/VulkanImGui.h"
 #include "Graphics/Vulkan/VulkanGraphicsDeviceImpl.h"
-#include "Graphics/Vulkan/VulkanShader.h"
 #include "Graphics/Vulkan/VulkanResources.h"
-#include "Graphics/Vulkan/VulkanBuffers.h"
-#include "Graphics/Vulkan/VulkanPipelineLayout.h"
 #include <imgui/imgui.h>
+#include <imgui/imgui_impl_vulkan.h>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace aq
 {
@@ -16,232 +17,347 @@ namespace aq
 		{
 			namespace
 			{
+				/**
+				 * バックエンド内部プールの SAMPLED_IMAGE ディスクリプタ数。
+				 * フォントアトラス + (ユーザーテクスチャ × 在フライトのフレーム数) を見込む。
+				 */
+				static constexpr uint32_t DESCRIPTOR_POOL_SIZE = 128;
+
+				/**
+				 * 1 フレームで変換するユーザーテクスチャ (VkImageView) の上限。
+				 * 超えた分は描かない。プールを枯らして vkAllocateDescriptorSets が落ちるより、
+				 * 絵が欠けるほうを選ぶ。
+				 */
+				static constexpr uint32_t MAX_USER_TEXTURE_COUNT = 16;
+
+				/**
+				 * DescriptorSet を解放するまで待つフレーム数。
+				 * フレーム N の提出が GPU を抜けたことは、フレーム N + FRAME_COUNT の
+				 * BeginFrameIfNeeded のフェンス待ちで保証される (+1 は余裕)。
+				 */
+				static constexpr uint64_t RETIRE_DELAY_FRAME_COUNT = VulkanGraphicsDeviceImpl::GetFrameCount() + 1;
+
+				/** 解放待ちの DescriptorSet */
+				struct RetiredSet
+				{
+					uint64_t        frameSerial = 0;              // 最後に使ったフレーム通し番号
+					VkDescriptorSet set         = VK_NULL_HANDLE;
+				};
+
 				VulkanGraphicsDeviceImpl* g_dev = nullptr;
-				VkPipeline   g_pipeline = VK_NULL_HANDLE;
-				std::unique_ptr<IShader>             g_vs, g_ps;
-				std::unique_ptr<IShaderResourceView> g_font;      // VulkanTexture
-				std::unique_ptr<ISamplerState>       g_sampler;   // VulkanSampler
-				std::unique_ptr<IConstantBuffer>     g_projCB;    // float4 scale/translate
-				std::unique_ptr<IVertexBuffer>       g_vb;
-				std::unique_ptr<IIndexBuffer>        g_ib;
-				uint32_t g_vbCap = 0, g_ibCap = 0;  // 頂点数 / インデックス数
-				VkImageView g_fontView = VK_NULL_HANDLE;
 
-				VkShaderModule ModuleOf(IShader* s) { return s ? static_cast<VulkanShader*>(s)->GetModule() : VK_NULL_HANDLE; }
+				/** 公式バックエンドの状態 */
+				bool     g_backendReady   = false;
+				VkFormat g_initFormat     = VK_FORMAT_UNDEFINED;  // Init 時のスワップチェーンフォーマット
+				uint32_t g_initImageCount = 0;                    // Init 時のスワップチェーン画像数
 
-				bool CreatePipeline()
+				/** 今フレームの VkImageView → VkDescriptorSet (同じビューの重複 Add を避ける) */
+				std::unordered_map<VkImageView, VkDescriptorSet> g_frameSets;
+				/** 解放待ち (GPU が抜けるまで RemoveTexture できない) */
+				std::vector<RetiredSet> g_retiredSets;
+				/** 自分が確保済みの DescriptorSet 全部。変換済みの ID を見分けるのに使う */
+				std::unordered_set<VkDescriptorSet> g_ownedSets;
+
+				/** テクスチャ数が上限に達した警告を 1 回だけ出すためのフラグ */
+				bool g_warnedTooManyTextures = false;
+
+
+				// VkDescriptorSet と ImTextureID の変換。非ディスパッチャブルハンドルは
+				// 64bit 環境ではポインタ、32bit 環境では uint64_t なので、変換はここに閉じ込める。
+#if defined(VK_USE_64_BIT_PTR_DEFINES) && VK_USE_64_BIT_PTR_DEFINES == 1
+				inline ImTextureID     ToTexID(VkDescriptorSet set)    { return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(set)); }
+				inline VkDescriptorSet ToDescriptorSet(ImTextureID id) { return reinterpret_cast<VkDescriptorSet>(static_cast<uintptr_t>(id)); }
+#else
+				inline ImTextureID     ToTexID(VkDescriptorSet set)    { return static_cast<ImTextureID>(set); }
+				inline VkDescriptorSet ToDescriptorSet(ImTextureID id) { return static_cast<VkDescriptorSet>(id); }
+#endif
+
+
+				/** バックエンドの失敗をエンジンのログへ流す (CheckVkResultFn) */
+				void CheckVkResult(VkResult result)
 				{
-					VkDevice dev = g_dev->GetDevice();
-					VkPipelineShaderStageCreateInfo stages[2]{};
-					stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-					stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;   stages[0].module = ModuleOf(g_vs.get()); stages[0].pName = "main";
-					stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-					stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; stages[1].module = ModuleOf(g_ps.get()); stages[1].pName = "main";
-					if (!stages[0].module || !stages[1].module) return false;
-
-					// 頂点入力: ImDrawVert (pos float2, uv float2, col RGBA8)。stride=20。
-					VkVertexInputBindingDescription bind{ 0, (uint32_t)sizeof(ImDrawVert), VK_VERTEX_INPUT_RATE_VERTEX };
-					VkVertexInputAttributeDescription attrs[3]{};
-					attrs[0] = { 0, 0, VK_FORMAT_R32G32_SFLOAT,  (uint32_t)offsetof(ImDrawVert, pos) };
-					attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,  (uint32_t)offsetof(ImDrawVert, uv)  };
-					attrs[2] = { 2, 0, VK_FORMAT_R8G8B8A8_UNORM, (uint32_t)offsetof(ImDrawVert, col) };
-					VkPipelineVertexInputStateCreateInfo vi{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-					vi.vertexBindingDescriptionCount = 1; vi.pVertexBindingDescriptions = &bind;
-					vi.vertexAttributeDescriptionCount = 3; vi.pVertexAttributeDescriptions = attrs;
-
-					VkPipelineInputAssemblyStateCreateInfo ia{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-					ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-					VkPipelineViewportStateCreateInfo vp{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-					vp.viewportCount = 1; vp.scissorCount = 1;
-					VkPipelineRasterizationStateCreateInfo rs{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-					rs.polygonMode = VK_POLYGON_MODE_FILL; rs.cullMode = VK_CULL_MODE_NONE; rs.frontFace = VK_FRONT_FACE_CLOCKWISE; rs.lineWidth = 1.0f;
-					VkPipelineMultisampleStateCreateInfo ms{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-					ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-					VkPipelineDepthStencilStateCreateInfo ds{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-
-					VkPipelineColorBlendAttachmentState cba{};
-					cba.blendEnable = VK_TRUE;
-					cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-					cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-					cba.colorBlendOp = VK_BLEND_OP_ADD;
-					cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-					cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-					cba.alphaBlendOp = VK_BLEND_OP_ADD;
-					cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-					VkPipelineColorBlendStateCreateInfo cb{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-					cb.attachmentCount = 1; cb.pAttachments = &cba;
-
-					VkDynamicState dyns[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-					VkPipelineDynamicStateCreateInfo dyn{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-					dyn.dynamicStateCount = 2; dyn.pDynamicStates = dyns;
-
-					VkFormat colorFmt = g_dev->GetSwapchainFormat();
-					VkPipelineRenderingCreateInfo rendering{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-					rendering.colorAttachmentCount = 1; rendering.pColorAttachmentFormats = &colorFmt;
-
-					VkGraphicsPipelineCreateInfo pci{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-					pci.pNext = &rendering;
-					pci.stageCount = 2; pci.pStages = stages;
-					pci.pVertexInputState = &vi; pci.pInputAssemblyState = &ia; pci.pViewportState = &vp;
-					pci.pRasterizationState = &rs; pci.pMultisampleState = &ms; pci.pDepthStencilState = &ds;
-					pci.pColorBlendState = &cb; pci.pDynamicState = &dyn;
-					pci.layout = g_dev->GetPipelineLayout()->GetPipelineLayout();
-					return VK_VERIFY(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &pci, nullptr, &g_pipeline));
+					(void)VkCheckImpl(result, "imgui_impl_vulkan", __FILE__, __LINE__);
 				}
 
-				bool CreateFontTexture()
-				{
-					ImGuiIO& io = ImGui::GetIO();
-					unsigned char* pixels = nullptr; int w = 0, h = 0;
-					io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
-					if (!pixels || w <= 0 || h <= 0) return false;
 
-					Texture2DDesc td; td.width = (uint32_t)w; td.height = (uint32_t)h; td.format = PixelFormat::R8G8B8A8_Unorm;
-					ImageData id; id.pixels = pixels; id.rowPitch = (uint32_t)w * 4; id.slicePitch = id.rowPitch * (uint32_t)h;
-					g_font = g_dev->CreateTexture2D(td, id);
-					if (!g_font) return false;
-					g_fontView = static_cast<VulkanSRV*>(g_font->GetNativeHandle())->GetImageView();
-					io.Fonts->SetTexID((ImTextureID)(uintptr_t)g_fontView);
-					return g_fontView != VK_NULL_HANDLE;
+				/** GPU を抜けた DescriptorSet を解放する */
+				void ReleaseRetiredSets(const uint64_t frameSerial)
+				{
+					size_t kept = 0;
+					for (size_t i = 0; i < g_retiredSets.size(); ++i)
+					{
+						const RetiredSet retired = g_retiredSets[i];
+						if (frameSerial >= retired.frameSerial + RETIRE_DELAY_FRAME_COUNT) {
+							ImGui_ImplVulkan_RemoveTexture(retired.set);
+							g_ownedSets.erase(retired.set);
+						} else {
+							g_retiredSets[kept++] = retired;
+						}
+					}
+					g_retiredSets.resize(kept);
 				}
 
-				bool EnsureBuffers(uint32_t vtxCount, uint32_t idxCount)
+
+				/** 自前の DescriptorSet を全部返す。GPU が空の区間でだけ呼ぶ */
+				void ReleaseAllSets()
 				{
-					if (vtxCount > g_vbCap)
+					for (const auto& entry : g_frameSets)
 					{
-						g_vbCap = vtxCount + 5000;
-						g_vb = g_dev->CreateDynamicVertexBuffer(g_vbCap, (uint32_t)sizeof(ImDrawVert), nullptr);
-						if (!g_vb) { g_vbCap = 0; return false; }
+						ImGui_ImplVulkan_RemoveTexture(entry.second);
 					}
-					if (idxCount > g_ibCap)
+					for (const RetiredSet& retired : g_retiredSets)
 					{
-						g_ibCap = idxCount + 10000;
-						g_ib = g_dev->CreateDynamicIndexBuffer(g_ibCap, sizeof(ImDrawIdx) == 2 ? IndexFormat::UInt16 : IndexFormat::UInt32, nullptr);
-						if (!g_ib) { g_ibCap = 0; return false; }
+						ImGui_ImplVulkan_RemoveTexture(retired.set);
 					}
+					g_frameSets.clear();
+					g_retiredSets.clear();
+					g_ownedSets.clear();
+				}
+
+
+				/** 公式バックエンドを初期化する (設計書/エディタ全体設計.md 4.4 の決定) */
+				bool InitBackend(const VkFormat colorFormat, const uint32_t imageCount)
+				{
+					// pColorAttachmentFormats はバックエンドが深いコピーを取るので
+					// (imgui_impl_vulkan.cpp の ImGui_ImplVulkan_CreateMainPipeline)、
+					// ローカル変数を指して渡してよい。
+					VkFormat attachmentFormat = colorFormat;
+
+					ImGui_ImplVulkan_InitInfo info = {};
+					info.ApiVersion     = VK_API_VERSION_1_3;   // CreateInstance の apiVersion と揃える
+					info.Instance       = g_dev->GetVkInstance();
+					info.PhysicalDevice = g_dev->GetPhysicalDevice();
+					info.Device         = g_dev->GetDevice();
+					info.QueueFamily    = g_dev->GetGraphicsQueueFamily();
+					info.Queue          = g_dev->GetGraphicsQueue();
+
+					// エンジンのフレーム別プール (GetCurrentDescriptorPool) はフレーム頭で Reset するので
+					// 流用できない (自分のリセットで ImGui 用のディスクリプタも一緒に消える)。
+					// DescriptorPoolSize を渡してバックエンド内部のプールを作らせる。
+					info.DescriptorPool     = VK_NULL_HANDLE;
+					info.DescriptorPoolSize = DESCRIPTOR_POOL_SIZE;
+
+					// MinImageCount は 2 以上、ImageCount は MinImageCount 以上がバックエンドの前提。
+					// ImageCount は頂点/インデックスバッファのリング段数にしか使われないので、
+					// 画像数が 1 の環境でも 2 に丸めて渡してよい。
+					info.MinImageCount  = 2;
+					info.ImageCount     = imageCount < 2 ? 2 : imageCount;
+					info.PipelineCache  = VK_NULL_HANDLE;
+
+					// dynamic rendering (VkRenderPass を作らない)。描画先はその都度呼び出し側が渡す。
+					info.UseDynamicRendering           = true;
+					info.PipelineInfoMain.MSAASamples  = VK_SAMPLE_COUNT_1_BIT;
+					info.PipelineInfoMain.PipelineRenderingCreateInfo =
+						VkPipelineRenderingCreateInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+					info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount    = 1;
+					info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &attachmentFormat;
+
+					info.CheckVkResultFn = CheckVkResult;
+
+					if (!ImGui_ImplVulkan_Init(&info))
+					{
+						EngineAssertMsg(false, "ImGui Vulkan バックエンドの初期化失敗");
+						return false;
+					}
+
+					g_initFormat     = colorFormat;
+					g_initImageCount = imageCount;
+					g_backendReady   = true;
 					return true;
 				}
+
+
+				/** 公式バックエンドを畳む。自前の DescriptorSet は内部プールごと消える前に返す */
+				void ShutdownBackend()
+				{
+					if (!g_backendReady) return;
+
+					// 在フライトのコマンドが DescriptorSet とパイプラインを参照している。
+					if (g_dev) g_dev->WaitDeviceIdle();
+					ReleaseAllSets();
+					ImGui_ImplVulkan_Shutdown();
+
+					g_backendReady   = false;
+					g_initFormat     = VK_FORMAT_UNDEFINED;
+					g_initImageCount = 0;
+				}
+
+
+				/**
+				 * スワップチェーンの作り直しに追従する。
+				 *
+				 * 寸法だけが変わる場合は何もしない (dynamic rendering なので描画先はその都度渡す)。
+				 * フォーマットか画像数が変わると ImGui のパイプラインとフレームリングが合わなくなるが、
+				 * ImGui_ImplVulkan_SetMinImageCount は非対応 (内部で assert) なので、
+				 * Shutdown から Init をやり直す (設計書 4.4)。Android のサーフェス再生成もここを通る。
+				 */
+				bool EnsureBackend()
+				{
+					if (!g_dev) return false;
+
+					const VkFormat format     = g_dev->GetSwapchainFormat();
+					const uint32_t imageCount = g_dev->GetSwapchainImageCount();
+					if (format == VK_FORMAT_UNDEFINED || imageCount == 0)
+					{
+						return false;   // スワップチェーン未確立。描く相手がいないので初期化もしない
+					}
+					if (g_backendReady && format == g_initFormat && imageCount == g_initImageCount)
+					{
+						return true;
+					}
+
+					ShutdownBackend();
+					return InitBackend(format, imageCount);
+				}
+
+
+				/** SRV の画像を SHADER_READ_ONLY_OPTIMAL へ遷移する。rendering scope の外でだけ呼ぶ */
+				void TransitionToShaderRead(VkCommandBuffer cmd, VulkanSRV* srv, VkImageLayout* layout)
+				{
+					VkImageMemoryBarrier2 barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+					// 直前の用途 (カラー書き込み / compute の GENERAL 書き込み) は分からないので、
+					// src は全コマンドの書き込みを待つ。dst は ImGui のサンプリングだけ。
+					barrier.srcStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+					barrier.srcAccessMask    = VK_ACCESS_2_MEMORY_WRITE_BIT;
+					barrier.dstStageMask     = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+					barrier.dstAccessMask    = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+					barrier.oldLayout        = *layout;
+					barrier.newLayout        = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					barrier.image            = srv->GetImage();
+					// Hi-Z のようにミップを持つ画像もあるので全サブリソースを揃える (描画側と同方式)。
+					barrier.subresourceRange = { srv->Aspect(), 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS };
+
+					VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+					dep.imageMemoryBarrierCount = 1;
+					dep.pImageMemoryBarriers    = &barrier;
+					vkCmdPipelineBarrier2(cmd, &dep);
+
+					*layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				}
 			}
+
 
 			bool Init()
 			{
 				g_dev = VulkanGraphicsDeviceImpl::GetInstance();
 				if (!g_dev) return false;
 
-				ImGuiIO& io = ImGui::GetIO();
-				io.BackendRendererName = "imgui_impl_aq_vulkan";
-				io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
-
-				g_vs = g_dev->CreateShader("aqEngine/Assets/Shader/ImGuiVK.fx", "VSMain", IShader::ShaderType::VS);
-				g_ps = g_dev->CreateShader("aqEngine/Assets/Shader/ImGuiVK.fx", "PSMain", IShader::ShaderType::PS);
-				if (!g_vs || !g_ps) return false;
-
-				SamplerDesc sd; sd.filter = FilterMode::MinMagMipLinear;
-				sd.addressU = sd.addressV = sd.addressW = AddressMode::Wrap;
-				g_sampler = g_dev->CreateSamplerState(sd);
-
-				float initProj[4] = { 0, 0, 0, 0 };
-				g_projCB = g_dev->CreateConstantBuffer(initProj, sizeof(initProj));
-
-				if (!g_sampler || !g_projCB)   return false;
-				if (!CreateFontTexture())      { EngineAssertMsg(false, "ImGui Vulkan フォント生成失敗"); return false; }
-				if (!CreatePipeline())         { EngineAssertMsg(false, "ImGui Vulkan パイプライン生成失敗"); return false; }
-				return true;
+				// フォント (io.Fonts) は呼び出し側が積む。公式バックエンドは RendererHasTextures を
+				// 立てて動的アトラスにするので、ここでアトラスを作る処理は要らない。
+				return EnsureBackend();
 			}
+
 
 			void Shutdown()
 			{
-				if (g_dev && g_pipeline) { vkDestroyPipeline(g_dev->GetDevice(), g_pipeline, nullptr); g_pipeline = VK_NULL_HANDLE; }
-				g_vb.reset(); g_ib.reset(); g_projCB.reset(); g_sampler.reset(); g_font.reset();
-				g_vs.reset(); g_ps.reset();
-				g_vbCap = g_ibCap = 0; g_fontView = VK_NULL_HANDLE; g_dev = nullptr;
+				ShutdownBackend();
+				g_dev = nullptr;
+				g_warnedTooManyTextures = false;
 			}
 
-			void NewFrame() {}
+
+			void NewFrame()
+			{
+				// アトラスの更新は RenderDrawData が draw_data->Textures を見て自分で行う。
+				if (g_backendReady) ImGui_ImplVulkan_NewFrame();
+			}
+
+
+			void PrepareTextures(ImDrawData* drawData)
+			{
+				if (!drawData || !EnsureBackend()) return;
+
+				VkCommandBuffer cmd = g_dev->GetCommandBuffer();
+				const uint64_t frameSerial = VulkanGraphicsDeviceImpl::GetStaticFrameSerial();
+
+				// GPU を抜けた DescriptorSet を回収する。
+				ReleaseRetiredSets(frameSerial);
+
+				// 対応表はフレームごとに作り直す。前フレームの set を VkImageView で引き当てて
+				// 使い回すと、RT を作り直したあとにハンドル値が再利用された場合、
+				// 破棄済みのビューを指す DescriptorSet を掴んだことに気付けない。
+				// TODO(E2a): device 側にビュー破棄のフックを入れて、設計書 4.4 のとおり
+				//            「破棄時に RemoveTexture してキャッシュから外す」持続キャッシュへ替える。
+				for (const auto& entry : g_frameSets)
+				{
+					g_retiredSets.push_back(RetiredSet{ frameSerial, entry.second });
+				}
+				g_frameSets.clear();
+
+				uint32_t viewCount = 0;
+				for (ImDrawList* drawList : drawData->CmdLists)
+				{
+					if (!drawList) continue;
+
+					for (int c = 0; c < drawList->CmdBuffer.Size; ++c)
+					{
+						ImDrawCmd& drawCmd = drawList->CmdBuffer[c];
+						if (drawCmd.UserCallback != nullptr)    continue;
+						// _TexData を持つものはバックエンドが管理しているテクスチャ (フォントアトラス等)。
+						if (drawCmd.TexRef._TexData != nullptr) continue;
+
+						const ImTextureID texId = drawCmd.GetTexID();
+						// 同じ ImDrawData を 2 回描く経路に備えた保険。自分が配った DescriptorSet は
+						// 解放まで生きているので、生のエンジンハンドルと値が衝突することはない。
+						if (g_ownedSets.find(ToDescriptorSet(texId)) != g_ownedSets.end()) continue;
+
+						// ImGui::Image にはエンジンのハンドル (IShaderResourceView::GetNativeHandle) が
+						// 渡ってくる。Vulkan ではその実体が VulkanSRV。
+						// TODO(E1a): 配列テクスチャ (シャドウ深度マップ) は公式シェーダが読めない。
+						//            VulkanSRV にビュー種別が無いので、ここでは検出できていない。
+						VulkanSRV*  srv  = reinterpret_cast<VulkanSRV*>(static_cast<uintptr_t>(texId));
+						VkImageView view = srv ? srv->GetImageView() : VK_NULL_HANDLE;
+						if (view == VK_NULL_HANDLE)
+						{
+							drawCmd.ElemCount = 0;   // 変換できないものは描かせない (不正な ID を渡さない)
+							continue;
+						}
+
+						// レイアウト遷移は dynamic rendering の scope 内では打てないので、ここで済ませる。
+						// 常時 SHADER_READ_ONLY の通常テクスチャは LayoutPtr()=nullptr で遷移不要。
+						VkImageLayout* layout = srv->LayoutPtr();
+						if (layout != nullptr && *layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+							&& srv->GetImage() != VK_NULL_HANDLE)
+						{
+							TransitionToShaderRead(cmd, srv, layout);
+						}
+
+						auto it = g_frameSets.find(view);
+						if (it == g_frameSets.end())
+						{
+							if (viewCount >= MAX_USER_TEXTURE_COUNT)
+							{
+								if (!g_warnedTooManyTextures)
+								{
+									g_warnedTooManyTextures = true;
+									aq::debug::OutputString("[Vulkan] ImGui: 1 フレームのユーザーテクスチャが上限を超えたので描画を省きました\n");
+								}
+								drawCmd.ElemCount = 0;
+								continue;
+							}
+
+							// AddTexture はレイアウト遷移をしない (遷移は上で済ませている)。
+							VkDescriptorSet set = ImGui_ImplVulkan_AddTexture(view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+							if (set == VK_NULL_HANDLE)
+							{
+								drawCmd.ElemCount = 0;
+								continue;
+							}
+							it = g_frameSets.emplace(view, set).first;
+							g_ownedSets.insert(set);
+							++viewCount;
+						}
+
+						drawCmd.TexRef = ImTextureRef(ToTexID(it->second));
+					}
+				}
+			}
+
 
 			void Render(VkCommandBuffer cmd, ImDrawData* drawData)
 			{
-				if (!g_dev || !g_pipeline || !drawData || drawData->TotalVtxCount <= 0) return;
-				if (!EnsureBuffers((uint32_t)drawData->TotalVtxCount, (uint32_t)drawData->TotalIdxCount)) return;
-
-				// 全 draw list の頂点/インデックスを連結してアップロード。
-				std::vector<ImDrawVert> verts; verts.reserve(drawData->TotalVtxCount);
-				std::vector<ImDrawIdx>  idxs;  idxs.reserve(drawData->TotalIdxCount);
-				for (int n = 0; n < drawData->CmdListsCount; ++n)
-				{
-					const ImDrawList* dl = drawData->CmdLists[n];
-					verts.insert(verts.end(), dl->VtxBuffer.Data, dl->VtxBuffer.Data + dl->VtxBuffer.Size);
-					idxs.insert(idxs.end(),  dl->IdxBuffer.Data, dl->IdxBuffer.Data + dl->IdxBuffer.Size);
-				}
-				static_cast<VulkanVertexBuffer*>(g_vb.get())->Update(verts.data(), (uint32_t)(verts.size() * sizeof(ImDrawVert)));
-				static_cast<VulkanIndexBuffer*>(g_ib.get())->Update(idxs.data(),   (uint32_t)(idxs.size()  * sizeof(ImDrawIdx)));
-
-				// scale/translate (imgui座標 → Vulkan NDC, Y下のまま)。
-				const float L = drawData->DisplayPos.x, T = drawData->DisplayPos.y;
-				const float W = drawData->DisplaySize.x, H = drawData->DisplaySize.y;
-				if (W <= 0 || H <= 0) return;
-				float proj[4] = { 2.0f / W, 2.0f / H, -1.0f - L * (2.0f / W), -1.0f - T * (2.0f / H) };
-				static_cast<VulkanConstantBuffer*>(g_projCB.get())->Update(proj);
-
-				vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, g_pipeline);
-				VkViewport vpRect{ 0, 0, W, H, 0.0f, 1.0f };  // 正・非Y-flip (swapchain は確定画像)
-				vkCmdSetViewport(cmd, 0, 1, &vpRect);
-
-				auto* vb = static_cast<VulkanVertexBuffer*>(g_vb.get());
-				auto* ib = static_cast<VulkanIndexBuffer*>(g_ib.get());
-				VkBuffer vbuf = vb->GetBuffer(); VkDeviceSize voff = vb->GetCurrentOffset();
-				vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &voff);
-				vkCmdBindIndexBuffer(cmd, ib->GetBuffer(), ib->GetCurrentOffset(), ib->GetIndexType());
-
-				VkDevice device = g_dev->GetDevice();
-				VkPipelineLayout layout = g_dev->GetPipelineLayout()->GetPipelineLayout();
-				VkDescriptorSetLayout setLayout = g_dev->GetPipelineLayout()->GetSetLayout();
-				VkSampler sampler = static_cast<VulkanSampler*>(g_sampler.get())->GetSampler();
-				auto* projCB = static_cast<VulkanConstantBuffer*>(g_projCB.get());
-
-				uint32_t globalVtx = 0, globalIdx = 0;
-				for (int n = 0; n < drawData->CmdListsCount; ++n)
-				{
-					const ImDrawList* dl = drawData->CmdLists[n];
-					for (int c = 0; c < dl->CmdBuffer.Size; ++c)
-					{
-						const ImDrawCmd& dc = dl->CmdBuffer[c];
-						if (dc.UserCallback) { continue; }
-						// クリップ矩形 → scissor
-						ImVec2 cmin(dc.ClipRect.x - L, dc.ClipRect.y - T);
-						ImVec2 cmax(dc.ClipRect.z - L, dc.ClipRect.w - T);
-						if (cmin.x < 0) cmin.x = 0; if (cmin.y < 0) cmin.y = 0;
-						if (cmax.x > W) cmax.x = W; if (cmax.y > H) cmax.y = H;
-						if (cmax.x <= cmin.x || cmax.y <= cmin.y) continue;
-						VkRect2D sc{ { (int32_t)cmin.x, (int32_t)cmin.y },
-						             { (uint32_t)(cmax.x - cmin.x), (uint32_t)(cmax.y - cmin.y) } };
-						vkCmdSetScissor(cmd, 0, 1, &sc);
-
-						VkImageView texView = (VkImageView)(uintptr_t)dc.GetTexID();
-						if (!texView) texView = g_fontView;
-
-						// descriptor set (engine layout: b0=proj, t0=tex, s0=sampler)
-						VkDescriptorSetAllocateInfo ai{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-						ai.descriptorPool = g_dev->GetCurrentDescriptorPool();
-						ai.descriptorSetCount = 1; ai.pSetLayouts = &setLayout;
-						VkDescriptorSet set = VK_NULL_HANDLE;
-						if (vkAllocateDescriptorSets(device, &ai, &set) != VK_SUCCESS) continue;
-
-						VkDescriptorBufferInfo bi{ projCB->GetBuffer(), projCB->GetCurrentOffset(), projCB->GetRange() };
-						VkDescriptorImageInfo  ti{}; ti.imageView = texView; ti.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-						VkDescriptorImageInfo  si{}; si.sampler = sampler;
-						VkWriteDescriptorSet w[3]{};
-						w[0] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET }; w[0].dstSet = set; w[0].dstBinding = VulkanPipelineLayout::CbvBinding(0); w[0].descriptorCount = 1; w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; w[0].pBufferInfo = &bi;
-						w[1] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET }; w[1].dstSet = set; w[1].dstBinding = VulkanPipelineLayout::SrvBinding(0); w[1].descriptorCount = 1; w[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; w[1].pImageInfo = &ti;
-						w[2] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET }; w[2].dstSet = set; w[2].dstBinding = VulkanPipelineLayout::SamplerBinding(0); w[2].descriptorCount = 1; w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER; w[2].pImageInfo = &si;
-						vkUpdateDescriptorSets(device, 3, w, 0, nullptr);
-						vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0, nullptr);
-
-						vkCmdDrawIndexed(cmd, dc.ElemCount, 1, globalIdx + dc.IdxOffset, globalVtx + dc.VtxOffset, 0);
-					}
-					globalVtx += dl->VtxBuffer.Size;
-					globalIdx += dl->IdxBuffer.Size;
-				}
+				if (!g_backendReady || !drawData) return;
+				ImGui_ImplVulkan_RenderDrawData(drawData, cmd);
 			}
 		}
 	}

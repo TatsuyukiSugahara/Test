@@ -50,6 +50,10 @@ namespace aq
 				"Light 0 (Shadow)", "Light 1", "Light 2", "Light 3"
 			};
 
+			// E1a: スライス SRV は TEXTURE2DARRAY(ArraySize=1 の配列ビュー)のままで、
+			// 公式 ImGui バックエンドのシェーダーは Texture2D しか読めない。配列を
+			// 2D のプレビュー RT に写す対応(エディタ全体設計.md 15 章)までは画像表示を
+			// やめ、解像度だけを出す(D3D11/D3D12/Vulkan 共通)。
 			for (uint32_t i = 0; i < lightCount; ++i)
 			{
 				auto* srv = depthMap->GetSliceSRV(i);
@@ -60,12 +64,9 @@ namespace aq
 				if (i % 2 == 1) ImGui::SameLine();
 
 				ImGui::BeginGroup();
-				ImGui::Image(
-					reinterpret_cast<ImTextureID>(srv->GetNativeHandle()),
-					sz,
-					ImVec2(0, 0), ImVec2(1, 1),
-					ImVec4(1, 1, 1, 1),
-					ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+				ImGui::Dummy(sz);
+				ImGui::Text("シャドウ深度マップの画像表示は未対応");
+				ImGui::Text("%u x %u", depthMap->GetResolution(), depthMap->GetResolution());
 				ImGui::Text("%s", (i < 4) ? kLabels[i] : "Light");
 				ImGui::EndGroup();
 

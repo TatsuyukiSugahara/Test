@@ -84,10 +84,15 @@ namespace aq
 			VmaAllocator     GetAllocator() const      { return allocator_; }
 			uint32_t         GetCurrentFrameIndex() const { return frameIndex_; }
 			VkQueue          GetGraphicsQueue() const  { return gfxQueue_; }
+			// GetInstance() はシングルトン取得なので、VkInstance はこちらで返す (ImGui バックエンドが要求する)。
+			VkInstance       GetVkInstance() const     { return instance_; }
+			uint32_t         GetGraphicsQueueFamily() const { return gfxQueueFamily_; }
 			VulkanPipelineLayout* GetPipelineLayout() const { return pipelineLayout_.get(); }
 			VulkanPipelineCache*  GetPipelineCache()  const { return pipelineCache_.get(); }
 			VkFormat         GetSwapchainFormat() const { return swapchainFormat_; }
 			VkExtent2D       GetSwapchainExtent() const { return swapchainExtent_; }
+			/** スワップチェーン画像数 (ImGui バックエンドの ImageCount に渡す。未確立なら 0) */
+			uint32_t         GetSwapchainImageCount() const { return static_cast<uint32_t>(swapchainImages_.size()); }
 			// サーフェスの作り直しに失敗している間は空になりうるので、範囲を見てから引く。
 			VkImageView      GetCurrentSwapchainView() const  { return imageIndex_ < swapchainViews_.size()  ? swapchainViews_[imageIndex_]  : VK_NULL_HANDLE; }
 			VkImage          GetCurrentSwapchainImage() const { return imageIndex_ < swapchainImages_.size() ? swapchainImages_[imageIndex_] : VK_NULL_HANDLE; }

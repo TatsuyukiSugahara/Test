@@ -24,3 +24,12 @@
 // ----------------------------------------------------------------------------
 //#define AQ_RENDER_PIPELINED
 // ============================================================================
+
+// ImGuiRenderCommand は ImDrawData* の生ポインタしか持たず、公式バックエンドは
+// 描画中にコンテキスト所有のフォントアトラス(draw_data->Textures)を書き換える。
+// AQ_RENDER_PIPELINED(メインの NewFrame とレンダーの読み取りが 1 フレーム重なる)
+// と ImGui を両立させるには描画データをフレーム所有のコピーにする必要があり、
+// 未対応(エディタ全体設計.md 15 章)。両方同時定義はコンパイルエラーにする。
+#if defined(AQ_RENDER_PIPELINED) && defined(AQ_IMGUI)
+#error "AQ_RENDER_PIPELINED と AQ_IMGUI は同時に定義できません(エディタ全体設計.md 4.4 節)"
+#endif

@@ -122,11 +122,12 @@ endif()
 # ----------------------------------------------------------------------------
 #  imgui
 #
-#  imgui.vcxproj と同じソース集合。imgui_impl_dx12.cpp は同梱版がコア
-#  (1.92 WIP)より新しく非互換のためビルドしない(DX12 の ImGui 描画は
-#  aqEngine 側の D3D12ImGui.cpp が自前実装している)。
-#  imgui_impl_win32.cpp / imgui_impl_dx11.cpp は Windows のみ。
-#  Mac 用の imgui_impl_osx.mm 同梱は P4 の作業(設計書 §6)。
+#  imgui.vcxproj と同じソース集合(v1.93.0-docking + 公式バックエンド)。
+#  imgui_impl_win32.cpp / imgui_impl_dx11.cpp / imgui_impl_dx12.cpp は Windows のみ。
+#  imgui_impl_vulkan.cpp は Vulkan 構成(Windows の Vulkan、Android)だけに足す。
+#  vulkan/vulkan.h を無条件に #include するため、他の API のときに足すと
+#  Vulkan SDK 未導入の環境でビルドが壊れる(vcxproj 側の ExcludedFromBuild と同じ理由)。
+#  Mac 用の imgui_impl_osx.mm / imgui_impl_metal.mm 同梱は E1b の作業(エディタ全体設計.md 4.4 節)。
 # ----------------------------------------------------------------------------
 set(AQ_IMGUI_SOURCES
 	"${AQ_THIRDPARTY_ROOT}/imgui/imgui.cpp"
@@ -140,11 +141,24 @@ if(WIN32)
 		"${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_win32.cpp"
 		"${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_dx11.cpp"
 	)
+	if(AQ_GRAPHICS_API STREQUAL "D3D12")
+		list(APPEND AQ_IMGUI_SOURCES "${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_dx12.cpp")
+	endif()
+endif()
+
+if((WIN32 AND AQ_GRAPHICS_API STREQUAL "Vulkan") OR ANDROID)
+	list(APPEND AQ_IMGUI_SOURCES "${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_vulkan.cpp")
 endif()
 
 add_library(imgui STATIC ${AQ_IMGUI_SOURCES})
 target_include_directories(imgui PUBLIC "${AQ_THIRDPARTY_ROOT}")
 target_compile_features(imgui PRIVATE cxx_std_20)
+
+# Vulkan ヘッダ(Windows)。Android は NDK の sysroot が供給するため不要
+# (aqEngine/Graphics/Vulkan/VulkanCommon.h と同じ方針)。
+if(WIN32 AND AQ_GRAPHICS_API STREQUAL "Vulkan")
+	target_include_directories(imgui PRIVATE "${AQ_VULKAN_SDK}/Include")
+endif()
 
 if(MSVC)
 	target_compile_options(imgui PRIVATE /utf-8 /W0)

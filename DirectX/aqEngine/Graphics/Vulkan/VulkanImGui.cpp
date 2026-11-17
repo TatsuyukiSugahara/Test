@@ -80,6 +80,18 @@ namespace aq
 				}
 
 
+				/**
+				 * Multi-Viewport 用のサーフェス作成の仮実装(常に失敗を返す)。
+				 * docking 版の win32 バックエンドは PlatformHasViewports を立てるが、このハンドラは登録しない。
+				 * 公式 Vulkan バックエンドの初期化はその組み合わせを assert するので、未登録なら代わりに置く。
+				 * Multi-Viewport を有効にするまでは呼ばれない。本当のサーフェス作成は Multi-Viewport 対応(E3a)で書く。
+				 */
+				int CreateVkSurfaceUnsupported(ImGuiViewport* /*viewport*/, ImU64 /*instance*/, const void* /*allocator*/, ImU64* /*outSurface*/)
+				{
+					return static_cast<int>(VK_ERROR_EXTENSION_NOT_PRESENT);
+				}
+
+
 				/** GPU を抜けた DescriptorSet を解放する */
 				void ReleaseRetiredSets(const uint64_t frameSerial)
 				{
@@ -153,6 +165,12 @@ namespace aq
 					info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &attachmentFormat;
 
 					info.CheckVkResultFn = CheckVkResult;
+
+					// PlatformHasViewports のときサーフェス作成ハンドラが必須(未登録だと Init が assert する)
+					ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
+					if (platformIO.Platform_CreateVkSurface == nullptr) {
+						platformIO.Platform_CreateVkSurface = CreateVkSurfaceUnsupported;
+					}
 
 					if (!ImGui_ImplVulkan_Init(&info))
 					{

@@ -124,7 +124,7 @@ endif()
 #
 #  imgui.vcxproj と同じソース集合(v1.93.0-docking + 公式バックエンド)。
 #  imgui_impl_win32.cpp / imgui_impl_dx11.cpp / imgui_impl_dx12.cpp は Windows のみ。
-#  imgui_impl_vulkan.cpp は Vulkan 構成(Windows の Vulkan、Android)だけに足す。
+#  imgui_impl_vulkan.cpp は Vulkan 構成(Windows・Mac の Vulkan、Android)だけに足す。
 #  vulkan/vulkan.h を無条件に #include するため、他の API のときに足すと
 #  Vulkan SDK 未導入の環境でビルドが壊れる(vcxproj 側の ExcludedFromBuild と同じ理由)。
 #  Mac 用の imgui_impl_osx.mm / imgui_impl_metal.mm 同梱は E1b の作業(エディタ全体設計.md 4.4 節)。
@@ -146,7 +146,7 @@ if(WIN32)
 	endif()
 endif()
 
-if((WIN32 AND AQ_GRAPHICS_API STREQUAL "Vulkan") OR ANDROID)
+if(AQ_GRAPHICS_API STREQUAL "Vulkan")
 	list(APPEND AQ_IMGUI_SOURCES "${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_vulkan.cpp")
 endif()
 
@@ -154,9 +154,9 @@ add_library(imgui STATIC ${AQ_IMGUI_SOURCES})
 target_include_directories(imgui PUBLIC "${AQ_THIRDPARTY_ROOT}")
 target_compile_features(imgui PRIVATE cxx_std_20)
 
-# Vulkan ヘッダ(Windows)。Android は NDK の sysroot が供給するため不要
+# Vulkan ヘッダ(Windows / Mac)。Android は NDK の sysroot が供給するため不要
 # (aqEngine/Graphics/Vulkan/VulkanCommon.h と同じ方針)。
-if(WIN32 AND AQ_GRAPHICS_API STREQUAL "Vulkan")
+if(AQ_GRAPHICS_API STREQUAL "Vulkan" AND NOT ANDROID)
 	target_include_directories(imgui PRIVATE "${AQ_VULKAN_SDK}/Include")
 endif()
 

@@ -42,8 +42,6 @@ DualBlurUp.fx         main       cs   # [参照] Rendering/PostProcess/Effects/B
 DualBlurUpAccum.fx    main       cs   # [参照] Rendering/PostProcess/Effects/BloomEffect.cpp
 HiZDownsample.fx      main       cs   # [参照] Rendering/Occlusion/HiZRenderer.cpp
 HiZReconstruct.fx     main       cs   # [参照] Rendering/Occlusion/HiZRenderer.cpp
-ImGuiVK.fx            VSMain     vs   # [参照] Graphics/Vulkan/VulkanImGui.cpp
-ImGuiVK.fx            PSMain     ps   # [参照] Graphics/Vulkan/VulkanImGui.cpp
 InstancedGrass.fx     VSMain     vs   # [参照] Graphics/InstancedStaticMesh.cpp
 InstancedGrass.fx     PSMain     ps   # [参照] Graphics/InstancedStaticMesh.cpp
 InstancedModelTex.fx  VSMain     vs   # [参照] Graphics/StaticMesh.cpp / InstancedStaticMesh.cpp

@@ -1090,10 +1090,11 @@ namespace aq
 						[objects_->currentCommandBuffer renderCommandEncoderWithDescriptor:imguiPass];
 					if (imguiEncoder != nil)
 					{
-						MetalImGui::Render(imguiEncoder,
-						                   [dstTexture pixelFormat],
-						                   static_cast<uint32_t>([dstTexture width]),
-						                   static_cast<uint32_t>([dstTexture height]),
+						// 公式 imgui_impl_metal はパス記述子から PSO のフォーマットを決め、
+						// コマンドバッファの完了ハンドラで頂点/インデックスバッファを回収する。
+						MetalImGui::Render(objects_->currentCommandBuffer,
+						                   imguiEncoder,
+						                   imguiPass,
 						                   imguiDrawData_);
 						[imguiEncoder endEncoding];
 					}

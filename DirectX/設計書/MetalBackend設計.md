@@ -538,6 +538,8 @@ namespace aq { namespace graphics {
 
 ### P6 の結果(2026-09-11)
 
+> 2026-11-18: 自前の `MetalImGui`(PSO・フォントアトラス・`ImGuiVK.fx` 由来の MSL)は、エディタ全体設計の E1b-1 で公式 `imgui_impl_metal` を呼ぶ接続層に置き換えた。現在の構成の一次資料は [エディタ全体設計](エディタ全体設計.md) 4.5 節。以下は P6 時点の記録。
+
 - [x] **ImGui が出て操作できる**。メニューバー・Scene Hierarchy・Inspector・
       Rendering パネル(タブ / スライダー / 折りたたみ)すべて動作
 - [x] **FPS オーバーレイが `Metal 60.0 FPS` と出る**(下記の副次修正)

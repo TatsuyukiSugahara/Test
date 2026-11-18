@@ -127,7 +127,9 @@ endif()
 #  imgui_impl_vulkan.cpp は Vulkan 構成(Windows・Mac の Vulkan、Android)だけに足す。
 #  vulkan/vulkan.h を無条件に #include するため、他の API のときに足すと
 #  Vulkan SDK 未導入の環境でビルドが壊れる(vcxproj 側の ExcludedFromBuild と同じ理由)。
-#  Mac 用の imgui_impl_osx.mm / imgui_impl_metal.mm 同梱は E1b の作業(エディタ全体設計.md 4.4 節)。
+#  imgui_impl_metal.mm は Metal 構成(macOS・iOS)だけに足す。公式は ARC 前提なので、
+#  このファイルにだけ -fobjc-arc を付ける(エンジンの .mm は ARC なしのまま。
+#  エディタ全体設計.md 4.5 節)。Mac 用の imgui_impl_osx.mm は E1b-2 で足す。
 # ----------------------------------------------------------------------------
 set(AQ_IMGUI_SOURCES
 	"${AQ_THIRDPARTY_ROOT}/imgui/imgui.cpp"
@@ -148,6 +150,14 @@ endif()
 
 if(AQ_GRAPHICS_API STREQUAL "Vulkan")
 	list(APPEND AQ_IMGUI_SOURCES "${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_vulkan.cpp")
+endif()
+
+if(AQ_GRAPHICS_API STREQUAL "Metal")
+	list(APPEND AQ_IMGUI_SOURCES "${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_metal.mm")
+	# 公式の imgui_impl_metal.mm は ARC 前提(strong プロパティへ alloc したまま release しない)。
+	# ARC なしでコンパイルすると毎フレームリークするので、このファイルにだけ有効にする。
+	set_source_files_properties("${AQ_THIRDPARTY_ROOT}/imgui/imgui_impl_metal.mm"
+		PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 endif()
 
 add_library(imgui STATIC ${AQ_IMGUI_SOURCES})

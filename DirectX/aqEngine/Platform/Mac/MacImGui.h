@@ -3,48 +3,40 @@
 #if defined(AQ_PLATFORM_MAC) && defined(AQ_IMGUI)
 
 #ifdef __OBJC__
-@class NSEvent;
 @class NSView;
 #endif
+
 
 namespace aq
 {
 	namespace platform
 	{
 		/**
-		 * ImGui の Mac プラットフォームバックエンド(imgui_impl_win32 相当)。
+		 * ImGui の Mac プラットフォームバックエンド(公式 imgui_impl_osx)への接続層(E1b-2)
 		 *
-		 * 描画は既存の VulkanImGui が持つので、ここが見るのは入力・カーソル形状・
-		 * クリップボードと、フレーム頭の DisplaySize / DeltaTime だけ。
-		 * imgui_impl_osx は同梱しない(設計書/Mac移植設計.md P4b)。NSEvent の入り口は
-		 * PlatformMac::PumpEvents の 1 本のままで、HandleEvent はそこから呼ばれる。
+		 * 入力(マウス・キー・文字・IME)・フォーカス・カーソル形状・クリップボードは公式 osx が持つ。
+		 * 公式は Init で渡したビューにイベントモニタと KeyEventResponder を張り、
+		 * PlatformMac::PumpEvents の [NSApp sendEvent:] を通るイベントを自分で拾う。
+		 * ここが受け持つのは Init / Shutdown の中継と、NewFrame での DisplayFramebufferScale の補正だけ。
+		 * 詳細は 設計書/エディタ全体設計.md 4.5 節。
 		 */
 		namespace MacImGui
 		{
-			/** バックエンドの登録(ImGui のコンテキスト生成後に呼ぶ) */
-			bool Init();
+#ifdef __OBJC__
+			/**
+			 * バックエンドの登録(ImGui のコンテキスト生成後に呼ぶ)
+			 *
+			 * 引数に Objective-C 型を取るので __OBJC__ の中に置く(呼び出し元の PlatformMac.mm は ObjC++)。
+			 * @param view 入力を拾うビュー(PlatformMac の AqMetalView)。Shutdown まで保持する
+			 */
+			bool Init(NSView* view);
+#endif
 
 			/** バックエンドの登録解除(ImGui のコンテキスト破棄前に呼ぶ) */
 			void Shutdown();
 
 			/** フレーム頭の状態更新(ImGui::NewFrame の前に呼ぶ) */
 			void NewFrame();
-
-			/**
-			 * ウィンドウのキーフォーカスが変化した(NSWindowDelegate から呼ぶ)。
-			 *
-			 * 失った側だけ通知するのでは足りない。ImGui の io.AppFocusLost は**立ちっぱなしの
-			 * フラグ**で、真の間は毎フレーム ClearInputKeys / ClearInputMouse が走るため
-			 * (imgui.cpp の UpdateInputEvents 末尾)、復帰時に true を返さないと以後の入力が
-			 * すべて捨てられる。
-			 */
-			void OnFocusChanged(bool focused);
-
-#ifdef __OBJC__
-			// NSEvent を ImGui へ流す。呼び出し側の Application.cpp は素の C++ なので
-			// Objective-C 型を使うこの 1 本だけ __OBJC__ で囲う(設計書 §6)。
-			void HandleEvent(NSEvent* event, NSView* view);
-#endif
 		}
 	}
 }

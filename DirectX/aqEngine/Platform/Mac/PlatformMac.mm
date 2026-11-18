@@ -161,13 +161,6 @@ namespace
 		default:
 			break;
 		}
-
-#if defined(AQ_IMGUI)
-		// ImGui にも同じイベントを渡す。ゲーム入力との排他は AppHost::Update の
-		// SuppressKeyboard/Mouse(io.WantCapture*)で効くので、両方が見てよい(設計書 P4b)。
-		// どちらも状態を溜めるだけなので、シンクへの転送との順序に意味は無い。
-		aq::platform::MacImGui::HandleEvent(event, view);
-#endif
 	}
 }
 
@@ -191,20 +184,8 @@ namespace
 {
 	(void)notification;
 	aq::hid::CocoaInputSink::Get().OnFocusLost();
-#if defined(AQ_IMGUI)
-	aq::platform::MacImGui::OnFocusChanged(false);
-#endif
-}
-
-
-// 復帰も必ず伝える。ImGui の io.AppFocusLost は立ちっぱなしのフラグで、真の間は
-// 毎フレーム入力が捨てられるため、false を送ったら true も返す必要がある。
-- (void)windowDidBecomeKey:(NSNotification*)notification
-{
-	(void)notification;
-#if defined(AQ_IMGUI)
-	aq::platform::MacImGui::OnFocusChanged(true);
-#endif
+	// ImGui のフォーカスは公式 imgui_impl_osx がアプリのアクティブ化通知から送る
+	// (エディタ全体設計.md 4.5 節)。ここでは伝えない。
 }
 
 
@@ -246,10 +227,15 @@ namespace
 }
 
 
-// P4 でキーイベントを受けるためにファーストレスポンダになれるようにしておく。
+// ファーストレスポンダにはならない(E1b-2。エディタ全体設計.md 4.5 節)。
+// 公式 imgui_impl_osx は自分で足す KeyEventResponder をファーストレスポンダにして、
+// interpretKeyEvents → insertText で文字入力を受ける。ここで YES を返すと、ビューを
+// クリックした時点でファーストレスポンダがこのビューへ移り、ImGui のテキスト欄に
+// 文字が入らなくなる。ゲームのキー入力は PumpEvents → DispatchInputEvent で直接受けて
+// おり、レスポンダチェーンは使わない(P4 で YES にした理由はもう無い)。
 - (BOOL)acceptsFirstResponder
 {
-	return YES;
+	return NO;
 }
 
 @end
@@ -409,10 +395,9 @@ namespace aq
 						break;
 					}
 
-					// 入力シンクと ImGui へ転送してから NSApplication へ流す。
-					// imgui_impl_osx は同梱せず(P4b)、自前の MacImGui::HandleEvent へ
-					// DispatchInputEvent から渡している。NSView にイベントモニタを張る主体が
-					// いないため、NSEvent の入り口はここ 1 本のまま(設計書 §8-5 は解消)。
+					// ゲームの入力シンクへ転送してから NSApplication へ流す。
+					// ImGui の入力は公式 imgui_impl_osx が Init で張ったローカルイベントモニタが拾う
+					// (ローカルモニタは sendEvent: を通るイベントに掛かる。エディタ全体設計.md 4.5 節)。
 					DispatchInputEvent(event, objects_ != nullptr ? objects_->view : nil);
 					[NSApp sendEvent:event];
 				}
@@ -469,7 +454,8 @@ namespace aq
 		bool PlatformMac::ImGuiInit()
 		{
 #ifdef AQ_IMGUI
-			return MacImGui::Init();
+			if (objects_ == nullptr || objects_->view == nil) return false;
+			return MacImGui::Init(objects_->view);
 #else
 			return true;
 #endif

@@ -211,6 +211,7 @@ namespace aq
 #endif
 #ifdef AQ_DEBUG_IMGUI
 		bool                                                showDebugUI_ = true;
+		bool                                                showImGuiMetrics_ = false;   // ImGui > Metrics で開く標準の Metrics ウィンドウ
 		std::unique_ptr<aq::ocean::OceanDebugPanel>         oceanDebugPanel_;
 		std::unique_ptr<aq::rendering::RenderingDebugPanel> renderingDebugPanel_;
 		std::unique_ptr<aq::ui::UIEditorDebugPanel>         uiEditorDebugPanel_;

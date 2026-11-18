@@ -1013,8 +1013,16 @@ namespace aq
 					aq::ecs::EntityContext::Get().DebugRenderMenu();
 					aq::DebugUI::Get().DebugRenderMenuAll();
 					module_->OnDebugRenderMenu();
+					// ImGui 標準の Metrics ウィンドウ。Inputs 欄で押下中のキーを見られる
+					// (Mac の Command 押下中の keyUp 欠落の確認用。エディタ全体設計.md 4.5 節)。
+					if (ImGui::BeginMenu("ImGui"))
+					{
+						ImGui::MenuItem("Metrics", nullptr, &showImGuiMetrics_);
+						ImGui::EndMenu();
+					}
 					ImGui::EndMainMenuBar();
 				}
+				if (showImGuiMetrics_) ImGui::ShowMetricsWindow(&showImGuiMetrics_);
 				{ AQ_PROFILE_SCOPE("ECS::DebugRender"); aq::ecs::EntityContext::Get().DebugRender(); }
 				aq::DebugUI::Get().DebugRenderAll();
 				{ AQ_PROFILE_SCOPE("OnDebugRender"); module_->OnDebugRender(); }

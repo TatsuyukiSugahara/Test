@@ -126,6 +126,18 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   `heightScale` / `terrainSize` は `HeightmapChunk::SetHeightScale` / `SetTerrainSize` に渡すが、この 2 つはハイトマップ未読込だと値を捨てる。
   `deserializePtr` は `OnDeserialized` を呼ばないので、Prefab エディタで Terrain を読んで保存し直すと 3 つの値が失われる。
   E6b で 3 つの値をコンポーネント側のオーサリング値で往復させる形に直した(同 6.4 節)。`Tools/ReflectionTest --selftest` の T2 で確かめる。
+- (2026-11-19 発見)**Level / Prefab エディタで参照ノードを読んで保存し直すと、override が壊れる。**
+  [PrefabEditNodeOps.cpp](../aqEngine/ECS/PrefabEditNodeOps.cpp) の `PrefabNodeFromJson` は `overrides` の `components` と `removedComponents` しか読まず、
+  `name` / `addedComponents` / `children` / `removedChildren` を捨てる。`PrefabNodeToJson` は override のコンポーネントを全フィールド書き出すので、
+  既定値のキーが override に増える。E4a で直す([エディタ全体設計](エディタ全体設計.md) 7.8 節)。
+- (2026-11-19 発見)**Level エディタが、インライン subLevel の中の `subLevels` を捨てる。** `LevelEditorPanel` の `SubLevelEdit` が
+  `name` と `entities` しか持たない(ランタイムは再帰で読む)。E4b で直す(同 7.8 節)。
+- (2026-11-19 発見)**Level の Unload の後に、生成が走ってエンティティが残ることがある。**
+  [LevelManager.cpp](../aqEngine/Level/LevelManager.cpp) の `Load` の遅延生成コマンドはロード済みかを確かめないので、`Load` → `Unload` → Flush の順で
+  古い Level のエンティティが作られる。`LoadAsync` の途中で `Unload` しても、残りのジョブが古い `LevelId` のまま作り続ける。どちらもどの Level にも属さない
+  エンティティが残る。E4b で直す(同 7.8 節)。
+- (2026-11-19 発見)**Level の自動リロード(`PollFileChanges`)が GPU の完了を待たずに破棄する。** `ReloadAll` は D3D12 のハングを避けるために
+  `WaitForRenderIdle` + `FlushPendingCommands` を入れているが、自動リロードには無い。E4b で直す(同 7.8 節)。
 - (2026-09-30 発見)**依存の経路が無いまま同じ Component やカメラを触る System の組が 7 件ある。**
   うち同じ wave で実際に並列に走っていた `ActorStateMachineSystem` ↔ `SpeedCharacterSystem`(`TransformComponent` を両方が書く)と
   `CoinSystem` ↔ `AutoCameraSystem`(`TransformComponent` の書きと読み)の 2 組は、2026-11-11 に

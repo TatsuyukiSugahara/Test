@@ -168,6 +168,7 @@ endif()
 # (iOS では .app にまとめられてしまい、ビルド時間だけが増える)。
 if(NOT ANDROID AND NOT IOS)
 	add_subdirectory(Tools/MixerTest)
+	add_subdirectory(Tools/ReflectionTest)
 endif()
 
 # ----------------------------------------------------------------------------

@@ -116,6 +116,16 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   顕在化していなかった。`queueMutex_` で提出区間を排他。
 - (解決済 2026-09-16)`SpawnSystem` と `HierarcicalTransformSystem` が同一 wave で `parentHandle` を
   読み書きしていた件は、[Core/AppHost.cpp](../aqEngine/Core/AppHost.cpp)(旧 Application.cpp)で依存を宣言して解消。
+- (2026-11-19 発見)**Animation の型消去の `deserializePtr` が疎な JSON を扱えない。**
+  `AnimationComponent::DeserializeFrom`([AnimationComponentSystem.cpp](../aqEngine/Component/AnimationComponentSystem.cpp))が
+  先頭で `slots_.clear()` するので、`clips` の無い JSON(`{}` や `playSpeed` だけ)を渡すとクリップが消える。
+  エディタのフィールド単位の編集・Undo で値を戻すときに表面化する。E6b で直す([エディタ全体設計](エディタ全体設計.md) 6.4 節)。
+  `Tools/ReflectionTest --selftest` で `[XFAIL]` として出る。
+- (2026-11-19 発見)**Terrain を型消去の経路で読んで書き出すと、`resolution` / `heightScale` / `terrainSize` が既定値に戻る。**
+  [TerrainComponent.h](../aqEngine/Component/TerrainComponent.h) の `Reflect` は `resolution` を `chunk_` から書き出して `authorResolution_` へ読み込み、
+  `heightScale` / `terrainSize` は `HeightmapChunk::SetHeightScale` / `SetTerrainSize` に渡すが、この 2 つはハイトマップ未読込だと値を捨てる。
+  `deserializePtr` は `OnDeserialized` を呼ばないので、Prefab エディタで Terrain を読んで保存し直すと 3 つの値が失われる。
+  E6b で直す(同 6.4 節)。`Tools/ReflectionTest --selftest` で `[XFAIL]` として出る。
 - (2026-09-30 発見)**依存の経路が無いまま同じ Component やカメラを触る System の組が 7 件ある。**
   うち同じ wave で実際に並列に走っていた `ActorStateMachineSystem` ↔ `SpeedCharacterSystem`(`TransformComponent` を両方が書く)と
   `CoinSystem` ↔ `AutoCameraSystem`(`TransformComponent` の書きと読み)の 2 組は、2026-11-11 に

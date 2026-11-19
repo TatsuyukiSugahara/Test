@@ -54,8 +54,8 @@ namespace aq
 					ImGui::DragInt("Resolution", &r, 1.0f, 4, 1024);
 					if (ImGui::IsItemDeactivatedAfterEdit()) { params_.resolution = static_cast<uint32_t>(r); reinit = true; }
 				}
-				reinit |= visitor.FieldPath("Normal Map 1", normalMapPath1_);
-				reinit |= visitor.FieldPath("Normal Map 2", normalMapPath2_);
+				reinit |= visitor.FieldPath("Normal Map 1", normalMapPath1_, nullptr, FieldAttr{}.Asset(AssetKind::Texture));
+				reinit |= visitor.FieldPath("Normal Map 2", normalMapPath2_, nullptr, FieldAttr{}.Asset(AssetKind::Texture));
 				if (reinit && state_ == State::Completed)
 				{
 					params_.normalMapPath1 = normalMapPath1_.empty() ? nullptr : normalMapPath1_.c_str();
@@ -102,8 +102,8 @@ namespace aq
 				visitor.Field("resolution", resolution,   "Resolution");
 				params_.resolution = static_cast<uint32_t>(resolution);   // read 時に反映（write 時は同値）
 
-				visitor.FieldPath("normalMap1", normalMapPath1_, "Normal Map 1");
-				visitor.FieldPath("normalMap2", normalMapPath2_, "Normal Map 2");
+				visitor.FieldPath("normalMap1", normalMapPath1_, "Normal Map 1", FieldAttr{}.Asset(AssetKind::Texture));
+				visitor.FieldPath("normalMap2", normalMapPath2_, "Normal Map 2", FieldAttr{}.Asset(AssetKind::Texture));
 				visitor.Field("normalScale1", params_.normalScale1);
 				visitor.Field("normalDirX1",  params_.normalDirX1);
 				visitor.Field("normalDirZ1",  params_.normalDirZ1);

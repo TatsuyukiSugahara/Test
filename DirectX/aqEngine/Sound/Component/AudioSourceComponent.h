@@ -63,7 +63,7 @@ namespace aq
 			template <typename V>
 			void Reflect(V& visitor)
 			{
-				visitor.FieldPath("clip", clipPath, "Clip");
+				visitor.FieldPath("clip", clipPath, "Clip", ecs::FieldAttr{}.Asset(ecs::AssetKind::Audio));
 				int busI = static_cast<int>(bus);
 				visitor.Field("bus", busI, "Bus");
 				bus = static_cast<SoundBusId>(busI);

@@ -1,19 +1,31 @@
 // リフレクション(Reflect と型消去の serializePtr / deserializePtr)の検査ツール
-// (設計書 エディタ全体設計.md 6.4 節「5. 検査ツール」。E6a)。
+// (設計書 エディタ全体設計.md 6.4 節「5. 検査ツール」。E6a / E6b)。
 //
 //   ReflectionTest --selftest [--assets <Game/Assets のパス>] [--dump <出力ファイル>]
 //
-// T1 往復 / T2 疎な JSON / T3 既存アセットのダンプ を行う。画面もデバイスも作らない。
-// 実体は AlignedStorage(TypeInfo) で既定値のまま作り、ComponentMeta の型消去関数だけを通す。
+// T1 往復 / T2 疎な JSON / T3 既存アセットのダンプ / T4 編集イベント / T5 属性 を行う。
+// 画面もデバイスも作らない。実体は AlignedStorage(TypeInfo) で既定値のまま作り、
+// ComponentMeta の型消去関数だけを通す。T4 / T5 は画面を持たない ImGui のコンテキストに
+// 入力を合成して行う(ImGui の Visitor は AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
 #include "Level/LevelComponentRegistry.h"
 #include "Util/SimpleJson.h"
+#ifdef AQ_DEBUG_IMGUI
+#include "ECS/ImGuiFieldVisitor.h"
+#include "ECS/ImGuiEditEventVisitor.h"
+#include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>   // T4 (7) で ImGuiContext::AnyIdHasBeenEditedThisFrame を直接立てる
+#endif
 
+#include <array>
+#include <cfloat>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -29,22 +41,14 @@ namespace
 	using aq::util::JsonValue;
 
 	/**
-	 * 既知の失敗(E6a 時点のエンジンの不具合。設計書 6.4 節の例外 1・例外 3)
+	 * 既知の失敗(エンジンの不具合。README の「既知の課題」)
 	 *
 	 * ここに名前がある試験は、失敗しても [XFAIL] として終了コードに数えない。
 	 * 通ったら [XPASS] を出して終了コード 1 にする(直ったのに印を外し忘れないため)。
-	 * E6b で不具合を直したら、該当する行を消す。
+	 * 不具合を直したら、該当する行を消す。
+	 * E6a の 5 件(設計書 6.4 節の例外 1・例外 3)は E6b で直したので、今は無い。
 	 */
-	static constexpr const char* KNOWN_FAILURES[] = {
-		// 例外 1: DeserializeFrom が先頭で slots_.clear() するので、clips の無い JSON でクリップが消える
-		"T2 Animation(クリップ付き) {}",
-		"T2 Animation(クリップ付き) playSpeed",
-		// 例外 3: 書き出しは chunk_ の解像度、読み込み先は authorResolution_ で往復しない
-		"T2 Terrain resolution",
-		// 例外 3: HeightmapChunk の SetHeightScale / SetTerrainSize はハイトマップ未読込だと値を捨てる
-		"T2 Terrain heightScale",
-		"T2 Terrain terrainSize",
-	};
+	static constexpr std::array<const char*, 0> KNOWN_FAILURES = {};
 
 	/** クリップ付きの Animation を作るための JSON(AddAnimation はパスを控えるだけでロードしない) */
 	static constexpr const char* ANIMATION_CLIP_JSON = "{\"clips\":[{\"name\":\"a\",\"path\":\"x.fbx\"}]}";
@@ -83,7 +87,8 @@ namespace
 			"\n"
 			"  ReflectionTest --selftest [--assets <Game/Assets のパス>] [--dump <出力ファイル>]\n"
 			"      T1 往復 / T2 疎な JSON を全登録型で試す。--assets を付けると\n"
-			"      T3 既存アセットのダンプも行い、--dump のファイルへ書く。\n");
+			"      T3 既存アセットのダンプも行い、--dump のファイルへ書く。\n"
+			"      Debug 構成(AQ_DEBUG_IMGUI)では T4 編集イベント / T5 属性 も画面無しの ImGui で試す。\n");
 	}
 
 
@@ -480,6 +485,675 @@ namespace
 	}
 
 
+#ifdef AQ_DEBUG_IMGUI
+	using aq::ecs::FieldAttr;
+	using aq::ecs::FieldEditEvent;
+	using aq::ecs::FieldEditPhase;
+	using aq::ecs::FieldItemRect;
+	using aq::ecs::ImGuiEditEventVisitor;
+	using aq::ecs::ImGuiFieldVisitor;
+
+	/** 画面無しの ImGui の画面の大きさ */
+	static constexpr float DISPLAY_WIDTH     = 640.0f;
+	static constexpr float DISPLAY_HEIGHT    = 480.0f;
+	/** 項目の左端からクリックする位置までの距離(ドラッグの部品・チェックボックスの箱の中に入る) */
+	static constexpr float CLICK_OFFSET_X    = 8.0f;
+	/** 試験の区切りで空けるフレーム数(1/60 秒 × 30 = 0.5 秒。ダブルクリックの間隔 0.3 秒より長い) */
+	static constexpr int   RESET_IDLE_FRAMES = 30;
+
+
+	/**
+	 * T4 / T5 の試験用の型(float、片側だけ範囲付きの float、bool、Vector3、Quaternion、パス、文字列、readOnly、hidden)
+	 */
+	struct EditTestTarget
+	{
+		float                value   = 1.0f;
+		float                clamped = 1.0f;
+		bool                 flag    = false;
+		aq::math::Vector3    vec     = aq::math::Vector3(1.0f, 2.0f, 3.0f);
+		aq::math::Quaternion rot     = aq::math::Quaternion::Identity;
+		std::string          path    = "a.tkm";
+		std::string          text    = "hello";
+		float                locked  = 5.0f;
+		float                secret  = 7.0f;
+
+		/** T4 (7): Vector3 を描く直前に「このフレームで既に別の項目が変わった」状態にする */
+		bool                 markEditedBeforeVec = false;
+		/** FieldPath が true を返した回数 */
+		int                  pathCommitCount     = 0;
+
+		template <typename V>
+		void Reflect(V& visitor)
+		{
+			visitor.Field("value",   value,   "Value");
+			visitor.Field("clamped", clamped, "Clamped", FieldAttr{}.Min(0.5f));
+			visitor.Field("flag",    flag,    "Flag");
+			if (markEditedBeforeVec) ImGui::GetCurrentContext()->AnyIdHasBeenEditedThisFrame = true;
+			visitor.Field("vec",     vec,     "Vec");
+			visitor.Field("rot",     rot,     "Rot");
+			if (visitor.FieldPath("path", path, "Path", FieldAttr{}.Asset(aq::ecs::AssetKind::Model))) ++pathCommitCount;
+			visitor.Field("text",    text,    "Text");
+			visitor.Field("locked",  locked,  "Locked", FieldAttr{}.ReadOnly());
+			visitor.Field("secret",  secret,  "Secret", FieldAttr{}.Hidden());
+		}
+	};
+
+
+	/**
+	 * 記録した編集イベント(フレーム番号付き)
+	 */
+	struct LoggedEvent
+	{
+		int            frame = 0;
+		FieldEditEvent event;
+	};
+
+
+	const char* PhaseName(const FieldEditPhase phase)
+	{
+		switch (phase) {
+		case FieldEditPhase::Begin:  return "Begin";
+		case FieldEditPhase::Update: return "Update";
+		case FieldEditPhase::Commit: return "Commit";
+		case FieldEditPhase::Cancel: return "Cancel";
+		}
+		return "?";
+	}
+
+
+	/** イベント列を 1 行ずつ「f<フレーム> <段階> <キー> <値>」で出す */
+	void PrintEvents(const char* title, const std::vector<LoggedEvent>& log)
+	{
+		std::printf("        %s: %zu 件\n", title, log.size());
+		for (const LoggedEvent& logged : log) {
+			const std::string value = logged.event.value.IsNull() ? std::string() : " " + StringifyOneLine(logged.event.value);
+			std::printf("          f%d %s %s%s\n", logged.frame, PhaseName(logged.event.phase), logged.event.key.c_str(), value.c_str());
+		}
+	}
+
+
+	/** キーごとに、Begin の後に Commit か Cancel が必ず 1 つ来るか(Begin の無い Update / Commit / Cancel も不可) */
+	bool IsWellFormed(const std::vector<LoggedEvent>& log, std::string& why)
+	{
+		std::map<std::string, bool> open;
+		for (const LoggedEvent& logged : log) {
+			bool& isOpen = open[logged.event.key];
+			const FieldEditPhase phase = logged.event.phase;
+			if (phase == FieldEditPhase::Begin) {
+				if (isOpen) { why = "閉じていない Begin の後に Begin: " + logged.event.key; return false; }
+				isOpen = true;
+			} else if (!isOpen) {
+				why = std::string("Begin の無い ") + PhaseName(phase) + ": " + logged.event.key;
+				return false;
+			} else if (phase == FieldEditPhase::Commit || phase == FieldEditPhase::Cancel) {
+				isOpen = false;
+			}
+		}
+		for (const auto& [key, isOpen] : open) {
+			if (isOpen) { why = "Commit / Cancel の来ない Begin: " + key; return false; }
+		}
+		return true;
+	}
+
+
+	size_t CountPhase(const std::vector<LoggedEvent>& log, const FieldEditPhase phase)
+	{
+		return static_cast<size_t>(std::count_if(log.begin(), log.end(), [phase](const LoggedEvent& logged)
+			{
+				return logged.event.phase == phase;
+			}));
+	}
+
+
+	/** 段階の並び(Update は連続を 1 つに詰める)を "Begin Update Commit" のような文字列にする */
+	std::string PhaseSequence(const std::vector<LoggedEvent>& log)
+	{
+		std::string out;
+		FieldEditPhase previous = FieldEditPhase::Cancel;
+		bool           hasPrevious = false;
+		for (const LoggedEvent& logged : log) {
+			const FieldEditPhase phase = logged.event.phase;
+			if (hasPrevious && phase == FieldEditPhase::Update && previous == FieldEditPhase::Update) continue;
+			out += (out.empty() ? "" : " ") + std::string(PhaseName(phase));
+			previous    = phase;
+			hasPrevious = true;
+		}
+		return out;
+	}
+
+
+	/**
+	 * 画面を持たない ImGui のコンテキストで、入力を合成して試験用の型を描く
+	 *
+	 * 入力は 1 種類ずつ 1 フレームに入れる(ImGui の入力キューはフレームをまたいで細切れにするため、
+	 * 同じフレームに押下と移動を混ぜない)。
+	 */
+	class HeadlessImGui
+	{
+	public:
+		enum class VisitorKind : uint8_t { EditEvent, Field };
+
+	private:
+		ImGuiContext*              context_     = nullptr;
+		int                        frame_       = 0;
+		ImVec2                     mouse_       = ImVec2(-FLT_MAX, -FLT_MAX);
+
+
+	public:
+		EditTestTarget             target;
+		VisitorKind                visitorKind  = VisitorKind::EditEvent;
+		/** false の間は試験用の型を描かない(ウィンドウは描く) */
+		bool                       drawFields   = true;
+		std::vector<LoggedEvent>   log;
+		std::vector<FieldItemRect> itemRects;
+
+
+	public:
+		HeadlessImGui()
+		{
+			context_ = ImGui::CreateContext();
+			ImGui::SetCurrentContext(context_);
+			ImGuiIO& io = ImGui::GetIO();
+			io.DisplaySize           = ImVec2(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+			io.DeltaTime             = 1.0f / 60.0f;
+			io.IniFilename           = nullptr;
+			io.LogFilename           = nullptr;
+			// Ctrl を文字どおり Ctrl として扱う(Mac の既定の Cmd との入れ替えをしない)
+			io.ConfigMacOSXBehaviors = false;
+
+			// レンダラーが無いので、フォントアトラスを旧来の経路で自分で作る
+			// (RendererHasTextures を立てないバックエンドは NewFrame の前にアトラスを作っておく必要がある)
+			unsigned char* pixels = nullptr;
+			int            width  = 0;
+			int            height = 0;
+			io.Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
+		}
+
+		~HeadlessImGui()
+		{
+			ImGui::DestroyContext(context_);
+		}
+
+		HeadlessImGui(const HeadlessImGui&)            = delete;
+		HeadlessImGui& operator=(const HeadlessImGui&) = delete;
+
+
+	public:
+		/** 1 フレーム進める(入力は呼ぶ前にキューへ入れておく) */
+		void Frame()
+		{
+			++frame_;
+			ImGui::NewFrame();
+			ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+			ImGui::SetNextWindowSize(ImVec2(DISPLAY_WIDTH, DISPLAY_HEIGHT));
+			ImGui::Begin("ReflectionTest", nullptr,
+				ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+			if (drawFields) {
+				if (visitorKind == VisitorKind::EditEvent) {
+					ImGuiEditEventVisitor visitor;
+					visitor.recordItemRects = true;
+					target.Reflect(visitor);
+					for (FieldEditEvent& event : visitor.events) {
+						log.push_back(LoggedEvent{ frame_, std::move(event) });
+					}
+					itemRects = std::move(visitor.itemRects);
+				} else {
+					ImGuiFieldVisitor visitor;
+					target.Reflect(visitor);
+				}
+			}
+			ImGui::End();
+			ImGui::Render();
+		}
+
+		void Idle(const int count)
+		{
+			for (int i = 0; i < count; ++i) Frame();
+		}
+
+		void MoveTo(const float x, const float y)
+		{
+			mouse_ = ImVec2(x, y);
+			ImGui::GetIO().AddMousePosEvent(x, y);
+			Frame();
+		}
+
+		/** 1 フレームに dx ずつ count 回動かす */
+		void MoveBy(const float dx, const int count)
+		{
+			for (int i = 0; i < count; ++i) MoveTo(mouse_.x + dx, mouse_.y);
+		}
+
+		void Button(const bool down)
+		{
+			ImGui::GetIO().AddMouseButtonEvent(0, down);
+			Frame();
+		}
+
+		void Key(const ImGuiKey key, const bool down)
+		{
+			ImGui::GetIO().AddKeyEvent(key, down);
+			Frame();
+		}
+
+		void Ctrl(const bool down)
+		{
+			ImGuiIO& io = ImGui::GetIO();
+			io.AddKeyEvent(ImGuiKey_LeftCtrl, down);
+			io.AddKeyEvent(ImGuiMod_Ctrl, down);
+			Frame();
+		}
+
+		void TapKey(const ImGuiKey key)
+		{
+			Key(key, true);
+			Key(key, false);
+		}
+
+		void Type(const char* text)
+		{
+			for (const char* c = text; *c; ++c) {
+				ImGui::GetIO().AddInputCharacter(static_cast<unsigned int>(*c));
+			}
+			Frame();
+		}
+
+		/** 項目の矩形(直前に描いたフレームのもの)。無ければ false */
+		bool FindRect(const char* key, FieldItemRect& out) const
+		{
+			for (const FieldItemRect& rect : itemRects) {
+				if (rect.key == key) {
+					out = rect;
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/** 項目の左端寄り(1 つ目の部品・チェックボックスの箱)へマウスを動かす */
+		bool MoveToItem(const char* key)
+		{
+			FieldItemRect rect;
+			if (!FindRect(key, rect)) return false;
+			MoveTo(rect.min.x + CLICK_OFFSET_X, (rect.min.y + rect.max.y) * 0.5f);
+			return true;
+		}
+
+		/** 項目をクリックする(押して離す) */
+		bool Click(const char* key)
+		{
+			if (!MoveToItem(key)) return false;
+			Button(true);
+			Button(false);
+			return true;
+		}
+
+		/** 項目をドラッグする(押して dx ずつ count フレーム動かして離す) */
+		bool Drag(const char* key, const float dx, const int count)
+		{
+			if (!MoveToItem(key)) return false;
+			Button(true);
+			MoveBy(dx, count);
+			Button(false);
+			return true;
+		}
+
+		/** Ctrl+クリックで直接入力にし、文字を打つ(確定はしない) */
+		bool CtrlClickAndType(const char* key, const char* text)
+		{
+			if (!MoveToItem(key)) return false;
+			Ctrl(true);
+			Button(true);
+			Button(false);
+			Ctrl(false);   // Ctrl を押したままだと文字入力が無視される
+			Type(text);
+			return true;
+		}
+
+		/** 文字列の項目をクリックし、中身を消して text を打つ(確定はしない) */
+		bool ReplaceText(const char* key, const char* text, const size_t currentLength)
+		{
+			if (!Click(key)) return false;
+			TapKey(ImGuiKey_End);
+			for (size_t i = 0; i < currentLength; ++i) TapKey(ImGuiKey_Backspace);
+			Type(text);
+			return true;
+		}
+
+		/** 試験の区切り: 入力を離し、マウスを外へ出し、記録を消す */
+		void Reset()
+		{
+			ImGuiIO& io = ImGui::GetIO();
+			io.AddMouseButtonEvent(0, false);
+			Frame();
+			io.AddKeyEvent(ImGuiKey_LeftCtrl, false);
+			io.AddKeyEvent(ImGuiMod_Ctrl, false);
+			Frame();
+			MoveTo(DISPLAY_WIDTH - 4.0f, DISPLAY_HEIGHT - 4.0f);
+			drawFields                 = true;
+			visitorKind                = VisitorKind::EditEvent;
+			target.markEditedBeforeVec = false;
+			// 前の試験のクリックと同じ位置を続けてクリックするとダブルクリック(= 直接入力)になるので、
+			// ダブルクリックの間隔(io.MouseDoubleClickTime)より長く空ける
+			Idle(RESET_IDLE_FRAMES);
+			log.clear();
+		}
+	};
+
+
+	/** (1)〜(7) の共通の確かめ: 形が整っていること */
+	bool CheckWellFormed(const std::vector<LoggedEvent>& log, std::string& detail)
+	{
+		std::string why;
+		if (IsWellFormed(log, why)) return true;
+		detail = why;
+		return false;
+	}
+
+
+	/** T4 編集イベント */
+	void RunEditEventTests(TestResults& results, HeadlessImGui& gui)
+	{
+		// 項目の矩形を取る
+		gui.Reset();
+
+		// (1) float のドラッグ
+		{
+			gui.Reset();
+			std::string detail;
+			bool passed = gui.Drag("value", 10.0f, 3);
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (1) float のドラッグ", events);
+			passed = passed && CheckWellFormed(events, detail);
+			if (passed) {
+				passed = events.size() >= 3
+					&& events.front().event.phase == FieldEditPhase::Begin
+					&& events.back().event.phase == FieldEditPhase::Commit
+					&& CountPhase(events, FieldEditPhase::Begin) == 1
+					&& CountPhase(events, FieldEditPhase::Update) >= 1
+					&& CountPhase(events, FieldEditPhase::Commit) == 1
+					&& CountPhase(events, FieldEditPhase::Cancel) == 0
+					&& events.front().event.value.AsFloat() == 1.0f
+					&& events.back().event.value.AsFloat() == gui.target.value
+					&& gui.target.value != 1.0f;
+				if (!passed) detail = "列: " + PhaseSequence(events);
+			}
+			Report(results, "T4 (1) float のドラッグ", passed, detail);
+		}
+
+		// (2) 押して動かさずに離す
+		{
+			gui.Reset();
+			std::string detail;
+			bool passed = gui.Click("value");
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (2) 押して動かさずに離す", events);
+			passed = passed && CheckWellFormed(events, detail);
+			if (passed) {
+				passed = PhaseSequence(events) == "Begin Cancel";
+				if (!passed) detail = "列: " + PhaseSequence(events);
+			}
+			Report(results, "T4 (2) 押して動かさずに離す", passed, detail);
+		}
+
+		// (3) チェックボックスのクリック
+		{
+			gui.Reset();
+			std::string detail;
+			const bool before = gui.target.flag;
+			bool passed = gui.Click("flag");
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (3) チェックボックス", events);
+			passed = passed && CheckWellFormed(events, detail);
+			if (passed) {
+				passed = PhaseSequence(events) == "Begin Update Commit"
+					&& gui.target.flag != before
+					&& events.back().event.value.AsBool() == gui.target.flag;
+				if (!passed) detail = "列: " + PhaseSequence(events);
+			}
+			Report(results, "T4 (3) チェックボックス", passed, detail);
+		}
+
+		// (4) Vector3 の 1 成分のドラッグ
+		{
+			gui.Reset();
+			std::string detail;
+			bool passed = gui.Drag("vec", 10.0f, 3);
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (4) Vector3 の 1 成分のドラッグ", events);
+			passed = passed && CheckWellFormed(events, detail);
+			if (passed) {
+				passed = PhaseSequence(events) == "Begin Update Commit"
+					&& gui.target.vec.x != 1.0f
+					&& gui.target.vec.y == 2.0f
+					&& gui.target.vec.z == 3.0f;
+				if (!passed) detail = "列: " + PhaseSequence(events);
+			}
+			Report(results, "T4 (4) Vector3 の 1 成分のドラッグ", passed, detail);
+		}
+
+		// (5) パスと文字列: 値を変えて Enter で Begin と Commit が同じフレームに 1 組、同じ値の Enter では何も出ない
+		{
+			struct TextCase { const char* key; const char* newText; std::string* value; };
+			const TextCase cases[] = {
+				{ "path", "b.tkm", &gui.target.path },
+				{ "text", "world", &gui.target.text },
+			};
+			for (const TextCase& textCase : cases) {
+				const std::string name = std::string("T4 (5) ") + textCase.key;
+
+				// 値を変えて Enter
+				gui.Reset();
+				const std::string before     = *textCase.value;
+				const int         pathBefore = gui.target.pathCommitCount;
+				bool passed = gui.ReplaceText(textCase.key, textCase.newText, before.size());
+				gui.TapKey(ImGuiKey_Enter);
+				const std::vector<LoggedEvent> changed = gui.log;
+				PrintEvents((name + " 値を変えて Enter").c_str(), changed);
+				std::string detail;
+				passed = passed && CheckWellFormed(changed, detail);
+				if (passed) {
+					passed = changed.size() == 2
+						&& changed[0].event.phase == FieldEditPhase::Begin
+						&& changed[1].event.phase == FieldEditPhase::Commit
+						&& changed[0].frame == changed[1].frame
+						&& changed[0].event.value.AsString() == before
+						&& changed[1].event.value.AsString() == textCase.newText
+						&& *textCase.value == textCase.newText;
+					if (!passed) detail = "列: " + PhaseSequence(changed);
+				}
+
+				// 同じ値で Enter
+				gui.Reset();
+				const int pathAfterChange = gui.target.pathCommitCount;
+				passed = gui.Click(textCase.key) && passed;
+				gui.TapKey(ImGuiKey_Enter);
+				const std::vector<LoggedEvent> same = gui.log;
+				PrintEvents((name + " 同じ値で Enter").c_str(), same);
+				if (passed && !same.empty()) {
+					passed = false;
+					detail = "同じ値の Enter でイベントが出た: " + PhaseSequence(same);
+				}
+
+				// FieldPath の戻り値は「確定し、かつ値が変わった」ときだけ true
+				if (passed && std::string_view(textCase.key) == "path") {
+					passed = (pathAfterChange == pathBefore + 1) && (gui.target.pathCommitCount == pathAfterChange);
+					if (!passed) detail = "FieldPath の戻り値が true になった回数が違う";
+				}
+				Report(results, name, passed, detail);
+			}
+		}
+
+		// (6) readOnly と hidden
+		{
+			gui.Reset();
+			std::string detail;
+			const float lockedBefore = gui.target.locked;
+			bool passed = gui.Drag("locked", 10.0f, 3);
+			gui.Click("locked");
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (6) readOnly のドラッグとクリック", events);
+			FieldItemRect hiddenRect;
+			const bool hasHiddenRect = gui.FindRect("secret", hiddenRect);
+			passed = passed && events.empty() && gui.target.locked == lockedBefore && !hasHiddenRect;
+			if (!passed) {
+				detail = hasHiddenRect ? "hidden が itemRects に出た" : "readOnly でイベントが出たか値が変わった";
+			}
+			Report(results, "T4 (6) readOnly と hidden", passed, detail);
+		}
+
+		// (7) 同じフレームで先に別の項目が変わっていても、Vector3 のドラッグに Update が出る
+		{
+			gui.Reset();
+			gui.target.markEditedBeforeVec = true;
+			std::string detail;
+			bool passed = gui.Drag("vec", 10.0f, 3);
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (7) 先に別の項目が変わったフレームの Vector3", events);
+			passed = passed && CheckWellFormed(events, detail);
+			if (passed) {
+				passed = PhaseSequence(events) == "Begin Update Commit";
+				if (!passed) detail = "列: " + PhaseSequence(events);
+			}
+			Report(results, "T4 (7) 先に別の項目が変わったフレームの Vector3", passed, detail);
+		}
+
+		// (8) ドラッグの途中で描くのをやめ、再び描いても、古い操作の Commit / Cancel が出ない
+		{
+			gui.Reset();
+			bool passed = gui.MoveToItem("value");
+			gui.Button(true);
+			gui.MoveBy(10.0f, 2);
+			const size_t beforeHide = gui.log.size();
+			gui.drawFields = false;
+			gui.Idle(2);
+			gui.drawFields = true;
+			gui.MoveBy(10.0f, 2);
+			gui.Button(false);
+			gui.Idle(2);
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (8) ドラッグの途中で描くのをやめる", events);
+			const std::vector<LoggedEvent> afterHide(events.begin() + static_cast<std::ptrdiff_t>(std::min(beforeHide, events.size())), events.end());
+			passed = passed
+				&& PhaseSequence(std::vector<LoggedEvent>(events.begin(), events.begin() + static_cast<std::ptrdiff_t>(std::min(beforeHide, events.size())))) == "Begin Update"
+				&& afterHide.empty();
+			Report(results, "T4 (8) ドラッグの途中で描くのをやめる", passed,
+				passed ? std::string() : "列: " + PhaseSequence(events));
+		}
+		{
+			gui.Reset();
+			bool passed = gui.CtrlClickAndType("value", "3");
+			const size_t beforeHide = gui.log.size();
+			gui.drawFields = false;
+			gui.Idle(2);
+			gui.drawFields = true;
+			gui.Idle(3);
+			const std::vector<LoggedEvent> events = gui.log;
+			PrintEvents("T4 (8) 直接入力の途中で描くのをやめる", events);
+			const std::vector<LoggedEvent> afterHide(events.begin() + static_cast<std::ptrdiff_t>(std::min(beforeHide, events.size())), events.end());
+			// 古い操作の Commit / Cancel が出ず、Begin の無い Update も出ない。出るなら同じフレームの Begin と Commit の 1 組
+			bool afterOk = afterHide.empty();
+			if (!afterOk && afterHide.size() == 2) {
+				afterOk = afterHide[0].event.phase == FieldEditPhase::Begin
+					&& afterHide[1].event.phase == FieldEditPhase::Commit
+					&& afterHide[0].frame == afterHide[1].frame;
+			}
+			passed = passed && afterOk;
+			Report(results, "T4 (8) 直接入力の途中で描くのをやめる", passed,
+				passed ? std::string() : "列: " + PhaseSequence(events));
+		}
+
+		// 記録だけ: DragFloat3 で部品を Tab で移ったときの列(合否に使わない。設計 6.4 節 3)
+		{
+			gui.Reset();
+			gui.CtrlClickAndType("vec", "4");
+			gui.TapKey(ImGuiKey_Tab);
+			gui.Type("5");
+			gui.TapKey(ImGuiKey_Enter);
+			gui.Idle(2);
+			PrintEvents("T4 記録 DragFloat3 の Tab 移動", gui.log);
+			std::printf("          vec = (%.3f, %.3f, %.3f)\n", gui.target.vec.x, gui.target.vec.y, gui.target.vec.z);
+		}
+
+		gui.Reset();
+	}
+
+
+	/** T5 属性: 片側だけ範囲付きの float は下限に収まり、範囲の無い float は制限されない */
+	void RunAttributeTests(TestResults& results, HeadlessImGui& gui)
+	{
+		// 項目の矩形は編集イベント Visitor で取る(2 つの Visitor は同じ配置で描く)
+		gui.Reset();
+
+		struct VisitorCase { HeadlessImGui::VisitorKind kind; const char* name; };
+		const VisitorCase visitors[] = {
+			{ HeadlessImGui::VisitorKind::Field,     "ImGuiFieldVisitor" },
+			{ HeadlessImGui::VisitorKind::EditEvent, "ImGuiEditEventVisitor" },
+		};
+		for (const VisitorCase& visitorCase : visitors) {
+			const std::string prefix = std::string("T5 ") + visitorCase.name + " ";
+
+			// 下限付き: ドラッグで下限の外へ
+			{
+				gui.Reset();
+				gui.visitorKind    = visitorCase.kind;
+				gui.target.clamped = 1.0f;
+				const bool moved = gui.Drag("clamped", -20.0f, 10);
+				const bool passed = moved && gui.target.clamped == 0.5f;
+				char detail[64];
+				std::snprintf(detail, sizeof(detail), "値 %.3f", gui.target.clamped);
+				Report(results, prefix + "下限付き ドラッグ", passed, passed ? std::string() : detail);
+			}
+			// 下限付き: Ctrl+クリックで下限の外の値を入力
+			{
+				gui.Reset();
+				gui.visitorKind    = visitorCase.kind;
+				gui.target.clamped = 1.0f;
+				const bool typed = gui.CtrlClickAndType("clamped", "-5");
+				gui.TapKey(ImGuiKey_Enter);
+				const bool passed = typed && gui.target.clamped == 0.5f;
+				char detail[64];
+				std::snprintf(detail, sizeof(detail), "値 %.3f", gui.target.clamped);
+				Report(results, prefix + "下限付き 直接入力", passed, passed ? std::string() : detail);
+			}
+			// 範囲なし: ドラッグは制限されない
+			{
+				gui.Reset();
+				gui.visitorKind  = visitorCase.kind;
+				gui.target.value = 1.0f;
+				const bool moved = gui.Drag("value", -20.0f, 10);
+				const bool passed = moved && gui.target.value < 0.0f;
+				char detail[64];
+				std::snprintf(detail, sizeof(detail), "値 %.3f", gui.target.value);
+				Report(results, prefix + "範囲なし ドラッグ", passed, passed ? std::string() : detail);
+			}
+			// 範囲なし: 直接入力も制限されない
+			{
+				gui.Reset();
+				gui.visitorKind  = visitorCase.kind;
+				gui.target.value = 1.0f;
+				const bool typed = gui.CtrlClickAndType("value", "-5");
+				gui.TapKey(ImGuiKey_Enter);
+				const bool passed = typed && gui.target.value == -5.0f;
+				char detail[64];
+				std::snprintf(detail, sizeof(detail), "値 %.3f", gui.target.value);
+				Report(results, prefix + "範囲なし 直接入力", passed, passed ? std::string() : detail);
+			}
+		}
+		gui.Reset();
+	}
+
+
+	/** T4 / T5 を画面無しの ImGui で回す */
+	void RunImGuiTests(TestResults& results)
+	{
+		HeadlessImGui gui;
+		RunEditEventTests(results, gui);
+		RunAttributeTests(results, gui);
+	}
+#endif
+
+
 	int RunSelfTest(const Options& options)
 	{
 		// コンポーネントの登録(Application::Initialize と同じ順)
@@ -496,6 +1170,12 @@ namespace
 		} else {
 			RunAssetDump(results, options);
 		}
+
+#ifdef AQ_DEBUG_IMGUI
+		RunImGuiTests(results);
+#else
+		std::printf("        T4 / T5: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない\n");
+#endif
 
 		std::printf("[selftest] PASS %u / FAIL %u / XFAIL %u / XPASS %u\n",
 			results.passCount, results.failCount, results.xfailCount, results.xpassCount);

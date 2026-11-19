@@ -27,7 +27,7 @@ namespace aq
 			template <typename V>
 			void Reflect(V& visitor)
 			{
-				visitor.FieldPath("prefab", prefabPath, "Prefab");
+				visitor.FieldPath("prefab", prefabPath, "Prefab", FieldAttr{}.Asset(AssetKind::Prefab));
 				visitor.Field("interval", interval, "Interval (sec)");
 				visitor.Field("maxCount", maxCount, "Max Count (-1=inf)");
 			}

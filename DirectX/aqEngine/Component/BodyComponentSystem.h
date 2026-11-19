@@ -175,8 +175,8 @@ namespace aq
 				// コピー経由で編集して Enter で SetModelPath を呼ぶ（自己代入回避）
 				std::string newModel   = modelPath_;
 				std::string newTexture = texturePath_;
-				const bool cm = visitor.FieldPath("Model Path",   newModel);
-				const bool ct = visitor.FieldPath("Texture Path", newTexture);
+				const bool cm = visitor.FieldPath("Model Path",   newModel,   nullptr, FieldAttr{}.Asset(AssetKind::Model));
+				const bool ct = visitor.FieldPath("Texture Path", newTexture, nullptr, FieldAttr{}.Asset(AssetKind::Texture));
 				if (cm || ct)
 					SetModelPath(newModel.c_str(),
 					             newTexture.empty() ? nullptr : newTexture.c_str());
@@ -206,8 +206,8 @@ namespace aq
 			template <typename V>
 			void Reflect(V& visitor)
 			{
-				visitor.FieldPath("model",   modelPath_,   "Model Path");
-				visitor.FieldPath("texture", texturePath_, "Texture Path");
+				visitor.FieldPath("model",   modelPath_,   "Model Path",   FieldAttr{}.Asset(AssetKind::Model));
+				visitor.FieldPath("texture", texturePath_, "Texture Path", FieldAttr{}.Asset(AssetKind::Texture));
 				visitor.Field("modelRotation", modelRotationEuler_);
 			}
 
@@ -307,8 +307,8 @@ namespace aq
 			{
 				std::string newModel   = modelPath_;
 				std::string newTexture = texturePath_;
-				const bool cm = visitor.FieldPath("Model Path",   newModel);
-				const bool ct = visitor.FieldPath("Texture Path", newTexture);
+				const bool cm = visitor.FieldPath("Model Path",   newModel,   nullptr, FieldAttr{}.Asset(AssetKind::Model));
+				const bool ct = visitor.FieldPath("Texture Path", newTexture, nullptr, FieldAttr{}.Asset(AssetKind::Texture));
 				if (cm || ct)
 					SetModelPath(newModel.c_str(),
 					             newTexture.empty() ? nullptr : newTexture.c_str());
@@ -333,8 +333,8 @@ namespace aq
 			template <typename V>
 			void Reflect(V& visitor)
 			{
-				visitor.FieldPath("model",   modelPath_,   "Model Path");
-				visitor.FieldPath("texture", texturePath_, "Texture Path");
+				visitor.FieldPath("model",   modelPath_,   "Model Path",   FieldAttr{}.Asset(AssetKind::Model));
+				visitor.FieldPath("texture", texturePath_, "Texture Path", FieldAttr{}.Asset(AssetKind::Texture));
 				visitor.Field("modelRotation", modelRotationEuler_);
 			}
 

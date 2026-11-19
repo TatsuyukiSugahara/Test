@@ -159,7 +159,7 @@ namespace aq
 			void Inspect(V& visitor)
 			{
 				std::string newPath = assetPath_;
-				if (visitor.FieldPath("particle", newPath, "Particle Asset"))
+				if (visitor.FieldPath("particle", newPath, "Particle Asset", FieldAttr{}.Asset(AssetKind::Particle)))
 					SetAsset(newPath.empty() ? nullptr : newPath.c_str());
 				visitor.ReadOnly("state", state_ == State::Ready ? "Ready" : (state_ == State::Loading ? "Loading" : "Empty"));
 			}
@@ -169,7 +169,7 @@ namespace aq
 			template <typename V>
 			void Reflect(V& visitor)
 			{
-				visitor.FieldPath("particle", assetPath_, "Particle Asset");
+				visitor.FieldPath("particle", assetPath_, "Particle Asset", FieldAttr{}.Asset(AssetKind::Particle));
 			}
 
 			void OnDeserialized()

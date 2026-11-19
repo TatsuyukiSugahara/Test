@@ -15,6 +15,11 @@ namespace aq
 {
 	namespace ecs
 	{
+#ifdef AQ_DEBUG_IMGUI
+		struct FieldEditEvent;   // ImGuiEditEventVisitor.h
+#endif
+
+
 		// コンポーネントの Inspector 表示・生成・依存関係・シリアライズを記述するメタデータ。
 		// remove は Step 6 (RemoveComponent ECS 対応後) まで保留。
 		struct ComponentMeta
@@ -39,6 +44,16 @@ namespace aq
 			std::function<void(void*, util::JsonValue&)>             serializePtr;
 			std::function<void(void*, const util::JsonValue&)>       deserializePtr;
 			std::function<void(void*)>                              drawInspectorPtr;  // AQ_DEBUG_IMGUI のみ
+
+			// --- 公開情報（エディタのインスペクター用・エディタ全体設計 6.4 節 4）---
+			// 削除の可否は remove == nullptr のまま使う（別のフラグは持たない）。
+			const char* category = nullptr;  // Add Component パレットの分類。nullptr は "Other"
+			bool        addable  = true;     // インスペクターの Add Component に出すか
+#ifdef AQ_DEBUG_IMGUI
+			// 編集用の写し（void*）に ImGuiEditEventVisitor を回し、このフレームの編集イベントを末尾に足す。
+			// 写しだけを書き換える。Reflect 化済みコンポーネントのみ設定（FillReflectPtrFns）。
+			std::function<void(void*, std::vector<FieldEditEvent>&)> drawEditPtr;
+#endif
 		};
 
 

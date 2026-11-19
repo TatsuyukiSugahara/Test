@@ -72,14 +72,18 @@ namespace aq
 
 		void AnimationComponent::DeserializeFrom(const util::JsonValue& in)
 		{
-			slots_.clear();
 			if (in.Contains("playSpeed")) playSpeed_ = in["playSpeed"].AsFloat(playSpeed_);
 
-			const util::JsonValue& clips = in["clips"];
-			for (size_t i = 0; i < clips.Size(); ++i)
+			// clips があるときだけ作り直す（疎な JSON で既存のクリップを消さない。エディタ全体設計 6.4 節 0）
+			if (in.Contains("clips"))
 			{
-				const util::JsonValue& c = clips[i];
-				AddAnimation(c["name"].AsString().c_str(), c["path"].AsString().c_str());
+				slots_.clear();
+				const util::JsonValue& clips = in["clips"];
+				for (size_t i = 0; i < clips.Size(); ++i)
+				{
+					const util::JsonValue& c = clips[i];
+					AddAnimation(c["name"].AsString().c_str(), c["path"].AsString().c_str());
+				}
 			}
 
 			// 保存された再生中クリップをループ再生する

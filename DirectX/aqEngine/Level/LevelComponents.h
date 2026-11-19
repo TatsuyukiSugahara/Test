@@ -1,5 +1,6 @@
 #pragma once
 #include "ECS/IComponent.h"
+#include "ECS/FieldAttr.h"
 #include "Level/LevelId.h"
 #include <string>
 
@@ -34,7 +35,7 @@ namespace aq
 			template <typename V>
 			void Reflect(V& visitor)
 			{
-				visitor.FieldPath("level", levelPath, "Level");
+				visitor.FieldPath("level", levelPath, "Level", ecs::FieldAttr{}.Asset(ecs::AssetKind::Level));
 				visitor.Field("loadWhenActive", loadWhenActive, "Load When Active");
 			}
 		};

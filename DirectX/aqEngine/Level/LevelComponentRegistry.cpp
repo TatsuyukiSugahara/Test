@@ -23,6 +23,7 @@ namespace aq
 				ecs::ComponentMeta meta;
 				meta.displayName = "Level Stream";
 				meta.typeName    = "LevelStream";
+				meta.category    = "Gameplay";   // ComponentRegistry.cpp の CATEGORY_GAMEPLAY と同じ分類(エディタ全体設計 6.4 節 4)
 				meta.has = [](ecs::EntityHandle h)          { return ecs::EntityContext::Get().GetComponent<LevelStreamComponent>(h) != nullptr; };
 				meta.get = [](ecs::EntityHandle h) -> void* { return ecs::EntityContext::Get().GetComponent<LevelStreamComponent>(h); };
 				meta.add = [](ecs::EntityHandle h)

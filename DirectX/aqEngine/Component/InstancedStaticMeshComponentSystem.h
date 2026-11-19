@@ -55,8 +55,8 @@ namespace aq
 			template <typename V>
 			void Reflect(V& visitor)
 			{
-				visitor.FieldPath("mesh",    meshName_,    "mesh (name or fbx/tkm path)");
-				visitor.FieldPath("texture", texturePath_, "texture (albedo)");
+				visitor.FieldPath("mesh",    meshName_,    "mesh (name or fbx/tkm path)", FieldAttr{}.Asset(AssetKind::Model));
+				visitor.FieldPath("texture", texturePath_, "texture (albedo)", FieldAttr{}.Asset(AssetKind::Texture));
 			}
 		};
 	}

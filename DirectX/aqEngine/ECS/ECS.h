@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "EntityContext.h"
+#include "FieldAttr.h"   // Reflect の Field / FieldPath に渡すフィールド属性
 #include <utility>
 
 

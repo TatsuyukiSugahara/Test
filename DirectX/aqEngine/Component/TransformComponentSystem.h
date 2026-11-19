@@ -30,7 +30,7 @@ namespace aq
 			void Reflect(V& visitor)
 			{
 				visitor.Field("position", position, "position (local)");
-				visitor.Field("scale",    scale,    "scale    (local)");
+				visitor.Field("scale",    scale,    "scale    (local)", FieldAttr{}.Min(0.001f).Tooltip("0以下にしない"));
 				visitor.Field("rotation", rotation, "rotation (local)");
 			}
 		};

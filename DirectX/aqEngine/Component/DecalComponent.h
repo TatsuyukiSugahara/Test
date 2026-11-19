@@ -81,7 +81,7 @@ namespace aq
 			void Reflect(V& visitor)
 			{
 				std::string newPath = texturePath_;
-				if (visitor.FieldPath("texture", newPath, "Texture"))
+				if (visitor.FieldPath("texture", newPath, "Texture", FieldAttr{}.Asset(AssetKind::Texture)))
 					SetTexturePath(newPath.empty() ? nullptr : newPath.c_str());
 				visitor.Field("size",         size_,         "Size (xz=範囲 y=深度)");
 				visitor.Field("color",        color_,        "Color");

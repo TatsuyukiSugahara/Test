@@ -14,6 +14,7 @@
 #include "SpawnSystem.h"
 #ifdef AQ_DEBUG_IMGUI
 #include "ImGuiFieldVisitor.h"   // drawInspector（ImGui 編集）専用。serialize/deserialize は非依存。
+#include "ImGuiEditEventVisitor.h"   // drawEditPtr（編集イベント）専用。
 #endif
 
 // レジストリのコア（typeName / serialize / deserialize / add / has / get / requiredWith）は
@@ -26,8 +27,17 @@ namespace aq
 	{
 		namespace
 		{
-			// Reflect 化済みコンポーネント T に対し、型消去 void* 版の serialize/deserialize/drawInspector を
-			// 一括設定する（Prefab エディタ用・設計 §6.2/§6.3）。Reflect を単一の真実として共有する。
+			/** Add Component パレットの分類（エディタ全体設計 6.4 節 4） */
+			static constexpr const char* CATEGORY_CORE      = "Core";
+			static constexpr const char* CATEGORY_RENDERING = "Rendering";
+			static constexpr const char* CATEGORY_ANIMATION = "Animation";
+			static constexpr const char* CATEGORY_AUDIO     = "Audio";
+			static constexpr const char* CATEGORY_GAMEPLAY  = "Gameplay";
+
+
+			// Reflect 化済みコンポーネント T に対し、型消去 void* 版の serialize/deserialize/drawInspector/drawEdit を
+			// 一括設定する（Prefab エディタ用・設計 §6.2/§6.3、エディタのインスペクター用・エディタ全体設計 6.4 節 4）。
+			// Reflect を単一の真実として共有する。
 			template <typename T>
 			void FillReflectPtrFns(ComponentMeta& meta)
 			{
@@ -47,6 +57,14 @@ namespace aq
 				{
 					ImGuiFieldVisitor visitor;
 					static_cast<T*>(p)->Reflect(visitor);
+				};
+				meta.drawEditPtr = [](void* p, std::vector<FieldEditEvent>& out)
+				{
+					ImGuiEditEventVisitor visitor;
+					static_cast<T*>(p)->Reflect(visitor);
+					for (FieldEditEvent& ev : visitor.events) {
+						out.push_back(std::move(ev));
+					}
 				};
 #endif
 			}
@@ -112,6 +130,8 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Transform";
 				meta.typeName     = "Transform";
+				meta.category     = CATEGORY_CORE;
+				meta.addable      = false;   // HierarchicalTransform と組で自動で付く
 				meta.requiredWith = { TypeInfo::Create<HierarchicalTransformComponent>() };
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<TransformComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<TransformComponent>(h); };
@@ -155,6 +175,8 @@ namespace aq
 			{
 				ComponentMeta meta;
 				meta.displayName  = "Hierarchical Transform";
+				meta.category     = CATEGORY_CORE;
+				meta.addable      = false;   // Transform と組で自動で付く
 				meta.requiredWith = { TypeInfo::Create<TransformComponent>() };
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<HierarchicalTransformComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<HierarchicalTransformComponent>(h); };
@@ -182,6 +204,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Box Static Mesh";
 				meta.typeName     = "BoxStaticMesh";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<BoxStaticMeshComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<BoxStaticMeshComponent>(h); };
@@ -221,6 +244,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Instanced Static Mesh";
 				meta.typeName     = "InstancedStaticMesh";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<InstancedStaticMeshComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<InstancedStaticMeshComponent>(h); };
@@ -265,6 +289,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Instanced Point List";
 				meta.typeName     = "InstancedPointList";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<InstancedPointListComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<InstancedPointListComponent>(h); };
@@ -327,6 +352,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Static Mesh";
 				meta.typeName     = "StaticMesh";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<StaticMeshComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<StaticMeshComponent>(h); };
@@ -372,6 +398,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Particle Emitter";
 				meta.typeName     = "ParticleEmitter";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<ParticleEmitterComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<ParticleEmitterComponent>(h); };
@@ -417,6 +444,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Skeletal Mesh";
 				meta.typeName     = "SkeletalMesh";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)         { return EntityContext::Get().GetComponent<SkeletalMeshComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<SkeletalMeshComponent>(h); };
@@ -462,6 +490,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Terrain";
 				meta.typeName     = "Terrain";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<TerrainComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<TerrainComponent>(h); };
@@ -507,6 +536,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Ocean";
 				meta.typeName     = "Ocean";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<OceanComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<OceanComponent>(h); };
@@ -552,6 +582,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Decal";
 				meta.typeName     = "Decal";
+				meta.category     = CATEGORY_RENDERING;
 				meta.requiredWith = {};
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<DecalComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<DecalComponent>(h); };
@@ -596,6 +627,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Spawner";
 				meta.typeName     = "Spawner";
+				meta.category     = CATEGORY_GAMEPLAY;
 				meta.requiredWith = { TypeInfo::Create<TransformComponent>(), TypeInfo::Create<HierarchicalTransformComponent>() };
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<SpawnerComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<SpawnerComponent>(h); };
@@ -640,6 +672,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Animation";
 				meta.typeName     = "Animation";
+				meta.category     = CATEGORY_ANIMATION;
 				meta.requiredWith = { TypeInfo::Create<SkeletalMeshComponent>() };
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<AnimationComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<AnimationComponent>(h); };
@@ -676,6 +709,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Audio Source";
 				meta.typeName     = "AudioSource";
+				meta.category     = CATEGORY_AUDIO;
 				meta.requiredWith = { TypeInfo::Create<TransformComponent>(), TypeInfo::Create<HierarchicalTransformComponent>() };
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<sound::AudioSourceComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<sound::AudioSourceComponent>(h); };
@@ -721,6 +755,7 @@ namespace aq
 				ComponentMeta meta;
 				meta.displayName  = "Audio Listener";
 				meta.typeName     = "AudioListener";
+				meta.category     = CATEGORY_AUDIO;
 				meta.requiredWith = { TypeInfo::Create<TransformComponent>(), TypeInfo::Create<HierarchicalTransformComponent>() };
 				meta.has  = [](EntityHandle h)          { return EntityContext::Get().GetComponent<sound::AudioListenerComponent>(h) != nullptr; };
 				meta.get  = [](EntityHandle h) -> void* { return EntityContext::Get().GetComponent<sound::AudioListenerComponent>(h); };

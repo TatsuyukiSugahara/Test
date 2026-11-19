@@ -1051,6 +1051,12 @@
     <ClInclude Include="ECS\JsonFieldVisitor.h">
       <Filter>ECS</Filter>
     </ClInclude>
+    <ClInclude Include="ECS\FieldAttr.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\ImGuiEditEventVisitor.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
     <ClInclude Include="ECS\Chunk.h">
       <Filter>ECS</Filter>
     </ClInclude>

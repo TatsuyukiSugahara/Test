@@ -15,6 +15,10 @@ namespace aq
 		{
 			chunk_.Initialize(desc, std::move(cpu));
 			state_ = State::Completed;
+			// オーサリング値を実際に作った地形の値に揃える（後の書き出しが古い値を書かないように）
+			authorResolution_  = desc.resolution;
+			authorHeightScale_ = desc.heightScale;
+			authorTerrainSize_ = desc.terrainSize;
 #ifdef AQ_DEBUG_IMGUI
 			heightmapPath_ = desc.heightmapPath ? desc.heightmapPath : "";
 			splatmapPath_  = desc.splatmapPath  ? desc.splatmapPath  : "";

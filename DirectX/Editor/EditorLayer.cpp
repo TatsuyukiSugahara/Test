@@ -12,6 +12,12 @@ namespace editor
 	}
 
 
+	void EditorLayer::OnBeginFrame(ImGuiContext* gameContext)
+	{
+		gameViewInput_.BeginFrame(gameContext);
+	}
+
+
 	void EditorLayer::OnBuildUI(const aq::rendering::RenderTargetHandle gameViewRT)
 	{
 		// メインビューポート全体をドッキング先にする
@@ -19,7 +25,15 @@ namespace editor
 
 		// 配置の保存(editor_layout.ini)が無い初回だけ、ゲームビューをドックスペースいっぱいに置く
 		ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
-		DrawGameView(gameViewRT);
+		// 起動直後はゲームビューにフォーカスを与え、何もクリックしなくてもゲームを操作できるようにする(Game.exe と同じ始まり方)
+		if (isFirstFrame_) {
+			ImGui::SetNextWindowFocus();
+			isFirstFrame_ = false;
+		}
+		const GameViewState gameViewState = DrawGameView(gameViewRT);
+
+		// 次のフレームの入力の振り分けに使う
+		gameViewInput_.SetViewState(gameViewState);
 	}
 
 
@@ -29,8 +43,12 @@ namespace editor
 	}
 
 
-	void EditorLayer::DrawGameView(const aq::rendering::RenderTargetHandle gameViewRT)
+	GameViewState EditorLayer::DrawGameView(const aq::rendering::RenderTargetHandle gameViewRT)
 	{
+		GameViewState state;
+		// 入力用のボタンがアクティブか(エディタの別の項目をマウスで操作中かの判定から除くため)
+		bool isInputButtonActive = false;
+
 		// 絵を内側の余白なしで領域いっぱいに使う
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 		const bool opened = ImGui::Begin(GAME_VIEW_WINDOW_NAME, nullptr,
@@ -63,12 +81,37 @@ namespace editor
 					// アスペクト比を保って領域に収まる最大の大きさにし、中央に置く
 					const float scale = std::min(regionSize.x / renderW, regionSize.y / renderH);
 					const ImVec2 imageSize(renderW * scale, renderH * scale);
-					ImGui::SetCursorScreenPos(ImVec2(regionPos.x + (regionSize.x - imageSize.x) * 0.5f,
-					                                 regionPos.y + (regionSize.y - imageSize.y) * 0.5f));
+					const ImVec2 imagePos(regionPos.x + (regionSize.x - imageSize.x) * 0.5f,
+					                      regionPos.y + (regionSize.y - imageSize.y) * 0.5f);
+					ImGui::SetCursorScreenPos(imagePos);
 					ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(textureId)), imageSize);
+
+					// 画像と同じ位置・大きさに見えないボタンを重ねる。押している間はこのボタンがアクティブになり、
+					// 浮かせたゲームビューの中身をドラッグしてもウィンドウが動かない。
+					// Image は ID を持たずホバーを取らない項目なので、重ねても当たり判定の取り合いにならない
+					ImGui::SetCursorScreenPos(imagePos);
+					ImGui::InvisibleButton("##GameViewInput", imageSize,
+					                       ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+					isInputButtonActive = ImGui::IsItemActive();
+
+					const ImVec2 itemMin = ImGui::GetItemRectMin();
+					const ImVec2 itemMax = ImGui::GetItemRectMax();
+					state.visible   = true;
+					state.imageMinX = itemMin.x;
+					state.imageMinY = itemMin.y;
+					state.imageMaxX = itemMax.x;
+					state.imageMaxY = itemMax.y;
 				}
 			}
 		}
+
+		// 画像を描かなかった(閉じている・畳まれている・未対応の API)ときはフォーカスも無い扱いにする
+		state.focused = state.visible && ImGui::IsWindowFocused();
 		ImGui::End();
+
+		// マウスを押していない項目(アクティブな InputText など)は含めない。ゲームビューのクリックでフォーカスを移せなくなるため
+		state.editorHoldsMouse = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)
+		                      || (ImGui::IsAnyItemActive() && !isInputButtonActive && ImGui::IsAnyMouseDown());
+		return state;
 	}
 }

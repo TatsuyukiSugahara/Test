@@ -63,6 +63,16 @@ namespace aq
 		};
 
 
+		/** 画面の一部に縮小して出した絵へポインタを写すための指定(InputManager::SetPointerView) */
+		struct PointerView
+		{
+			bool  enabled        = false;   // false なら今までどおり(換算しない)
+			float minX = 0.0f, minY = 0.0f; // 絵の矩形の左上(ウィンドウのクライアント座標)
+			float maxX = 0.0f, maxY = 0.0f; // 絵の矩形の右下
+			bool  treatAsOutside = false;   // true なら矩形の中でも外とみなす(エディタがマウスを使っているとき)
+		};
+
+
 		class Mouse
 		{
 		public:
@@ -70,8 +80,12 @@ namespace aq
 			~Mouse() = default;
 
 			void SetBackend(IMouseBackend* backend) { backend_ = backend; }
-			/** blocked なら取得結果を中立値(全ボタン離し・移動 0)に置き換えてから判定する */
-			void Update(float dt, bool blocked);
+			/**
+			 * blocked なら取得結果を中立値(全ボタン離し・移動 0)に置き換えてから判定する。
+			 * view が有効なら、Poll したカーソルが矩形の外のとき全ボタン離し・移動 0 とし、
+			 * カーソル座標を矩形内の相対位置からクライアントサイズの空間へ換算する
+			 */
+			void Update(float dt, bool blocked, const PointerView& view);
 
 			bool          IsTriggered(MouseButton btn) const;
 			bool          IsPressed  (MouseButton btn) const;
@@ -85,6 +99,11 @@ namespace aq
 			MouseState     now_{};
 			MouseState     old_{};
 			float          holdTimers_[3]{};
+
+			/** PointerView 有効時に、直前の Poll でボタンが押されていたか(矩形の外で押し始めたかの判別用) */
+			bool           rawDown_[MouseState::BUTTON_COUNT]{};
+			/** PointerView 有効時に、矩形の中で押し始めて押されたままのボタン(離すまで中として追従する) */
+			bool           pressedInside_[MouseState::BUTTON_COUNT]{};
 		};
 
 
@@ -220,6 +239,13 @@ namespace aq
 			bool IsMouseSuppressed()    const    { return suppressMouse_;    }
 
 			/**
+			 * 画面の一部に縮小して出した絵へポインタを写す指定。メインスレッドがフレームの境目(Update の前)で呼ぶ。
+			 * 有効な間、Mouse は矩形の外のマウス入力を捨て、カーソル座標を絵の中の相対位置へ換算する
+			 */
+			void SetPointerView(const PointerView& view) { pointerView_ = view; }
+			const PointerView& GetPointerView() const    { return pointerView_; }
+
+			/**
 			 * フォーカス外の入力停止(ImGui の Suppress とは別の理由)。メインスレッドがフレームの境目で呼ぶ。
 			 * 立っている間の Update はキーボード・マウス・全パッドを中立値として扱い、パッドの出力(振動・
 			 * トリガーエフェクトの強度)を 0 にする。入るとき・明けるときに保留中の振動を捨てる。
@@ -266,6 +292,9 @@ namespace aq
 
 			bool suppressKeyboard_ = false;
 			bool suppressMouse_    = false;
+
+			/** マウスのポインタを写す矩形の指定(既定は無効) */
+			PointerView pointerView_;
 
 			/** フォーカス外の入力停止中か。Pad::Rumble がワーカースレッドから読むので atomic */
 			std::atomic<bool> focusBlocked_ { false };

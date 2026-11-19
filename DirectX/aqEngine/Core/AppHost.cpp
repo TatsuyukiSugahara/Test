@@ -746,6 +746,20 @@ namespace aq
 		{
 			aq::hid::InputManager::Get().SetFocusBlocked(!Engine::Get().HasInputFocus());
 		}
+#if AQ_EDITOR
+		if (editorLayer_ && imguiReady_ && editorImGuiContext_)
+		{
+			// エディタ用を明示して current にする(初回の Update は初期化後でゲーム用が current のまま)。
+			// win32 の NewFrame をここで呼ぶのは、win32 が補うキーの離しなどを、エディタが入力キューを覗く前に積ませるため
+			// (Render() で呼ぶと覗いた後に積まれ、エディタ用の NewFrame で消えてゲーム用ではキーが押されたままになる)
+			ImGui::SetCurrentContext(editorImGuiContext_);
+			if (aq::platform::IPlatform* platform = Engine::Get().GetPlatform()) {
+				platform->ImGuiNewFrame();
+			}
+			editorLayer_->OnBeginFrame(gameImGuiContext_);
+			ImGui::SetCurrentContext(gameImGuiContext_);
+		}
+#endif
 		{ AQ_PROFILE_SCOPE("Input::Update"); aq::hid::InputManager::Get().Update(); }
 		{
 			AQ_PROFILE_SCOPE("EntityContext::Update");
@@ -856,9 +870,6 @@ namespace aq
 		{
 			AQ_PROFILE_SCOPE("EditorLayer");
 			ImGui::SetCurrentContext(editorImGuiContext_);
-			if (aq::platform::IPlatform* platform = Engine::Get().GetPlatform()) {
-				platform->ImGuiNewFrame();
-			}
 			aq::graphics::GraphicsDevice::Get().ImGuiNewFrameEditor();
 			ImGui::NewFrame();
 			editorLayer_->OnBuildUI(renderer_.GetOutputRT());
@@ -885,6 +896,8 @@ namespace aq
 		ImDrawData* imguiDrawData = nullptr;
 		if (imguiReady_)
 		{
+			// ゲーム用が current であることを前提にした ImGui::GetIO() などの呼び出しがあるため、取り違えを検出する
+			EngineAssertMsg(ImGui::GetCurrentContext() == gameImGuiContext_, "BuildRenderCommands must be called with the game ImGui context current");
 			aq::platform::IPlatform* platform = Engine::Get().GetPlatform();
 			// エディタ構成ではゲーム用コンテキストに win32 を繋いでいないので、プラットフォームの NewFrame を
 			// 呼ばない(未接続のバックエンドを踏んで assert する)。下の自前設定の経路で埋める。

@@ -127,6 +127,20 @@ namespace aq
 		}
 
 
+		bool PlatformWin32::IsAppActive() const
+		{
+			// 前面のウィンドウが自プロセスのものなら true。メインウィンドウから外へ出したウィンドウでも true になる。
+			const HWND foreground = ::GetForegroundWindow();
+			if (foreground == nullptr)
+			{
+				return false;
+			}
+			DWORD processId = 0;
+			::GetWindowThreadProcessId(foreground, &processId);
+			return processId == ::GetCurrentProcessId();
+		}
+
+
 		bool PlatformWin32::HasInputFocus() const
 		{
 			// 埋め込みでないときは従来どおり、フォーカスに関係なく入力を読む。

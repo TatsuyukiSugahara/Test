@@ -91,6 +91,12 @@ namespace aq
 			// 埋め込みを持たないプラットフォームでは常に true(従来どおり)。
 			virtual bool HasInputFocus() const { return true; }
 
+			/**
+			 * アプリ(自プロセスのいずれかのウィンドウ)が前面か。HasInputFocus と違い、埋め込みかどうかは見ない。
+			 * 判定できないプラットフォームでは常に true。
+			 */
+			virtual bool IsAppActive() const { return true; }
+
 			// 入力デバイスの協調レベル設定に使うウィンドウ。
 			// 既定はメインウィンドウ。ここでは空のハンドルを返し、Engine がメインウィンドウへ読み替える
 			// (Engine::GetInputCooperativeWindow)。メインウィンドウでは足りない実装だけが override する。

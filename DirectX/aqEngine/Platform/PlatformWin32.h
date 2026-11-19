@@ -43,6 +43,7 @@ namespace aq
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
 			bool HasInputFocus() const override;
+			bool IsAppActive() const override;
 			aq::graphics::NativeWindowHandle GetInputCooperativeWindow() const override;
 			bool ImGuiInit() override;
 			void ImGuiShutdown() override;

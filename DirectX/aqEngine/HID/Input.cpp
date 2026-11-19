@@ -82,7 +82,7 @@ namespace aq
 		// Mouse
 		// ==========================================
 
-		void Mouse::Update(float dt, bool blocked)
+		void Mouse::Update(float dt, bool blocked, const PointerView& view)
 		{
 			old_ = now_;
 
@@ -104,6 +104,57 @@ namespace aq
 				now_         = {};
 				now_.cursorX = cursorX;
 				now_.cursorY = cursorY;
+
+				// 押したままの追従も途切れるので、状態を捨てる
+				aq::memory::Clear(rawDown_, sizeof(rawDown_));
+				aq::memory::Clear(pressedInside_, sizeof(pressedInside_));
+			} else if (view.enabled) {
+				// 範囲の判定は Poll したカーソルで行う(エディタ用 ImGui の io.MousePos と同じクライアント座標)
+				const bool inRect = !view.treatAsOutside
+				                 && now_.cursorX >= view.minX && now_.cursorX < view.maxX
+				                 && now_.cursorY >= view.minY && now_.cursorY < view.maxY;
+
+				// 中で押し始めたボタンは、離すまで中として扱う(外へドラッグしても離しをゲームへ届ける)。
+				// 外で押し始めて中へ入ってきたボタンは追従の対象にしない
+				bool followed = false;
+				for (uint32_t i = 0; i < MouseState::BUTTON_COUNT; ++i)
+				{
+					const bool down = (now_.buttons[i] & 0x80) != 0;
+					if (!down) {
+						pressedInside_[i] = false;
+					} else if (!rawDown_[i] && inRect) {
+						pressedInside_[i] = true;
+					}
+					rawDown_[i] = down;
+					followed = followed || pressedInside_[i];
+				}
+
+				// 外で押し始めたボタンは、中へ入ってきても離した扱いにする
+				// (そのまま通すと、入った瞬間に押されたと判定されてゲームへクリックが届く)
+				for (uint32_t i = 0; i < MouseState::BUTTON_COUNT; ++i)
+				{
+					if (!pressedInside_[i]) {
+						now_.buttons[i] = 0;
+					}
+				}
+
+				// 外なら移動 0(SuppressMouse では UI の押下表示が残るので使わない)
+				if (!inRect && !followed)
+				{
+					now_.dx    = 0;
+					now_.dy    = 0;
+					now_.wheel = 0;
+				}
+
+				// UIInputSystem::HitTest はクライアントサイズで割る前提なので、矩形内の相対位置を
+				// クライアントサイズの空間へ写す。外のカーソルは範囲外に写り、UI のホバーが外れる
+				const float width  = view.maxX - view.minX;
+				const float height = view.maxY - view.minY;
+				if (width > 0.0f && height > 0.0f)
+				{
+					now_.cursorX = (now_.cursorX - view.minX) / width  * static_cast<float>(Engine::Get().GetScreenWidth());
+					now_.cursorY = (now_.cursorY - view.minY) / height * static_cast<float>(Engine::Get().GetScreenHeight());
+				}
 			}
 
 			for (uint32_t i = 0; i < 3; ++i)
@@ -444,7 +495,7 @@ namespace aq
 			for (auto& pad : pads_) pad.Update(dt);
 			BuildPointerTouchState();
 
-			if (mouse_) mouse_->Update(dt, blocked);
+			if (mouse_) mouse_->Update(dt, blocked, pointerView_);
 		}
 
 

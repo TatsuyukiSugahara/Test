@@ -3,8 +3,10 @@
   <ItemGroup>
     <ClCompile Include="EditorMain.cpp" />
     <ClCompile Include="EditorLayer.cpp" />
+    <ClCompile Include="GameViewInput.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EditorLayer.h" />
+    <ClInclude Include="GameViewInput.h" />
   </ItemGroup>
 </Project>

@@ -4,17 +4,26 @@
 #include "Rendering/RenderTargetHandle.h"
 
 
+struct ImGuiContext;
+
+
 namespace aq
 {
 	/**
 	 * AppHost がフレームの決まった位置で呼ぶエディタ側の処理。
 	 * Editor プロジェクトが実装し、起動時に AppHost::SetEditorLayer で登録する(AppHost は所有しない)。
-	 * どちらのフックも、AppHost がエディタ用の ImGui コンテキストを current にした状態で呼ぶ。
+	 * どのフックも、AppHost がエディタ用の ImGui コンテキストを current にした状態で呼ぶ。
 	 */
 	class IEditorLayer
 	{
 	public:
 		virtual ~IEditorLayer() = default;
+
+		/**
+		 * フレームの先頭(InputManager::Update の前)。エディタ用コンテキストが current で、win32 の NewFrame は済んでいる。
+		 * gameContext はゲーム用 ImGui コンテキスト(入力の転送先)。戻るときの current は問わない(AppHost がゲーム用へ戻す)
+		 */
+		virtual void OnBeginFrame(ImGuiContext* gameContext) = 0;
 
 		/** エディタ用コンテキストでパネルを構築する(NewFrame の後、Render の前)。gameViewRT はこのフレームの displayRT */
 		virtual void OnBuildUI(const aq::rendering::RenderTargetHandle gameViewRT) = 0;

@@ -126,10 +126,9 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   `heightScale` / `terrainSize` は `HeightmapChunk::SetHeightScale` / `SetTerrainSize` に渡すが、この 2 つはハイトマップ未読込だと値を捨てる。
   `deserializePtr` は `OnDeserialized` を呼ばないので、Prefab エディタで Terrain を読んで保存し直すと 3 つの値が失われる。
   E6b で 3 つの値をコンポーネント側のオーサリング値で往復させる形に直した(同 6.4 節)。`Tools/ReflectionTest --selftest` の T2 で確かめる。
-- (2026-11-19 発見)**Level / Prefab エディタで参照ノードを読んで保存し直すと、override が壊れる。**
-  [PrefabEditNodeOps.cpp](../aqEngine/ECS/PrefabEditNodeOps.cpp) の `PrefabNodeFromJson` は `overrides` の `components` と `removedComponents` しか読まず、
-  `name` / `addedComponents` / `children` / `removedChildren` を捨てる。`PrefabNodeToJson` は override のコンポーネントを全フィールド書き出すので、
-  既定値のキーが override に増える。E4a で直す([エディタ全体設計](エディタ全体設計.md) 7.8 節)。
+- ~~(2026-11-19 発見)Level / Prefab エディタで参照ノードを読んで保存し直すと、override が壊れる。~~
+  (2026-11-20、E4a で解消。`overridesRaw`/`loadedJson` を保持し、変わったキーだけを書き戻す形にした。
+  [エディタ全体設計](エディタ全体設計.md) 7.8 節「2. override の保持」、ReflectionTest T6 で確認)。
 - (2026-11-19 発見)**Level エディタが、インライン subLevel の中の `subLevels` を捨てる。** `LevelEditorPanel` の `SubLevelEdit` が
   `name` と `entities` しか持たない(ランタイムは再帰で読む)。E4b で直す(同 7.8 節)。
 - (2026-11-19 発見)**Level の Unload の後に、生成が走ってエンティティが残ることがある。**
@@ -243,10 +242,8 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   IBL の BRDF LUT を Clamp のつもりで読んでいたため、D3D12 だけ粗さ 0 / 1 の箱の色が違っていた(最大 43/255)。LUT の座標を端の texel 中心までに収めて回避した
   ([PBRFunctions.fx](../aqEngine/Assets/Shader/PBRFunctions.fx) の `EvalIBLSpecular`)。Clamp・Point などを前提にする他の PS も D3D12 では Wrap / Linear で読まれる。
   直すなら、よく使うサンプラを静的サンプラとして足すか、サンプラのディスクリプタテーブルを持つ。
-- (2026-11-16 発見)**Level / Prefab エディタで保存し直すと、参照ノードの override が増える。**
-  [PrefabEditNodeOps.cpp](../aqEngine/ECS/PrefabEditNodeOps.cpp) の `PrefabNodeFromJson` は疎な override を既定値入りのコンポーネントに復元し、
-  `PrefabNodeToJson` は Reflect 対象の全フィールドを書き出す。元の Prefab の scale が 2 で override が position だけでも、往復後は scale = 1 まで override される。
-  参照ノードの `overrides.children` / `removedChildren` も読み込み時に捨てられる。[エディタ全体設計](エディタ全体設計.md) 7.2(E4)で override の生 JSON を保持して直す。
+- ~~(2026-11-16 発見)Level / Prefab エディタで保存し直すと、参照ノードの override が増える。~~
+  (2026-11-20、E4a で解消。129 行目と同じ不具合、重複記録)。
 - (2026-11-16 発見)**Level エディタの Load in World は前のプレビューを消さずに追加ロードし、in-memory 登録も残し続ける。**
   [LevelEditor.cpp](../aqEngine/Level/LevelEditor.cpp) の `LoadInWorld`。押すたびにエンティティと `LevelRegistry` の登録が増える。エディタ全体設計 7.3(E4)で直す。
 - (2026-11-17 発見)**デバッグパネルの `ImGui::Image` で、アルファが 0 の画像が透明になって見えない。**

@@ -129,14 +129,18 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 - ~~(2026-11-19 発見)Level / Prefab エディタで参照ノードを読んで保存し直すと、override が壊れる。~~
   (2026-11-20、E4a で解消。`overridesRaw`/`loadedJson` を保持し、変わったキーだけを書き戻す形にした。
   [エディタ全体設計](エディタ全体設計.md) 7.8 節「2. override の保持」、ReflectionTest T6 で確認)。
-- (2026-11-19 発見)**Level エディタが、インライン subLevel の中の `subLevels` を捨てる。** `LevelEditorPanel` の `SubLevelEdit` が
-  `name` と `entities` しか持たない(ランタイムは再帰で読む)。E4b で直す(同 7.8 節)。
-- (2026-11-19 発見)**Level の Unload の後に、生成が走ってエンティティが残ることがある。**
-  [LevelManager.cpp](../aqEngine/Level/LevelManager.cpp) の `Load` の遅延生成コマンドはロード済みかを確かめないので、`Load` → `Unload` → Flush の順で
-  古い Level のエンティティが作られる。`LoadAsync` の途中で `Unload` しても、残りのジョブが古い `LevelId` のまま作り続ける。どちらもどの Level にも属さない
-  エンティティが残る。E4b で直す(同 7.8 節)。
-- (2026-11-19 発見)**Level の自動リロード(`PollFileChanges`)が GPU の完了を待たずに破棄する。** `ReloadAll` は D3D12 のハングを避けるために
-  `WaitForRenderIdle` + `FlushPendingCommands` を入れているが、自動リロードには無い。E4b で直す(同 7.8 節)。
+- ~~(2026-11-19 発見)Level エディタが、インライン subLevel の中の `subLevels` を捨てる。~~
+  (2026-11-20、E4b で解消。`LevelEditModel::SubLevelEdit` が `subLevels` を再帰で持つ形にした。
+  ReflectionTest T6(LevelEditModel 往復・入れ子の subLevel)で確認)。
+- ~~(2026-11-19 発見)Level の Unload の後に、生成が走ってエンティティが残ることがある。~~
+  (2026-11-20、E4b で解消。同期ロードの遅延生成コマンドは実行前に `IsLoaded` を確かめ、非同期ロードは
+  `Unload` が対象ジョブに飛ばす印を付ける形にした。ReflectionTest T8 (b)〜(d) で確認)。
+- ~~(2026-11-19 発見)Level の自動リロード(`PollFileChanges`)が GPU の完了を待たずに破棄する。~~
+  (2026-11-20、E4b で解消。`ReloadAll` と同じく `WaitForRenderIdle` + `FlushPendingCommands` を入れた)。
+- (2026-11-20 発見)**Level エディタでインラインの subLevel を削除([x])すると、その中のノードを選択していた場合
+  `selected_` が解放済みのノードを指したまま残り、同じフレームの Inspector 描画で使われる。** E4b の実装中に発見(実装自体は変えていない)。
+  [LevelEditor.cpp](../aqEngine/Level/LevelEditor.cpp) の `DrawSubLevels` / `DebugRender` で、削除予約の実行時に `selected_` が削除対象の子孫なら
+  クリアする対応が要る。
 - (2026-09-30 発見)**依存の経路が無いまま同じ Component やカメラを触る System の組が 7 件ある。**
   うち同じ wave で実際に並列に走っていた `ActorStateMachineSystem` ↔ `SpeedCharacterSystem`(`TransformComponent` を両方が書く)と
   `CoinSystem` ↔ `AutoCameraSystem`(`TransformComponent` の書きと読み)の 2 組は、2026-11-11 に
@@ -244,8 +248,9 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   直すなら、よく使うサンプラを静的サンプラとして足すか、サンプラのディスクリプタテーブルを持つ。
 - ~~(2026-11-16 発見)Level / Prefab エディタで保存し直すと、参照ノードの override が増える。~~
   (2026-11-20、E4a で解消。129 行目と同じ不具合、重複記録)。
-- (2026-11-16 発見)**Level エディタの Load in World は前のプレビューを消さずに追加ロードし、in-memory 登録も残し続ける。**
-  [LevelEditor.cpp](../aqEngine/Level/LevelEditor.cpp) の `LoadInWorld`。押すたびにエンティティと `LevelRegistry` の登録が増える。エディタ全体設計 7.3(E4)で直す。
+- ~~(2026-11-16 発見)Level エディタの Load in World は前のプレビューを消さずに追加ロードし、in-memory 登録も残し続ける。~~
+  (2026-11-20、E4b で解消。`LevelEditModel::ProcessPreviewRequest` が前回のプレビューを Unload・Unregister してから
+  置き換える形にした。ReflectionTest T8 (f) で、10 回連打してもプレビューが 1 つだけ残ることを確認)。
 - (2026-11-17 発見)**デバッグパネルの `ImGui::Image` で、アルファが 0 の画像が透明になって見えない。**
   ImGui はアルファでブレンドして描くため、G-Buffer0(BaseColor + Metallic)や Bright Extract のようにアルファに別の値(Metallic など)を入れた
   RT は、その値が 0 の部分が見えない。D3D11 / D3D12 / Vulkan で同じで、ImGui の公式バックエンドへ置き換える前(自前バックエンド)からの挙動。

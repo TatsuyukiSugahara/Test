@@ -361,6 +361,8 @@ namespace aq
 			~RenderSystem();
 			void Update() override;
 
+			RunModeMask GetRunModes() const override { return RunModeMask::All; }
+
 			/** ECS を走査して RenderFrame を構築する。描画は行わない。 */
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame);
 			void BuildRenderFrame(aq::rendering::RenderFrame& frame, aq::CameraType cameraType);

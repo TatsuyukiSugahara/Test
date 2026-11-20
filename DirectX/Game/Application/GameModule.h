@@ -30,6 +30,9 @@ namespace app
 		/** 次の描画で俯瞰ベイクを行うか（ステージ確定時に立てて 1 回だけ描く） */
 		bool minimapBakeRequested_ = false;
 
+		/** 影の中心の初期値(プリセットに入れる値。OnPlayEnd でもこの値へ戻す) */
+		static const aq::math::Vector3 SHADOW_CENTER_DEFAULT;
+
 		static constexpr uint32_t OFFSCREEN_RT_WIDTH  = 512;
 		static constexpr uint32_t OFFSCREEN_RT_HEIGHT = 512;
 
@@ -62,6 +65,8 @@ namespace app
 
 	protected:
 		bool OnInitialize(aq::AppHost& host) override;
+		void OnPlayBegin() override;
+		void OnPlayEnd() override;
 		void OnFinalize() override;
 		void OnUpdate() override;
 		void OnRegister() override;

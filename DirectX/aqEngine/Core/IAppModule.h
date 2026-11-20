@@ -22,6 +22,17 @@ namespace aq
 
 		/** エンジンサブシステム初期化後に 1 回 */
 		virtual bool OnInitialize(AppHost& /*host*/) { return true; }
+		/**
+		 * ゲームの再生を始める。AppHost::Initialize 内で OnInitialize の直後に 1 回、
+		 * エディタでは再生の開始のたびに呼ばれる。メインスレッドの System 反復外でだけ呼ばれる。
+		 * ゲームの状態機械やセッションのエンティティなど、再生ごとに作り直すものをここで作る。
+		 */
+		virtual void OnPlayBegin() {}
+		/**
+		 * ゲームの再生を終える(エディタの停止時)。OnPlayBegin で作ったものを片付ける。
+		 * ランタイムの終了時は呼ばれず、OnFinalize で後始末する。
+		 */
+		virtual void OnPlayEnd() {}
 		/** エンジンサブシステム終了前に 1 回 */
 		virtual void OnFinalize() {}
 		/** エンジン標準 System の登録後、FinalizeRegistration 前に 1 回 */

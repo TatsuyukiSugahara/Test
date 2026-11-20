@@ -33,6 +33,9 @@ namespace app
 	const aq::math::Vector3 GameModule::OUTLINE_COLOR = aq::math::Vector3(0.02f, 0.06f, 0.12f);
 
 
+	const aq::math::Vector3 GameModule::SHADOW_CENTER_DEFAULT = aq::math::Vector3(0.0f, 3.0f, 0.0f);
+
+
 	// unique_ptr<aq::sound::SoundStream> の破棄に完全型が必要なため、ここで定義する。
 	GameModule::GameModule()
 	{
@@ -77,11 +80,10 @@ namespace app
 
 		GameInput::Initialize();
 
-		// タイトル/ローディング/プレイのゲームフロー(旧 Scene を置換)。UI 画面(タイトル/ローディング)を登録し
-		// タイトルを表示する。決定入力で箱 Level を非同期ロードし、完了後にプレイへ遷移する。
-		app::GameFlow::Create();
-		app::GameFlow::Get().Initialize();
-		aq::StartupMark("    [game] GameFlow ok");
+		// UI フォント・白テクスチャ・決定 SE の先読み。非同期ロードを早く始めるため、ここで行う。
+		// ゲームフロー本体の生成と開始は OnPlayBegin。
+		app::GameFlow::Preload();
+		aq::StartupMark("    [game] GameFlow preload ok");
 
 		// 標準の描画構成(Shadow + Deferred + PostProcess + Sky)をまとめて組む。
 		// AquaDash で既定から変えているのは影の範囲だけ(コースが細長く、影を落としたいのは
@@ -90,7 +92,7 @@ namespace app
 			aq::RendererPreset preset;
 			preset.shadow.nearPlane   = 0.1f;
 			preset.shadow.farPlane    = 60.0f;
-			preset.shadow.sceneCenter = aq::math::Vector3(0.0f, 3.0f, 0.0f);
+			preset.shadow.sceneCenter = SHADOW_CENTER_DEFAULT;
 			preset.shadow.softness    = 2.0f;
 
 			// IBL(空からの環境光と映り込み。エンジンの既定は無効)。強度はエンジンの既定 0.5 のまま。
@@ -113,16 +115,13 @@ namespace app
 			}
 		}
 
-		// BGM: 起動時から常時ループ再生する(バンク登録に依存しない wav 直読み)。
+		// BGM: ストリームは起動時に開き、再生は OnPlayBegin で始める(バンク登録に依存しない wav 直読み)。
 		// SoundEngine の初期化は Engine が別スレッドで進めているので、ここで合流してから開く。
 		// レンダラ初期化(シェーダコンパイル)の後ろに置くことで、その間もサウンド初期化が並走する。
 		if (aq::Engine::Get().EnsureSoundInitialized() && aq::sound::SoundEngine::IsAvailable()) {
 			// AquaDash 用に生成したシンセループ (Tools/generate_bgm.py)。
 			bgmStream_ = aq::sound::SoundEngine::Get().OpenStream(
 				"Assets/Sound/AquaDashBGM.wav", aq::sound::SoundBusId::BGM);
-			if (bgmStream_) {
-				bgmStream_->Play(aq::sound::LoopRegion{ 0, 1, 0 });   // frameCount!=0 で無限ループ
-			}
 		}
 		aq::StartupMark("    [game] BGM stream opened (sound joined)");
 
@@ -135,6 +134,52 @@ namespace app
 #endif
 
 		return true;
+	}
+
+
+	void GameModule::OnPlayBegin()
+	{
+		// タイトル/ローディング/プレイのゲームフロー(旧 Scene を置換)。UI 画面(タイトル/ローディング)を登録し
+		// タイトルを表示する。決定入力で箱 Level を非同期ロードし、完了後にプレイへ遷移する。
+		// 再生のたびに作り直す。
+		app::GameFlow::Create();
+		app::GameFlow::Get().Initialize();
+		aq::StartupMark("    [game] GameFlow ok");
+
+		// BGM は再生のたびに頭から鳴らす。
+		if (bgmStream_) {
+			bgmStream_->Play(aq::sound::LoopRegion{ 0, 1, 0 });   // frameCount!=0 で無限ループ
+		}
+	}
+
+
+	void GameModule::OnPlayEnd()
+	{
+		// セッションの破棄を予約する(ステージのエンティティと Level はエンジンが片付ける)。
+		app::GameFlow::Release();
+
+		if (bgmStream_) {
+			bgmStream_->Stop();
+		}
+		minimapBakeRequested_ = false;
+
+		// パッドのトリガー抵抗と振動を止める。
+		GameInput::Get().SetTriggerResistance(aq::hid::PadAxis::RTrigger, 0.0f, 0.0f);
+		GameInput::Get().StopVibration();
+
+		// OnUpdate が毎フレーム書く描画の設定を既定値へ戻す。
+		aq::rendering::Renderer& renderer = aq::AppHost::Get().GetRenderer();
+		auto* shadowPass = renderer.GetPipeline()
+			? renderer.GetPipeline()->Find<aq::rendering::ShadowPass>() : nullptr;
+		if (auto* shadowRenderer = shadowPass ? shadowPass->GetShadowRenderer() : nullptr)
+		{
+			shadowRenderer->SetSceneCenter(SHADOW_CENTER_DEFAULT);
+		}
+		auto* motionBlur = renderer.GetPipeline() ? renderer.GetPipeline()->Find<aq::rendering::MotionBlurPass>() : nullptr;
+		if (motionBlur)
+		{
+			motionBlur->SetStrength(0.0f);
+		}
 	}
 
 

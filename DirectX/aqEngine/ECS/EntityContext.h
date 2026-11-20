@@ -30,10 +30,13 @@ namespace aq
 #endif
 
 		public:
-			/** System を一括更新し、積まれたコマンドをフラッシュする */
-			void Update()
+			/**
+			 * mode で動く System を一括更新し、積まれたコマンドをフラッシュする。
+			 * フラッシュはモードに関係なく必ず行う。
+			 */
+			void Update(RunMode mode = RunMode::Play)
 			{
-				systemManager_.Update();
+				systemManager_.Update(mode);
 				entityManager_.FlushCommands();
 			}
 

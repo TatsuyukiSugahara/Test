@@ -11,7 +11,7 @@ namespace aq
 {
 	namespace ecs
 	{
-		void SystemManager::Update()
+		void SystemManager::Update(RunMode mode)
 		{
 			if (registrationState_ != RegistrationState::Finalized) {
 				// 毎フレーム呼ばれるので、ログは最初の 1 回だけにする
@@ -36,6 +36,7 @@ namespace aq
 				for (size_t idx : updateOrder_) {
 					if (systemEntries_[idx].level != wave) continue;
 					SystemBase* system = systemEntries_[idx].system.get();
+					if (!Contains(system->GetRunModes(), mode)) continue;
 					// displayName は systemEntries_ が保持し続けるため const char* の寿命は安全
 					const char* name = systemEntries_[idx].displayName.c_str();
 					waveFutures.push_back(

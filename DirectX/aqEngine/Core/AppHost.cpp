@@ -468,6 +468,8 @@ namespace aq
 
 		if (!module_->OnInitialize(*this)) return false;
 		aq::StartupMark("  [app] game OnInitialize ok");
+		module_->OnPlayBegin();
+		aq::StartupMark("  [app] game OnPlayBegin ok");
 
 		// GPU 駆動クラスタ(トライアングル)カリング: compute シェーダをロード。
 		// compute 非対応(FL10 の Xbox One UWP 等)では初期化せず、カリングも無効化する。
@@ -763,7 +765,7 @@ namespace aq
 		{ AQ_PROFILE_SCOPE("Input::Update"); aq::hid::InputManager::Get().Update(); }
 		{
 			AQ_PROFILE_SCOPE("EntityContext::Update");
-			aq::ecs::EntityContext::Get().Update();
+			aq::ecs::EntityContext::Get().Update(runMode_);
 		}
 		// Level の非同期ロード進行 / ファイル変更監視は EntityContext::Update 後の安全点で実行する
 		// （ForEach/並列システム外・単一スレッド）。ここで即時のエンティティ生成を安全に行える。
@@ -781,12 +783,19 @@ namespace aq
 			AQ_PROFILE_SCOPE("LinkService::Tick");
 			aq::link::LinkService::Get().Tick();
 		}
-		{ AQ_PROFILE_SCOPE("OnUpdate"); module_->OnUpdate(); }
+		if (runMode_ == RunMode::Play)
+		{
+			AQ_PROFILE_SCOPE("OnUpdate");
+			module_->OnUpdate();
+		}
 		{
 			AQ_PROFILE_SCOPE("UI::Update");
 			auto& ui = aq::ui::UIContext::Get();
-			ui.GetInputSystem().Update(ui.Screens(), aq::hid::InputManager::Get());
-			ui.Screens().Update(aq::Engine::GetDeltaTime());
+			if (runMode_ == RunMode::Play)
+			{
+				ui.GetInputSystem().Update(ui.Screens(), aq::hid::InputManager::Get());
+				ui.Screens().Update(aq::Engine::GetDeltaTime());
+			}
 			ui.GetBatchRenderer().CollectRenderItems(ui.Screens());
 		}
 		{ AQ_PROFILE_SCOPE("Camera::UpdateAll"); aq::CameraManager::Get().UpdateAll(); }
@@ -1046,7 +1055,11 @@ namespace aq
 		}
 #endif
 
-		{ AQ_PROFILE_SCOPE("OnPreRender"); module_->OnPreRender(); }
+		if (runMode_ != RunMode::Edit)
+		{
+			AQ_PROFILE_SCOPE("OnPreRender");
+			module_->OnPreRender();
+		}
 
 		auto mainCmdList = std::make_unique<aq::rendering::RenderCommandList>();
 		mainCmdList->Enqueue<aq::rendering::SetRenderTargetCommand>(Engine::Get().GetMainRenderTargetHandle());

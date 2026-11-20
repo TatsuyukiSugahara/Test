@@ -16,6 +16,8 @@ namespace aq
 
 			void Update() override {}
 
+			RunModeMask GetRunModes() const override { return RunModeMask::All; }
+
 			void DebugRenderMenu() override;
 			void DebugRender()     override;
 

@@ -8,6 +8,8 @@ E4a で、編集ノード(`PrefabEditNode`)の JSON 往復(T6)と数値の書き
 (同 7.8 節「9. 検査ツールの追加」)。E4b で、T6 に `LevelEditModel` 経由の Level 全体の往復を追加し、
 `Engine`/`EntityContext` を画面無しで動かして Level の生成・取り消しを検査する T8 を足した
 (同 7.8 節「9.」の T8 行と、節末尾の「T8 の実行環境」)。
+E5a で、System のモード宣言(`RunMode` / `RunModeMask`)を検査する T9 を足した
+(同 8.5 節「1.」)。
 
 E6a でエンジンを変える前に現状の出力(T3)を控え、E6b の変更の前後で既存アセットの保存結果が
 変わらないことを機械的に比べるために使う。
@@ -60,6 +62,7 @@ build/macos-ninja-metal/bin/Debug/ReflectionTest --selftest --assets Game/Assets
 | T6 編集ノードの往復(E4a はノード単位、E4b は Level 全体) | `TestData/` と `--assets` 以下の全 `*.level.json` の `entities` の各ノードと、全 `*.prefab.json` のルートを `PrefabNodeFromJson` → `PrefabNodeToJson` し、設計書 11.4 節の規則で元と比べる(参照ノードは `prefab` と `overrides` の生 JSON を構造で比べ、キーの有無も一致・数値は double で完全一致。実体ノードはコンポーネントを既定値で構築して比べ、子の順序と数も比べる。ノード名は実行時の名前 = 参照ノードは `overrides.name` 優先)。さらに `TestData/T6_Overrides.level.json` の参照ノード `RefFull` をプログラムで編集して書き出す: (a) override に無かったフィールド(Transform の `scale`)を変える → そのキーだけが増える、(b) 変えて元に戻す → 元と同じ、(c) override コンポーネント(Spawner)を外す → `components` から消える / 外して同じ型を足し直す → 全フィールドが `components` に入る、(d) `addedComponents` の AudioSource を変える → `addedComponents` 側が全フィールドで変わる、(e) Name を変える → 外側の `name` と `overrides.name` の両方が変わる、(f) `addedComponents` の AudioSource を外す → 書いて読み直しても復活しない、(g) 外して足し直して値を変える → 読み直すと新しい値で、`addedComponents` に古い値が残らない。**E4b で追加**: `TestData/T6_Overrides.level.json`(2 段のインライン subLevel、Inner1 の中に Inner2 を持つ)を `LevelEditModel::FromJson` → `ToJson` し、(1) 1 回目と、それを読み直してもう一度書き出した 2 回目が一致する(安定している)、(2) 入れ子の subLevel(Inner2)が捨てられずに残ることを確かめる。Debug 構成のみ(編集ノードが `AQ_DEBUG_IMGUI` のときだけある) |
 | T7 数値 | `Stringify` の表記と、読み直した値を確かめる(下の表)。Debug 構成では、`TestData/T7_Numbers.level.json` を編集ノードへ読み込んで書き出したファイルを一時ディレクトリへ書いて読み直し、7 桁以上の小数を持つ通常のフィールドは float として、override の値は double として一致することも確かめる |
 | T8 生成と取り消し(E4b) | 画面無しで `Engine::Create()` + `ecs::EntityContext::Initialize()` を使い(ウィンドウ・デバイス・ThreadPool・AppHost・MemoryManager は作らない)、Transform だけの試験用 Level で: (a) `Load` 直後は `IsSpawned` が false、`FlushPendingCommands` 後は true。(b) `Load` → `Unload` → Flush でエンティティが 0(同期ロードの不具合の修正確認)。(c) `LoadAsync` 中に根を `Unload` すると `IsCancelled`/`IsDone` が true になり、所属の無いエンティティが残らない。(d) `LoadAsync` 中に子だけを `Unload` すると、子は作られず親は最後まで作られる。(e) `Register` → `Unregister` → `IsRegistered` が false。(f) `RequestPreview` を 10 フレーム連続で呼んでも、エンティティ数が毎フレーム同じで、プレビューの登録が 1 つだけ(Debug 構成のみ)。Debug 構成のみ(`LevelEditModel` が `AQ_DEBUG_IMGUI` のときだけあるため (f) は Debug 限定。(a)〜(e) は Release でも動く) |
+| T9 実行モード(E5a) | T8 と同じく画面無しで `Engine::Create()` + `ThreadPool::Initialize` + `ecs::EntityContext::Initialize()` を使い(T8 の後始末の後に作り直す。System は `FinalizeRegistration` の後に足せないため)、試験用の System 4 種(`GetRunModes` を上書きしない・`Play`・`All`・`Edit \| Play` の宣言)を登録して、`EntityContext::Update(RunMode::Edit / Play / Pause)` を 1 回ずつ呼ぶ。各モードで: (1) System ごとの `Update` の回数が宣言どおり(`Edit`: All と Edit\|Play の 1 回ずつ、`Play`: 4 種とも 1 回、`Pause`: All だけ)。(2) `RequestCreateEntity` で積んだ生成が、`Update` の前は反映されず、`Update` の後(= Flush の後)に 1 つ増える(Flush はモードに関係なく行う)。Release でも動く |
 
 T7 の表記の期待値(設計書 7.8 節「1. 数値」の 3 分岐: 整数で絶対値が 2^53 未満 → 小数点なし、
 float に狭めても同じ値 → float の最短表現、それ以外 → double の最短表現):

@@ -535,6 +535,7 @@
   <ItemGroup>
     <ClInclude Include="Core\AppHost.h" />
     <ClInclude Include="Core\IAppModule.h" />
+    <ClInclude Include="Core\RunMode.h" />
     <ClInclude Include="Core\DebugUI.h" />
     <ClInclude Include="Core\IDebugRenderable.h" />
     <ClInclude Include="Core\LaunchOptions.h" />

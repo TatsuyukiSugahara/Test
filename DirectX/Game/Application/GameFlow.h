@@ -183,6 +183,10 @@ namespace app
 		static GameFlow& Get() { return *instance_; }
 		static void      Release();
 
+		// UI フォント・白テクスチャ・決定 SE の先読み。非同期ロードを早く始めるため、起動時(GameModule::OnInitialize)に呼ぶ。
+		// Create / Initialize とは独立していて、再生のたびに呼ぶ必要はない。
+		static void Preload();
+
 		// UI 画面登録 + セッションエンティティ生成 + 初期状態 (タイトル) 開始。Create の後に一度呼ぶ。
 		void Initialize();
 

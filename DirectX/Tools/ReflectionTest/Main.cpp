@@ -5,6 +5,7 @@
 //
 // T1 往復 / T2 疎な JSON / T3 既存アセットのダンプ / T4 編集イベント / T5 属性 を行う。
 // E4a で T6 編集ノードの往復 / T7 数値の書き出し を足した(7.8 節「9. 検査ツールの追加」)。
+// E5a で T9 実行モード(System の選択と全モードでの Flush)を足した。T8 と同じく画面を作らず、System を登録して EntityContext::Update(mode) を回す。
 // E4b で T8 生成と取り消し を足した。T8 だけは Engine(Create のみ)と EntityContext を作り、
 // 遅延生成を FlushPendingCommands と LevelManager::Tick で動かす(画面・デバイス・System は作らない)。
 // 画面もデバイスも作らない。実体は AlignedStorage(TypeInfo) で既定値のまま作り、
@@ -31,6 +32,7 @@
 #endif
 
 #include <array>
+#include <atomic>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
@@ -113,7 +115,8 @@ namespace
 			"      T7 数値の書き出しを試す。Debug 構成では T6 編集ノードの往復(TestData と --assets)と\n"
 			"      T7 のファイル往復も行う。\n"
 			"      T8 Level の生成と取り消し(IsSpawned / Unload / LoadAsync の取り消し / Unregister)を試す。\n"
-			"      Debug 構成ではプレビューの置き換え(LevelEditModel)も行う。\n");
+			"      Debug 構成ではプレビューの置き換え(LevelEditModel)も行う。\n"
+			"      T9 実行モード(Edit / Play / Pause で動く System と、全モードでの Flush)を試す。\n");
 	}
 
 
@@ -1543,6 +1546,131 @@ namespace
 	}
 
 
+	/**
+	 * T9 の試験用 System。Update が呼ばれた回数を数える。
+	 * Id で型を分け、Mask が動くモードを宣言する(AddSystem は型で照合するので、別々の System になる)。
+	 */
+	template <int Id, aq::RunModeMask Mask>
+	class RunModeCountSystem : public aq::ecs::SystemBase
+	{
+	public:
+		void Update() override { ++callCount_; }
+		aq::RunModeMask GetRunModes() const override { return Mask; }
+
+		static std::atomic<int> callCount_;
+	};
+
+	template <int Id, aq::RunModeMask Mask>
+	std::atomic<int> RunModeCountSystem<Id, Mask>::callCount_{ 0 };
+
+	/** 宣言なし(既定 = Play のみ) / All / Edit | Play */
+	using DefaultModeSystem  = RunModeCountSystem<0, aq::RunModeMask::Play>;
+	using AllModeSystem      = RunModeCountSystem<1, aq::RunModeMask::All>;
+	using EditPlayModeSystem = RunModeCountSystem<2, aq::RunModeMask::Edit | aq::RunModeMask::Play>;
+
+
+	/** 既定を使う System(GetRunModes を上書きしない) */
+	class UndeclaredModeSystem : public aq::ecs::SystemBase
+	{
+	public:
+		void Update() override { ++callCount_; }
+
+		static std::atomic<int> callCount_;
+	};
+
+	std::atomic<int> UndeclaredModeSystem::callCount_{ 0 };
+
+
+	/** mode の名前 */
+	const char* RunModeName(const aq::RunMode mode)
+	{
+		switch (mode) {
+		case aq::RunMode::Edit:  return "Edit";
+		case aq::RunMode::Play:  return "Play";
+		case aq::RunMode::Pause: return "Pause";
+		}
+		return "?";
+	}
+
+
+	/**
+	 * T9 実行モード(System の選択と、全モードでの Flush)
+	 *
+	 * T8 と同じく画面無しで Engine(Create のみ)と EntityContext を作る。T8 は System を登録しないので、
+	 * T8 の後始末の後に EntityContext を作り直し、System を登録して FinalizeRegistration する。
+	 * System は ThreadPool へ出されるので、ここだけ ThreadPool を作る。
+	 * - 既定の System(GetRunModes を上書きしない)は Play のときだけ、All はすべて、Edit | Play は Pause 以外で呼ばれる。
+	 * - EntityContext::Update(mode) の後の Flush は、どのモードでも行われる(積んだ生成が Update の後に済んでいる)。
+	 */
+	void RunRunModeTests(TestResults& results)
+	{
+		const bool engineCreatedHere = !aq::Engine::IsCreated();
+		if (engineCreatedHere) aq::Engine::Create();
+		aq::util::ThreadPool::Initialize(2);
+		aq::ecs::EntityContext::Initialize();
+
+		aq::ecs::EntityContext& ctx = aq::ecs::EntityContext::Get();
+		ctx.AddSystem<UndeclaredModeSystem>();
+		ctx.AddSystem<DefaultModeSystem>();
+		ctx.AddSystem<AllModeSystem>();
+		ctx.AddSystem<EditPlayModeSystem>();
+		if (!ctx.FinalizeRegistration()) {
+			Report(results, "T9 System の登録", false, "FinalizeRegistration に失敗");
+		} else {
+			struct Expectation
+			{
+				aq::RunMode mode;
+				int         undeclared;
+				int         playOnly;
+				int         all;
+				int         editPlay;
+			};
+			// 各モードで 1 回 Update したときに、System ごとに 1 回(動く)か 0 回(動かない)
+			const Expectation expectations[] = {
+				{ aq::RunMode::Edit,  0, 0, 1, 1 },
+				{ aq::RunMode::Play,  1, 1, 1, 1 },
+				{ aq::RunMode::Pause, 0, 0, 1, 0 },
+			};
+
+			for (const Expectation& expectation : expectations) {
+				UndeclaredModeSystem::callCount_ = 0;
+				DefaultModeSystem::callCount_    = 0;
+				AllModeSystem::callCount_        = 0;
+				EditPlayModeSystem::callCount_   = 0;
+
+				const uint32_t before = CountEntities();
+				ctx.RequestCreateEntity<>();
+				const uint32_t queued = CountEntities();
+				ctx.Update(expectation.mode);
+				const uint32_t after = CountEntities();
+
+				const std::string modeName = RunModeName(expectation.mode);
+				const int undeclared = UndeclaredModeSystem::callCount_;
+				const int playOnly   = DefaultModeSystem::callCount_;
+				const int all        = AllModeSystem::callCount_;
+				const int editPlay   = EditPlayModeSystem::callCount_;
+
+				const bool systemsPassed = undeclared == expectation.undeclared && playOnly == expectation.playOnly
+					&& all == expectation.all && editPlay == expectation.editPlay;
+				Report(results, "T9 " + modeName + " の System", systemsPassed, systemsPassed ? std::string()
+					: "未宣言 " + std::to_string(undeclared) + "(期待 " + std::to_string(expectation.undeclared) + ")"
+					  + " / Play 宣言 " + std::to_string(playOnly) + "(期待 " + std::to_string(expectation.playOnly) + ")"
+					  + " / All " + std::to_string(all) + "(期待 " + std::to_string(expectation.all) + ")"
+					  + " / Edit|Play " + std::to_string(editPlay) + "(期待 " + std::to_string(expectation.editPlay) + ")");
+
+				const bool flushPassed = queued == before && after == before + 1;
+				Report(results, "T9 " + modeName + " の Flush", flushPassed, flushPassed ? std::string()
+					: CountDetail("積んだ直後", queued, before) + " / " + CountDetail("Update 後", after, before + 1));
+			}
+		}
+
+		// 後始末(System の登録は確定後に外せないので EntityContext ごと作り直す)
+		aq::ecs::EntityContext::Finalize();
+		aq::util::ThreadPool::Finalize();
+		if (engineCreatedHere) aq::Engine::Release();
+	}
+
+
 #ifdef AQ_DEBUG_IMGUI
 	using aq::ecs::FieldAttr;
 	using aq::ecs::FieldEditEvent;
@@ -2249,6 +2377,7 @@ namespace
 #endif
 
 		RunSpawnTests(results);
+		RunRunModeTests(results);
 
 		std::printf("[selftest] PASS %u / FAIL %u / XFAIL %u / XPASS %u\n",
 			results.passCount, results.failCount, results.xfailCount, results.xpassCount);

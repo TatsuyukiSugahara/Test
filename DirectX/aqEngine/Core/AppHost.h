@@ -1,5 +1,6 @@
 #pragma once
 #include "IAppModule.h"
+#include "RunMode.h"
 #include "Rendering/Renderer.h"
 #include "Rendering/RenderThread.h"
 #include "Rendering/Pipeline/PipelinePresets.h"
@@ -78,6 +79,9 @@ namespace aq
 		/** エディタの UI 層(非所有。エディタのエントリが登録する。ランタイムでは常に nullptr) */
 		IEditorLayer* editorLayer_ = nullptr;
 
+		/** 実行モード。ランタイムは常に Play */
+		RunMode runMode_ = RunMode::Play;
+
 
 	public:
 		/** @param module 所有して動かすモジュール(nullptr 不可) */
@@ -88,6 +92,15 @@ namespace aq
 	public:
 		/** 現在のモジュール */
 		inline IAppModule& GetModule() { return *module_; }
+
+		/** 現在の実行モード */
+		inline RunMode GetRunMode() const { return runMode_; }
+
+		/**
+		 * 実行モードを切り替える。フレームの先頭(OnBeginFrame の中)でだけ呼ぶ。
+		 * フレームの途中や System の反復中には呼ばない。
+		 */
+		inline void SetRunMode(RunMode mode) { runMode_ = mode; }
 
 		/** メイン描画のレンダラ */
 		inline rendering::Renderer& GetRenderer() { return renderer_; }

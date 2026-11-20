@@ -6,6 +6,7 @@
 #include <string>
 #include <typeindex>
 #include <algorithm>
+#include "Core/RunMode.h"
 
 
 namespace aq
@@ -21,6 +22,12 @@ namespace aq
 			virtual ~SystemBase() {}
 
 			virtual void Update() = 0;
+
+			/**
+			 * この System が動くモード。既定は Play のみ。
+			 * 含まないモードでは SystemManager::Update が実行しない。
+			 */
+			virtual RunModeMask GetRunModes() const { return RunModeMask::Play; }
 #ifdef AQ_DEBUG_IMGUI
 			virtual void        DebugRenderMenu()               {}
 			virtual void        DebugRender()                   {}
@@ -88,8 +95,11 @@ namespace aq
 
 
 		public:
-			/** System更新(依存関係を考慮して並列実行)。FinalizeRegistration 済みであること。 */
-			void Update();
+			/**
+			 * System更新(依存関係を考慮して並列実行)。FinalizeRegistration 済みであること。
+			 * GetRunModes() に mode を含まない System は実行しない(wave の順序は変えない)。
+			 */
+			void Update(RunMode mode);
 
 #ifdef AQ_DEBUG_IMGUI
 			/** グループなし System のメニュー + グループごとの MenuItem を描画 */

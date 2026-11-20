@@ -158,7 +158,7 @@ namespace app
 					if (!GameInput::Get().IsTriggered(GameAction::Confirm)) { return; }
 					startRequested_ = true;
 					if (title) { title->RequestStart(); }
-					// 決定 SE を再生(クリップは GameFlow::Initialize で先読み済み)。
+					// 決定 SE を再生(クリップは GameFlow::Preload で先読み済み)。
 					if (aq::sound::SoundEngine::IsAvailable()) {
 						auto clip = aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);
 						aq::sound::SoundEngine::Get().Play(clip, aq::sound::SoundBusId::SE);
@@ -418,7 +418,7 @@ namespace app
 	}
 
 
-	void GameFlow::Initialize()
+	void GameFlow::Preload()
 	{
 		// UI 画像テクスチャの事前ロード。未ロード中はバインドがスキップされ表示が遅れるため、
 		// 事前にキャッシュして決定時に即座に黒背景を出せるようにする。
@@ -435,7 +435,11 @@ namespace app
 			// 決定 SE を先読み(タイトルで押した瞬間に即鳴らせるように)。
 			aq::res::ResourceManager::Get().Load<aq::sound::SoundClip>(DECISION_SE_PATH);
 		}
+	}
 
+
+	void GameFlow::Initialize()
+	{
 		// セッション状態 (System / UI が読む共有データ) を載せるエンティティ。
 		// ステージ再入場でも破棄しないので stageEntities_ には積まない。
 		{

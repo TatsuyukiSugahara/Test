@@ -221,6 +221,8 @@ namespace aq
 		public:
 			void Update() override;
 
+			RunModeMask GetRunModes() const override { return RunModeMask::Edit | RunModeMask::Play; }
+
 #ifdef AQ_DEBUG_IMGUI
 			const char* GetDebugGroup()    const override { return "Particle"; }
 			const char* GetDebugTabLabel() const override { return "Particle"; }

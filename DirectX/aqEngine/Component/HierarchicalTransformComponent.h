@@ -49,6 +49,8 @@ namespace aq
 
 			void Update() override;
 
+			RunModeMask GetRunModes() const override { return RunModeMask::All; }
+
 			static HierarcicalTransformSystem& Get()      { return *instance_; }
 			static bool                        IsAvailable() { return instance_ != nullptr; }
 

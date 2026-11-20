@@ -127,6 +127,29 @@ namespace aq
 		}
 
 
+		bool PlatformWin32::GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const
+		{
+			// 埋め込み起動では返さない。子ウィンドウは親のクライアントの大きさで作るが
+			// レンダー解像度は初期化引数のままなので、値を返すと親をリサイズしなくても
+			// 起動直後にレンダー解像度が変わってしまう(設計書/エディタ全体設計.md 5.9 節)。
+			if (hWnd_ == nullptr || parentWnd_ != nullptr)
+			{
+				return false;
+			}
+
+			// WM_SIZE は通知に使わず、毎フレームのポーリングで読む(設計書/エンジン課題解消設計.md P4 §5.2)。
+			// 最小化中の 0×0 もそのまま返し、Engine 側が「現状維持」として扱う。
+			RECT clientRect = {};
+			if (!::GetClientRect(hWnd_, &clientRect))
+			{
+				return false;
+			}
+			outWidth  = static_cast<uint32_t>(clientRect.right  - clientRect.left);
+			outHeight = static_cast<uint32_t>(clientRect.bottom - clientRect.top);
+			return true;
+		}
+
+
 		bool PlatformWin32::IsAppActive() const
 		{
 			// 前面のウィンドウが自プロセスのものなら true。メインウィンドウから外へ出したウィンドウでも true になる。

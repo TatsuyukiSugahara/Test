@@ -40,6 +40,12 @@ namespace aq
 			// ImGui::Image に渡せる ID を返す。同じリソースなら同じ ID を返すので毎フレーム呼んでよい。
 			// format は SRV のフォーマット (DXGI_FORMAT)、srv は描画前の状態遷移に使う既存の SRV。
 			void* RegisterOpaqueTexture(ID3D12Resource* resource, uint32_t format, D3D12SRV* srv);
+
+			// 登録した表から resource のエントリを外す (RT の解放・作り直しの前に呼ぶ)。
+			// 外した後の ID は無効になるが、ImGui のテクスチャ ID はパネルが毎フレーム
+			// 取り直す契約 (設計書「エディタ全体設計」5.4 節) なので使い続ける者はいない。
+			// GPU の完了待ちの後に呼ぶこと。
+			void UnregisterOpaqueTexture(ID3D12Resource* resource);
 		}
 	}
 }

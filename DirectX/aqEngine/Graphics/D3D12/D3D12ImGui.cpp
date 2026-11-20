@@ -71,8 +71,8 @@ namespace aq
 				};
 
 				// エントリのアドレスを ImTextureID として使うので、unique_ptr で持って位置を固定する。
-				// TODO: D3D12 は RT の破棄経路 (ReleaseOffscreenRenderTarget) が未実装で、RT は起動時に作られたまま。
-				//       E3b のリサイズ対応で RT を作り直すときに、ここから外す処理を足す。
+				// RT を解放・作り直すときは、解放済みのリソースと SRV を指すエントリが残らないよう
+				// UnregisterOpaqueTexture で外す (E3b-1)。
 				std::vector<std::unique_ptr<OpaqueTextureEntry>> g_opaqueEntries;
 
 
@@ -352,6 +352,20 @@ namespace aq
 				entry->srv      = srv;
 				g_opaqueEntries.push_back(std::move(entry));
 				return g_opaqueEntries.back().get();
+			}
+
+
+			void UnregisterOpaqueTexture(ID3D12Resource* resource)
+			{
+				if (!resource) return;
+				for (auto it = g_opaqueEntries.begin(); it != g_opaqueEntries.end(); ++it)
+				{
+					if ((*it)->resource == resource)
+					{
+						g_opaqueEntries.erase(it);
+						return;
+					}
+				}
 			}
 
 

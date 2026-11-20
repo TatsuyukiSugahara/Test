@@ -42,6 +42,7 @@ namespace aq
 			void RequestExit() override;
 			const char* GetContentRoot() override;
 			const char* GetUserDataDirectory() override;
+			bool GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const override;
 			bool HasInputFocus() const override;
 			bool IsAppActive() const override;
 			aq::graphics::NativeWindowHandle GetInputCooperativeWindow() const override;

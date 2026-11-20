@@ -72,6 +72,30 @@ namespace aq
 		}
 
 
+		void D3D12RenderContextImpl::BeginFrameAndSyncBindings()
+		{
+			device_->BeginFrameIfNeeded();
+
+			const uint64_t epoch = device_->GetBindingEpoch();
+			if (epoch == lastBindingEpoch_) return;
+			lastBindingEpoch_ = epoch;
+
+			// リサイズで RT を作り直した / 解放した。保留中のハンドルは解放済みのリソースや
+			// 同じ位置に作り直された別の RT を指し得るので、全部捨てて張り直させる。
+			// ImGui のユーザーテクスチャのスロットはフレームごとに作り直すので対象外。
+			for (auto& srv : pendingSRV_) srv = {};
+			for (auto& srv : csSRV_)      srv = {};
+			for (auto& uav : csUAV_)      uav = {};
+			for (auto& rtv : rtvHandles_) rtv = {};
+			for (auto& fmt : rtFormats_)  fmt = DXGI_FORMAT_UNKNOWN;
+			rtvCount_  = 0;
+			dsvHandle_ = {};
+			hasDSV_    = false;
+			dsFormat_  = DXGI_FORMAT_UNKNOWN;
+			srvDirty_  = true;
+		}
+
+
 		void D3D12RenderContextImpl::EnsureGraphicsRootSig()
 		{
 			if (!graphicsRootDirty_) return;
@@ -161,7 +185,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::OMSetRenderTargets(uint32_t numViews, IRenderTarget* renderTarget)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			ID3D12GraphicsCommandList* list = device_->GetCommandList();
 
 			rtvCount_ = 0;
@@ -189,7 +213,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::OMSetMRTRenderTargets(uint32_t numViews, IRenderTarget* const* renderTargets)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			ID3D12GraphicsCommandList* list = device_->GetCommandList();
 
 			rtvCount_ = 0;
@@ -218,7 +242,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::OMSetRenderTargetWithDepth(IRenderTarget& colorRT, IRenderTarget& depthSourceRT)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			ID3D12GraphicsCommandList* list = device_->GetCommandList();
 
 			auto& color = static_cast<D3D12RenderTarget&>(colorRT);
@@ -239,7 +263,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::ClearDepthBuffer()
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			if (hasDSV_)
 				device_->GetCommandList()->ClearDepthStencilView(
 					dsvHandle_, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
@@ -247,7 +271,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::RSSetViewport(float topLeftX, float topLeftY, float width, float height)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			ID3D12GraphicsCommandList* list = device_->GetCommandList();
 
 			D3D12_VIEWPORT vp = { topLeftX, topLeftY, width, height, 0.0f, 1.0f };
@@ -264,14 +288,14 @@ namespace aq
 
 		void D3D12RenderContextImpl::RSSetScissorRect(int x, int y, int w, int h)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			D3D12_RECT rect = { x, y, x + w, y + h };
 			device_->GetCommandList()->RSSetScissorRects(1, &rect);
 		}
 
 		void D3D12RenderContextImpl::ClearRenderTargetView(uint32_t index, float* clearColor)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			if (index < rtvCount_ && clearColor)
 				device_->GetCommandList()->ClearRenderTargetView(rtvHandles_[index], clearColor, 0, nullptr);
 		}
@@ -280,14 +304,14 @@ namespace aq
 		// ── インプットアセンブラ ─────────────────────────────────────────────
 		void D3D12RenderContextImpl::IASetVertexBuffer(IVertexBuffer& vb)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			const D3D12_VERTEX_BUFFER_VIEW& view = static_cast<D3D12VertexBuffer&>(vb).GetView();
 			device_->GetCommandList()->IASetVertexBuffers(0, 1, &view);
 		}
 
 		void D3D12RenderContextImpl::IASetIndexBuffer(IIndexBuffer& ib)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			const D3D12_INDEX_BUFFER_VIEW& view = static_cast<D3D12IndexBuffer&>(ib).GetView();
 			device_->GetCommandList()->IASetIndexBuffer(&view);
 		}
@@ -310,7 +334,7 @@ namespace aq
 		void D3D12RenderContextImpl::VSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& cb)
 		{
 			if (startSlot >= D3D12RootSignature::MAX_ROOT_CBV) return;
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			EnsureGraphicsRootSig();  // 直前に Dispatch があれば graphics root sig を復元
 			device_->GetCommandList()->SetGraphicsRootConstantBufferView(
 				startSlot, static_cast<D3D12ConstantBuffer&>(cb).GetGPUAddress());
@@ -319,7 +343,7 @@ namespace aq
 		void D3D12RenderContextImpl::PSSetConstantBuffer(uint32_t startSlot, IConstantBuffer& cb)
 		{
 			if (startSlot >= D3D12RootSignature::MAX_ROOT_CBV) return;
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			EnsureGraphicsRootSig();
 			device_->GetCommandList()->SetGraphicsRootConstantBufferView(
 				startSlot, static_cast<D3D12ConstantBuffer&>(cb).GetGPUAddress());
@@ -335,7 +359,7 @@ namespace aq
 			// 実体の D3D12SRV* を取得する (D3D11 backend が native SRV ポインタを使うのと同じ多態)。
 			auto* s = static_cast<D3D12SRV*>(srv.GetNativeHandle());
 			if (!s) { PSUnsetShaderResource(startSlot); return; }
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			s->TransitionToSRV(device_->GetCommandList());
 			pendingSRV_[startSlot] = s->GetStagingCPUHandle();
 			srvDirty_ = true;
@@ -365,7 +389,7 @@ namespace aq
 			if (startSlot >= CS_SRV_COUNT) return;
 			auto* s = static_cast<D3D12SRV*>(srv.GetNativeHandle());
 			if (!s) { csSRV_[startSlot] = {}; return; }
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			s->TransitionToComputeSRV(device_->GetCommandList());
 			csSRV_[startSlot] = s->GetStagingCPUHandle();
 		}
@@ -378,7 +402,7 @@ namespace aq
 		void D3D12RenderContextImpl::CSSetUnorderedAccessView(uint32_t startSlot, IUnorderedAccessView& uav)
 		{
 			if (startSlot >= CS_UAV_COUNT) return;
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			auto& u = static_cast<D3D12UAVHandleRef&>(uav);
 			u.TransitionToUAV(device_->GetCommandList());
 			csUAV_[startSlot] = u.GetStagingCPUHandle();
@@ -393,7 +417,7 @@ namespace aq
 		// ── 描画 ─────────────────────────────────────────────────────────────
 		void D3D12RenderContextImpl::Draw(uint32_t vertexCount, uint32_t startVertexLocation)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			FlushPipeline();
 			FlushDescriptors();
 			device_->GetCommandList()->DrawInstanced(vertexCount, 1, startVertexLocation, 0);
@@ -401,7 +425,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::DrawIndexed(uint32_t indexCount)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			FlushPipeline();
 			FlushDescriptors();
 			device_->GetCommandList()->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
@@ -409,7 +433,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::DrawIndexed(uint32_t indexCount, uint32_t startIndexLocation)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			FlushPipeline();
 			FlushDescriptors();
 			device_->GetCommandList()->DrawIndexedInstanced(indexCount, 1, startIndexLocation, 0, 0);
@@ -418,7 +442,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::IASetVertexBufferSlot(uint32_t slot, IVertexBuffer& vb)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			const D3D12_VERTEX_BUFFER_VIEW& view = static_cast<D3D12VertexBuffer&>(vb).GetView();
 			device_->GetCommandList()->IASetVertexBuffers(slot, 1, &view);
 		}
@@ -428,7 +452,7 @@ namespace aq
 		                                                  uint32_t startIndexLocation, int32_t baseVertexLocation,
 		                                                  uint32_t startInstanceLocation)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			FlushPipeline();
 			FlushDescriptors();
 			device_->GetCommandList()->DrawIndexedInstanced(
@@ -437,7 +461,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::Dispatch(uint32_t x, uint32_t y, uint32_t z)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			auto* cs = static_cast<D3D12Shader*>(pendingCS_);
 			if (!cs) return;
 
@@ -513,7 +537,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::IASetIndexBufferGpu(IGpuBuffer& indexBuffer)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			auto& b = static_cast<D3D12GpuBuffer&>(indexBuffer);
 			// compute(UAV) → INDEX_BUFFER へ遷移 (バリアが compute 書き込み完了の同期も担う)
 			b.Transition(device_->GetCommandList(), D3D12_RESOURCE_STATE_INDEX_BUFFER);
@@ -524,7 +548,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::DrawIndexedIndirect(IGpuBuffer& argsBuffer)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			FlushPipeline();
 			FlushDescriptors();
 			auto& b = static_cast<D3D12GpuBuffer&>(argsBuffer);
@@ -537,7 +561,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::UavBarrier(IGpuBuffer& buffer)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			auto& b = static_cast<D3D12GpuBuffer&>(buffer);
 			D3D12_RESOURCE_BARRIER barrier = {};
 			barrier.Type          = D3D12_RESOURCE_BARRIER_TYPE_UAV;
@@ -554,7 +578,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::OMSetDepthOnlyTargetSlice(IDepthMap& depthMap, uint32_t slice)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			ID3D12GraphicsCommandList* list = device_->GetCommandList();
 			auto& dm = static_cast<D3D12DepthMap&>(depthMap);
 
@@ -587,7 +611,7 @@ namespace aq
 
 		void D3D12RenderContextImpl::ClearDepthMapSlice(IDepthMap& depthMap, uint32_t slice)
 		{
-			device_->BeginFrameIfNeeded();
+			BeginFrameAndSyncBindings();
 			auto& dm = static_cast<D3D12DepthMap&>(depthMap);
 			device_->GetCommandList()->ClearDepthStencilView(
 				dm.GetDsv(slice), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);

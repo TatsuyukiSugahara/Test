@@ -382,7 +382,7 @@ namespace aq
 	}
 
 
-	void Engine::SyncScreenSize()
+	bool Engine::SyncScreenSize()
 	{
 		// 回転やリサイズで提示面の寸法が変わる。ImGui の DisplaySize や仮想パッドの
 		// 当たり判定はスクリーン座標で持っているので、実際の面に追従させる。
@@ -392,13 +392,14 @@ namespace aq
 		uint32_t width  = 0;
 		uint32_t height = 0;
 		if (!aq::graphics::GraphicsDevice::Get().GetSurfaceSize(width, height)) {
-			return;
+			return false;
 		}
 		if (width == 0 || height == 0) {
-			return;
+			return false;
 		}
 		screenWidth_  = width;
 		screenHeight_ = height;
+		return true;
 	}
 
 
@@ -525,6 +526,15 @@ namespace aq
 		// 手順 5: Engine の寸法を更新し、保留を解除する。
 		renderWidth_  = pendingOutW_;
 		renderHeight_ = pendingOutH_;
+
+		// 提示面の寸法もこのフレームのうちに新しくする(設計書/エディタ全体設計.md 5.9 節 2.5)。
+		// ゲーム内 UI の当たり判定は screenWidth_ を使うので、次のフレームまで旧い値を残さない。
+		// GetSurfaceSize を持たないデバイス(D3D12)は、確定した提示面の寸法を入れる。
+		if (!SyncScreenSize())
+		{
+			screenWidth_  = pendingOutW_;
+			screenHeight_ = pendingOutH_;
+		}
 		resizePending_ = false;
 		aq::StartupMarkf("[engine] リサイズ完了: %ux%u", renderWidth_, renderHeight_);
 

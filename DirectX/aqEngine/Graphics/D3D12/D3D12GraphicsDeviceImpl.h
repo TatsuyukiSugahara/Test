@@ -83,6 +83,33 @@ namespace aq
 			IRenderTarget* GetRenderTarget(uint32_t index) override;
 			uint32_t CreateOffscreenRenderTarget(uint32_t width, uint32_t height) override;
 			uint32_t CreateOffscreenRenderTarget(const RenderTargetDesc& desc) override;
+			void ReleaseOffscreenRenderTarget(uint32_t index) override;
+
+			// ── 描画解像度の実行時リサイズ (設計書/エディタ全体設計.md 5.9 節 E3b-1) ──
+			/** D3D12 は提示面もメイン RT も作り直せる。GetSurfaceSize は実装しない(埋め込み起動の寸法を上書きしないため) */
+			bool SupportsRenderResize() const override { return true; }
+			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH) override;
+
+			/**
+			 * 提示面(スワップチェーン)だけを作り直す。メインスレッドからレンダースレッド停止中に呼ぶ。
+			 * 失敗したときは旧バッファで取り直すので、呼び出し側は再試行できる。
+			 * (E3b-2 で IGraphicsDeviceImpl へ出す予定の内部関数)
+			 */
+			bool ResizePresentSurface(uint32_t width, uint32_t height);
+
+			/**
+			 * メイン RT / 深度だけを作り直す。提示面は触らない。
+			 * ディスクリプタの位置は作成時のものを使い回すので、リサイズを繰り返しても増えない。
+			 * (E3b-2 で IGraphicsDeviceImpl へ出す予定の内部関数)
+			 */
+			bool ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH);
+
+			/**
+			 * バインドの世代。リサイズ系の関数を通るたびに +1。
+			 * RenderContext が「解放済み / 作り直された RT を指す保留中のディスクリプタ」を
+			 * 新しいフレームの最初の入口で捨てるために監視する。
+			 */
+			uint64_t GetBindingEpoch() const { return bindingEpoch_; }
 
 			// ── リソースファクトリ (Phase 0: クリア画面のため未実装。Phase 1〜2 で実装) ──
 			std::unique_ptr<IVertexBuffer>       CreateVertexBuffer(uint32_t vertexNum, uint32_t stride, const void* data) override;
@@ -162,8 +189,23 @@ namespace aq
 			bool CreateMainRenderTargets(uint32_t width, uint32_t height);
 			bool CreateSRVHeaps();
 			bool CreateRtvDsvHeaps();
+			/** バックバッファ RTV の位置を確保する(初期化で 1 回だけ) */
+			bool AllocateBackBufferRtvSlots();
+			/** 覚えた位置へバックバッファの RTV を作る(初期化とリサイズのたび) */
 			bool CreateBackBufferRTVs();
 			void WaitForGPU();
+
+			/**
+			 * 開いたままのフレームを閉じて実行し、完了を待つ(リサイズの先頭で呼ぶ)。
+			 * 初期化中はメインスレッドも RT やビューポートの設定でフレームを開くため、
+			 * Present を待たずに自分で閉じる。閉じていなければ何もしない。
+			 */
+			void FlushOpenFrame();
+
+			// ディスクリプタの確保(容量を超えたら false)。確保した位置は RT ごとに覚えて使い回す。
+			bool AllocateRtvDescriptor(uint32_t& outIndex);
+			bool AllocateDsvDescriptor(uint32_t& outIndex);
+			bool AllocateStagingDescriptor(uint32_t& outIndex);
 
 			// バッチアップロード用の共有コマンドリストを (未オープンなら Reset して) 取得する。
 			ID3D12GraphicsCommandList* AcquireBatchUploadList();
@@ -179,6 +221,20 @@ namespace aq
 #else
 			static constexpr uint32_t MAIN_RT_COUNT = 1;
 #endif
+			/** 未確保のディスクリプタ位置 */
+			static constexpr uint32_t INVALID_DESCRIPTOR = ~0u;
+
+			/**
+			 * 1 本の RT が使うディスクリプタの位置。作り直しで同じ位置を使い回すために覚える
+			 * (リサイズを繰り返しても RTV / DSV / ステージングが尽きないようにする)。
+			 */
+			struct RenderTargetSlots
+			{
+				uint32_t rtv = INVALID_DESCRIPTOR;
+				uint32_t dsv = INVALID_DESCRIPTOR;   // 深度付きのときだけ確保する
+				uint32_t srv = INVALID_DESCRIPTOR;
+				uint32_t uav = INVALID_DESCRIPTOR;
+			};
 
 			ID3D12Device*              device_        = nullptr;
 			ID3D12CommandQueue*        commandQueue_  = nullptr;
@@ -219,6 +275,22 @@ namespace aq
 			uint32_t                   currentBackBufferIndex_ = 0;
 			uint32_t                   backBufferStates_[RENDER_TARGET_COUNT] = {};  // D3D12_RESOURCE_STATES
 			uint32_t                   backBufferRtvIndex_[RENDER_TARGET_COUNT] = {};  // rtvHeap_ 内の位置 (エディタ合成で描画先にする)
+
+			/** 提示面(スワップチェーン)の寸法。書くのは初期化とメインスレッドのリサイズだけなので atomic にしない */
+			uint32_t                   presentWidth_  = 0;
+			uint32_t                   presentHeight_ = 0;
+
+			// RT ごとのディスクリプタの位置と、オフスクリーン RT の空き番号。
+			// 1 回のリサイズでは「新を全部作ってから旧を解放する」ため旧番号は再利用できず、
+			// 2 回目のリサイズで 1 回目の旧が再利用されるので、使う位置は最大で約 2 倍で止まる。
+			RenderTargetSlots              mainRtSlots_[MAIN_RT_COUNT];
+			std::vector<RenderTargetSlots> offscreenSlots_;         // offscreenRTs_ と同じ添字
+			std::vector<uint32_t>          freeOffscreenSlots_;     // 解放済みの添字。CreateOffscreenRenderTarget が先に再利用する
+
+			/** バインドの世代(リサイズ系の関数のたびに +1。RenderContext が保留状態を捨てる契機) */
+			uint64_t                   bindingEpoch_ = 0;
+			/** CopyToBackBuffer の寸法不一致を 1 回だけログに出すための印 */
+			bool                       copySizeMismatchLogged_ = false;
 
 			// ImGui のコンテキスト (エディタ構成のみ設定される)。レンダースレッドで描く前に current にする。
 			// ランタイムでは nullptr のままで、ImGuiRender はコンテキストを切り替えない。

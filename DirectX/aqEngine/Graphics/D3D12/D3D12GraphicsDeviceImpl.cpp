@@ -37,6 +37,15 @@ namespace aq
 				list->ResourceBarrier(1, &barrier);
 			}
 
+			// ディスクリプタヒープ先頭から index 個目の CPU ハンドルを求める
+			D3D12_CPU_DESCRIPTOR_HANDLE CpuHandleAt(ID3D12DescriptorHeap* heap,
+			                                        const uint32_t descriptorSize, const uint32_t index)
+			{
+				D3D12_CPU_DESCRIPTOR_HANDLE handle = heap->GetCPUDescriptorHandleForHeapStart();
+				handle.ptr += static_cast<SIZE_T>(index) * descriptorSize;
+				return handle;
+			}
+
 			// API 非依存フォーマット → DXGI (D3D11 層の ToD3D11Format と同じ対応表)
 			DXGI_FORMAT ToDXGIFormat(PixelFormat p)
 			{
@@ -85,6 +94,7 @@ namespace aq
 			aq::StartupLog("  [D3D12] swapchain ok");
 			if (!CreateBackBuffers()) { aq::StartupLog("  [D3D12] CreateBackBuffers FAILED"); return false; }
 			if (!CreateRtvDsvHeaps()) { aq::StartupLog("  [D3D12] CreateRtvDsvHeaps FAILED"); return false; }
+			if (!AllocateBackBufferRtvSlots()) { aq::StartupLog("  [D3D12] AllocateBackBufferRtvSlots FAILED"); return false; }
 			if (!CreateBackBufferRTVs()) { aq::StartupLog("  [D3D12] CreateBackBufferRTVs FAILED"); return false; }
 			if (!CreateSRVHeaps()) { aq::StartupLog("  [D3D12] CreateSRVHeaps FAILED"); return false; }
 			if (!CreateMainRenderTargets(width, height)) { aq::StartupLog("  [D3D12] CreateMainRenderTargets FAILED"); return false; }
@@ -133,6 +143,8 @@ namespace aq
 			psoCache_.reset();
 			rootSignature_.reset();
 			offscreenRTs_.clear();
+			offscreenSlots_.clear();
+			freeOffscreenSlots_.clear();
 			for (auto& rt : mainRenderTargets_) rt.reset();
 			for (auto& bb : backBuffers_)       SafeReleaseD3D12(bb);
 			for (auto& rb : readbackBuf_)       SafeReleaseD3D12(rb);
@@ -569,6 +581,8 @@ namespace aq
 			if (FAILED(hr)) { EngineAssertMsg(false, "IDXGISwapChain3 取得失敗"); return false; }
 
 			currentBackBufferIndex_ = swapChain_->GetCurrentBackBufferIndex();
+			presentWidth_           = width;
+			presentHeight_          = height;
 			return true;
 		}
 
@@ -590,7 +604,9 @@ namespace aq
 		bool D3D12GraphicsDeviceImpl::CreateRtvDsvHeaps()
 		{
 			// カラー RTV ヒープ (メイン RT 2 + オフスクリーン RT 群: GBuffer/ブルームチェーン等)
-			rtvCapacity_       = 256;
+			// CPU 専用ヒープなので、リサイズの作り直しで使う位置が約 2 倍になる分の余裕を持たせる
+			// (位置は RT ごとに覚えて使い回すので、リサイズを繰り返しても頭打ちになる)。
+			rtvCapacity_       = 512;
 			rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 			{
 				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
@@ -602,7 +618,7 @@ namespace aq
 			}
 
 			// 深度 DSV ヒープ (メイン RT 深度 2 + オフスクリーン深度 + シャドウ配列スライス)
-			dsvCapacity_       = 64;
+			dsvCapacity_       = 256;
 			dsvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 			{
 				D3D12_DESCRIPTOR_HEAP_DESC desc = {};
@@ -635,21 +651,53 @@ namespace aq
 		}
 
 
+		bool D3D12GraphicsDeviceImpl::AllocateRtvDescriptor(uint32_t& outIndex)
+		{
+			if (rtvNext_ >= rtvCapacity_) { EngineAssertMsg(false, "D3D12 RTV ヒープ容量不足"); return false; }
+			outIndex = rtvNext_++;
+			return true;
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::AllocateDsvDescriptor(uint32_t& outIndex)
+		{
+			if (dsvNext_ >= dsvCapacity_) { EngineAssertMsg(false, "D3D12 DSV ヒープ容量不足"); return false; }
+			outIndex = dsvNext_++;
+			return true;
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::AllocateStagingDescriptor(uint32_t& outIndex)
+		{
+			// 末尾 2 スロットは null SRV / null UAV が占める (CreateSRVHeaps)。
+			if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 SRV ステージングヒープ枯渇"); return false; }
+			outIndex = srvStagingNext_++;
+			return true;
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::AllocateBackBufferRtvSlots()
+		{
+			// 位置の確保は起動時の 1 回だけ。ビューの作成 (CreateBackBufferRTVs) は
+			// リサイズのたびに同じ位置へやり直す。
+			for (uint32_t i = 0; i < RENDER_TARGET_COUNT; ++i)
+			{
+				if (!AllocateRtvDescriptor(backBufferRtvIndex_[i])) return false;
+			}
+			return true;
+		}
+
+
 		bool D3D12GraphicsDeviceImpl::CreateBackBufferRTVs()
 		{
 			// バックバッファの RTV。通常は CopyToBackBuffer の複写先なので使わないが、
 			// エディタ合成 (RenderEditorOverlay) ではバックバッファへ直接描く。
-			// D3D12 はレンダーリサイズ未対応で、バックバッファは起動時に 1 回しか作られないため作り直しはしない。
+			// 位置は AllocateBackBufferRtvSlots が覚えているので、リサイズ後も同じ位置へ作り直す。
 			for (uint32_t i = 0; i < RENDER_TARGET_COUNT; ++i)
 			{
 				if (!backBuffers_[i]) return false;
-				if (rtvNext_ >= rtvCapacity_) { EngineAssertMsg(false, "D3D12 RTV ヒープ容量不足"); return false; }
-
-				const uint32_t rtvIdx = rtvNext_++;
-				D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
-				rtv.ptr += static_cast<SIZE_T>(rtvIdx) * rtvDescriptorSize_;
-				device_->CreateRenderTargetView(backBuffers_[i], nullptr, rtv);
-				backBufferRtvIndex_[i] = rtvIdx;
+				device_->CreateRenderTargetView(backBuffers_[i], nullptr,
+					CpuHandleAt(rtvHeap_, rtvDescriptorSize_, backBufferRtvIndex_[i]));
 			}
 			return true;
 		}
@@ -660,25 +708,24 @@ namespace aq
 			// メイン RT は深度付きオフスクリーン (D3D11 backend と同じ。最後に CopyToBackBuffer)。
 			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i)
 			{
-				const uint32_t rtvIdx = rtvNext_++;
-				const uint32_t dsvIdx = dsvNext_++;
-				const uint32_t srvIdx = srvStagingNext_++;
-				const uint32_t uavIdx = srvStagingNext_++;
+				RenderTargetSlots& slots = mainRtSlots_[i];
+				// 位置は最初の 1 回だけ確保し、リサイズの作り直しでは同じ位置を使う。
+				if (slots.rtv == INVALID_DESCRIPTOR && !AllocateRtvDescriptor(slots.rtv))     return false;
+				if (slots.dsv == INVALID_DESCRIPTOR && !AllocateDsvDescriptor(slots.dsv))     return false;
+				if (slots.srv == INVALID_DESCRIPTOR && !AllocateStagingDescriptor(slots.srv)) return false;
+				if (slots.uav == INVALID_DESCRIPTOR && !AllocateStagingDescriptor(slots.uav)) return false;
 
-				D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
-				rtv.ptr += static_cast<SIZE_T>(rtvIdx) * rtvDescriptorSize_;
-				D3D12_CPU_DESCRIPTOR_HANDLE dsv = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
-				dsv.ptr += static_cast<SIZE_T>(dsvIdx) * dsvDescriptorSize_;
-				D3D12_CPU_DESCRIPTOR_HANDLE srv = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-				srv.ptr += static_cast<SIZE_T>(srvIdx) * srvDescriptorSize_;
-				D3D12_CPU_DESCRIPTOR_HANDLE uav = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-				uav.ptr += static_cast<SIZE_T>(uavIdx) * srvDescriptorSize_;
-
-				mainRenderTargets_[i] = std::make_unique<D3D12RenderTarget>();
+				// 作り直しでは同じオブジェクトを使う (CreateOffscreen が先頭で Release するので、
+				// 同じ位置のディスクリプタのまま作り直せる。RT のポインタも変わらない)。
+				if (!mainRenderTargets_[i]) mainRenderTargets_[i] = std::make_unique<D3D12RenderTarget>();
 				// メイン RT は HDR (R16G16B16A16_FLOAT)。PBR ライティングの 1.0 超の値をクランプせず保持し、
 				// ポストプロセス(Bloom 合成)でトーンマップして LDR バックバッファへ出力する。
 				if (!mainRenderTargets_[i]->CreateOffscreen(device_, width, height,
-				        DXGI_FORMAT_R16G16B16A16_FLOAT, /*hasDepth*/true, rtv, dsv, srv, uav))
+				        DXGI_FORMAT_R16G16B16A16_FLOAT, /*hasDepth*/true,
+				        CpuHandleAt(rtvHeap_,        rtvDescriptorSize_, slots.rtv),
+				        CpuHandleAt(dsvHeap_,        dsvDescriptorSize_, slots.dsv),
+				        CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, slots.srv),
+				        CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, slots.uav)))
 				{
 					return false;
 				}
@@ -862,6 +909,22 @@ namespace aq
 			ID3D12Resource* backBuf  = backBuffers_[currentBackBufferIndex_];
 			if (!srcColor || !backBuf) return;
 
+			// CopyResource は寸法が違うとデバイスの削除につながるので、違うときはコピーしない。
+			// E3b-1 では起きない (出力 RT とバックバッファを同じ要求寸法で作る) 安全網。
+			const D3D12_RESOURCE_DESC srcDesc = srcColor->GetDesc();
+			const D3D12_RESOURCE_DESC bbDesc  = backBuf->GetDesc();
+			if (srcDesc.Width != bbDesc.Width || srcDesc.Height != bbDesc.Height)
+			{
+				if (!copySizeMismatchLogged_)
+				{
+					aq::StartupMarkf("[d3d12] CopyToBackBuffer: 寸法不一致 (出力 %ux%u / バックバッファ %ux%u)。コピーしない",
+					                 static_cast<unsigned>(srcDesc.Width), static_cast<unsigned>(srcDesc.Height),
+					                 static_cast<unsigned>(bbDesc.Width),  static_cast<unsigned>(bbDesc.Height));
+					copySizeMismatchLogged_ = true;
+				}
+				return;
+			}
+
 			// src(メインRT) → COPY_SOURCE、バックバッファ → COPY_DEST
 			if (rt.GetState() != D3D12_RESOURCE_STATE_COPY_SOURCE)
 			{
@@ -925,6 +988,124 @@ namespace aq
 				fence_->SetEventOnCompletion(value, static_cast<HANDLE>(fenceEvent_));
 				WaitForSingleObject(static_cast<HANDLE>(fenceEvent_), INFINITE);
 			}
+		}
+
+
+		void D3D12GraphicsDeviceImpl::FlushOpenFrame()
+		{
+			if (!frameOpen_) return;
+
+			// 初期化中はメインスレッドも RT やビューポートの設定でフレームを開く。Present を待つと
+			// 「保留中は描画しない」ため再試行が尽きてしまうので、ここで自分で閉じて実行する。
+			commandList_->Close();
+			ID3D12CommandList* lists[] = { commandList_ };
+			commandQueue_->ExecuteCommandLists(1, lists);
+
+			// フェンスの値とフレームの完了印は Present と同じく更新する
+			// (次に同じスロットを開くときのフェンス待ちが正しく働くようにする)。
+			commandQueue_->Signal(fence_, ++fenceValue_);
+			frameFenceValue_[frameIndex_] = fenceValue_;
+			if (readbackJustWrote_ >= 0)
+			{
+				readbackFence_[readbackJustWrote_] = fenceValue_;
+				readbackJustWrote_                 = -1;
+				++dbgReadbackStamps_;
+			}
+			frameOpen_ = false;
+
+			// 記録済みのコマンドが参照するリソースを作り直す前なので、完了まで待つ。
+			if (fence_->GetCompletedValue() < fenceValue_)
+			{
+				fence_->SetEventOnCompletion(fenceValue_, static_cast<HANDLE>(fenceEvent_));
+				WaitForSingleObject(static_cast<HANDLE>(fenceEvent_), INFINITE);
+			}
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
+		{
+			// 提示面 → レンダーターゲットの順。D3D12 はサーフェスの寸法に縛られないので、
+			// 確定寸法は要求値と同じになる。
+			if (!ResizePresentSurface(reqW, reqH)) return false;
+			return ResizeRenderTargets(reqW, reqH, outW, outH);
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::ResizePresentSurface(uint32_t width, uint32_t height)
+		{
+			if (!device_ || !swapChain_ || width == 0 || height == 0) return false;
+
+			FlushOpenFrame();
+			WaitForGPU();
+			++bindingEpoch_;
+
+			// ResizeBuffers はスワップチェーンのバッファへの参照が残っていると失敗する。
+			for (auto& bb : backBuffers_) SafeReleaseD3D12(bb);
+
+			// フォーマットは据え置き (DXGI_FORMAT_UNKNOWN)。フラグは作成時と同じものを渡す。
+			const UINT flags  = tearingSupported_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
+			const HRESULT hr  = swapChain_->ResizeBuffers(RENDER_TARGET_COUNT, width, height,
+			                                              DXGI_FORMAT_UNKNOWN, flags);
+			if (FAILED(hr))
+			{
+				// ResizeBuffers が失敗したスワップチェーンは旧のバッファのままなので、
+				// 取り直して RTV も作り直し、描ける状態へ戻してから失敗を返す (呼び出し側が再試行する)。
+				aq::StartupMarkf("[d3d12] ResizeBuffers 失敗 hr=0x%08X", static_cast<unsigned>(hr));
+				if (CreateBackBuffers()) CreateBackBufferRTVs();
+				currentBackBufferIndex_ = swapChain_->GetCurrentBackBufferIndex();
+				return false;
+			}
+
+			// CreateBackBuffers がステートを PRESENT へ戻す (ResizeBuffers 後の初期ステート)。
+			if (!CreateBackBuffers())    return false;
+			if (!CreateBackBufferRTVs()) return false;
+			currentBackBufferIndex_ = swapChain_->GetCurrentBackBufferIndex();
+			presentWidth_           = width;
+			presentHeight_          = height;
+			return true;
+		}
+
+
+		bool D3D12GraphicsDeviceImpl::ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
+		{
+			if (!device_ || reqW == 0 || reqH == 0) return false;
+
+			FlushOpenFrame();
+			WaitForGPU();
+			++bindingEpoch_;
+
+#ifdef AQ_IMGUI
+			// 作り直すと、ImGui 側に解放済みのリソースと SRV を指すエントリが残ってしまう。
+			// GPU の完了待ちは済んでいるのでここで外してよい。
+			for (auto& rt : mainRenderTargets_)
+			{
+				if (rt) D3D12ImGui::UnregisterOpaqueTexture(rt->GetResource());
+			}
+#endif
+			// 覚えた位置へ作り直す (CreateMainRenderTargets が mainRtSlots_ を使う)。
+			// 失敗しても旧へ戻る保証はしない (IGraphicsDeviceImpl の契約。Engine が再試行する)。
+			if (!CreateMainRenderTargets(reqW, reqH)) return false;
+
+			outW = reqW;
+			outH = reqH;
+			return true;
+		}
+
+
+		void D3D12GraphicsDeviceImpl::ReleaseOffscreenRenderTarget(uint32_t index)
+		{
+			// [0, RENDER_TARGET_COUNT) はメイン RT と予約領域。範囲外・二重解放は何もしない。
+			if (index < RENDER_TARGET_COUNT) return;
+			const uint32_t slot = index - RENDER_TARGET_COUNT;
+			if (slot >= offscreenRTs_.size() || offscreenRTs_[slot] == nullptr) return;
+
+			// 呼び出しは WaitForRenderIdle 済みの区間が前提 (GPU は旧 RT を使っていない)。
+#ifdef AQ_IMGUI
+			D3D12ImGui::UnregisterOpaqueTexture(offscreenRTs_[slot]->GetResource());
+#endif
+			offscreenRTs_[slot].reset();   // ディスクリプタの位置は offscreenSlots_ に残して再利用する
+			freeOffscreenSlots_.push_back(slot);
+			++bindingEpoch_;
 		}
 
 
@@ -1071,11 +1252,10 @@ namespace aq
 			uint32_t stride, uint32_t count, const void* data)
 		{
 			if (!device_ || stride == 0 || count == 0) return nullptr;
-			if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 staging 枯渇"); return nullptr; }
 
-			const uint32_t srvIdx = srvStagingNext_++;
-			D3D12_CPU_DESCRIPTOR_HANDLE srvH = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-			srvH.ptr += static_cast<SIZE_T>(srvIdx) * srvDescriptorSize_;
+			uint32_t srvIdx = 0;
+			if (!AllocateStagingDescriptor(srvIdx)) return nullptr;
+			const D3D12_CPU_DESCRIPTOR_HANDLE srvH = CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, srvIdx);
 
 			auto buf = std::make_unique<D3D12GpuBuffer>();
 			if (!buf->Create(device_, stride * count, stride, /*srv*/true, /*uav*/false, data, srvH, {}))
@@ -1095,17 +1275,15 @@ namespace aq
 			D3D12_CPU_DESCRIPTOR_HANDLE uavH = {};
 			if (srv)
 			{
-				if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 staging 枯渇"); return nullptr; }
-				const uint32_t i = srvStagingNext_++;
-				srvH = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-				srvH.ptr += static_cast<SIZE_T>(i) * srvDescriptorSize_;
+				uint32_t i = 0;
+				if (!AllocateStagingDescriptor(i)) return nullptr;
+				srvH = CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, i);
 			}
 			if (uav)
 			{
-				if (srvStagingNext_ >= nullUAVIndex_) { EngineAssertMsg(false, "D3D12 staging 枯渇"); return nullptr; }
-				const uint32_t i = srvStagingNext_++;
-				uavH = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-				uavH.ptr += static_cast<SIZE_T>(i) * srvDescriptorSize_;
+				uint32_t i = 0;
+				if (!AllocateStagingDescriptor(i)) return nullptr;
+				uavH = CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, i);
 			}
 
 			auto buf = std::make_unique<D3D12GpuBuffer>();
@@ -1325,9 +1503,10 @@ namespace aq
 			}
 
 			// ── ステージングヒープに SRV を作成 ──
-			const uint32_t slot = srvStagingNext_++;
-			D3D12_CPU_DESCRIPTOR_HANDLE srvCPU = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-			srvCPU.ptr += static_cast<SIZE_T>(slot) * srvDescriptorSize_;
+			// 関数の先頭で容量を確かめてあるので、ここでは失敗しない。
+			uint32_t slot = 0;
+			if (!AllocateStagingDescriptor(slot)) { texResource->Release(); return nullptr; }
+			const D3D12_CPU_DESCRIPTOR_HANDLE srvCPU = CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, slot);
 
 			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 			srvDesc.Format                  = format;
@@ -1410,21 +1589,21 @@ namespace aq
 			D3D12_CPU_DESCRIPTOR_HANDLE dsvs[D3D12DepthMap::kArraySize] = {};
 			for (uint32_t i = 0; i < D3D12DepthMap::kArraySize; ++i)
 			{
-				const uint32_t dsvIdx = dsvNext_++;
-				dsvs[i] = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
-				dsvs[i].ptr += static_cast<SIZE_T>(dsvIdx) * dsvDescriptorSize_;
+				uint32_t dsvIdx = 0;
+				if (!AllocateDsvDescriptor(dsvIdx)) return nullptr;
+				dsvs[i] = CpuHandleAt(dsvHeap_, dsvDescriptorSize_, dsvIdx);
 			}
 
-			const uint32_t arrSrvIdx = srvStagingNext_++;
-			D3D12_CPU_DESCRIPTOR_HANDLE arrSrv = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-			arrSrv.ptr += static_cast<SIZE_T>(arrSrvIdx) * srvDescriptorSize_;
+			uint32_t arrSrvIdx = 0;
+			if (!AllocateStagingDescriptor(arrSrvIdx)) return nullptr;
+			D3D12_CPU_DESCRIPTOR_HANDLE arrSrv = CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, arrSrvIdx);
 
 			D3D12_CPU_DESCRIPTOR_HANDLE sliceSrvs[D3D12DepthMap::kArraySize] = {};
 			for (uint32_t i = 0; i < D3D12DepthMap::kArraySize; ++i)
 			{
-				const uint32_t idx = srvStagingNext_++;
-				sliceSrvs[i] = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-				sliceSrvs[i].ptr += static_cast<SIZE_T>(idx) * srvDescriptorSize_;
+				uint32_t idx = 0;
+				if (!AllocateStagingDescriptor(idx)) return nullptr;
+				sliceSrvs[i] = CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, idx);
 			}
 
 			auto dm = std::make_unique<D3D12DepthMap>();
@@ -1445,32 +1624,57 @@ namespace aq
 
 		uint32_t D3D12GraphicsDeviceImpl::CreateOffscreenRenderTarget(const RenderTargetDesc& desc)
 		{
-			const uint32_t rtvIdx = rtvNext_++;
-			const uint32_t srvIdx = srvStagingNext_++;
-			const uint32_t uavIdx = srvStagingNext_++;
-			D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
-			rtv.ptr += static_cast<SIZE_T>(rtvIdx) * rtvDescriptorSize_;
-			D3D12_CPU_DESCRIPTOR_HANDLE srv = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-			srv.ptr += static_cast<SIZE_T>(srvIdx) * srvDescriptorSize_;
-			D3D12_CPU_DESCRIPTOR_HANDLE uav = srvStagingHeap_->GetCPUDescriptorHandleForHeapStart();
-			uav.ptr += static_cast<SIZE_T>(uavIdx) * srvDescriptorSize_;
+			// 解放済みの番号があれば先に再利用する(ハンドルは添字なので詰め直さない)。
+			// 深度付きのときは DSV を持つ番号を優先して選び、DSV の新規確保を増やさない。
+			uint32_t slot = INVALID_DESCRIPTOR;
+			if (!freeOffscreenSlots_.empty())
+			{
+				size_t pick = freeOffscreenSlots_.size() - 1;
+				if (desc.hasDepth)
+				{
+					for (size_t i = 0; i < freeOffscreenSlots_.size(); ++i)
+					{
+						if (offscreenSlots_[freeOffscreenSlots_[i]].dsv != INVALID_DESCRIPTOR) { pick = i; break; }
+					}
+				}
+				slot = freeOffscreenSlots_[pick];
+				freeOffscreenSlots_.erase(freeOffscreenSlots_.begin() + static_cast<std::ptrdiff_t>(pick));
+			}
+			else
+			{
+				slot = static_cast<uint32_t>(offscreenRTs_.size());
+				offscreenRTs_.push_back(nullptr);
+				offscreenSlots_.push_back(RenderTargetSlots{});
+			}
+
+			// 同じ番号を再利用するときは同じ位置を使う(新しい番号のときだけ確保する)。
+			RenderTargetSlots& slots = offscreenSlots_[slot];
+			const bool slotsReady =
+				(slots.rtv != INVALID_DESCRIPTOR || AllocateRtvDescriptor(slots.rtv)) &&
+				(slots.srv != INVALID_DESCRIPTOR || AllocateStagingDescriptor(slots.srv)) &&
+				(slots.uav != INVALID_DESCRIPTOR || AllocateStagingDescriptor(slots.uav)) &&
+				(!desc.hasDepth || slots.dsv != INVALID_DESCRIPTOR || AllocateDsvDescriptor(slots.dsv));
+			if (!slotsReady)
+			{
+				freeOffscreenSlots_.push_back(slot);   // 確保済みの位置は覚えたまま空き番号へ戻す
+				return ~0u;
+			}
 
 			D3D12_CPU_DESCRIPTOR_HANDLE dsv = {};
-			if (desc.hasDepth)
-			{
-				const uint32_t dsvIdx = dsvNext_++;
-				dsv = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
-				dsv.ptr += static_cast<SIZE_T>(dsvIdx) * dsvDescriptorSize_;
-			}
+			if (desc.hasDepth) dsv = CpuHandleAt(dsvHeap_, dsvDescriptorSize_, slots.dsv);
 
 			auto rt = std::make_unique<D3D12RenderTarget>();
 			if (!rt->CreateOffscreen(device_, desc.width, desc.height,
-			        ToDXGIFormat(desc.colorFormat), desc.hasDepth, rtv, dsv, srv, uav))
+			        ToDXGIFormat(desc.colorFormat), desc.hasDepth,
+			        CpuHandleAt(rtvHeap_,        rtvDescriptorSize_, slots.rtv), dsv,
+			        CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, slots.srv),
+			        CpuHandleAt(srvStagingHeap_, srvDescriptorSize_, slots.uav)))
 			{
+				freeOffscreenSlots_.push_back(slot);
 				return ~0u;
 			}
-			offscreenRTs_.push_back(std::move(rt));
-			return RENDER_TARGET_COUNT + static_cast<uint32_t>(offscreenRTs_.size() - 1);
+			offscreenRTs_[slot] = std::move(rt);
+			return RENDER_TARGET_COUNT + slot;
 		}
 	}
 }

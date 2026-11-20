@@ -172,8 +172,11 @@ namespace aq
 		 */
 		bool EnsureSurfaceUpToDate();
 
-		/** 実際に提示している面の寸法をスクリーンサイズへ反映する(回転・リサイズ追従) */
-		void SyncScreenSize();
+		/**
+		 * 実際に提示している面の寸法をスクリーンサイズへ反映する(回転・リサイズ追従)。
+		 * @return 反映できたら true。GetSurfaceSize を持たないデバイス(D3D12)では false
+		 */
+		bool SyncScreenSize();
 
 		/**
 		 * 描画解像度のリサイズ(設計書/エンジン課題解消設計.md P4 §5.2)。FrameStep の先頭で呼ぶ。

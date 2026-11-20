@@ -107,6 +107,13 @@ namespace aq
 			void UpdateConstantBuffer(IConstantBuffer& buf, const void* data) override;
 
 		private:
+			/**
+			 * 全ての入口の先頭で呼ぶ。フレームを開き、バインドの世代が変わっていたら
+			 * 保留中のディスクリプタ (SRV / UAV / RTV / DSV) と PSO キー用のフォーマットを捨てる。
+			 * リサイズはフレームの外で行うので、捨てるのは新しいフレームの最初の入口で一度だけになり、
+			 * その後に各パスが設定した状態は消えない (設計書/エディタ全体設計.md 5.9 節)。
+			 */
+			void BeginFrameAndSyncBindings();
 			// Dispatch 後など、グラフィクスルートシグネチャが失われていれば張り直す。
 			void EnsureGraphicsRootSig();
 			// 描画時に PSO を解決してパイプラインを確定する
@@ -142,6 +149,7 @@ namespace aq
 			D3D12_CPU_DESCRIPTOR_HANDLE pendingSRV_[SRV_SLOT_COUNT] = {};
 			bool                        srvDirty_     = false;
 			uint64_t                    lastFrameGen_ = 0;  // SRV テーブルを張り直したフレーム世代
+			uint64_t                    lastBindingEpoch_ = 0;  // 保留状態を捨てたバインドの世代 (リサイズ検出)
 			bool                        graphicsRootDirty_ = false;  // Dispatch 後に graphics root sig 張り直しが必要
 
 			// 保留コンピュート状態 (Phase 4: ブルーム)。Dispatch 時に確定する。

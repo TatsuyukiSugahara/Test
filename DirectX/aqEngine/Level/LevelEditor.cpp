@@ -45,6 +45,13 @@ namespace aq
 				return;
 			}
 
+			// 再生中は中身を操作不可にする（ImGui のフォントは ASCII のみなので英語で出す）。
+			// New / Load / Save / ノード編集 / Load in World / Load Async / Reload Refs はすべてウィンドウの中のウィジェット。
+			if (locked_) {
+				ImGui::TextUnformatted("Locked while playing");
+			}
+			ImGui::BeginDisabled(locked_);
+
 			DrawToolbar();
 			ImGui::Separator();
 
@@ -75,6 +82,8 @@ namespace aq
 			ImGui::BeginChild("##level_inspector", ImVec2(0.0f, 0.0f), true);
 			DrawInspector();
 			ImGui::EndChild();
+
+			ImGui::EndDisabled();
 
 			ImGui::End();
 		}
@@ -226,6 +235,7 @@ namespace aq
 
 		void LevelEditorPanel::Save()
 		{
+			if (locked_) { return; }
 			// 一時ファイルに書いてから置き換える（エディタ全体設計 7.7 節）。
 			if (!model_.SaveFile(pathBuf_)) {
 				EngineAssertMsg(false, "LevelEditor::Save: failed to write level JSON file");
@@ -235,6 +245,7 @@ namespace aq
 
 		void LevelEditorPanel::Load()
 		{
+			if (locked_) { return; }
 			// 失敗したときモデルは変わらないので、選択もそのままにする。
 			if (!model_.LoadFile(pathBuf_)) {
 				EngineAssertMsg(false, "LevelEditor::Load: failed to parse level JSON file");

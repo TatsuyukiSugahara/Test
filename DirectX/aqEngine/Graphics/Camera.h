@@ -12,6 +12,26 @@ namespace aq
 
 	class Camera
 	{
+	public:
+		/**
+		 * カメラの状態の写し（位置・注視点・Up・Near・Far・画角・正射影）。
+		 * アスペクト比とビューポートは含めない（ゲームビューの大きさは復元と無関係に変わるため）。
+		 * 行列は持たず、RestoreState のあとの次の Update で作り直される。
+		 */
+		struct State
+		{
+			math::Vector3 position;
+			math::Vector3 target;
+			math::Vector3 up           = math::Vector3::Up;
+			float         nearPlane    = 1.0f;
+			float         farPlane     = 1000.0f;
+			float         viewAngle    = 0.0f;
+			bool          orthographic = false;
+			float         orthographicWidth  = 0.0f;
+			float         orthographicHeight = 0.0f;
+		};
+
+
 	private:
 		math::Vector3 position_;
 		math::Vector3 targetPosition_;
@@ -39,6 +59,11 @@ namespace aq
 
 		/** 更新 */
 		void Update();
+
+		/** 現在の状態を写し取る（アスペクト比は含まない） */
+		State CaptureState() const;
+		/** 写し取った状態へ戻す。行列は次の Update で作り直される（アスペクト比は変えない） */
+		void  RestoreState(const State& state);
 
 
 	public:

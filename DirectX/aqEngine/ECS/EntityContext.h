@@ -194,6 +194,21 @@ namespace aq
 			}
 
 			/**
+			 * 生きている全エンティティのハンドルを集める（out は置き換える）。
+			 * 型条件が空の View で全 Chunk を回すので、Transform を持たないエンティティ
+			 * （CreateEntityFromTypes で作ったものなど）も含まれる。
+			 * ForEach 中と FlushCommands 中には呼ばないこと（反復の外でだけ呼ぶ）。
+			 */
+			void CollectAllHandles(std::vector<EntityHandle>& out)
+			{
+				out.clear();
+				GetView<>().ForEach([&out](Entity entity)
+					{
+						out.push_back(entity.GetHandle());
+					});
+			}
+
+			/**
 			 * T を持つ最初のエンティティの T を返す（見つからなければ nullptr）。
 			 * 「唯一であること」は強制しない。複数あっても最初の 1 件を返すだけなので、
 			 * 1 体しか生成しないと決めた共有状態コンポーネントの取得に使う。

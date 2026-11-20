@@ -875,10 +875,15 @@ namespace aq
 		ToggleMainRenderTarget();
 #endif
 		appHost_->Update();
-		// サウンド: 終了ボイスの回収・バックエンドのポンプ（§2.1）。
-		aq::sound::SoundEngine::Get().Update(gameTimer_.GetDeltaTime());
-		// オーディオ層: イベントインスタンスの回収・クールダウン更新。
-		aq::audio::AudioDirector::Get().Update(gameTimer_.GetDeltaTime());
+		// 一時停止中は音の更新を止める。AudioDirector が一時停止中のストリームを「終了」とみなして回収してしまい、
+		// SoundEngine::Update がフェードを進めてしまうため（再開時に鳴り続きを保つ）。
+		if (appHost_->GetRunMode() != aq::RunMode::Pause)
+		{
+			// サウンド: 終了ボイスの回収・バックエンドのポンプ（§2.1）。
+			aq::sound::SoundEngine::Get().Update(gameTimer_.GetDeltaTime());
+			// オーディオ層: イベントインスタンスの回収・クールダウン更新。
+			aq::audio::AudioDirector::Get().Update(gameTimer_.GetDeltaTime());
+		}
 		// FlushRender() はレンダースレッドがコマンドリストの実行・RT コピー・Present を
 		// 完了するまで待機する。描画に関わるすべての D3D11 コンテキスト呼び出しは
 		// レンダースレッド側に集約され、メインスレッドは Submit() 以降コンテキストに触れない。

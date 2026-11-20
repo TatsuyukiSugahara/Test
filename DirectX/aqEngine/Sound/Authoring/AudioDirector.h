@@ -92,6 +92,8 @@ namespace aq
 			PlayingId PostEvent(NameId eventId, uint64_t gameObject = 0);
 			void      StopPlaying(PlayingId id, float fadeSeconds = 0.0f);
 			void      StopAllByKind(NameId kindId, float fadeSeconds = 0.0f);
+			// 仮想化されたものを含む全インスタンスを即時に止めて回収する（StopAllByKind の全種類版）。
+			void      StopAll();
 
 			// Switch 値を設定（gameObject=0 でグローバル）。§7
 			void      SetSwitch(NameId groupId, NameId valueId, uint64_t gameObject = 0);

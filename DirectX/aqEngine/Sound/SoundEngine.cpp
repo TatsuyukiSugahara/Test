@@ -189,6 +189,22 @@ namespace aq
 		}
 
 
+		uint32_t SoundEngine::GetActiveVoiceCount() const
+		{
+			uint32_t count = 0;
+			for (const ActiveVoice& slot : voices_) {
+				if (slot.active) { ++count; }
+			}
+			for (const SourceSlot& slot : sources_) {
+				if (slot.active && slot.source && slot.source->IsPlaying()) { ++count; }
+			}
+			for (const SoundStream* stream : streams_) {
+				if (stream && stream->IsPlaying()) { ++count; }
+			}
+			return count;
+		}
+
+
 		void SoundEngine::Stop(SoundHandle handle)
 		{
 			ActiveVoice* slot = ResolveActive(handle);

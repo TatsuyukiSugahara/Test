@@ -468,8 +468,11 @@ namespace aq
 
 		if (!module_->OnInitialize(*this)) return false;
 		aq::StartupMark("  [app] game OnInitialize ok");
+#if !AQ_EDITOR
+		// エディタ構成は Edit で起動する。OnPlayBegin は Editor の再生ボタンが呼ぶ。
 		module_->OnPlayBegin();
 		aq::StartupMark("  [app] game OnPlayBegin ok");
+#endif
 
 		// GPU 駆動クラスタ(トライアングル)カリング: compute シェーダをロード。
 		// compute 非対応(FL10 の Xbox One UWP 等)では初期化せず、カリングも無効化する。

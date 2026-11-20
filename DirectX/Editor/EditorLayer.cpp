@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "EditorLayer.h"
+#include "Core/AppHost.h"
 #include <imgui/imgui.h>
 
 
@@ -17,12 +18,33 @@ namespace editor
 
 	void EditorLayer::OnBeginFrame(ImGuiContext* gameContext)
 	{
+		// 再生・停止の遷移はここ(FlushRender の後・ECS の反復の外)でだけ行う。自己テストは遷移の前に進めて要求を出す。
+		// ゲームの開始・終了処理やプレビューの作り直しは、ランタイムと同じくゲーム用コンテキストを current にして呼ぶ
+		{
+			ImGuiContext* editorContext = ImGui::GetCurrentContext();
+			if (gameContext != nullptr) {
+				ImGui::SetCurrentContext(gameContext);
+			}
+
+			if (startSelfTestOnLaunch_) {
+				startSelfTestOnLaunch_ = false;
+				playStopSelfTest_.Start(true);
+			}
+			playStopSelfTest_.Tick(playModeController_);
+			playModeController_.ApplyPendingRequest();
+
+			ImGui::SetCurrentContext(editorContext);
+		}
+
 		gameViewInput_.BeginFrame(gameContext);
 	}
 
 
 	void EditorLayer::OnBuildUI(const aq::rendering::RenderTargetHandle gameViewRT)
 	{
+		// メニューバーはドックスペースより先に置く(ドッキング先がメニューバーの下の領域になる)
+		DrawPlayToolbar();
+
 		// メインビューポート全体をドッキング先にする
 		const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport();
 
@@ -125,5 +147,64 @@ namespace editor
 		state.editorHoldsMouse = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)
 		                      || (ImGui::IsAnyItemActive() && !isInputButtonActive && ImGui::IsAnyMouseDown());
 		return state;
+	}
+
+
+	void EditorLayer::DrawPlayToolbar()
+	{
+		if (!ImGui::BeginMainMenuBar()) return;
+
+		const aq::RunMode mode = aq::AppHost::Get().GetRunMode();
+		// 自己テストの実行中と、要求が実行待ちの間は操作を受け付けない(遷移はフレームの先頭で 1 つずつ行う)
+		const bool isBusy = playStopSelfTest_.IsRunning() || playModeController_.HasPendingRequest();
+
+		// ImGui のフォントは ASCII のみを読み込んでいるので英語で出す
+		ImGui::BeginDisabled(isBusy || mode != aq::RunMode::Edit);
+		if (ImGui::Button("Play")) {
+			playModeController_.RequestPlay();
+		}
+		ImGui::EndDisabled();
+
+		// Pause と Resume は同じ位置に置き、モードで切り替える
+		if (mode == aq::RunMode::Pause) {
+			ImGui::BeginDisabled(isBusy);
+			if (ImGui::Button("Resume")) {
+				playModeController_.RequestResume();
+			}
+			ImGui::EndDisabled();
+		} else {
+			ImGui::BeginDisabled(isBusy || mode != aq::RunMode::Play);
+			if (ImGui::Button("Pause")) {
+				playModeController_.RequestPause();
+			}
+			ImGui::EndDisabled();
+		}
+
+		ImGui::BeginDisabled(isBusy || mode == aq::RunMode::Edit);
+		if (ImGui::Button("Stop")) {
+			playModeController_.RequestStop();
+		}
+		ImGui::EndDisabled();
+
+		ImGui::Separator();
+		switch (mode) {
+		case aq::RunMode::Edit:  ImGui::TextUnformatted("Mode: Edit");  break;
+		case aq::RunMode::Play:  ImGui::TextUnformatted("Mode: Play");  break;
+		case aq::RunMode::Pause: ImGui::TextUnformatted("Mode: Pause"); break;
+		}
+
+		ImGui::Separator();
+		if (playStopSelfTest_.IsRunning()) {
+			ImGui::Text("Self Test: cycle %d/%d", std::min(playStopSelfTest_.GetDisplayCycle(), PlayStopSelfTest::CYCLE_COUNT),
+			            PlayStopSelfTest::CYCLE_COUNT);
+		} else {
+			ImGui::BeginDisabled(isBusy || mode != aq::RunMode::Edit);
+			if (ImGui::Button("Self Test")) {
+				playStopSelfTest_.Start(false);
+			}
+			ImGui::EndDisabled();
+		}
+
+		ImGui::EndMainMenuBar();
 	}
 }

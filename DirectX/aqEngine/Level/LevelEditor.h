@@ -32,6 +32,7 @@ namespace aq
 			bool                 show_          = false;
 			char                 pathBuf_[260]  = "Assets/Levels/New.level.json";
 			LevelLoadHandle      lastAsync_;                     // 直近の LoadAsync 進捗（バー表示用）
+			bool                 locked_        = false;                 // 再生中は編集を受け付けない
 
 
 		public:
@@ -41,6 +42,13 @@ namespace aq
 			const char* GetDebugCategory() const override { return "Tools"; }
 			void        DebugRenderMenu() override;
 			void        DebugRender()     override;
+
+			/** 編集モデル（Editor が再生前の記録と停止後の復元に使う） */
+			LevelEditModel&       GetModel()       { return model_; }
+
+			/** 再生中などに編集を受け付けなくする。true の間はウィンドウの中身を操作不可にする */
+			void SetLocked(const bool locked) { locked_ = locked; }
+			bool IsLocked() const             { return locked_; }
 
 
 		private:

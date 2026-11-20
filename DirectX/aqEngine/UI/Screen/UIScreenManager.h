@@ -81,6 +81,12 @@ namespace aq
 			// 画面遷移用の Exit 待機 (設計書 9 章) はこの経路を通さない。
 			void ReloadTopDocument();
 
+			// スタックの全画面を上から即時に破棄する（再生の停止後に UI を空へ戻すために使う）。
+			// 各画面で OnExit（Exit 待機中で呼び済みなら省く）→ OnDestroy → ルート UIObject の破棄を行い、
+			// 保留中の操作・Click 待ち・Exit 待ちの状態も捨てる。画面の登録（registry）は残す。
+			// Update / FlushPendingOps の中から呼ばないこと。
+			void Clear();
+
 		private:
 			struct PendingOp
 			{

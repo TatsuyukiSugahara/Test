@@ -4,9 +4,13 @@
     <ClCompile Include="EditorMain.cpp" />
     <ClCompile Include="EditorLayer.cpp" />
     <ClCompile Include="GameViewInput.cpp" />
+    <ClCompile Include="PlayModeController.cpp" />
+    <ClCompile Include="PlayStopSelfTest.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EditorLayer.h" />
     <ClInclude Include="GameViewInput.h" />
+    <ClInclude Include="PlayModeController.h" />
+    <ClInclude Include="PlayStopSelfTest.h" />
   </ItemGroup>
 </Project>

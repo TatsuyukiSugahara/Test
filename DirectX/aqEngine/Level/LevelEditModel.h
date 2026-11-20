@@ -94,6 +94,9 @@ namespace aq
 			/** node とその子孫のうち、未採番（editId == 0）のノードへ ID を振る。モデルの中で一意 */
 			void AssignId(ecs::PrefabEditNode& node);
 
+			/** 完了待ち・Flush・前回プレビューのアンロード・Flush・登録の解除を行う（新しいプレビューは作らない） */
+			void ReleasePreview();
+
 
 		public:
 			/** プレビューの置き換えを要求する（Load in World）。同じフレームの要求は 1 回にまとめる */
@@ -104,6 +107,14 @@ namespace aq
 			 * System の反復の外で、1 フレームに 1 回呼ぶ（GPU の完了待ちと Flush を行うため）。
 			 */
 			void ProcessPreviewRequest();
+
+			/**
+			 * 保留中のプレビュー要求を取り消し、いまのプレビューを片付ける（新しいプレビューは作らない）。
+			 * ProcessPreviewRequest の「完了待ち・Flush・アンロード・Flush・登録の解除」だけを行うので、
+			 * ProcessPreviewRequest と同じく System の反復の外で呼ぶ。
+			 * @return プレビューがあって片付けたら true
+			 */
+			bool ClearPreview();
 
 
 		public:

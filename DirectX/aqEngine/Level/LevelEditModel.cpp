@@ -251,11 +251,8 @@ namespace aq
 		}
 
 
-		void LevelEditModel::ProcessPreviewRequest()
+		void LevelEditModel::ReleasePreview()
 		{
-			if (!previewRequested_) { return; }
-			previewRequested_ = false;
-
 			LevelManager&       levelManager = LevelManager::Get();
 			ecs::EntityContext& ctx          = ecs::EntityContext::Get();
 
@@ -282,6 +279,26 @@ namespace aq
 			}
 			previewLevelId_ = LevelId();
 			previewKey_.clear();
+		}
+
+
+		bool LevelEditModel::ClearPreview()
+		{
+			previewRequested_ = false;
+			const bool hadPreview = previewLevelId_.IsValid() || !previewKey_.empty();
+			ReleasePreview();
+			return hadPreview;
+		}
+
+
+		void LevelEditModel::ProcessPreviewRequest()
+		{
+			if (!previewRequested_) { return; }
+			previewRequested_ = false;
+
+			ReleasePreview();
+
+			LevelManager& levelManager = LevelManager::Get();
 
 			// 6. 編集モデルから LevelData を作り、新しいキーで登録して Load する。
 			//    相対パスは通常のファイルロードと同じく、開いたファイルのディレクトリから解決する。

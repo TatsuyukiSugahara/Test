@@ -286,16 +286,31 @@ namespace aq
 		}
 
 
+		void LevelManager::CollectLoadedRoots(std::vector<LevelId>& out) const
+		{
+			out.clear();
+			for (uint32_t i = 0; i < static_cast<uint32_t>(slots_.size()); ++i)
+			{
+				const LevelSlot& slot = slots_[i];
+				if (slot.loaded && !slot.parent.IsValid()) out.push_back(MakeId(i));
+			}
+		}
+
+
+		const std::string& LevelManager::GetSourceKey(LevelId id) const
+		{
+			static const std::string empty;
+			if (!IsLoaded(id)) return empty;
+			return slots_[id.index].path;
+		}
+
+
 		void LevelManager::UnloadAll()
 		{
 			// root（親を持たない）ロード済み Level を集めてから Unload する
 			//（Unload 中に slots_/freeList_ を変更するため、収集と実行を分ける）。
 			std::vector<LevelId> roots;
-			for (uint32_t i = 0; i < static_cast<uint32_t>(slots_.size()); ++i)
-			{
-				const LevelSlot& slot = slots_[i];
-				if (slot.loaded && !slot.parent.IsValid()) roots.push_back(MakeId(i));
-			}
+			CollectLoadedRoots(roots);
 			for (const LevelId& r : roots) Unload(r);
 		}
 

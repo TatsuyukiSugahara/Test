@@ -95,6 +95,9 @@ namespace aq
 
 			// ハンドル操作（§2.4）。世代不一致は安全に no-op。
 			bool IsPlaying(SoundHandle handle) const;
+			// 再生中のボイス数（ワンショットのアクティブ数 + 再生中の 3D 発音体 + 再生中のストリーム）。
+			// 再生の前後で鳴り残しが無いかの比較に使う。
+			uint32_t GetActiveVoiceCount() const;
 			void Stop(SoundHandle handle);
 			void SetVolume(SoundHandle handle, float volume);
 			void SetPitch(SoundHandle handle, float ratio);     // ピッチ/速度（1.0=等倍）

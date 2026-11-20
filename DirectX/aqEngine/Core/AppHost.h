@@ -79,8 +79,12 @@ namespace aq
 		/** エディタの UI 層(非所有。エディタのエントリが登録する。ランタイムでは常に nullptr) */
 		IEditorLayer* editorLayer_ = nullptr;
 
-		/** 実行モード。ランタイムは常に Play */
+		/** 実行モード。ランタイムは常に Play。エディタ構成は Edit で起動し、再生ボタンで Play にする */
+#if defined(AQ_EDITOR) && AQ_EDITOR
+		RunMode runMode_ = RunMode::Edit;
+#else
 		RunMode runMode_ = RunMode::Play;
+#endif
 
 
 	public:
@@ -101,6 +105,11 @@ namespace aq
 		 * フレームの途中や System の反復中には呼ばない。
 		 */
 		inline void SetRunMode(RunMode mode) { runMode_ = mode; }
+
+#ifdef AQ_DEBUG_IMGUI
+		/** 全シーン共通の Level エディタパネル(無ければ nullptr)。Editor が再生中のロックと編集モデルの参照に使う */
+		inline aq::level::LevelEditorPanel* GetLevelEditorPanel() { return levelEditorPanel_.get(); }
+#endif
 
 		/** メイン描画のレンダラ */
 		inline rendering::Renderer& GetRenderer() { return renderer_; }

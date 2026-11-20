@@ -149,6 +149,34 @@ namespace aq
 		}
 
 
+		void UIScreenManager::Clear()
+		{
+			// 保留中の操作と待機状態を先に捨てる（破棄中の OnExit / OnDestroy が積んだ操作も、最後にもう一度捨てる）
+			pendingOps_.clear();
+			exitWaiting_   = false;
+			exitElapsed_   = 0.f;
+			exitOp_        = PendingOp();
+			clickWaiting_  = false;
+			clickElapsed_  = 0.f;
+			clickWaitDone_ = false;
+
+			// 上から破棄する。pop してから後始末することで、コールバックからスタックを見ても自分は含まれない
+			while (!stack_.empty())
+			{
+				std::unique_ptr<UIScreen> screen = std::move(stack_.back());
+				stack_.pop_back();
+
+				if (!screen->exiting_) screen->OnExit(); // Exit 待機中の画面は BeginExit で呼び済み
+				screen->OnDestroy();
+				if (UIObject* root = screen->root_)
+					UIContext::Get().DestroyObject(root);
+			}
+
+			pendingOps_.clear();
+			UIContext::Get().GetInputSystem().ClearState();
+		}
+
+
 		// ---- 内部 ---------------------------------------------------------------
 
 		bool UIScreenManager::FlushPendingOps()

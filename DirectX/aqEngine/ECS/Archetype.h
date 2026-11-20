@@ -253,7 +253,10 @@ namespace aq
 				static_assert(sizeof...(Args) <= MAX_COMPONENT_COUNT,
 					"Archetype: コンポーネント数が MAX_COMPONENT_COUNT(16) を超えています");
 				Archetype result;
-				result.CreateImpl<Args...>();
+				// 型条件が空（全 Chunk を対象にする View 用）のときは CreateImpl を呼ばない
+				if constexpr (sizeof...(Args) != 0) {
+					result.CreateImpl<Args...>();
+				}
 
 				if (result.archetypeSize_ > 1) {
 					for (size_t i = 0; i < result.archetypeSize_ - 1; ++i) {

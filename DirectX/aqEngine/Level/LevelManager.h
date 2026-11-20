@@ -128,6 +128,12 @@ namespace aq
 			// ロード済みの全 Level をアンロードする（root から再帰）。
 			void UnloadAll();
 
+			// ロード済みで親を持たない Level（root）を集める（out は置き換える）。
+			void CollectLoadedRoots(std::vector<LevelId>& out) const;
+
+			// id のスロットが持つ、ロードしたときのパスか in-memory 登録のキー。無効・古い id は空文字列。
+			const std::string& GetSourceKey(LevelId id) const;
+
 			// LevelId が現在ロード済みか（generation 一致を含む）。スロットを確保した時点で true になる
 			// （生成は遅延されるので、生成の完了は IsSpawned で見る）。
 			bool IsLoaded(LevelId id) const;

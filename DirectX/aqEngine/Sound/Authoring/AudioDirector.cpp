@@ -896,6 +896,19 @@ namespace aq
 		}
 
 
+		void AudioDirector::StopAll()
+		{
+			for (PlayingInstance& inst : instances_) {
+				if (inst.id == 0) { continue; }
+				StopInstance(inst, 0.0f);
+				// 仮想インスタンスは StopInstance が回収済み。実体のあるものは Update の回収を待たず、ここで回収する。
+				if (inst.id != 0) {
+					RecycleInstance(inst);
+				}
+			}
+		}
+
+
 		void AudioDirector::CollectDebugVoices(std::vector<DebugVoiceInfo>& out) const
 		{
 			out.clear();

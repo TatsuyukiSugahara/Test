@@ -58,6 +58,37 @@ namespace aq
 	}
 
 
+	Camera::State Camera::CaptureState() const
+	{
+		State state;
+		state.position           = position_;
+		state.target             = targetPosition_;
+		state.up                 = up_;
+		state.nearPlane          = near_;
+		state.farPlane           = far_;
+		state.viewAngle          = viewAngle_;
+		state.orthographic       = orthographic_;
+		state.orthographicWidth  = orthographicWidth_;
+		state.orthographicHeight = orthographicHeight_;
+		return state;
+	}
+
+
+	void Camera::RestoreState(const State& state)
+	{
+		// 行列は Update が毎回この値から作り直すので、ここで dirty を立てる必要はない
+		position_           = state.position;
+		targetPosition_     = state.target;
+		up_                 = state.up;
+		near_               = state.nearPlane;
+		far_                = state.farPlane;
+		viewAngle_          = state.viewAngle;
+		orthographic_       = state.orthographic;
+		orthographicWidth_  = state.orthographicWidth;
+		orthographicHeight_ = state.orthographicHeight;
+	}
+
+
 	void Camera::Update()
 	{
 		// 正射影は SetOrthographic を呼んだカメラのみ。未設定カメラは従来どおり透視投影。

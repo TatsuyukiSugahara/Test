@@ -145,6 +145,31 @@ namespace aq
 			}
 
 			/**
+			 * 提示面(スワップチェーン)とレンダー解像度(メイン RT)を別々に作り直せるか
+			 * (設計書/エディタ全体設計.md 5.9 節 3)。
+			 * false(既定)のバックエンドでは、Engine は従来どおり 1 つの寸法で ResizeMainTargets を呼ぶ。
+			 * true を返すバックエンドは ResizePresentSurface と ResizeRenderTargets を必ず実装すること。
+			 */
+			virtual bool SupportsSeparatePresentSize() const { return false; }
+
+			/**
+			 * 提示面(スワップチェーン)だけを w × h で作り直す。メイン RT とパスには関係しない。
+			 * 呼べるのは WaitIdle 済みの区間だけで、ゲームスレッドから呼ぶ。
+			 * @return 成功したら true。失敗したら false(呼び出し側は再試行する)
+			 */
+			virtual bool ResizePresentSurface(uint32_t /*w*/, uint32_t /*h*/) { return false; }
+
+			/**
+			 * メイン RT / 深度だけを reqW × reqH で作り直す。提示面は触らない。
+			 * 呼べる区間とハンドル・確定寸法の扱いは ResizeMainTargets と同じ。
+			 * @return 成功したら true。失敗したら false(旧状態へ戻れるとは限らない。呼び出し側は再試行する)
+			 */
+			virtual bool ResizeRenderTargets(uint32_t /*reqW*/, uint32_t /*reqH*/, uint32_t& /*outW*/, uint32_t& /*outH*/)
+			{
+				return false;
+			}
+
+			/**
 			 * オフスクリーン RT を 1 本解放する。ハンドル(添字)は空き番号として再利用される。
 			 * WaitIdle 済みの区間で呼ぶこと。解放済みの添字を GetRenderTarget に渡すと nullptr を返す。
 			 */

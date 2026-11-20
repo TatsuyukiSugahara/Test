@@ -427,6 +427,12 @@ namespace aq
 			return AttemptRenderResize();
 		}
 
+		// 口が有効な間は、提示面(ウィンドウ)とレンダー解像度(外部指定)を組として検出する
+		// (設計書/エディタ全体設計.md 5.9 節 3)。無効な間は以降の従来経路のまま。
+		if (IsRenderSizeOverrideActive()) {
+			return DetectSeparateRenderResize();
+		}
+
 		// 寸法は Platform が持つ値から取る(デバイスの内部状態はレンダースレッドが書き換え得るので読まない)。
 		// 取れない Platform だけ従来の GetSurfaceSize にフォールバックする。
 		uint32_t width  = 0;
@@ -470,11 +476,88 @@ namespace aq
 
 		resizePending_    = true;
 		resizeDeviceDone_ = false;
+		separatePending_  = false;   // 従来経路(1 つの寸法で ResizeMainTargets)
 		pendingReqW_      = width;
 		pendingReqH_      = height;
 		resizeRetries_    = 0;
 		lastSoundOnlyTime_ = std::chrono::steady_clock::now();
 		aq::StartupMarkf("[engine] リサイズ開始: %ux%u -> %ux%u", renderWidth_, renderHeight_, width, height);
+		return AttemptRenderResize();
+	}
+
+
+	bool Engine::DetectSeparateRenderResize()
+	{
+		auto& device = aq::graphics::GraphicsDevice::Get();
+
+		// 提示面はウィンドウに追従する。寸法の取り方は従来経路と同じ
+		uint32_t presentW = 0;
+		uint32_t presentH = 0;
+		if (!platform_->GetClientPixelSize(presentW, presentH) && !device.GetSurfaceSize(presentW, presentH)) {
+			return true;
+		}
+		if (presentW == 0 || presentH == 0) {
+			return true;   // 最小化など。現状維持
+		}
+
+		// レンダー解像度は口に渡された値
+		const uint32_t renderW = renderOverrideW_;
+		const uint32_t renderH = renderOverrideH_;
+
+		// 今の組と同じ = することが無い。直近に要求した組と同じ = 失敗・無効だった組なので、
+		// 寸法がまた変わるまで再要求しない(従来経路の lastRequestedW_ と同じ考え方)。
+		const bool sameAsCurrent   = (presentW == presentW_              && presentH == presentH_
+		                           && renderW  == renderWidth_          && renderH  == renderHeight_);
+		const bool sameAsRequested = (presentW == pairRequestedPresentW_ && presentH == pairRequestedPresentH_
+		                           && renderW  == pairRequestedRenderW_  && renderH  == pairRequestedRenderH_);
+		if (sameAsCurrent || sameAsRequested) {
+			pairCandidateFrames_ = 0;
+			return true;
+		}
+
+		// ドラッグ中の連続変更で毎フレーム作り直さないよう、同じ組が 2 フレーム続いたら確定する。
+		if (presentW != pairCandidatePresentW_ || presentH != pairCandidatePresentH_
+		 || renderW  != pairCandidateRenderW_  || renderH  != pairCandidateRenderH_)
+		{
+			pairCandidatePresentW_ = presentW;
+			pairCandidatePresentH_ = presentH;
+			pairCandidateRenderW_  = renderW;
+			pairCandidateRenderH_  = renderH;
+			pairCandidateFrames_   = 1;
+			return true;
+		}
+		if (++pairCandidateFrames_ < 2) {
+			return true;
+		}
+		pairCandidateFrames_ = 0;
+
+		// 手順 0: レンダー解像度が変わるときだけ、全パスが対応しているかを確かめる(確定時に 1 度)。
+		// 提示面だけの変更はパスに関係しないが、未対応のパスがあるときは従来経路と同じく何もしない。
+		pairRequestedPresentW_ = presentW;   // 失敗・無効でも毎フレーム再要求しない
+		pairRequestedPresentH_ = presentH;
+		pairRequestedRenderW_  = renderW;
+		pairRequestedRenderH_  = renderH;
+		if ((renderW != renderWidth_ || renderH != renderHeight_) && !appHost_->CanResizeRender())
+		{
+			if (!resizeDisabledLogged_) {
+				aq::StartupMark("[engine] リサイズ無効: パイプラインに未対応のパスがある(固定寸法のまま続行)");
+				resizeDisabledLogged_ = true;
+			}
+			return true;
+		}
+
+		resizePending_     = true;
+		separatePending_   = true;
+		presentDone_       = false;
+		resizeDeviceDone_  = false;   // 組の経路ではレンダー解像度の段(ResizeRenderTargets)の完了印
+		pendingPresentW_   = presentW;
+		pendingPresentH_   = presentH;
+		pendingReqW_       = renderW;
+		pendingReqH_       = renderH;
+		resizeRetries_     = 0;
+		lastSoundOnlyTime_ = std::chrono::steady_clock::now();
+		aq::StartupMarkf("[engine] リサイズ開始(提示面/レンダー): %ux%u/%ux%u -> %ux%u/%ux%u",
+			presentW_, presentH_, renderWidth_, renderHeight_, presentW, presentH, renderW, renderH);
 		return AttemptRenderResize();
 	}
 
@@ -502,6 +585,70 @@ namespace aq
 		// 手順 1: CPU・GPU 双方の完了待ち。以降はフレームの外(レンダースレッド停止中)。
 		appHost_->WaitForRenderIdle();
 
+		// 口が有効な間は、提示面とレンダー解像度を別々の段として進める(設計書/エディタ全体設計.md 5.9 節 3)。
+		// 完了印の立った段は再試行でやり直さない。
+		if (separatePending_)
+		{
+			const bool presentChanges = (pendingPresentW_ != presentW_     || pendingPresentH_ != presentH_);
+			const bool renderChanges  = (pendingReqW_      != renderWidth_ || pendingReqH_      != renderHeight_);
+
+			// 手順 2a: 提示面(スワップチェーン)だけを作り直す。パスは関係しない。
+			if (presentChanges && !presentDone_)
+			{
+				if (!device.ResizePresentSurface(pendingPresentW_, pendingPresentH_)) {
+					return fail("提示面");
+				}
+				presentDone_ = true;
+			}
+
+			// 手順 2b〜4: レンダー解像度(メイン RT / 深度 → 全パスの準備 → 確定)。
+			// 今と同じ寸法なら 3 段とも飛ばす(提示面だけの変更では RT とパスを作り直さない)。
+			if (renderChanges)
+			{
+				if (!resizeDeviceDone_)
+				{
+					uint32_t outW = 0;
+					uint32_t outH = 0;
+					if (!device.ResizeRenderTargets(pendingReqW_, pendingReqH_, outW, outH) || outW == 0 || outH == 0) {
+						return fail("デバイス");
+					}
+					pendingOutW_      = outW;
+					pendingOutH_      = outH;
+					resizeDeviceDone_ = true;
+				}
+				if (!appHost_->PrepareRenderResize(pendingOutW_, pendingOutH_)) {
+					return fail("パス");
+				}
+				appHost_->CommitRenderResize(pendingOutW_, pendingOutH_);
+			}
+
+			// 手順 5: Engine の寸法を同じフレームのうちに更新し(2.5 節)、保留を解除する。
+			// 変わった段の寸法だけを入れる(提示面だけのリサイズでレンダー解像度を動かさない)。
+			if (renderChanges)
+			{
+				renderWidth_  = pendingOutW_;
+				renderHeight_ = pendingOutH_;
+			}
+			if (presentChanges)
+			{
+				presentW_ = pendingPresentW_;
+				presentH_ = pendingPresentH_;
+				if (!SyncScreenSize())
+				{
+					screenWidth_  = pendingPresentW_;
+					screenHeight_ = pendingPresentH_;
+				}
+			}
+			resizePending_   = false;
+			separatePending_ = false;
+			aq::StartupMarkf("[engine] リサイズ完了(提示面/レンダー): %ux%u/%ux%u",
+				presentW_, presentH_, renderWidth_, renderHeight_);
+
+			// 再作成に掛かった時間が次フレームのデルタ時間に載らないようにする。
+			gameTimer_.ResetDelta();
+			return true;
+		}
+
 		// 手順 2: デバイス(スワップチェーン + メイン RT / 深度)。確定寸法を受け取る。
 		if (!resizeDeviceDone_)
 		{
@@ -526,6 +673,10 @@ namespace aq
 		// 手順 5: Engine の寸法を更新し、保留を解除する。
 		renderWidth_  = pendingOutW_;
 		renderHeight_ = pendingOutH_;
+		// ResizeMainTargets は提示面も同じ確定寸法で作り直すので、覚えている提示面の寸法も合わせる
+		// (後から口が有効になったときの組の検出がこの値を見る)。
+		presentW_     = pendingOutW_;
+		presentH_     = pendingOutH_;
 
 		// 提示面の寸法もこのフレームのうちに新しくする(設計書/エディタ全体設計.md 5.9 節 2.5)。
 		// ゲーム内 UI の当たり判定は screenWidth_ を使うので、次のフレームまで旧い値を残さない。
@@ -541,6 +692,50 @@ namespace aq
 		// 再作成に掛かった時間が次フレームのデルタ時間に載らないようにする。
 		gameTimer_.ResetDelta();
 		return true;
+	}
+
+
+	void Engine::SetRenderSizeOverride(const uint32_t width, const uint32_t height)
+	{
+		auto& device = aq::graphics::GraphicsDevice::Get();
+		if (!device.SupportsRenderResize() || !device.SupportsSeparatePresentSize())
+		{
+			// 提示面とレンダー解像度を分けられないバックエンドでは、レンダー解像度だけを
+			// 動かすと提示面と食い違う。無視して従来どおり(ウィンドウに追従)続ける。
+			if (!renderOverrideUnsupportedLogged_) {
+				aq::StartupMark("[engine] レンダー解像度の外部指定は未対応のバックエンド(無視して続行)");
+				renderOverrideUnsupportedLogged_ = true;
+			}
+			return;
+		}
+
+		if (width == 0 || height == 0)
+		{
+			if (IsRenderSizeOverrideActive())
+			{
+				// 解除。レンダー解像度は口の値のままなので、通常経路に「未要求」として検出させ直す
+				// (ウィンドウの寸法で提示面とレンダー解像度の両方を作り直す)。
+				renderOverrideW_ = 0;
+				renderOverrideH_ = 0;
+				lastRequestedW_  = 0;
+				lastRequestedH_  = 0;
+				candidateFrames_ = 0;
+			}
+			return;
+		}
+
+		if (!IsRenderSizeOverrideActive())
+		{
+			// 口が有効になった。前回有効だったときの要求の記録は、通常経路のリサイズで
+			// 寸法が変わっている可能性があるので捨てる。
+			pairRequestedPresentW_ = 0;
+			pairRequestedPresentH_ = 0;
+			pairRequestedRenderW_  = 0;
+			pairRequestedRenderH_  = 0;
+			pairCandidateFrames_   = 0;
+		}
+		renderOverrideW_ = width;
+		renderOverrideH_ = height;
 	}
 
 
@@ -634,6 +829,8 @@ namespace aq
 		renderHeight_ = initializeParameter.renderHeight;
 		lastRequestedW_ = renderWidth_;    // リサイズの検出は、起動時の寸法を「要求済み」として始める
 		lastRequestedH_ = renderHeight_;
+		presentW_       = renderWidth_;    // スワップチェーンもこの寸法で作る(提示で拡縮する)
+		presentH_       = renderHeight_;
 
 		// 選択された API の実装を注入 (将来 Vulkan に替える場合は define を変えてここを追加する)
 #ifdef ENGINE_GRAPHICS_D3D11

@@ -9,6 +9,9 @@ namespace editor
 	{
 		/** ゲームビューのウィンドウ名。ドッキング配置は editor_layout.ini にこの名前で保存される */
 		static constexpr const char* GAME_VIEW_WINDOW_NAME = "Game View";
+
+		/** ゲームビューへ追従させるレンダー解像度の下限(これより小さい領域では切り上げ、絵に余白が出る) */
+		static constexpr uint32_t MIN_GAME_VIEW_RENDER_SIZE = 64;
 	}
 
 
@@ -62,6 +65,15 @@ namespace editor
 
 			if (regionSize.x > 0.0f && regionSize.y > 0.0f)
 			{
+				// レンダー解像度をゲームビューの大きさに追従させる(設計書/エディタ全体設計.md 5.9 節 E3b-2)。
+				// 毎フレーム渡してよい(同じ値なら何も起きない。実際の作り直しは 2 フレーム続いてから)。
+				// 小さすぎる解像度は作り直しが割に合わないので 64 で止める(そのときだけ余白が出る)。
+				{
+					const uint32_t overrideW = std::max<uint32_t>(static_cast<uint32_t>(regionSize.x), MIN_GAME_VIEW_RENDER_SIZE);
+					const uint32_t overrideH = std::max<uint32_t>(static_cast<uint32_t>(regionSize.y), MIN_GAME_VIEW_RENDER_SIZE);
+					aq::Engine::Get().SetRenderSizeOverride(overrideW, overrideH);
+				}
+
 				// 余白(アスペクト比の差で空く部分)は黒にする
 				ImGui::GetWindowDrawList()->AddRectFilled(
 					regionPos, ImVec2(regionPos.x + regionSize.x, regionPos.y + regionSize.y), IM_COL32(0, 0, 0, 255));

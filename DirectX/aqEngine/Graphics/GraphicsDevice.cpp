@@ -88,6 +88,18 @@ namespace aq
 			if (impl_ && handle.IsValid()) { impl_->ReleaseOffscreenRenderTarget(handle.index); }
 		}
 
+		bool GraphicsDevice::SupportsSeparatePresentSize() const { return impl_ ? impl_->SupportsSeparatePresentSize() : false; }
+
+		bool GraphicsDevice::ResizePresentSurface(uint32_t w, uint32_t h)
+		{
+			return impl_ ? impl_->ResizePresentSurface(w, h) : false;
+		}
+
+		bool GraphicsDevice::ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
+		{
+			return impl_ ? impl_->ResizeRenderTargets(reqW, reqH, outW, outH) : false;
+		}
+
 
 		bool GraphicsDevice::RecreateSurface(NativeWindowHandle window)
 		{

@@ -90,19 +90,20 @@ namespace aq
 			bool SupportsRenderResize() const override { return true; }
 			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH) override;
 
+			/** 提示面とレンダー解像度を別々に作り直せる(エディタのゲームビュー追従。5.9 節 E3b-2) */
+			bool SupportsSeparatePresentSize() const override { return true; }
+
 			/**
 			 * 提示面(スワップチェーン)だけを作り直す。メインスレッドからレンダースレッド停止中に呼ぶ。
 			 * 失敗したときは旧バッファで取り直すので、呼び出し側は再試行できる。
-			 * (E3b-2 で IGraphicsDeviceImpl へ出す予定の内部関数)
 			 */
-			bool ResizePresentSurface(uint32_t width, uint32_t height);
+			bool ResizePresentSurface(uint32_t width, uint32_t height) override;
 
 			/**
 			 * メイン RT / 深度だけを作り直す。提示面は触らない。
 			 * ディスクリプタの位置は作成時のものを使い回すので、リサイズを繰り返しても増えない。
-			 * (E3b-2 で IGraphicsDeviceImpl へ出す予定の内部関数)
 			 */
-			bool ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH);
+			bool ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH) override;
 
 			/**
 			 * バインドの世代。リサイズ系の関数を通るたびに +1。

@@ -112,6 +112,30 @@ namespace aq
 		std::chrono::steady_clock::time_point lastSoundOnlyTime_;
 		bool              resizeDisabledLogged_ = false;
 
+		/** 提示面とレンダー解像度を分けるリサイズ(設計書/エディタ全体設計.md 5.9 節 3)。外部指定の値。0×0 は未指定(= ウィンドウに追従) */
+		uint32_t          renderOverrideW_  = 0;
+		uint32_t          renderOverrideH_  = 0;
+		bool              renderOverrideUnsupportedLogged_ = false;
+		/** 現在の提示面(スワップチェーン)の寸法。初期化時はスワップチェーンを作った寸法(= 起動時のレンダー解像度) */
+		uint32_t          presentW_         = 0;
+		uint32_t          presentH_         = 0;
+		/** 口が有効な間の検出: (ウィンドウの寸法, 外部指定の値) の組を 2 フレーム続けて見てから確定する */
+		uint32_t          pairCandidatePresentW_ = 0;
+		uint32_t          pairCandidatePresentH_ = 0;
+		uint32_t          pairCandidateRenderW_  = 0;
+		uint32_t          pairCandidateRenderH_  = 0;
+		uint32_t          pairCandidateFrames_   = 0;
+		/** 直近に要求した組。失敗・無効でも毎フレーム再要求しないための印(通常経路の lastRequestedW_ と同じ役割) */
+		uint32_t          pairRequestedPresentW_ = 0;
+		uint32_t          pairRequestedPresentH_ = 0;
+		uint32_t          pairRequestedRenderW_  = 0;
+		uint32_t          pairRequestedRenderH_  = 0;
+		/** 保留中のリサイズが組(口が有効)の経路か。目標の提示面の寸法と、提示面の段の完了印 */
+		bool              separatePending_  = false;
+		uint32_t          pendingPresentW_  = 0;
+		uint32_t          pendingPresentH_  = 0;
+		bool              presentDone_      = false;   // ResizePresentSurface まで済んだ(再試行でやり直さない)
+
 		/** 撮影用(-freeze-frame)。Update を呼んだフレーム数と、止めたかどうか */
 		uint32_t          updatedFrames_ = 0;
 		bool              freezeLogged_  = false;
@@ -151,6 +175,17 @@ namespace aq
 		void WaitForRenderIdle();
 
 		/**
+		 * レンダー解像度をウィンドウ以外が決める(設計書/エディタ全体設計.md 5.9 節 3)。
+		 * 提示面(スワップチェーン)はウィンドウに追従したまま、レンダー解像度だけをここで渡した寸法にする。
+		 * 0×0 を渡すと解除し、次のフレームからウィンドウの寸法で両方が追従する従来の動きに戻る。
+		 *
+		 * 毎フレーム呼んでよい(同じ値なら何も起きない)。実際の作り直しは、同じ値が 2 フレーム続いてから
+		 * FrameStep の先頭で行う。デバイスが SupportsRenderResize かつ SupportsSeparatePresentSize で
+		 * ないときは無視する(ログを 1 回出す)。メインスレッドから呼ぶこと。
+		 */
+		void SetRenderSizeOverride(uint32_t width, uint32_t height);
+
+		/**
 		 * 終了を要求する(ゲームコードと Engine 内部の両方から呼ぶ)。要求したフレームは最後まで回り、
 		 * 次の PumpEvents() でループを抜ける(iOS は終了しない)。
 		 * 終了コードは最初に要求された値を保つ(後から 0 で上書きしない)。
@@ -185,6 +220,10 @@ namespace aq
 		bool HandleRenderResize();
 		/** 手順 1〜5(待ち → デバイス → 準備 → 確定)。失敗したら保留状態にして false */
 		bool AttemptRenderResize();
+		/** レンダー解像度の外部指定が有効か(未対応のバックエンドでは SetRenderSizeOverride が値を持たない) */
+		inline bool IsRenderSizeOverrideActive() const { return renderOverrideW_ != 0 && renderOverrideH_ != 0; }
+		/** 口が有効な間の検出。(ウィンドウの寸法, 外部指定の値) の組で保留を立てる。@return false ならこのフレームは Update を飛ばす */
+		bool DetectSeparateRenderResize();
 		/** 保留中のフレームでもサウンドの供給だけは続ける(Update を飛ばすと音が切れるため)。デルタ時間は実時間を測る */
 		void UpdateSoundOnly();
 

@@ -96,6 +96,11 @@ namespace aq
 			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH);
 			void ReleaseOffscreenRenderTarget(rendering::RenderTargetHandle handle);
 
+			/** 提示面とレンダー解像度を分けたリサイズ(設計書/エディタ全体設計.md 5.9 節 3)。意味は IGraphicsDeviceImpl の同名関数を参照 */
+			bool SupportsSeparatePresentSize() const;
+			bool ResizePresentSurface(uint32_t w, uint32_t h);
+			bool ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH);
+
 			/** RenderContext に API 依存コンテキストをセット */
 			void SetupRenderContext(RenderContext& outContext);
 

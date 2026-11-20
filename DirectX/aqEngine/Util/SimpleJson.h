@@ -57,6 +57,7 @@ namespace aq
 			// ---- 値取得 ----
 			bool               AsBool  (bool   def = false) const { return IsBool()   ? boolVal_ : def; }
 			float              AsFloat (float  def = 0.f)   const { return IsNumber() ? (float)numVal_ : def; }
+			double             AsDouble(double def = 0.0)   const { return IsNumber() ? numVal_ : def; }   // 狭めずに読む(override の生 JSON の数値を往復させる)
 			int                AsInt   (int    def = 0)     const { return IsNumber() ? (int)numVal_   : def; }
 			const std::string& AsString()                   const { return strVal_; }
 

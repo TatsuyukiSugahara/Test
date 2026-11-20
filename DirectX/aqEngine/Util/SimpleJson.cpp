@@ -3,6 +3,9 @@
 #include "Resource/Resource.h"
 #include <fstream>
 #include <cctype>
+#include <cfloat>
+#include <charconv>
+#include <cmath>
 #include <cstdlib>
 
 namespace aq
@@ -245,6 +248,35 @@ namespace aq
 				return std::string(static_cast<size_t>(depth) * 2, ' ');
 			}
 
+			/** 2^53。絶対値がこれ未満の整数は double で正確に表せる */
+			static constexpr double MAX_EXACT_INTEGER = 9007199254740992.0;
+
+			/**
+			 * 数値を書き出す(エディタ全体設計 7.8 節「1. 数値」)。次の順に選ぶ。
+			 *   1. 整数で絶対値が 2^53 未満 → 小数点なし
+			 *   2. float に狭めても同じ値 → float の最短表現。float のフィールドを double に広げた値が
+			 *      0.10000000149011612 のような表記にならないようにするため
+			 *   3. それ以外 → double の最短表現。override の生 JSON の数値(テキストから読んだ double)を往復させるため
+			 * 読み込みは strtod のまま(from_chars の浮動小数点版は iOS で使えない)。
+			 */
+			void AppendNumber(const double d, std::string& out)
+			{
+				if (std::fabs(d) < MAX_EXACT_INTEGER && std::trunc(d) == d) {
+					out += std::to_string(static_cast<long long>(d));
+					return;
+				}
+
+				// 範囲外の double を float に変換するのは未定義なので、FLT_MAX 以下のときだけ狭めて比べる
+				const bool fitsFloat   = std::isfinite(d) && std::fabs(d) <= static_cast<double>(FLT_MAX);
+				const bool sameAsFloat = fitsFloat && static_cast<double>(static_cast<float>(d)) == d;
+
+				char buf[64];
+				const std::to_chars_result result = sameAsFloat
+					? std::to_chars(buf, buf + sizeof(buf), static_cast<float>(d))
+					: std::to_chars(buf, buf + sizeof(buf), d);
+				out.append(buf, result.ptr);
+			}
+
 			void StringifyImpl(const JsonValue& v, std::string& out, int depth)
 			{
 				if (v.IsNull())
@@ -257,19 +289,8 @@ namespace aq
 				}
 				else if (v.IsNumber())
 				{
-					// 整数相当なら小数点なしで出力
-					const double d = static_cast<double>(v.AsFloat());
-					const long long i = static_cast<long long>(d);
-					if (static_cast<double>(i) == d)
-					{
-						out += std::to_string(i);
-					}
-					else
-					{
-						char buf[32];
-						std::snprintf(buf, sizeof(buf), "%g", d);
-						out += buf;
-					}
+					// float に狭めずに書く(整数・float の最短・double の最短の 3 分岐)
+					AppendNumber(v.AsDouble(), out);
 				}
 				else if (v.IsString())
 				{

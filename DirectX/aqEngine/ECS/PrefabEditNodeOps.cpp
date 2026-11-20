@@ -9,6 +9,254 @@ namespace aq
 {
 	namespace ecs
 	{
+		namespace
+		{
+			/** overrides の中のキー */
+			static constexpr const char* KEY_NAME               = "name";
+			static constexpr const char* KEY_COMPONENTS         = "components";
+			static constexpr const char* KEY_ADDED_COMPONENTS   = "addedComponents";
+			static constexpr const char* KEY_REMOVED_COMPONENTS = "removedComponents";
+
+
+			/** 2 つの JSON が等しいか（キーの順序は無視、数値は double で完全一致） */
+			bool JsonEquals(const util::JsonValue& a, const util::JsonValue& b)
+			{
+				if (a.IsNumber() && b.IsNumber()) { return a.AsDouble() == b.AsDouble(); }
+				if (a.IsNull() && b.IsNull())     { return true; }
+				if (a.IsBool() && b.IsBool())     { return a.AsBool() == b.AsBool(); }
+				if (a.IsString() && b.IsString()) { return a.AsString() == b.AsString(); }
+				if (a.IsArray() && b.IsArray()) {
+					if (a.Size() != b.Size()) { return false; }
+					for (size_t i = 0; i < a.Size(); ++i) {
+						if (!JsonEquals(a[i], b[i])) { return false; }
+					}
+					return true;
+				}
+				if (a.IsObject() && b.IsObject()) {
+					if (a.GetObject().size() != b.GetObject().size()) { return false; }
+					for (const auto& [key, value] : a.GetObject()) {
+						if (!b.Contains(key) || !JsonEquals(value, b[key])) { return false; }
+					}
+					return true;
+				}
+				return false;
+			}
+
+
+			/**
+			 * before から after への「違うキー」を求める（JsonValue::Merge の規則と同じ）
+			 *
+			 * オブジェクトは中まで比べて違う葉だけを残し、配列とスカラーは値ごと置き換える。
+			 * @return 違いがあれば true（out に差分を入れる）
+			 */
+			bool MakeJsonDiff(const util::JsonValue& before, const util::JsonValue& after, util::JsonValue& out)
+			{
+				if (before.IsObject() && after.IsObject()) {
+					util::JsonValue diff = util::JsonValue::MakeObject();
+					bool            changed = false;
+					for (const auto& [key, value] : after.GetObject()) {
+						if (!before.Contains(key)) {
+							diff.Set(key, value);
+							changed = true;
+							continue;
+						}
+						util::JsonValue child;
+						if (MakeJsonDiff(before[key], value, child)) {
+							diff.Set(key, std::move(child));
+							changed = true;
+						}
+					}
+					if (changed) { out = std::move(diff); }
+					return changed;
+				}
+				if (JsonEquals(before, after)) { return false; }
+				out = after;
+				return true;
+			}
+
+
+			/** オブジェクトから key を除く（JsonValue に削除が無いので作り直す） */
+			void EraseKey(util::JsonValue& object, const std::string& key)
+			{
+				if (!object.Contains(key)) { return; }
+				util::JsonValue rebuilt = util::JsonValue::MakeObject();
+				for (const auto& [name, value] : object.GetObject()) {
+					if (name != key) { rebuilt.Set(name, value); }
+				}
+				object = std::move(rebuilt);
+			}
+
+
+			/** overrides.<section> から typeName を除く。除いて空になった section はキーごと消す */
+			void EraseSectionMember(util::JsonValue& overrides, const char* section, const std::string& typeName)
+			{
+				if (!overrides[section].Contains(typeName)) { return; }
+				util::JsonValue inner = overrides[section];
+				EraseKey(inner, typeName);
+				if (inner.GetObject().empty()) {
+					EraseKey(overrides, section);
+				} else {
+					overrides.Set(section, std::move(inner));
+				}
+			}
+
+
+			/** overrides.<section>.<typeName> を value で置き換える（section が無ければ作る） */
+			void SetSectionMember(util::JsonValue& overrides, const char* section, const std::string& typeName, const util::JsonValue& value)
+			{
+				util::JsonValue inner = overrides[section].IsObject() ? overrides[section] : util::JsonValue::MakeObject();
+				inner.Set(typeName, value);
+				overrides.Set(section, std::move(inner));
+			}
+
+
+			/** overrides.<section>.<typeName> へ diff を deep-merge する（既存の override の意味どおり） */
+			void MergeSectionMember(util::JsonValue& overrides, const char* section, const std::string& typeName, const util::JsonValue& diff)
+			{
+				util::JsonValue inner = overrides[section].IsObject() ? overrides[section] : util::JsonValue::MakeObject();
+				if (inner.Contains(typeName)) {
+					util::JsonValue merged = inner[typeName];
+					merged.Merge(diff);
+					inner.Set(typeName, std::move(merged));
+				} else {
+					inner.Set(typeName, diff);
+				}
+				overrides.Set(section, std::move(inner));
+			}
+
+
+			bool HasComponent(const PrefabEditNode& node, const TypeInfo& type)
+			{
+				for (const PrefabEditComponent& c : node.components) {
+					if (c.data.Type() == type) { return true; }
+				}
+				return false;
+			}
+
+
+			/**
+			 * 読み込んだときにあったのに今の一覧に無い override コンポーネントを、overrides.<section> から消す
+			 *
+			 * 読み込みは登録済みの型だけを編集ノードへ入れるので、登録済みで一覧に無い型を「消えた」とみなす
+			 * （未登録の型は読み込んでいないので、生 JSON のまま残す）。
+			 */
+			void EraseMissingComponents(util::JsonValue& overrides, const char* section, const PrefabEditNode& node)
+			{
+				ComponentRegistry& registry = ComponentRegistry::Get();
+				std::vector<std::string> missing;
+				for (const auto& [typeName, value] : overrides[section].GetObject()) {
+					const TypeInfo t = registry.TypeOf(typeName);
+					if (t == TypeInfo()) { continue; }
+					if (!HasComponent(node, t)) { missing.push_back(typeName); }
+				}
+				for (const std::string& typeName : missing) {
+					EraseSectionMember(overrides, section, typeName);
+				}
+			}
+
+
+			/**
+			 * 参照ノードの overrides を作る（エディタ全体設計 7.8 節「2. override の保持」）
+			 *
+			 * 読み込んだ生 JSON（overridesRaw）を写して始め、編集で変わったところだけを書き換える。
+			 * children / removedChildren は触らない（編集 UI が無い）。
+			 */
+			util::JsonValue BuildReferenceOverrides(const PrefabEditNode& node)
+			{
+				ComponentRegistry& registry = ComponentRegistry::Get();
+
+				util::JsonValue overrides = node.overridesRaw.IsObject() ? node.overridesRaw : util::JsonValue::MakeObject();
+
+				// 名前: overrides.name があったときは、Name 欄の編集が実行時の名前に効くようにそちらも書く
+				if (overrides.Contains(KEY_NAME)) {
+					overrides.Set(KEY_NAME, util::JsonValue(node.name));
+				}
+
+				// 読み込んだのに今の一覧に無い override コンポーネントは、読み込んだ出どころから消す（両方にあれば両方から）
+				EraseMissingComponents(overrides, KEY_COMPONENTS, node);
+				EraseMissingComponents(overrides, KEY_ADDED_COMPONENTS, node);
+
+				for (const PrefabEditComponent& c : node.components) {
+					const ComponentMeta* meta = registry.Find(c.data.Type().GetHash());
+					if (!meta || !meta->serializePtr || !meta->typeName) { continue; }
+					const std::string typeName = meta->typeName;
+
+					util::JsonValue current;
+					meta->serializePtr(c.data.Get(), current);
+
+					if (c.loadedJson.IsNull()) {
+						// 新しく足した: components に全フィールドを書く。addedComponents は後から適用されるので、
+						// 同じ型が残っていると新しい値が上書きされる。そこから消す
+						SetSectionMember(overrides, KEY_COMPONENTS, typeName, current);
+						EraseSectionMember(overrides, KEY_ADDED_COMPONENTS, typeName);
+					} else if (c.source == PrefabOverrideSource::AddedComponents) {
+						// addedComponents は丸ごと上書きする意味なので、変わっていれば全フィールドを書き戻す
+						if (!JsonEquals(c.loadedJson, current)) {
+							SetSectionMember(overrides, KEY_ADDED_COMPONENTS, typeName, current);
+						}
+					} else {
+						// components は deep-merge なので、違うキーだけを書き足す（元に戻したキーは書かない）
+						util::JsonValue diff;
+						if (MakeJsonDiff(c.loadedJson, current, diff)) {
+							MergeSectionMember(overrides, KEY_COMPONENTS, typeName, diff);
+						}
+					}
+				}
+
+				// 削除コンポーネント: 今の一覧で置き換える（空ならキーを消す）。変わっていなければ生 JSON のまま
+				{
+					std::vector<std::string> loaded;
+					for (const util::JsonValue& r : overrides[KEY_REMOVED_COMPONENTS].GetArray()) {
+						if (r.IsString()) { loaded.push_back(r.AsString()); }
+					}
+					if (loaded != node.removedComponents) {
+						if (node.removedComponents.empty()) {
+							EraseKey(overrides, KEY_REMOVED_COMPONENTS);
+						} else {
+							util::JsonValue removed = util::JsonValue::MakeArray();
+							for (const std::string& t : node.removedComponents) { removed.PushBack(util::JsonValue(t)); }
+							overrides.Set(KEY_REMOVED_COMPONENTS, std::move(removed));
+						}
+					}
+				}
+				return overrides;
+			}
+
+
+			/**
+			 * 参照ノードの override コンポーネントを 1 つ読み込む
+			 *
+			 * 同じ型が既にあれば置き換える（components と addedComponents の両方にある型は、
+			 * 後から丸ごと上書きする addedComponents の値が実行時の値なので、そちらを残す）。
+			 */
+			void LoadOverrideComponent(PrefabEditNode& node, const std::string& typeName, const util::JsonValue& value,
+				const PrefabOverrideSource source)
+			{
+				ComponentRegistry& registry = ComponentRegistry::Get();
+				const TypeInfo t = registry.TypeOf(typeName);
+				if (t == TypeInfo()) { return; }                         // 未登録 typeName はスキップ
+
+				PrefabEditComponent comp{ AlignedStorage(t) };
+				const ComponentMeta* meta = registry.Find(t.GetHash());
+				if (meta && meta->deserializePtr) {
+					meta->deserializePtr(comp.data.Get(), value);
+				}
+				if (meta && meta->serializePtr) {
+					meta->serializePtr(comp.data.Get(), comp.loadedJson);
+				}
+				comp.source = source;
+
+				for (PrefabEditComponent& existing : node.components) {
+					if (existing.data.Type() == t) {
+						existing = std::move(comp);
+						return;
+					}
+				}
+				node.components.push_back(std::move(comp));
+			}
+		}
+
+
 		util::JsonValue PrefabNodeToJson(const PrefabEditNode& node)
 		{
 			ComponentRegistry& registry = ComponentRegistry::Get();
@@ -16,36 +264,13 @@ namespace aq
 			util::JsonValue obj = util::JsonValue::MakeObject();
 			obj.Set("name", util::JsonValue(node.name));
 
-			// 参照ノード: prefab パス + overrides（override/追加コンポーネント・削除リスト）。
+			// 参照ノード: prefab パス + overrides（読み込んだ生 JSON に編集した差分だけを反映する）。
 			// components/children の実体は解決時に参照先から展開され、overrides が上書き適用される（§7.3）。
 			if (!node.prefabRef.empty()) {
 				obj.Set("prefab", util::JsonValue(node.prefabRef));
 
-				util::JsonValue overrides = util::JsonValue::MakeObject();
-				bool hasOverrides = false;
-
-				// override/追加コンポーネント（deep-merge。base に無ければ追加される）
-				bool hasComps = false;
-				util::JsonValue comps = util::JsonValue::MakeObject();
-				for (const PrefabEditComponent& c : node.components) {
-					const ComponentMeta* meta = registry.Find(c.data.Type().GetHash());
-					if (!meta || !meta->serializePtr || !meta->typeName) { continue; }
-					util::JsonValue cj;
-					meta->serializePtr(c.data.Get(), cj);
-					comps.Set(meta->typeName, std::move(cj));
-					hasComps = true;
-				}
-				if (hasComps) { overrides.Set("components", std::move(comps)); hasOverrides = true; }
-
-				// 削除コンポーネント
-				if (!node.removedComponents.empty()) {
-					util::JsonValue removed = util::JsonValue::MakeArray();
-					for (const std::string& t : node.removedComponents) { removed.PushBack(util::JsonValue(t)); }
-					overrides.Set("removedComponents", std::move(removed));
-					hasOverrides = true;
-				}
-
-				if (hasOverrides) { obj.Set("overrides", std::move(overrides)); }
+				util::JsonValue overrides = BuildReferenceOverrides(node);
+				if (!overrides.GetObject().empty()) { obj.Set("overrides", std::move(overrides)); }
 				return obj;
 			}
 
@@ -77,26 +302,31 @@ namespace aq
 
 			ComponentRegistry& registry = ComponentRegistry::Get();
 
-			// 参照ノード: prefab パス + overrides（override コンポーネント・削除リスト）を復元する。
+			// 参照ノード: prefab パス + overrides を復元する。overrides の生 JSON は丸ごと控え、
+			// 書き出しでは編集で変わったところだけを書き換える（name / children / removedChildren も保持される）。
 			if (json.Contains("prefab") && json["prefab"].IsString()) {
 				node->prefabRef = json["prefab"].AsString();
 
 				if (json.Contains("overrides") && json["overrides"].IsObject()) {
 					const util::JsonValue& ov = json["overrides"];
-					if (ov.Contains("components") && ov["components"].IsObject()) {
-						for (const auto& kv : ov["components"].GetObject()) {
-							const TypeInfo t = registry.TypeOf(kv.first);
-							if (t == TypeInfo()) { continue; }
-							PrefabEditComponent comp{ AlignedStorage(t) };
-							const ComponentMeta* meta = registry.Find(t.GetHash());
-							if (meta && meta->deserializePtr) {
-								meta->deserializePtr(comp.data.Get(), kv.second);
-							}
-							node->components.push_back(std::move(comp));
+					node->overridesRaw = ov;
+
+					// 名前は overrides.name を優先する（実行時の ApplyPatch と同じ優先順）
+					if (ov.Contains(KEY_NAME) && ov[KEY_NAME].IsString()) { node->name = ov[KEY_NAME].AsString(); }
+
+					// override コンポーネント（deep-merge）と追加コンポーネント（丸ごと上書き）。出どころを覚える
+					if (ov.Contains(KEY_COMPONENTS) && ov[KEY_COMPONENTS].IsObject()) {
+						for (const auto& kv : ov[KEY_COMPONENTS].GetObject()) {
+							LoadOverrideComponent(*node, kv.first, kv.second, PrefabOverrideSource::Components);
 						}
 					}
-					if (ov.Contains("removedComponents") && ov["removedComponents"].IsArray()) {
-						for (const util::JsonValue& r : ov["removedComponents"].GetArray()) {
+					if (ov.Contains(KEY_ADDED_COMPONENTS) && ov[KEY_ADDED_COMPONENTS].IsObject()) {
+						for (const auto& kv : ov[KEY_ADDED_COMPONENTS].GetObject()) {
+							LoadOverrideComponent(*node, kv.first, kv.second, PrefabOverrideSource::AddedComponents);
+						}
+					}
+					if (ov.Contains(KEY_REMOVED_COMPONENTS) && ov[KEY_REMOVED_COMPONENTS].IsArray()) {
+						for (const util::JsonValue& r : ov[KEY_REMOVED_COMPONENTS].GetArray()) {
 							if (r.IsString()) { node->removedComponents.push_back(r.AsString()); }
 						}
 					}

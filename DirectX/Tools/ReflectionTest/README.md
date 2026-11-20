@@ -4,6 +4,8 @@
 編集イベント Visitor(`ImGuiEditEventVisitor`)とフィールド属性(`FieldAttr`)を、
 画面もデバイスも作らずに検査するコマンドラインツール
 (→ [設計書/エディタ全体設計.md](../../設計書/エディタ全体設計.md) 6.4 節「5. 検査ツール」、E6a / E6b)。
+E4a で、編集ノード(`PrefabEditNode`)の JSON 往復(T6)と数値の書き出し(T7)の試験を足した
+(同 7.8 節「9. 検査ツールの追加」)。
 
 E6a でエンジンを変える前に現状の出力(T3)を控え、E6b の変更の前後で既存アセットの保存結果が
 変わらないことを機械的に比べるために使う。
@@ -53,6 +55,33 @@ build/macos-ninja-metal/bin/Debug/ReflectionTest --selftest --assets Game/Assets
 | T3 既存アセット | `--assets` 以下の全 `*.prefab.json` と `*.level.json` を開き、JSON 中の `components` オブジェクトを再帰で探す。各コンポーネントを既定値の実体へ `deserializePtr` してから `serializePtr` し、結果を `--dump` へ書く。最後にファイル数・コンポーネント数を出す。JSON として読めないファイルがあれば `[FAIL]` |
 | T4 編集イベント | 画面を持たない ImGui のコンテキストに入力を合成し、試験用の型(float、片側だけ範囲付きの float、bool、Vector3、Quaternion、パス、文字列、readOnly、hidden)を `ImGuiEditEventVisitor` で描く。(1) float のドラッグで Begin(変更前)→ Update 1 回以上 → Commit(変更後)。(2) 押して動かさずに離すと Begin → Cancel。(3) チェックボックスで Begin → Update → Commit、値が反転する。(4) Vector3 の 1 成分のドラッグで Begin → Update → Commit が 1 組。(5) パスと文字列は、値を変えて Enter で Begin と Commit が同じフレームに 1 組、同じ値の Enter では何も出ない(`FieldPath` の戻り値も「確定し、かつ値が変わった」ときだけ true)。(6) readOnly と hidden はイベントを出さず、hidden は `itemRects` に出ない。(7) Vector3 を描く直前に `ImGuiContext::AnyIdHasBeenEditedThisFrame` を立てても Update が出る。(8) ドラッグ・Ctrl+クリックの直接入力の途中で描くのを 2 フレームやめて再び描いても、古い操作の Commit / Cancel が出ず、出るなら同じフレームの Begin と Commit の 1 組。(1)〜(7) では Begin の後に Commit か Cancel が必ず 1 つ来る。ほかに、DragFloat3 で部品を Tab で移ったときの列を記録だけする(合否に使わない) |
 | T5 属性 | `ImGuiFieldVisitor` と `ImGuiEditEventVisitor` の両方で、下限付き(`Min(0.5f)`)の float を下限の外へドラッグしても、Ctrl+クリックで `-5` を入力しても 0.5 に収まる。範囲の無い float は同じ操作で制限されない |
+| T6 編集ノードの往復(E4a はノード単位) | `TestData/` と `--assets` 以下の全 `*.level.json` の `entities` の各ノードと、全 `*.prefab.json` のルートを `PrefabNodeFromJson` → `PrefabNodeToJson` し、設計書 11.4 節の規則で元と比べる(参照ノードは `prefab` と `overrides` の生 JSON を構造で比べ、キーの有無も一致・数値は double で完全一致。実体ノードはコンポーネントを既定値で構築して比べ、子の順序と数も比べる。ノード名は実行時の名前 = 参照ノードは `overrides.name` 優先)。さらに `TestData/T6_Overrides.level.json` の参照ノード `RefFull` をプログラムで編集して書き出す: (a) override に無かったフィールド(Transform の `scale`)を変える → そのキーだけが増える、(b) 変えて元に戻す → 元と同じ、(c) override コンポーネント(Spawner)を外す → `components` から消える / 外して同じ型を足し直す → 全フィールドが `components` に入る、(d) `addedComponents` の AudioSource を変える → `addedComponents` 側が全フィールドで変わる、(e) Name を変える → 外側の `name` と `overrides.name` の両方が変わる、(f) `addedComponents` の AudioSource を外す → 書いて読み直しても復活しない、(g) 外して足し直して値を変える → 読み直すと新しい値で、`addedComponents` に古い値が残らない。Debug 構成のみ(編集ノードが `AQ_DEBUG_IMGUI` のときだけある) |
+| T7 数値 | `Stringify` の表記と、読み直した値を確かめる(下の表)。Debug 構成では、`TestData/T7_Numbers.level.json` を編集ノードへ読み込んで書き出したファイルを一時ディレクトリへ書いて読み直し、7 桁以上の小数を持つ通常のフィールドは float として、override の値は double として一致することも確かめる |
+
+T7 の表記の期待値(設計書 7.8 節「1. 数値」の 3 分岐: 整数で絶対値が 2^53 未満 → 小数点なし、
+float に狭めても同じ値 → float の最短表現、それ以外 → double の最短表現):
+
+| 入力 | 表記 | 読み直しの比較 |
+|---|---|---|
+| `0.1f` を double に広げた値 | `0.1` | float |
+| `1234567.5` | `1234567.5` | double |
+| `16777217` | `16777217` | double |
+| `2147483647` / `-2147483648` | 同じ | double |
+| `9007199254740992`(2^53)/ `9007199254740993`(double では 2^53) | `9.007199e+15` | float(2^53 は「2^53 未満」に当たらず、float に狭めても同じ値なので float の最短表現になる) |
+| `1e20` | `1e+20` | double |
+| `1e-05` | `1e-05` | double |
+| `-0.0` | `0` | double(`==` で比べる) |
+
+### 試験用データ(`TestData/`)
+
+| ファイル | 中身 |
+|---|---|
+| `T6_Base.prefab.json` | 参照ノードが指す Prefab(子 `ChildA` / `ChildB`、Spawner、AudioListener) |
+| `T6_Overrides.level.json` | 実体ノード(子付き)、`overrides` の `name` / `components` / `addedComponents` / `removedComponents` / `children` / `removedChildren` をすべて持つ参照ノード `RefFull`、overrides の無い参照ノード、2 段のインライン subLevel(E4b 用) |
+| `T6_Nested.prefab.json` | 入れ子の参照ノード(子の override を持つ)を持つ Prefab(Prefab エディタの経路) |
+| `T7_Numbers.level.json` | 7 桁以上の小数を持つ float のフィールドと、float に狭めると変わる override の値 |
+
+場所は `CMakeLists.txt` がソースの位置(`REFLECTION_TEST_DATA_DIR`)を埋め込むので、カレントディレクトリに依らない。
 
 - 数値は float に丸めて比べる。
 - T2 の試験名は `T2 <型名> <キー>`(`{}` の試験は `T2 <型名> {}`)。
@@ -90,6 +119,16 @@ E6a で記録していた 5 件(`T2 Animation(クリップ付き) {}`、`T2 Anim
 `T2 Terrain resolution`、`T2 Terrain heightScale`、`T2 Terrain terrainSize`)は E6b で直した
 (Animation の疎な JSON、Terrain の型消去の経路での往復。
 [エディタ全体設計](../../設計書/エディタ全体設計.md) 6.4 節の例外 1・例外 3 と「0. 既存の不具合の修正」)。
+
+E4a の前に T6 / T7 を今のコードで足し、次の 18 件を `[XFAIL]` として控えてから直した
+([エディタ全体設計](../../設計書/エディタ全体設計.md) 7.8 節「1. 数値」「2. override の保持」):
+
+| 試験 | 直す前の不具合 |
+|---|---|
+| `T6 TestData/T6_Overrides.level.json entities[1]`、`T6 TestData/T6_Nested.prefab.json ルート`、`T6 TestData/T7_Numbers.level.json entities[1]` | `PrefabNodeFromJson` が `overrides` の `name` / `addedComponents` / `children` / `removedChildren` を捨て、`PrefabNodeToJson` が override のコンポーネントを全フィールド書く(既定値のキーが増え、子の override が消える) |
+| `T6 (a)`〜`T6 (g)` の 8 件 | 同上(`addedComponents` のコンポーネントが読み込まれない、Name が `overrides.name` に効かない) |
+| `T7 Stringify 1234567.5`、`16777217`、`2147483647`、`9007199254740992`、`9007199254740993` | `Stringify` が数値を float に狭めてから `%g`(有効 6 桁)で書く |
+| `T7 ファイル往復 float のフィールド`、`T7 ファイル往復 override の double` | 同上(7 桁以上の小数が変わる。override の double が float に狭まる) |
 
 ---
 

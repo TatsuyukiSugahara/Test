@@ -1,0 +1,18 @@
+// T6 Prefab の往復の試験用データ(エディタ全体設計.md 7.8 節「9. 検査ツールの追加」)。
+// 入れ子の参照ノード(NestedRef)を持つ Prefab。Prefab エディタの経路(ルートを PrefabNodeFromJson → PrefabNodeToJson)で試す。
+// NestedRef の overrides は子の override(children / removedChildren)を持つ。
+{
+  "name": "T6Nested",
+  "components": { "Transform": { "position": [0, 0, 0] } },
+  "children": [
+    { "name": "InlineChild", "components": { "Transform": { "position": [1, 0, 0] } } },
+    { "name": "NestedRef", "prefab": "T6_Base.prefab.json",
+      "overrides": {
+        "components": { "Transform": { "scale": [3, 3, 3] } },
+        "children": [
+          { "name": "ChildA", "components": { "Transform": { "position": [0, 2, 0] } } }
+        ],
+        "removedChildren": ["ChildB"]
+      } }
+  ]
+}

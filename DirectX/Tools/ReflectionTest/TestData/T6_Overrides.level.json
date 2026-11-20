@@ -1,0 +1,50 @@
+// T6 Level の往復の試験用データ(エディタ全体設計.md 7.8 節「9. 検査ツールの追加」)。
+//   Inline  : 実体ノード(子付き)
+//   RefFull : overrides の name / components / addedComponents / removedComponents / children / removedChildren をすべて持つ参照ノード。
+//             外側の name と overrides.name を別にしてある(読み込みは overrides.name を優先する)。
+//             (a)〜(g) のプログラムによる編集試験もこのノードで行う
+//   RefPlain: overrides の無い参照ノード
+//   subLevels は 2 段のインライン定義(E4b の Level 全体の往復で使う)
+{
+  "name": "T6_Overrides",
+  "entities": [
+    { "name": "Inline", "components": { "Transform": { "position": [1, 2, 3] } },
+      "children": [
+        { "name": "InlineChild", "components": {
+          "Transform": { "scale": [2, 2, 2] },
+          "Spawner": { "interval": 0.5 } } }
+      ] },
+    { "name": "RefFull", "prefab": "T6_Base.prefab.json",
+      "overrides": {
+        "name": "RefFullRenamed",
+        "components": {
+          "Transform": { "position": [1.5, 2, 3] },
+          "Spawner": { "interval": 2.5 }
+        },
+        "addedComponents": {
+          "AudioSource": { "volume": 0.5, "loop": true }
+        },
+        "removedComponents": ["AudioListener"],
+        "children": [
+          { "name": "ChildA", "components": { "Transform": { "position": [0, 1, 0] } } },
+          { "name": "ChildNew", "components": { "Transform": { "position": [5, 0, 0] } } }
+        ],
+        "removedChildren": ["ChildB"]
+      } },
+    { "name": "RefPlain", "prefab": "T6_Base.prefab.json" }
+  ],
+  "subLevels": [
+    { "loadOnStart": true, "level": {
+      "name": "Inner1",
+      "entities": [
+        { "name": "Inner1Node", "components": { "Transform": { "position": [0, 0, 1] } } }
+      ],
+      "subLevels": [
+        { "loadOnStart": true, "level": {
+          "name": "Inner2",
+          "entities": [
+            { "name": "Inner2Node", "components": { "Transform": { "position": [0, 0, 2] } } }
+          ] } }
+      ] } }
+  ]
+}

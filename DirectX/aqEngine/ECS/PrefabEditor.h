@@ -11,11 +11,21 @@ namespace aq
 {
 	namespace ecs
 	{
+		// 参照ノードの override コンポーネントを読み込んだ出どころ（エディタ全体設計 7.8 節「2. override の保持」）。
+		enum class PrefabOverrideSource : uint8_t
+		{
+			None,              // 実体ノードのコンポーネント / 新しく足したコンポーネント
+			Components,        // overrides.components（deep-merge）
+			AddedComponents,   // overrides.addedComponents（後から丸ごと上書き）
+		};
+
 		// エディタ用ワーキングコピー（設計 §6.2）。ランタイムの PrefabData とは別物。
 		// コンポーネントは型消去した実体（AlignedStorage）として保持し、既存 Inspector を再利用する。
 		struct PrefabEditComponent
 		{
-			AlignedStorage data;   // 型は data.Type()
+			AlignedStorage       data;                                // 型は data.Type()
+			util::JsonValue      loadedJson;                          // 参照ノードの override: 読み込んだ直後の serializePtr の値。新しく足したものは空（Null）
+			PrefabOverrideSource source = PrefabOverrideSource::None; // 参照ノードの override: 読み込んだ出どころ
 		};
 
 		struct PrefabEditNode
@@ -25,6 +35,7 @@ namespace aq
 			std::vector<PrefabEditComponent>             components;         // 通常=インライン / 参照ノード=override コンポーネント（deep-merge/追加）
 			std::vector<std::string>                     removedComponents;  // 参照ノードの override: 参照先から除去する typeName
 			std::vector<std::unique_ptr<PrefabEditNode>> children;           // ポインタ安定のため unique_ptr
+			util::JsonValue                              overridesRaw = util::JsonValue::MakeObject();   // 参照ノード: 読み込んだ overrides の生 JSON（無ければ空のオブジェクト）。書き出しはこれを写して始める
 		};
 
 

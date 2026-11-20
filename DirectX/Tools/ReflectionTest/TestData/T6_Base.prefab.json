@@ -1,0 +1,15 @@
+// T6 / T7 の参照ノードが指す Prefab(エディタ全体設計.md 7.8 節「9. 検査ツールの追加」)。
+// 編集ノードの往復試験そのものは参照先を解決しないが、実行時に読んでも意味が通るように、
+// overrides が触る子(ChildA / ChildB)とコンポーネント(Spawner / AudioListener)を持たせておく。
+{
+  "name": "T6Base",
+  "components": {
+    "Transform": { "position": [0, 0, 0] },
+    "Spawner": { "prefab": "", "interval": 1.0, "maxCount": 3 },
+    "AudioListener": {}
+  },
+  "children": [
+    { "name": "ChildA", "components": { "Transform": { "position": [0, 0.5, 0] } } },
+    { "name": "ChildB", "components": { "Transform": { "position": [0, -0.5, 0] } } }
+  ]
+}

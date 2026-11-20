@@ -1,0 +1,18 @@
+// T7 数値の試験用データ(エディタ全体設計.md 7.8 節「9. 検査ツールの追加」)。
+//   Precise  : 7 桁以上の小数を持つ通常のフィールド(float)。書いて読み直すと float として一致する
+//   RefDouble: override の値(double。float に狭めると変わる値)。書いて読み直すと double として一致する
+{
+  "name": "T7_Numbers",
+  "entities": [
+    { "name": "Precise", "components": {
+      "Transform": { "position": [1.2345678, -98.765433, 0.1], "scale": [1.0000001, 1, 1] },
+      "Spawner": { "interval": 0.33333334 } } },
+    { "name": "RefDouble", "prefab": "T6_Base.prefab.json",
+      "overrides": {
+        "components": {
+          "Transform": { "position": [0.123456789012345, 1.1, 1e-7] },
+          "Spawner": { "interval": 1234.56789012 }
+        }
+      } }
+  ]
+}

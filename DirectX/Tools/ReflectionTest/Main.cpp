@@ -5,6 +5,8 @@
 //
 // T1 往復 / T2 疎な JSON / T3 既存アセットのダンプ / T4 編集イベント / T5 属性 を行う。
 // E4a で T6 編集ノードの往復 / T7 数値の書き出し を足した(7.8 節「9. 検査ツールの追加」)。
+// E4b で T8 生成と取り消し を足した。T8 だけは Engine(Create のみ)と EntityContext を作り、
+// 遅延生成を FlushPendingCommands と LevelManager::Tick で動かす(画面・デバイス・System は作らない)。
 // 画面もデバイスも作らない。実体は AlignedStorage(TypeInfo) で既定値のまま作り、
 // ComponentMeta の型消去関数だけを通す。T4 / T5 は画面を持たない ImGui のコンテキストに
 // 入力を合成して行う(ImGui の Visitor は AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ)。
@@ -13,8 +15,13 @@
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
 #include "Level/LevelComponentRegistry.h"
+#include "Level/LevelComponents.h"
+#include "Level/LevelManager.h"
+#include "Level/LevelRegistry.h"
+#include "Level/LevelSerializer.h"
 #include "Util/SimpleJson.h"
 #ifdef AQ_DEBUG_IMGUI
+#include "Level/LevelEditModel.h"
 #include "ECS/PrefabEditor.h"
 #include "ECS/PrefabEditNodeOps.h"
 #include "ECS/ImGuiFieldVisitor.h"
@@ -104,7 +111,9 @@ namespace
 			"      T3 既存アセットのダンプも行い、--dump のファイルへ書く。\n"
 			"      Debug 構成(AQ_DEBUG_IMGUI)では T4 編集イベント / T5 属性 も画面無しの ImGui で試す。\n"
 			"      T7 数値の書き出しを試す。Debug 構成では T6 編集ノードの往復(TestData と --assets)と\n"
-			"      T7 のファイル往復も行う。\n");
+			"      T7 のファイル往復も行う。\n"
+			"      T8 Level の生成と取り消し(IsSpawned / Unload / LoadAsync の取り消し / Unregister)を試す。\n"
+			"      Debug 構成ではプレビューの置き換え(LevelEditModel)も行う。\n");
 	}
 
 
@@ -1022,7 +1031,58 @@ namespace
 	}
 
 
-	/** T6 Level・Prefab の往復(E4a はノード単位) */
+	/**
+	 * T6 Level 全体の往復(E4b は LevelEditModel 経由。7.8 節「9.」)
+	 *
+	 * T6_Overrides.level.json(実体ノード・override 入りの参照ノード・2 段のインライン subLevel を含む)を
+	 * LevelEditModel::FromJson → ToJson し、(1) 1 回目の結果と、それを読み直してもう一度書き出した
+	 * 2 回目の結果が一致する(安定している)こと、(2) 入れ子の subLevel(Inner1 の中の Inner2)が
+	 * 捨てられずに残ることを確かめる。ノード単位の中身は RunNodeRoundTripTests が既に確認済みなので、
+	 * ここでは LevelEditModel 固有の関心(Level 全体の構造・入れ子の subLevel)だけを見る。
+	 */
+	void RunLevelModelRoundTripTest(TestResults& results)
+	{
+		const std::string path = std::string(TEST_DATA_DIR) + "/" + OVERRIDE_TEST_LEVEL;
+
+		aq::level::LevelEditModel model;
+		if (!model.LoadFile(path)) {
+			Report(results, "T6 LevelEditModel 往復", false, "読み込み失敗: " + path);
+			return;
+		}
+		const JsonValue first = model.ToJson();
+
+		aq::level::LevelEditModel model2;
+		if (!model2.FromJson(first)) {
+			Report(results, "T6 LevelEditModel 往復", false, "2 回目の読み込みに失敗");
+			return;
+		}
+		const JsonValue second = model2.ToJson();
+
+		const bool stable = JsonEquals(first, second);
+		Report(results, "T6 LevelEditModel 往復(安定)", stable,
+			stable ? std::string() : "1 回目と 2 回目で違う: " + DiffKeys(first, second));
+
+		// 入れ子の subLevel(Inner1 の中の Inner2)が残っているか。
+		bool foundInner2 = false;
+		if (first.Contains("subLevels") && first["subLevels"].IsArray()) {
+			for (const JsonValue& sub : first["subLevels"].GetArray()) {
+				if (!sub.Contains("level") || !sub["level"].IsObject()) continue;
+				const JsonValue& inner1 = sub["level"];
+				if (!inner1.Contains("subLevels") || !inner1["subLevels"].IsArray()) continue;
+				for (const JsonValue& inner : inner1["subLevels"].GetArray()) {
+					if (inner.Contains("level") && inner["level"].IsObject()
+						&& inner["level"].Contains("name") && inner["level"]["name"].AsString() == "Inner2") {
+						foundInner2 = true;
+					}
+				}
+			}
+		}
+		Report(results, "T6 LevelEditModel 往復(入れ子の subLevel)", foundInner2,
+			foundInner2 ? std::string() : "Inner2 が見つからない(入れ子の subLevel が捨てられている)");
+	}
+
+
+	/** T6 Level・Prefab の往復(E4a はノード単位、E4b は Level 全体を LevelEditModel 経由で) */
 	void RunNodeRoundTripTests(TestResults& results, const Options& options)
 	{
 		RunNodeRoundTripDirectory(results, "TestData", TEST_DATA_DIR);
@@ -1032,6 +1092,7 @@ namespace
 			RunNodeRoundTripDirectory(results, "Assets", options.assetsPath);
 		}
 		RunOverrideEditTests(results);
+		RunLevelModelRoundTripTest(results);
 	}
 
 
@@ -1107,6 +1168,379 @@ namespace
 		}
 	}
 #endif
+
+
+	using aq::level::LevelId;
+	using aq::level::LevelLoadHandle;
+	using aq::level::LevelManager;
+	using aq::level::LevelMemberComponent;
+	using aq::level::LevelRegistry;
+
+	/** T8 の (c) / (d) で 1 フレームに作るエンティティ数 */
+	static constexpr uint32_t T8_ASYNC_PER_FRAME  = 1;
+	/** T8 で非同期ロードを最後まで進めるときの Tick の上限(無限ループ防止) */
+	static constexpr int      T8_MAX_TICKS        = 64;
+	/** T8 (f) で回すフレーム数と、1 フレームに出す要求の数 */
+	static constexpr int      T8_PREVIEW_FRAMES   = 10;
+	static constexpr int      T8_PREVIEW_REQUESTS = 10;
+
+
+	/**
+	 * T8 の試験用 Level の JSON(Transform だけ)
+	 *
+	 * @param entityCount      トップレベルの entity の数
+	 * @param inlineChildCount 0 より大きければ、その数の entity を持つインラインのサブ Level を 1 つ足す(loadOnStart)
+	 */
+	JsonValue MakeSpawnTestLevelJson(const char* name, const int entityCount, const int inlineChildCount)
+	{
+		const auto makeEntities = [](const char* prefix, const int count)
+			{
+				JsonValue entities = JsonValue::MakeArray();
+				for (int i = 0; i < count; ++i) {
+					JsonValue components = JsonValue::MakeObject();
+					components.Set("Transform", JsonValue::MakeObject());
+					JsonValue entity = JsonValue::MakeObject();
+					entity.Set("name", JsonValue(std::string(prefix) + std::to_string(i)));
+					entity.Set("components", std::move(components));
+					entities.PushBack(std::move(entity));
+				}
+				return entities;
+			};
+
+		JsonValue level = JsonValue::MakeObject();
+		level.Set("name", JsonValue(std::string(name)));
+		level.Set("entities", makeEntities("E", entityCount));
+		if (inlineChildCount > 0) {
+			JsonValue child = JsonValue::MakeObject();
+			child.Set("name", JsonValue(std::string(name) + "_Child"));
+			child.Set("entities", makeEntities("C", inlineChildCount));
+			JsonValue sub = JsonValue::MakeObject();
+			sub.Set("level", std::move(child));
+			sub.Set("loadOnStart", JsonValue(true));
+			JsonValue subLevels = JsonValue::MakeArray();
+			subLevels.PushBack(std::move(sub));
+			level.Set("subLevels", std::move(subLevels));
+		}
+		return level;
+	}
+
+
+	/** 試験用 Level を in-memory 登録する。登録できたら true */
+	bool RegisterSpawnTestLevel(const std::string& key, const int entityCount, const int inlineChildCount)
+	{
+		const JsonValue json = MakeSpawnTestLevelJson(key.c_str(), entityCount, inlineChildCount);
+		std::shared_ptr<const aq::level::LevelData> data = aq::level::LevelSerializer::FromJson(json);
+		if (!data) return false;
+		LevelRegistry::Get().Register(key, data);
+		return LevelRegistry::Get().IsRegistered(key);
+	}
+
+
+	/** ワールドのエンティティ数(T8 のエンティティはすべて Transform を持つ) */
+	uint32_t CountEntities()
+	{
+		uint32_t count = 0;
+		aq::ecs::Foreach<aq::ecs::TransformComponent>([&count](const aq::ecs::Entity&, aq::ecs::TransformComponent*)
+			{
+				++count;
+			});
+		return count;
+	}
+
+
+	/** levelId の Level に属するエンティティ数 */
+	uint32_t CountLevelEntities(const LevelId levelId)
+	{
+		uint32_t count = 0;
+		aq::ecs::Foreach<LevelMemberComponent>([&count, levelId](const aq::ecs::Entity&, LevelMemberComponent* member)
+			{
+				if (member->levelId == levelId) ++count;
+			});
+		return count;
+	}
+
+
+	/** どのロード済み Level にも属さないエンティティ数 */
+	uint32_t CountOrphanEntities()
+	{
+		uint32_t owned = 0;
+		aq::ecs::Foreach<LevelMemberComponent>([&owned](const aq::ecs::Entity&, LevelMemberComponent* member)
+			{
+				if (LevelManager::Get().IsLoaded(member->levelId)) ++owned;
+			});
+		return CountEntities() - owned;
+	}
+
+
+	/** 次の試験の前に、全 Level をアンロードして破棄を確定し、取り消したロードを外す */
+	void ResetSpawnTestWorld()
+	{
+		LevelManager::Get().UnloadAll();
+		LevelManager::Get().Tick(0.0f);   // 取り消した(done の)非同期ロードを外す
+		aq::ecs::EntityContext::Get().FlushPendingCommands();
+	}
+
+
+	/** 数の比較の詳細(「名前 実際 / 期待」) */
+	std::string CountDetail(const char* label, const uint32_t actual, const uint32_t expected)
+	{
+		return std::string(label) + " " + std::to_string(actual) + " / 期待 " + std::to_string(expected);
+	}
+
+
+	/** T8 (a): Load 直後は IsSpawned が false、Flush の後は true */
+	void RunSpawnedTest(TestResults& results)
+	{
+		const std::string name = "T8 (a) IsSpawned";
+		const std::string key  = "<t8-a>";
+		if (!RegisterSpawnTestLevel(key, 3, 1)) {
+			Report(results, name, false, "試験用 Level を登録できない");
+			return;
+		}
+
+		LevelManager& levelManager = LevelManager::Get();
+		const LevelId levelId      = levelManager.Load(key);
+		const bool    beforeFlush  = levelManager.IsSpawned(levelId);
+		aq::ecs::EntityContext::Get().FlushPendingCommands();
+		const bool     afterFlush  = levelManager.IsSpawned(levelId);
+		const uint32_t count       = CountEntities();
+
+		const bool passed = levelId.IsValid() && !beforeFlush && afterFlush && count == 4;
+		Report(results, name, passed, passed ? std::string()
+			: "Load 直後 " + std::string(beforeFlush ? "true" : "false") + " / Flush 後 " + (afterFlush ? "true" : "false")
+			  + " / " + CountDetail("エンティティ数", count, 4));
+
+		ResetSpawnTestWorld();
+		LevelRegistry::Get().Unregister(key);
+	}
+
+
+	/** T8 (b): Load → Unload → Flush でエンティティが 1 つも作られない(同期ロードの不具合) */
+	void RunUnloadBeforeFlushTest(TestResults& results)
+	{
+		const std::string name = "T8 (b) Load → Unload → Flush";
+		const std::string key  = "<t8-b>";
+		if (!RegisterSpawnTestLevel(key, 3, 1)) {
+			Report(results, name, false, "試験用 Level を登録できない");
+			return;
+		}
+
+		LevelManager& levelManager = LevelManager::Get();
+		const LevelId levelId      = levelManager.Load(key);
+		levelManager.Unload(levelId);
+		aq::ecs::EntityContext::Get().FlushPendingCommands();
+		const uint32_t count = CountEntities();
+
+		const bool passed = levelId.IsValid() && count == 0 && !levelManager.IsSpawned(levelId);
+		Report(results, name, passed, passed ? std::string() : CountDetail("エンティティ数", count, 0));
+
+		ResetSpawnTestWorld();
+		LevelRegistry::Get().Unregister(key);
+	}
+
+
+	/** T8 (c): LoadAsync を 2 フレーム進めて根を Unload すると取り消され、以後エンティティが増えず、所属の無いものも残らない */
+	void RunCancelRootAsyncTest(TestResults& results)
+	{
+		const std::string name = "T8 (c) LoadAsync 中に根を Unload";
+		const std::string key  = "<t8-c>";
+		if (!RegisterSpawnTestLevel(key, 4, 2)) {
+			Report(results, name, false, "試験用 Level を登録できない");
+			return;
+		}
+
+		LevelManager&           levelManager = LevelManager::Get();
+		aq::ecs::EntityContext& ctx          = aq::ecs::EntityContext::Get();
+		const LevelLoadHandle   handle       = levelManager.LoadAsync(key, LevelId(), T8_ASYNC_PER_FRAME);
+		levelManager.Tick(0.0f);
+		levelManager.Tick(0.0f);
+		const uint32_t builtBeforeUnload = CountEntities();
+
+		levelManager.Unload(handle.GetLevelId());
+		const bool cancelled = handle.IsCancelled();
+		const bool done      = handle.IsDone();
+		ctx.FlushPendingCommands();
+		const uint32_t afterUnload = CountEntities();
+
+		for (int i = 0; i < T8_MAX_TICKS; ++i) {
+			levelManager.Tick(0.0f);
+		}
+		ctx.FlushPendingCommands();
+		const uint32_t afterTicks = CountEntities();
+		const uint32_t orphans    = CountOrphanEntities();
+		const size_t   active     = levelManager.GetActiveAsyncCount();
+
+		const bool passed = handle.IsValid() && builtBeforeUnload == 2 && cancelled && done
+			&& afterUnload == 0 && afterTicks == 0 && orphans == 0 && active == 0;
+		Report(results, name, passed, passed ? std::string()
+			: CountDetail("Unload 前", builtBeforeUnload, 2)
+			  + " / IsCancelled " + (cancelled ? "true" : "false") + " / IsDone " + (done ? "true" : "false")
+			  + " / " + CountDetail("Unload 後", afterUnload, 0) + " / " + CountDetail("Tick 後", afterTicks, 0)
+			  + " / " + CountDetail("所属なし", orphans, 0) + " / 残りのロード " + std::to_string(active));
+
+		ResetSpawnTestWorld();
+		LevelRegistry::Get().Unregister(key);
+	}
+
+
+	/** T8 (d): LoadAsync 中に子のサブ Level だけを Unload すると、子は作られず、親は最後まで作られる */
+	void RunCancelChildAsyncTest(TestResults& results)
+	{
+		const std::string name = "T8 (d) LoadAsync 中に子だけを Unload";
+		const std::string key  = "<t8-d>";
+		if (!RegisterSpawnTestLevel(key, 2, 2)) {
+			Report(results, name, false, "試験用 Level を登録できない");
+			return;
+		}
+
+		LevelManager&           levelManager = LevelManager::Get();
+		aq::ecs::EntityContext& ctx          = aq::ecs::EntityContext::Get();
+		const LevelLoadHandle   handle       = levelManager.LoadAsync(key, LevelId(), T8_ASYNC_PER_FRAME);
+		const LevelId           rootId       = handle.GetLevelId();
+		// インラインのサブ Level は "<inline>" で登録される。前の試験の Level は ResetSpawnTestWorld で外してあるので、これだけが当たる
+		const LevelId           childId      = levelManager.Find("<inline>");
+
+		// ジョブは親 E0, E1 → 子 C0, C1 の順。親を 1 つ作ったところで子だけを外す
+		levelManager.Tick(0.0f);
+		levelManager.Unload(childId);
+		for (int i = 0; i < T8_MAX_TICKS && !handle.IsDone(); ++i) {
+			levelManager.Tick(0.0f);
+		}
+		ctx.FlushPendingCommands();
+
+		const uint32_t rootCount  = CountLevelEntities(rootId);
+		const uint32_t childCount = CountLevelEntities(childId);
+		const uint32_t total      = CountEntities();
+		const bool     done       = handle.IsDone();
+		const bool     cancelled  = handle.IsCancelled();
+
+		const bool passed = handle.IsValid() && childId.IsValid() && rootCount == 2 && childCount == 0 && total == 2
+			&& done && !cancelled && handle.Built() == handle.Total();
+		Report(results, name, passed, passed ? std::string()
+			: CountDetail("親", rootCount, 2) + " / " + CountDetail("子", childCount, 0) + " / " + CountDetail("全体", total, 2)
+			  + " / IsDone " + (done ? "true" : "false") + " / IsCancelled " + (cancelled ? "true" : "false")
+			  + " / built " + std::to_string(handle.Built()) + " / total " + std::to_string(handle.Total()));
+
+		ResetSpawnTestWorld();
+		LevelRegistry::Get().Unregister(key);
+	}
+
+
+	/** T8 (e): Register → Unregister → IsRegistered が false(Load は Debug で assert するので呼ばない) */
+	void RunUnregisterTest(TestResults& results)
+	{
+		const std::string key = "<t8-e>";
+		const bool registered = RegisterSpawnTestLevel(key, 1, 0);
+		LevelRegistry::Get().Unregister(key);
+		const bool afterUnregister = LevelRegistry::Get().IsRegistered(key);
+		// 無いキーの Unregister は何もしない(落ちない)
+		LevelRegistry::Get().Unregister("<t8-e-not-registered>");
+
+		const bool passed = registered && !afterUnregister;
+		Report(results, "T8 (e) Unregister", passed, passed ? std::string()
+			: std::string("登録 ") + (registered ? "true" : "false") + " / 外した後 " + (afterUnregister ? "true" : "false"));
+	}
+
+
+#ifdef AQ_DEBUG_IMGUI
+	/** T8 (f): プレビューの置き換えを 1 フレームに 10 回要求し、10 フレーム続けても、エンティティ数が変わらず登録が 1 つだけ */
+	void RunPreviewReplaceTest(TestResults& results)
+	{
+		const std::string name = "T8 (f) プレビューの置き換え";
+
+		aq::level::LevelEditModel model;
+		if (!model.FromJson(MakeSpawnTestLevelJson("T8_Preview", 3, 0))) {
+			Report(results, name, false, "編集モデルへ読み込めない");
+			return;
+		}
+
+		aq::ecs::EntityContext&  ctx = aq::ecs::EntityContext::Get();
+		std::vector<uint32_t>    counts;
+		std::vector<std::string> keys;
+		for (int frame = 0; frame < T8_PREVIEW_FRAMES; ++frame) {
+			for (int i = 0; i < T8_PREVIEW_REQUESTS; ++i) {
+				model.RequestPreview();
+			}
+			model.ProcessPreviewRequest();
+			ctx.FlushPendingCommands();   // 次フレームの手順 3(5.3 節)の Flush の代わり
+			counts.push_back(CountEntities());
+			keys.push_back(model.GetPreviewKey());
+		}
+
+		// 要求が無いフレームでは何もしない
+		const std::string lastKey = model.GetPreviewKey();
+		model.ProcessPreviewRequest();
+		const bool idleKept = model.GetPreviewKey() == lastKey;
+
+		bool sameCount = true;
+		for (const uint32_t count : counts) {
+			if (count != counts.front()) sameCount = false;
+		}
+		uint32_t registeredCount = 0;
+		for (const std::string& key : keys) {
+			if (LevelRegistry::Get().IsRegistered(key)) ++registeredCount;
+		}
+		std::vector<std::string> uniqueKeys = keys;
+		std::sort(uniqueKeys.begin(), uniqueKeys.end());
+		uniqueKeys.erase(std::unique(uniqueKeys.begin(), uniqueKeys.end()), uniqueKeys.end());
+
+		const bool spawned = LevelManager::Get().IsSpawned(model.GetPreviewLevelId());
+		const bool passed  = counts.front() == 3 && sameCount && registeredCount == 1
+			&& uniqueKeys.size() == static_cast<size_t>(T8_PREVIEW_FRAMES) && idleKept && spawned
+			&& CountOrphanEntities() == 0;
+
+		std::string countText;
+		for (const uint32_t count : counts) {
+			countText += (countText.empty() ? "" : ",") + std::to_string(count);
+		}
+		Report(results, name, passed, passed ? std::string()
+			: "エンティティ数 [" + countText + "] / 期待 3 / 登録 " + std::to_string(registeredCount)
+			  + " / 置き換え " + std::to_string(uniqueKeys.size()) + " 回 / IsSpawned " + (spawned ? "true" : "false")
+			  + " / 要求なしで変わらない " + (idleKept ? "true" : "false"));
+
+		// 後始末(プレビューの Level と登録を外す)
+		LevelManager::Get().Unload(model.GetPreviewLevelId());
+		ctx.FlushPendingCommands();
+		LevelRegistry::Get().Unregister(model.GetPreviewKey());
+		ResetSpawnTestWorld();
+	}
+#endif
+
+
+	/**
+	 * T8 生成と取り消し(7.8 節「9.」)
+	 *
+	 * 画面無しで Engine と EntityContext を作って行う。
+	 * - Engine は Create だけで Initialize しない(ウィンドウ・デバイス・ThreadPool・AppHost を作らない)。
+	 *   AppHost が無いので Engine::WaitForRenderIdle は何もしない(プレビューの置き換えが呼ぶ)。
+	 * - EntityContext は System を登録せず Update も呼ばない。遅延生成は FlushPendingCommands で、
+	 *   非同期ロードは LevelManager::Tick で進める(どちらも本来は System の反復の外で呼ぶもの)。
+	 * - new / delete は MemoryManager を初期化しないので既定の HeapAllocator に落ちる(T1〜T7 と同じ)。
+	 * - 後始末は 全 Level のアンロード → Tick → Flush → LevelRegistry::Clear → EntityContext::Finalize → Engine::Release の順。
+	 */
+	void RunSpawnTests(TestResults& results)
+	{
+		const bool engineCreatedHere = !aq::Engine::IsCreated();
+		if (engineCreatedHere) aq::Engine::Create();
+		aq::ecs::EntityContext::Initialize();
+
+		RunSpawnedTest(results);
+		RunUnloadBeforeFlushTest(results);
+		RunCancelRootAsyncTest(results);
+		RunCancelChildAsyncTest(results);
+		RunUnregisterTest(results);
+#ifdef AQ_DEBUG_IMGUI
+		RunPreviewReplaceTest(results);
+#else
+		std::printf("        T8 (f): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+#endif
+
+		// 後始末
+		ResetSpawnTestWorld();
+		LevelRegistry::Get().Clear();
+		aq::ecs::EntityContext::Finalize();
+		if (engineCreatedHere) aq::Engine::Release();
+	}
 
 
 #ifdef AQ_DEBUG_IMGUI
@@ -1813,6 +2247,8 @@ namespace
 #else
 		std::printf("        T7 ファイル往復: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(編集ノードが無い)\n");
 #endif
+
+		RunSpawnTests(results);
 
 		std::printf("[selftest] PASS %u / FAIL %u / XFAIL %u / XPASS %u\n",
 			results.passCount, results.failCount, results.xfailCount, results.xpassCount);

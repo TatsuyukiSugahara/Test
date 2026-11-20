@@ -17,8 +17,9 @@ namespace aq
 		{
 			LevelId  id;
 			uint32_t total = 0;   // 生成予定エンティティ総数（サブLevel 含む）
-			uint32_t built = 0;   // 生成済み
+			uint32_t built = 0;   // 生成済み（Unload で飛ばしたジョブも数える）
 			bool     done  = false;
+			bool     cancelled = false;   // 根の Level（id）が Unload されて取り消された（done も true になる）
 		};
 
 
@@ -38,6 +39,7 @@ namespace aq
 			uint32_t Total()      const { return progress_ ? progress_->total : 0; }
 			uint32_t Built()      const { return progress_ ? progress_->built : 0; }
 			bool     IsDone()     const { return !progress_ || progress_->done; }
+			bool     IsCancelled() const { return progress_ && progress_->cancelled; }   // 根の Level が Unload されて取り消された
 			float    Progress()   const { return (progress_ && progress_->total) ? static_cast<float>(progress_->built) / static_cast<float>(progress_->total) : 1.0f; }
 		};
 
@@ -57,6 +59,7 @@ namespace aq
 				std::vector<uint32_t>            children;      // 子 Level の slot index（Unload カスケード用）
 				uint32_t                         generation = 0;
 				bool                             loaded     = false;
+				bool                             spawned    = false; // 予約した生成が実行された（IsSpawned。エディタ全体設計 7.8 節「6.」）
 				int64_t                          fileTime   = 0; // ファイル由来 root の最終更新時刻（変更検知用・非ファイルは 0）
 			};
 
@@ -67,6 +70,8 @@ namespace aq
 				int32_t                    parentJobIndex = -1;        // 同一 Level フォレスト内の親ジョブ（-1 = ルート）
 				LevelId                    levelId;                     // このエンティティの所属 Level
 				ecs::EntityHandle          handle;                      // 生成後に埋まる
+				bool                       skip           = false;     // 所属 Level が Unload された（作らないが built には数える）
+				bool                       lastOfLevel    = false;     // 所属 Level の最後のジョブ（作り終えたら spawned を立てる）
 			};
 
 			// 進行中の非同期ロード 1 件。
@@ -114,14 +119,22 @@ namespace aq
 
 			// Level をアンロードする。配下の全 Entity を遅延破棄（RequestDestroyEntity）し、
 			// サブLevel も再帰的に破棄する。LevelId は generation を進めて stale 化する。
-			// 実際の Entity 破棄は次の FlushCommands。
+			// 実際の Entity 破棄は次の FlushCommands。System の中からも呼ばれるので、ここでは Flush しない。
+			// 同期ロードの未実行の生成コマンドは、実行時に IsLoaded で弾かれて何も作らない。
+			// 進行中の非同期ロードのうち対象（子孫含む）に属するジョブは飛ばす印を付け、
+			// 根の Level が対象ならそのロードを取り消す（LevelLoadHandle::IsCancelled）。
 			void Unload(LevelId id);
 
 			// ロード済みの全 Level をアンロードする（root から再帰）。
 			void UnloadAll();
 
-			// LevelId が現在ロード済みか（generation 一致を含む）。
+			// LevelId が現在ロード済みか（generation 一致を含む）。スロットを確保した時点で true になる
+			// （生成は遅延されるので、生成の完了は IsSpawned で見る）。
 			bool IsLoaded(LevelId id) const;
+
+			// 予約した生成が実行されたか。その Level と、一緒に読んだサブLevel（子孫）のすべてが
+			// 生成済みのとき true。アンロード済み・古い ID は false（エディタ全体設計 7.8 節「6.」）。
+			bool IsSpawned(LevelId id) const;
 
 			// path から現在ロード済みの LevelId を引く。未ロードなら無効な LevelId。
 			LevelId Find(std::string_view pathOrId) const;
@@ -157,6 +170,14 @@ namespace aq
 
 			// slot を解放し generation を進める（freelist へ返す）。stale 化。
 			void FreeSlot(LevelId id);
+
+			// id の Level の生成が済んだ印を立てる。アンロード・再利用済み（世代が違う）なら何もしない。
+			// 同期ロードの遅延生成コマンド（Flush の中・メインスレッド）と非同期ロードの Tick から呼ぶ。
+			void MarkSpawned(LevelId id);
+
+			// 進行中の非同期ロードのうち、targets のいずれかに属するジョブに飛ばす印を付ける。
+			// 根の Level が targets に含まれるロードは取り消す（cancelled / done を立てる）。
+			void CancelAsyncJobs(const std::vector<LevelId>& targets);
 
 			// 親 Level の children リストから id を外す。
 			void DetachFromParent(LevelId id);

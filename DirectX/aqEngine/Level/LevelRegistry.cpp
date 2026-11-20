@@ -47,6 +47,18 @@ namespace aq
 		}
 
 
+		void LevelRegistry::Unregister(std::string_view key)
+		{
+			cache_.erase(Normalize(key));
+		}
+
+
+		bool LevelRegistry::IsRegistered(std::string_view key) const
+		{
+			return cache_.find(Normalize(key)) != cache_.end();
+		}
+
+
 		void LevelRegistry::Clear()
 		{
 			cache_.clear();

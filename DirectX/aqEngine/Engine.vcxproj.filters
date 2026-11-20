@@ -313,6 +313,9 @@
     <ClCompile Include="Level\LevelComponentRegistry.cpp">
       <Filter>Level</Filter>
     </ClCompile>
+    <ClCompile Include="Level\LevelEditModel.cpp">
+      <Filter>Level</Filter>
+    </ClCompile>
     <ClCompile Include="Level\LevelEditor.cpp">
       <Filter>Level</Filter>
     </ClCompile>
@@ -1025,6 +1028,9 @@
       <Filter>Level</Filter>
     </ClInclude>
     <ClInclude Include="Level\LevelComponentRegistry.h">
+      <Filter>Level</Filter>
+    </ClInclude>
+    <ClInclude Include="Level\LevelEditModel.h">
       <Filter>Level</Filter>
     </ClInclude>
     <ClInclude Include="Level\LevelEditor.h">

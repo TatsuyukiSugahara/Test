@@ -297,6 +297,7 @@
     <ClCompile Include="Level\LevelManager.cpp" />
     <ClCompile Include="Level\LevelStreamSystem.cpp" />
     <ClCompile Include="Level\LevelComponentRegistry.cpp" />
+    <ClCompile Include="Level\LevelEditModel.cpp" />
     <ClCompile Include="Level\LevelEditor.cpp" />
     <ClCompile Include="ECS\PrefabEditor.cpp" />
     <ClCompile Include="ECS\PrefabEditNodeOps.cpp" />
@@ -563,6 +564,7 @@
     <ClInclude Include="Level\LevelManager.h" />
     <ClInclude Include="Level\LevelStreamSystem.h" />
     <ClInclude Include="Level\LevelComponentRegistry.h" />
+    <ClInclude Include="Level\LevelEditModel.h" />
     <ClInclude Include="Level\LevelEditor.h" />
     <ClInclude Include="ECS\AlignedStorage.h" />
     <ClInclude Include="ECS\PrefabEditor.h" />

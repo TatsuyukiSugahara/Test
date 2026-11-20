@@ -31,6 +31,13 @@ namespace aq
 			// 既存キーがあればそれを返す（再登録しない）。
 			std::shared_ptr<const LevelData> Register(std::string_view key, std::shared_ptr<const LevelData> data);
 
+			// key の登録（キャッシュ）を外す。key は正規化してから引く。無ければ何もしない。
+			// エディタのプレビューが前回の in-memory 登録を外すのに使う（エディタ全体設計 7.8 節「5.」）。
+			void Unregister(std::string_view key);
+
+			// key が登録（キャッシュ）されているか。key は正規化してから引く（検査用）。
+			bool IsRegistered(std::string_view key) const;
+
 			// キャッシュを全消去する。
 			void Clear();
 

@@ -36,6 +36,7 @@ namespace aq
 			std::vector<std::string>                     removedComponents;  // 参照ノードの override: 参照先から除去する typeName
 			std::vector<std::unique_ptr<PrefabEditNode>> children;           // ポインタ安定のため unique_ptr
 			util::JsonValue                              overridesRaw = util::JsonValue::MakeObject();   // 参照ノード: 読み込んだ overrides の生 JSON（無ければ空のオブジェクト）。書き出しはこれを写して始める
+			uint32_t                                     editId = 0;        // 保存しない。LevelEditModel::AssignId が振る（0 = 未採番）。Prefab エディタは使わない
 		};
 
 

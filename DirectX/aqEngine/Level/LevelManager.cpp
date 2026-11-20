@@ -39,6 +39,7 @@ namespace aq
 			slot.parent   = parent;
 			slot.children.clear();
 			slot.loaded   = true;
+			slot.spawned  = false;
 			slot.fileTime = 0;
 
 			LevelId id;
@@ -62,6 +63,12 @@ namespace aq
 			ctx.RequestDeferredBuild(
 				[data, levelId](const ecs::EntityManager::DeferredCreateFn& rawCreate)
 				{
+					// Load → Unload → Flush の順になったとき、Unload は既存の Entity しか破棄できないので、
+					// ここで古い levelId の Entity を作ってしまわないよう、まだロード済みかを確かめる
+					// （Unload は System の中からも呼ばれるため、Unload 側で Flush して解決することはできない）。
+					LevelManager& manager = LevelManager::Get();
+					if (!manager.IsLoaded(levelId)) return;
+
 					// 各ノードのアーキタイプへ LevelMemberComponent を注入する create ラッパ。
 					ecs::EntityManager::DeferredCreateFn create =
 						[&rawCreate](std::vector<ecs::TypeInfo> types) -> ecs::Entity
@@ -79,6 +86,9 @@ namespace aq
 
 					for (const ecs::PrefabNodeData& node : data->entities)
 						ecs::InstantiatePrefabTree(node, ecs::EntityHandle(), create, stamp);
+
+					// 最後のノードまで作り終えた（entities が空の Level もここで生成済みになる）。
+					manager.MarkSpawned(levelId);
 				});
 		}
 
@@ -185,13 +195,54 @@ namespace aq
 			LevelSlot& slot = slots_[id.index];
 			if (!slot.loaded || slot.generation != id.generation) return;
 
-			slot.loaded = false;
+			slot.loaded  = false;
+			slot.spawned = false;
 			slot.data.reset();
 			slot.path.clear();
 			slot.children.clear();
 			slot.parent = LevelId();
 			++slot.generation;                       // stale 化（再利用時に旧 LevelId を弾く）
 			freeList_.push_back(id.index);
+		}
+
+
+		void LevelManager::MarkSpawned(LevelId id)
+		{
+			// コマンドが走る前にアンロード・再利用されていたら世代が違うので何もしない。
+			if (!IsLoaded(id)) return;
+			slots_[id.index].spawned = true;
+		}
+
+
+		void LevelManager::CancelAsyncJobs(const std::vector<LevelId>& targets)
+		{
+			const auto isTarget = [&targets](const LevelId& levelId)
+			{
+				for (const LevelId& t : targets)
+				{
+					if (t == levelId) return true;
+				}
+				return false;
+			};
+
+			for (AsyncLoad& load : asyncLoads_)
+			{
+				// 根の Level が対象なら、ロード全体を外す（ローディング画面が待ち続けないように done も立てる）。
+				// 外したロードは次の ProcessAsyncLoads で除去される。
+				if (isTarget(load.progress->id))
+				{
+					load.progress->cancelled = true;
+					load.progress->done      = true;
+				}
+
+				// ジョブ列からは消さない（parentJobIndex と cursor の添字をずらさないため）。印を付けるだけ。
+				// 印が付いたジョブの子孫は同じ Level に属するので、同じく印が付く。
+				for (size_t i = load.cursor; i < load.jobs.size(); ++i)
+				{
+					BuildJob& job = load.jobs[i];
+					if (!job.skip && isTarget(job.levelId)) job.skip = true;
+				}
+			}
 		}
 
 
@@ -214,6 +265,9 @@ namespace aq
 			// 対象 + 全子孫の LevelId を先に集める（この後 slot を stale 化するため）。
 			std::vector<LevelId> targets;
 			CollectSubtree(id, targets);
+
+			// 進行中の非同期ロードのうち、対象に属する残りのジョブを飛ばす（slot を stale 化する前に行う）。
+			CancelAsyncJobs(targets);
 
 			// 集合に含まれる levelId の Entity を遅延破棄する。
 			// member->levelId の値はこの Foreach 内で読むので、後で slot を stale 化しても判定は正しい。
@@ -251,6 +305,21 @@ namespace aq
 			if (!id.IsValid() || id.index >= slots_.size()) return false;
 			const LevelSlot& slot = slots_[id.index];
 			return slot.loaded && slot.generation == id.generation;
+		}
+
+
+		bool LevelManager::IsSpawned(LevelId id) const
+		{
+			if (!IsLoaded(id)) return false;
+
+			// 一緒に読んだサブLevel は children に登録されているので、子孫まで含めて見る。
+			std::vector<LevelId> subtree;
+			CollectSubtree(id, subtree);
+			for (const LevelId& t : subtree)
+			{
+				if (!slots_[t.index].spawned) return false;
+			}
+			return true;
 		}
 
 
@@ -362,6 +431,13 @@ namespace aq
 			LevelRegistry::Get().Clear();
 			ecs::PrefabRegistry::Get().Clear();
 			for (const auto& c : changed) { if (IsLoaded(c.second)) Unload(c.second); }
+
+			// ReloadAll と同じく、直前のフレームの描画が GPU 上でまだバッファを使っているうちに破棄を確定させると
+			// GPU がハングする（D3D12 で DXGI_ERROR_DEVICE_HUNG）。描画の完了を待ってから破棄をここで確定させる。
+			// Tick は System 反復の外（EntityContext::Update 後の安全点）で呼ばれるので Flush してよい。
+			aq::Engine::Get().WaitForRenderIdle();
+			ecs::EntityContext::Get().FlushPendingCommands();
+
 			for (const auto& c : changed) { Load(c.first); }
 		}
 
@@ -415,8 +491,14 @@ namespace aq
 
 			load.keepAlive.push_back(data);   // job.node ポインタの生存を保証する
 
+			// この Level のジョブは連続して並ぶ（サブLevel のジョブはこの後に足す）。
+			const size_t firstJob = load.jobs.size();
 			for (const ecs::PrefabNodeData& node : data->entities)
 				FlattenNode(node, levelId, -1, load);
+
+			// 最後のジョブを作り終えたら生成済みにする。ジョブが 0 個の Level はこの時点で生成済み。
+			if (load.jobs.size() > firstJob) load.jobs.back().lastOfLevel = true;
+			else                             MarkSpawned(levelId);
 
 			// loadOnStart サブLevel も同じジョブ列に含める（各エンティティは自身の levelId を持つ）。
 			for (const SubLevelRef& sub : data->subLevels)
@@ -451,11 +533,22 @@ namespace aq
 
 			for (AsyncLoad& load : asyncLoads_)
 			{
+				// 根の Level が Unload されて取り消されたロードは何もしない（done は立っているので下で除去される）。
+				if (load.progress->cancelled) continue;
+
 				uint32_t budget = load.entitiesPerFrame;
 				while (budget > 0 && load.cursor < load.jobs.size())
 				{
 					BuildJob&     job        = load.jobs[load.cursor];
 					const LevelId jobLevelId = job.levelId;
+
+					// 所属 Level が Unload されたジョブは作らず、予算も使わない。進捗が 100% に届くよう built には数える。
+					if (job.skip)
+					{
+						++load.cursor;
+						++load.progress->built;
+						continue;
+					}
 
 					// LevelMemberComponent を注入する即時 create（安全点なので CreateEntityFromTypes を使える）。
 					const auto create = [](std::vector<ecs::TypeInfo> types) -> ecs::Entity
@@ -473,6 +566,9 @@ namespace aq
 
 					const ecs::Entity entity = ecs::InstantiatePrefabNode(*job.node, parentHandle, create, stamp);
 					job.handle = entity.GetHandle();
+
+					// 所属 Level の最後のジョブを作り終えた。
+					if (job.lastOfLevel) MarkSpawned(jobLevelId);
 
 					++load.cursor;
 					++load.progress->built;

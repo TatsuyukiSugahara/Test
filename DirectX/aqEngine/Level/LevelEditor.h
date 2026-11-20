@@ -1,8 +1,9 @@
 #pragma once
 #ifdef AQ_DEBUG_IMGUI
 #include "Core/IDebugRenderable.h"
-#include "ECS/PrefabEditor.h"   // ecs::PrefabEditNode
-#include "Level/LevelManager.h" // LevelLoadHandle
+#include "ECS/PrefabEditor.h"     // ecs::PrefabEditNode
+#include "Level/LevelEditModel.h" // 編集状態
+#include "Level/LevelManager.h"   // LevelLoadHandle
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,24 +18,13 @@ namespace aq
 		 * entities は Prefab フォレスト（各 root = ecs::PrefabEditNode ツリー）として編集し、
 		 * ノード編集ロジック（ツリー/インスペクター/JSON 往復）は Prefab エディタと共有する
 		 * （ecs::PrefabNode* オペレーション）。subLevels は path + loadOnStart のリストで持つ。
+		 * 編集状態は LevelEditModel が持ち、このパネルは UI の状態だけを持つ（エディタ全体設計 7.8 節「3.」）。
 		 */
 		class LevelEditorPanel : public IDebugRenderable
 		{
 		private:
-			/** サブLevel エントリ（.level.json の subLevels[] に対応） */
-			struct SubLevelEdit
-			{
-				bool                                              isInline = false;   // true = その場で作るインライン定義
-				std::string                                       path;               // isInline=false: 外部 .level.json パス
-				std::string                                       name = "SubLevel";  // isInline=true: 名前
-				std::vector<std::unique_ptr<ecs::PrefabEditNode>> entities;           // isInline=true: 配下 entity ツリー
-				bool                                              loadOnStart = true;
-			};
-
 			/** 編集モデル（.level.json に対応） */
-			std::string                                       name_ = "Level";
-			std::vector<std::unique_ptr<ecs::PrefabEditNode>> entities_;   // 各要素 = 1 トップレベル entity ツリー
-			std::vector<SubLevelEdit>                         subLevels_;
+			LevelEditModel       model_;
 
 			/** UI 状態 */
 			ecs::PrefabEditNode* selected_      = nullptr;
@@ -69,12 +59,8 @@ namespace aq
 			/** list から pendingDelete_ を外す（トップレベル除去 or 木からの除去）。外したら true。 */
 			bool RemovePendingFrom(std::vector<std::unique_ptr<ecs::PrefabEditNode>>& list);
 
-			/** 編集モデル → .level.json 相当の JSON。Save / Load in World が共有する。 */
-			util::JsonValue BuildJson() const;
-
 			void Save();
 			void Load();
-			void LoadInWorld();   // 現在の編集内容を in-memory 登録 → LevelManager でワールドへロード
 		};
 	}
 }

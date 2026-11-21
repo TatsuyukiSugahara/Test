@@ -136,12 +136,29 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClCompile Include="PlayStopSelfTest.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="EditorContext.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Commands\NodeCommands.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Panels\HierarchyPanel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Panels\LevelFileMenu.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EditorLayer.h" />
     <ClInclude Include="GameViewInput.h" />
     <ClInclude Include="PlayModeController.h" />
     <ClInclude Include="PlayStopSelfTest.h" />
+    <ClInclude Include="EditorContext.h" />
+    <ClInclude Include="Commands\IEditorCommand.h" />
+    <ClInclude Include="Commands\NodeCommands.h" />
+    <ClInclude Include="Panels\HierarchyPanel.h" />
+    <ClInclude Include="Panels\LevelFileMenu.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Game\GameLogic.vcxproj">

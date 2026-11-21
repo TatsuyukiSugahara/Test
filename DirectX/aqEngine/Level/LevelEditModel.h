@@ -3,6 +3,7 @@
 #include "ECS/PrefabEditor.h"   // ecs::PrefabEditNode
 #include "Level/LevelId.h"
 #include "Util/SimpleJson.h"
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,6 +33,26 @@ namespace aq
 
 
 		/**
+		 * ノードの置き場所
+		 *
+		 * nodeId != 0 ならそのノードの子。0 なら subLevelIndex の列（-1 = トップレベルの entities、
+		 * 0 以上 = 1 段目のインライン subLevel のルート列）。nodeId != 0 のとき subLevelIndex は無視する
+		 * （FindParent / DetachNode が返す値は -1 にそろえる）。UI と同じく 2 段目以降の subLevel は扱わない。
+		 */
+		struct NodeParent
+		{
+			uint32_t nodeId        = 0;
+			int      subLevelIndex = -1;
+		};
+
+
+		/** index に渡すと列の末尾を指す */
+		static constexpr size_t APPEND = SIZE_MAX;
+
+
+
+
+		/**
 		 * Level の編集モデル（エディタ全体設計 7.1 節・7.8 節「3.」）
 		 *
 		 * エディタが編集する正本。.level.json を PrefabEditNode のフォレストとサブLevel で表す。
@@ -40,6 +61,11 @@ namespace aq
 		 */
 		class LevelEditModel
 		{
+		public:
+			using NodeParent = level::NodeParent;
+			static constexpr size_t APPEND = level::APPEND;
+
+
 		private:
 			/** 編集内容（.level.json に対応） */
 			std::string                                       name_ = "Level";
@@ -89,11 +115,50 @@ namespace aq
 			 */
 
 			/** id を持つノードを探す（無ければ nullptr）。トップレベルとインラインのサブ Level の entities を探す */
-			ecs::PrefabEditNode* FindNode(uint32_t id);
+			ecs::PrefabEditNode*       FindNode(uint32_t id);
+			const ecs::PrefabEditNode* FindNode(uint32_t id) const;
 
 			/** node とその子孫のうち、未採番（editId == 0）のノードへ ID を振る。モデルの中で一意 */
 			void AssignId(ecs::PrefabEditNode& node);
 
+			/**
+			 * ノードの親と、親の列の中での位置を調べる。1 段目までの列（トップレベルと 1 段目のインライン subLevel）にある
+			 * ノードだけが対象で、見つからない・2 段目以降の subLevel の中なら false
+			 */
+			bool FindParent(uint32_t id, NodeParent& outParent, size_t& outIndex) const;
+
+			/**
+			 * parent の index（範囲外は末尾）へ node を挿入する。node とその子孫のうち未採番のものだけに ID を振り、
+			 * 採番済みの ID は変えない。挿入したノードの ID を返す。
+			 * 参照ノードの下、ファイル参照の subLevel、存在しない親・範囲外の subLevel へは挿入できない（0 を返し、モデルは変えない）。
+			 */
+			uint32_t InsertNode(const NodeParent& parent, size_t index, std::unique_ptr<ecs::PrefabEditNode> node);
+
+			/**
+			 * id のノードをサブツリーごと取り外して返す（editId は子孫も含めて保つ）。無ければ nullptr でモデルは変えない。
+			 * outParent / outIndex には取り外す前の置き場所を返す
+			 */
+			std::unique_ptr<ecs::PrefabEditNode> DetachNode(uint32_t id, NodeParent* outParent = nullptr, size_t* outIndex = nullptr);
+
+			/**
+			 * id のノードをサブツリーごと newParent の index（範囲外は末尾）へ移す。
+			 * 同じ列の中で後ろへ動かすときの index は、取り外した後の添字として扱う。
+			 * 参照ノードの下・自分と子孫の下・ファイル参照の subLevel へは移せない（false でモデルは変えない）
+			 */
+			bool MoveNode(uint32_t id, const NodeParent& newParent, size_t index);
+
+			/** id のノードの名前を変える。ノードが無ければ false */
+			bool SetNodeName(uint32_t id, const std::string& name);
+
+			/**
+			 * 参照ノードの prefab とファイル参照の subLevel の path のうち、絶対パスでないものがあれば true。
+			 * 絶対の判定は PrefabSerializer の JoinPath と同じ（区切りを '/' にそろえて、先頭が '/' か 2 文字目が ':'）。
+			 * トップレベル・子孫・インライン subLevel（入れ子を含む）のすべてを調べる
+			 */
+			bool HasRelativeReferences() const;
+
+
+		public:
 			/** 完了待ち・Flush・前回プレビューのアンロード・Flush・登録の解除を行う（新しいプレビューは作らない） */
 			void ReleasePreview();
 

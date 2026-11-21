@@ -125,6 +125,116 @@ namespace aq
 				}
 				return nullptr;
 			}
+
+			using NodeList = std::vector<std::unique_ptr<ecs::PrefabEditNode>>;
+
+
+			/** ノードの置き場所（親の列と添字） */
+			struct NodeLocation
+			{
+				NodeList*  list = nullptr;
+				size_t     index = 0;
+				NodeParent parent;
+			};
+
+
+			/** list 以下（子孫を含む）から id を探す。owner は list を持つノード（ルート列なら nullptr） */
+			bool LocateInList(NodeList& list, const uint32_t id, const ecs::PrefabEditNode* owner, const int subLevelIndex, NodeLocation& out)
+			{
+				for (size_t i = 0; i < list.size(); ++i) {
+					ecs::PrefabEditNode* node = list[i].get();
+					if (node->editId == id) {
+						out.list  = &list;
+						out.index = i;
+						if (owner) {
+							out.parent = NodeParent{ owner->editId, -1 };
+						} else {
+							out.parent = NodeParent{ 0, subLevelIndex };
+						}
+						return true;
+					}
+					if (LocateInList(node->children, id, node, subLevelIndex, out)) { return true; }
+				}
+				return false;
+			}
+
+
+			/** トップレベルと 1 段目のインライン subLevel のルート列から id を探す（UI と同じく 2 段目以降は見ない） */
+			bool Locate(NodeList& entities, std::vector<SubLevelEdit>& subLevels, const uint32_t id, NodeLocation& out)
+			{
+				if (id == 0) { return false; }
+				if (LocateInList(entities, id, nullptr, -1, out)) { return true; }
+				for (size_t s = 0; s < subLevels.size(); ++s) {
+					if (!subLevels[s].isInline) { continue; }
+					if (LocateInList(subLevels[s].entities, id, nullptr, static_cast<int>(s), out)) { return true; }
+				}
+				return false;
+			}
+
+
+			/** parent が指す、挿入先の列。参照ノードの下・ファイル参照の subLevel・存在しない親は nullptr。outOwner は親ノード（ルート列なら nullptr） */
+			NodeList* ResolveTargetList(NodeList& entities, std::vector<SubLevelEdit>& subLevels, const NodeParent& parent, ecs::PrefabEditNode** outOwner)
+			{
+				if (outOwner) { *outOwner = nullptr; }
+
+				if (parent.nodeId != 0) {
+					NodeLocation loc;
+					if (!Locate(entities, subLevels, parent.nodeId, loc)) { return nullptr; }
+					ecs::PrefabEditNode* owner = (*loc.list)[loc.index].get();
+					if (!owner->prefabRef.empty()) { return nullptr; }   // 参照ノードの下には置かない
+					if (outOwner) { *outOwner = owner; }
+					return &owner->children;
+				}
+
+				if (parent.subLevelIndex < 0) { return &entities; }
+				if (static_cast<size_t>(parent.subLevelIndex) >= subLevels.size()) { return nullptr; }
+				SubLevelEdit& sub = subLevels[static_cast<size_t>(parent.subLevelIndex)];
+				if (!sub.isInline) { return nullptr; }   // ファイル参照の subLevel はノードを持たない
+				return &sub.entities;
+			}
+
+
+			/** root 自身か、その子孫に target があれば true */
+			bool IsSelfOrDescendant(const ecs::PrefabEditNode* root, const ecs::PrefabEditNode* target)
+			{
+				if (root == target) { return true; }
+				for (const auto& child : root->children) {
+					if (IsSelfOrDescendant(child.get(), target)) { return true; }
+				}
+				return false;
+			}
+
+
+			/** PrefabSerializer の JoinPath と同じ規則で、絶対パスなら true */
+			bool IsAbsolutePath(std::string path)
+			{
+				for (char& c : path) { if (c == '\\') { c = '/'; } }
+				return (!path.empty() && path[0] == '/') || (path.size() >= 2 && path[1] == ':');
+			}
+
+
+			bool NodesHaveRelativeReference(const NodeList& nodes)
+			{
+				for (const auto& node : nodes) {
+					if (!node->prefabRef.empty() && !IsAbsolutePath(node->prefabRef)) { return true; }
+					if (NodesHaveRelativeReference(node->children)) { return true; }
+				}
+				return false;
+			}
+
+
+			bool SubLevelsHaveRelativeReference(const std::vector<SubLevelEdit>& subLevels)
+			{
+				for (const SubLevelEdit& sub : subLevels) {
+					if (sub.isInline) {
+						if (NodesHaveRelativeReference(sub.entities)) { return true; }
+						if (SubLevelsHaveRelativeReference(sub.subLevels)) { return true; }
+					} else if (!IsAbsolutePath(sub.path)) {
+						return true;
+					}
+				}
+				return false;
+			}
 		}
 
 
@@ -224,6 +334,89 @@ namespace aq
 			if (id == 0) { return nullptr; }
 			if (ecs::PrefabEditNode* found = FindNodeIn(entities_, id)) { return found; }
 			return FindNodeInSubLevels(subLevels_, id);
+		}
+
+
+		const ecs::PrefabEditNode* LevelEditModel::FindNode(const uint32_t id) const
+		{
+			return const_cast<LevelEditModel*>(this)->FindNode(id);
+		}
+
+
+		bool LevelEditModel::FindParent(const uint32_t id, NodeParent& outParent, size_t& outIndex) const
+		{
+			LevelEditModel* self = const_cast<LevelEditModel*>(this);
+			NodeLocation    loc;
+			if (!Locate(self->entities_, self->subLevels_, id, loc)) { return false; }
+			outParent = loc.parent;
+			outIndex  = loc.index;
+			return true;
+		}
+
+
+		uint32_t LevelEditModel::InsertNode(const NodeParent& parent, const size_t index, std::unique_ptr<ecs::PrefabEditNode> node)
+		{
+			if (!node) { return 0; }
+
+			NodeList* list = ResolveTargetList(entities_, subLevels_, parent, nullptr);
+			if (!list) { return 0; }
+
+			ecs::PrefabEditNode* raw = node.get();
+			AssignId(*raw);   // 採番済みの ID は変えず、未採番のノードだけに振る
+			const size_t pos = (index < list->size()) ? index : list->size();
+			list->insert(list->begin() + static_cast<std::ptrdiff_t>(pos), std::move(node));
+			return raw->editId;
+		}
+
+
+		std::unique_ptr<ecs::PrefabEditNode> LevelEditModel::DetachNode(const uint32_t id, NodeParent* outParent, size_t* outIndex)
+		{
+			NodeLocation loc;
+			if (!Locate(entities_, subLevels_, id, loc)) { return nullptr; }
+
+			if (outParent) { *outParent = loc.parent; }
+			if (outIndex)  { *outIndex  = loc.index; }
+
+			std::unique_ptr<ecs::PrefabEditNode> node = std::move((*loc.list)[loc.index]);
+			loc.list->erase(loc.list->begin() + static_cast<std::ptrdiff_t>(loc.index));
+			return node;
+		}
+
+
+		bool LevelEditModel::MoveNode(const uint32_t id, const NodeParent& newParent, const size_t index)
+		{
+			NodeLocation src;
+			if (!Locate(entities_, subLevels_, id, src)) { return false; }
+			const ecs::PrefabEditNode* moving = (*src.list)[src.index].get();
+
+			// 取り外す前に、行き先が有効かをすべて確かめる（失敗してもモデルを変えないため）。
+			ecs::PrefabEditNode* owner = nullptr;
+			NodeList*            dest  = ResolveTargetList(entities_, subLevels_, newParent, &owner);
+			if (!dest) { return false; }
+			if (owner && IsSelfOrDescendant(moving, owner)) { return false; }   // 自分と子孫の下へは移さない
+
+			// 取り外してから挿入する。行き先の列は親ノードの持ち物か最上位の列なので、取り外しで無効にならない。
+			std::unique_ptr<ecs::PrefabEditNode> node = std::move((*src.list)[src.index]);
+			src.list->erase(src.list->begin() + static_cast<std::ptrdiff_t>(src.index));
+
+			const size_t pos = (index < dest->size()) ? index : dest->size();   // 同じ列の中なら取り外した後の添字
+			dest->insert(dest->begin() + static_cast<std::ptrdiff_t>(pos), std::move(node));
+			return true;
+		}
+
+
+		bool LevelEditModel::SetNodeName(const uint32_t id, const std::string& name)
+		{
+			ecs::PrefabEditNode* node = FindNode(id);
+			if (!node) { return false; }
+			node->name = name;
+			return true;
+		}
+
+
+		bool LevelEditModel::HasRelativeReferences() const
+		{
+			return NodesHaveRelativeReference(entities_) || SubLevelsHaveRelativeReference(subLevels_);
 		}
 
 

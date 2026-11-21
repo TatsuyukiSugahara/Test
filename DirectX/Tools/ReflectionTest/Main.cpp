@@ -11,6 +11,7 @@
 // 画面もデバイスも作らない。実体は AlignedStorage(TypeInfo) で既定値のまま作り、
 // ComponentMeta の型消去関数だけを通す。T4 / T5 は画面を持たない ImGui のコンテキストに
 // 入力を合成して行う(ImGui の Visitor は AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ)。
+// E7a で T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)を足した。画面も Engine も作らない(Debug 構成のみ)。
 // T6 と T7 のファイル往復も、編集ノード(PrefabEditNode)が AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
@@ -116,7 +117,8 @@ namespace
 			"      T7 のファイル往復も行う。\n"
 			"      T8 Level の生成と取り消し(IsSpawned / Unload / LoadAsync の取り消し / Unregister)を試す。\n"
 			"      Debug 構成ではプレビューの置き換え(LevelEditModel)も行う。\n"
-			"      T9 実行モード(Edit / Play / Pause で動く System と、全モードでの Flush)を試す。\n");
+			"      T9 実行モード(Edit / Play / Pause で動く System と、全モードでの Flush)を試す。\n"
+			"      Debug 構成では T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)も行う。\n");
 	}
 
 
@@ -1172,6 +1174,435 @@ namespace
 	}
 #endif
 
+
+#ifdef AQ_DEBUG_IMGUI
+	/**
+	 * T10 の試験用 Level
+	 *
+	 * 実体ノード A(子 A1(孫 A1a)、A2)・B、参照ノード Ref(相対パス)、インラインの subLevel(S1)、
+	 * ファイル参照の subLevel(相対パス)を持つ。
+	 */
+	static constexpr const char* STRUCTURE_TEST_LEVEL_JSON = R"({
+  "name": "T10",
+  "entities": [
+    { "name": "A", "components": { "Transform": {} }, "children": [
+      { "name": "A1", "components": { "Transform": {} }, "children": [
+        { "name": "A1a", "components": { "Transform": {} } } ] },
+      { "name": "A2", "components": { "Transform": {} } } ] },
+    { "name": "B", "components": { "Transform": {} } },
+    { "name": "Ref", "prefab": "T6_Base.prefab.json" }
+  ],
+  "subLevels": [
+    { "loadOnStart": true, "level": { "name": "Inline", "entities": [
+      { "name": "S1", "components": { "Transform": {} } } ] } },
+    { "loadOnStart": true, "level": "Other.level.json" }
+  ]
+})";
+
+	/** 1 段目のインライン subLevel(Inline)と、ファイル参照の subLevel の添字 */
+	static constexpr int STRUCTURE_INLINE_SUB = 0;
+	static constexpr int STRUCTURE_FILE_SUB   = 1;
+
+	/** 位置を指定しない(末尾) */
+	static constexpr size_t STRUCTURE_APPEND  = aq::level::APPEND;
+
+
+	/** ノードの並びを「A(A1(A1a),A2),B」の形の文字にする */
+	std::string NodeOutline(const JsonValue& nodes)
+	{
+		std::string text;
+		if (!nodes.IsArray()) return text;
+		for (const JsonValue& node : nodes.GetArray()) {
+			if (!text.empty()) text += ",";
+			text += node["name"].AsString();
+			if (node.Contains("children") && node["children"].IsArray() && node["children"].Size() > 0) {
+				text += "(" + NodeOutline(node["children"]) + ")";
+			}
+		}
+		return text;
+	}
+
+
+	/** Level 全体を「entities|[Inline:S1][file:パス]」の形の文字にする(1 段目の subLevel だけ) */
+	std::string LevelOutline(const JsonValue& level)
+	{
+		std::string text = level.Contains("entities") ? NodeOutline(level["entities"]) : std::string();
+		text += "|";
+		if (level.Contains("subLevels") && level["subLevels"].IsArray()) {
+			for (const JsonValue& sub : level["subLevels"].GetArray()) {
+				const JsonValue& inner = sub["level"];
+				if (inner.IsObject()) {
+					text += "[" + inner["name"].AsString() + ":" + NodeOutline(inner["entities"]) + "]";
+				} else {
+					text += "[file:" + inner.AsString() + "]";
+				}
+			}
+		}
+		return text;
+	}
+
+
+	/** name のノードを nodes 以下から探す */
+	const PrefabEditNode* FindNodeByName(const std::vector<std::unique_ptr<PrefabEditNode>>& nodes, const std::string& name)
+	{
+		for (const auto& node : nodes) {
+			if (node->name == name) return node.get();
+			if (const PrefabEditNode* found = FindNodeByName(node->children, name)) return found;
+		}
+		return nullptr;
+	}
+
+
+	/** モデルの中から name のノードの ID を探す(トップレベルと 1 段目のインライン subLevel)。無ければ 0 */
+	uint32_t IdOf(const aq::level::LevelEditModel& model, const std::string& name)
+	{
+		if (const PrefabEditNode* node = FindNodeByName(model.GetEntities(), name)) return node->editId;
+		for (const aq::level::SubLevelEdit& sub : model.GetSubLevels()) {
+			if (!sub.isInline) continue;
+			if (const PrefabEditNode* node = FindNodeByName(sub.entities, name)) return node->editId;
+		}
+		return 0;
+	}
+
+
+	/** Transform 付きの新しい実体ノード */
+	std::unique_ptr<PrefabEditNode> MakeEntityNode(const char* name)
+	{
+		auto node  = std::make_unique<PrefabEditNode>();
+		node->name = name;
+		aq::ecs::PrefabNodeEnsureTransform(*node);
+		return node;
+	}
+
+
+	/** T10 の試験用 Level を読み込む。読めなければ false */
+	bool LoadStructureTestModel(aq::level::LevelEditModel& model)
+	{
+		return model.FromJson(aq::util::JsonParser::ParseString(STRUCTURE_TEST_LEVEL_JSON));
+	}
+
+
+	/** 並びが期待どおりかを 1 件として出す(違えば、期待と実際を説明に出す) */
+	void ReportOutline(TestResults& results, const std::string& name, const aq::level::LevelEditModel& model, const std::string& expected)
+	{
+		const std::string actual = LevelOutline(model.ToJson());
+		Report(results, name, actual == expected, actual == expected ? std::string() : "期待 " + expected + " / 実際 " + actual);
+	}
+
+
+	/** T10 (a): InsertNode(トップ・子・subLevel のルート)で ID が振られ、ToJson の位置に出る。失敗する挿入はモデルを変えない */
+	void RunStructureInsertTest(TestResults& results)
+	{
+		const std::string name = "T10 (a) InsertNode";
+		aq::level::LevelEditModel model;
+		if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		// トップレベルの 1 番目(B の前)。子を持つノードは、子孫にも ID が振られる
+		auto top = MakeEntityNode("N1");
+		top->children.push_back(MakeEntityNode("N1c"));
+		const uint32_t topId      = model.InsertNode(aq::level::NodeParent{ 0, -1 }, 1, std::move(top));
+		const uint32_t topChildId = IdOf(model, "N1c");
+		ReportOutline(results, name + " トップ", model, "A(A1(A1a),A2),N1(N1c),B,Ref|[Inline:S1][file:Other.level.json]");
+
+		// 子(A1 の末尾)
+		const uint32_t childId = model.InsertNode(aq::level::NodeParent{ IdOf(model, "A1"), -1 }, STRUCTURE_APPEND, MakeEntityNode("N2"));
+		ReportOutline(results, name + " 子", model, "A(A1(A1a,N2),A2),N1(N1c),B,Ref|[Inline:S1][file:Other.level.json]");
+
+		// subLevel のルート(先頭)
+		const uint32_t subId = model.InsertNode(aq::level::NodeParent{ 0, STRUCTURE_INLINE_SUB }, 0, MakeEntityNode("N3"));
+		ReportOutline(results, name + " subLevel", model, "A(A1(A1a,N2),A2),N1(N1c),B,Ref|[Inline:N3,S1][file:Other.level.json]");
+
+		// 範囲外の index は末尾
+		const uint32_t endId = model.InsertNode(aq::level::NodeParent{ 0, -1 }, 99, MakeEntityNode("N4"));
+		ReportOutline(results, name + " 範囲外は末尾", model, "A(A1(A1a,N2),A2),N1(N1c),B,Ref,N4|[Inline:N3,S1][file:Other.level.json]");
+
+		// ID は 0 でなく、すべて違い、FindNode で引ける
+		const uint32_t ids[] = { topId, topChildId, childId, subId, endId };
+		bool idsOk = true;
+		for (size_t i = 0; i < std::size(ids); ++i) {
+			if (ids[i] == 0 || model.FindNode(ids[i]) == nullptr) idsOk = false;
+			for (size_t j = i + 1; j < std::size(ids); ++j) {
+				if (ids[i] == ids[j]) idsOk = false;
+			}
+		}
+		Report(results, name + " ID", idsOk, idsOk ? std::string() : "ID が 0・重複・引けない");
+
+		// 採番済みの ID は変えない(取り外した A を同じ ID のまま戻す)
+		const uint32_t idA = IdOf(model, "A");
+		auto detached = model.DetachNode(idA);
+		const uint32_t reinserted = detached ? model.InsertNode(aq::level::NodeParent{ 0, -1 }, 0, std::move(detached)) : 0;
+		Report(results, name + " 採番済みは変えない", reinserted == idA && IdOf(model, "A") == idA,
+			"元 " + std::to_string(idA) + " / 戻した後 " + std::to_string(reinserted));
+
+		// 失敗する挿入は 0 を返し、モデルを変えない
+		const JsonValue before = model.ToJson();
+		const uint32_t failRef  = model.InsertNode(aq::level::NodeParent{ IdOf(model, "Ref"), -1 }, 0, MakeEntityNode("X"));
+		const uint32_t failFile = model.InsertNode(aq::level::NodeParent{ 0, STRUCTURE_FILE_SUB }, 0, MakeEntityNode("X"));
+		const uint32_t failSub  = model.InsertNode(aq::level::NodeParent{ 0, 9 }, 0, MakeEntityNode("X"));
+		const uint32_t failNone = model.InsertNode(aq::level::NodeParent{ 99999, -1 }, 0, MakeEntityNode("X"));
+		const uint32_t failNull = model.InsertNode(aq::level::NodeParent{ 0, -1 }, 0, nullptr);
+		const bool failed = failRef == 0 && failFile == 0 && failSub == 0 && failNone == 0 && failNull == 0
+			&& JsonEquals(before, model.ToJson());
+		Report(results, name + " 失敗はモデルを変えない", failed, failed ? std::string() : "失敗するはずの挿入が通ったか、モデルが変わった");
+	}
+
+
+	/** T10 (b): DetachNode で外したサブツリーは子孫の editId を保ち、元の位置へ戻すと ToJson が元と一致する */
+	void RunStructureDetachTest(TestResults& results)
+	{
+		const std::string name = "T10 (b) DetachNode";
+		aq::level::LevelEditModel model;
+		if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const JsonValue original = model.ToJson();
+		const uint32_t  idA   = IdOf(model, "A");
+		const uint32_t  idA1  = IdOf(model, "A1");
+		const uint32_t  idA1a = IdOf(model, "A1a");
+		const uint32_t  idA2  = IdOf(model, "A2");
+
+		aq::level::NodeParent parent{ 12345, 12345 };
+		size_t                index = 12345;
+		auto detached = model.DetachNode(idA, &parent, &index);
+		if (!detached) { Report(results, name, false, "取り外せない"); return; }
+
+		const bool idsKept = detached->editId == idA && detached->children.size() == 2
+			&& detached->children[0]->editId == idA1 && detached->children[1]->editId == idA2
+			&& detached->children[0]->children.size() == 1 && detached->children[0]->children[0]->editId == idA1a;
+		Report(results, name + " editId を保つ", idsKept, idsKept ? std::string() : "取り外したサブツリーの editId が変わった");
+
+		const std::string afterDetach = LevelOutline(model.ToJson());
+		const bool        removed     = afterDetach == "B,Ref|[Inline:S1][file:Other.level.json]"
+			&& model.FindNode(idA) == nullptr && model.FindNode(idA1a) == nullptr;
+		Report(results, name + " 外した後", removed, "外した後の並び: " + afterDetach);
+
+		const bool placeOk = parent.nodeId == 0 && parent.subLevelIndex == -1 && index == 0;
+		Report(results, name + " 元の置き場所", placeOk,
+			"nodeId " + std::to_string(parent.nodeId) + " / subLevelIndex " + std::to_string(parent.subLevelIndex) + " / index " + std::to_string(index));
+
+		const uint32_t back     = model.InsertNode(parent, index, std::move(detached));
+		const bool     restored = back == idA && JsonEquals(original, model.ToJson());
+		Report(results, name + " 元の位置へ戻す", restored, restored ? std::string() : "戻した後の ToJson が元と違う");
+
+		const bool found = model.FindNode(idA) != nullptr && model.FindNode(idA)->name == "A"
+			&& model.FindNode(idA1a) != nullptr && model.FindNode(idA1a)->name == "A1a";
+		Report(results, name + " FindNode", found, found ? std::string() : "戻した後に同じ ID で引けない");
+
+		// const 版の FindNode と FindParent
+		const aq::level::LevelEditModel& constModel = model;
+		aq::level::NodeParent            childParent;
+		size_t                           childIndex = 0;
+		const bool hasParent = constModel.FindParent(idA1a, childParent, childIndex);
+		Report(results, name + " FindParent", hasParent && childParent.nodeId == idA1 && childIndex == 0 && constModel.FindNode(idA1) != nullptr,
+			"nodeId " + std::to_string(childParent.nodeId) + " / index " + std::to_string(childIndex));
+
+		// 無い ID は nullptr でモデルを変えない
+		const bool missing = model.DetachNode(99999) == nullptr && JsonEquals(original, model.ToJson());
+		Report(results, name + " 無い ID", missing, "無い ID の取り外しがモデルを変えた");
+	}
+
+
+	/** T10 (c): MoveNode でトップ ↔ 子 ↔ subLevel のルートへ、子孫ごと移る */
+	void RunStructureMoveTest(TestResults& results)
+	{
+		const std::string name = "T10 (c) MoveNode";
+		aq::level::LevelEditModel model;
+		if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const uint32_t idA   = IdOf(model, "A");
+		const uint32_t idA1  = IdOf(model, "A1");
+		const uint32_t idA1a = IdOf(model, "A1a");
+		const uint32_t idA2  = IdOf(model, "A2");
+		const uint32_t idB   = IdOf(model, "B");
+
+		// トップ → 子
+		bool allMoved = model.MoveNode(idB, aq::level::NodeParent{ idA, -1 }, STRUCTURE_APPEND);
+		ReportOutline(results, name + " トップ → 子", model, "A(A1(A1a),A2,B),Ref|[Inline:S1][file:Other.level.json]");
+
+		// 子 → トップ(先頭)
+		allMoved = model.MoveNode(idA2, aq::level::NodeParent{ 0, -1 }, 0) && allMoved;
+		ReportOutline(results, name + " 子 → トップ", model, "A2,A(A1(A1a),B),Ref|[Inline:S1][file:Other.level.json]");
+
+		// 子(孫つき)→ subLevel のルート。孫の ID が変わらず、親が A1 のまま
+		allMoved = model.MoveNode(idA1, aq::level::NodeParent{ 0, STRUCTURE_INLINE_SUB }, STRUCTURE_APPEND) && allMoved;
+		ReportOutline(results, name + " 子 → subLevel", model, "A2,A(B),Ref|[Inline:S1,A1(A1a)][file:Other.level.json]");
+		aq::level::NodeParent parent;
+		size_t                index = 0;
+		const bool subOk = model.FindParent(idA1, parent, index) && parent.nodeId == 0 && parent.subLevelIndex == STRUCTURE_INLINE_SUB && index == 1
+			&& model.FindParent(idA1a, parent, index) && parent.nodeId == idA1 && index == 0
+			&& model.FindNode(idA1a) != nullptr && model.FindNode(idA1a)->name == "A1a";
+		Report(results, name + " subLevel の中の親子", subOk, subOk ? std::string() : "subLevel へ移した後の親・ID が違う");
+
+		// subLevel のルート → 別のノードの子(subLevel をまたぐ)
+		allMoved = model.MoveNode(idA1, aq::level::NodeParent{ idA, -1 }, 0) && allMoved;
+		ReportOutline(results, name + " subLevel → 子", model, "A2,A(A1(A1a),B),Ref|[Inline:S1][file:Other.level.json]");
+
+		// 同じ列の中で後ろへ動かすときの index は、取り外した後の添字([A2, A, Ref] から A2 を index 1 へ → A, A2, Ref)
+		allMoved = model.MoveNode(idA2, aq::level::NodeParent{ 0, -1 }, 1) && allMoved;
+		ReportOutline(results, name + " 同じ列の中で後ろへ", model, "A(A1(A1a),B),A2,Ref|[Inline:S1][file:Other.level.json]");
+
+		// 同じ親の子の中で、末尾へ
+		allMoved = model.MoveNode(idA1, aq::level::NodeParent{ idA, -1 }, STRUCTURE_APPEND) && allMoved;
+		ReportOutline(results, name + " 同じ親の末尾へ", model, "A(B,A1(A1a)),A2,Ref|[Inline:S1][file:Other.level.json]");
+
+		// 参照ノード自身は、行き先が有効なら移せる
+		allMoved = model.MoveNode(IdOf(model, "Ref"), aq::level::NodeParent{ idA2, -1 }, 0) && allMoved;
+		ReportOutline(results, name + " 参照ノードを動かす", model, "A(B,A1(A1a)),A2(Ref)|[Inline:S1][file:Other.level.json]");
+
+		Report(results, name + " 戻り値", allMoved, "有効な移動が false を返した");
+	}
+
+
+	/** T10 (d): 自分・子孫・参照ノード・ファイル参照の subLevel への移動と、参照ノードへの挿入は false でモデルが変わらない */
+	void RunStructureRejectTest(TestResults& results)
+	{
+		const std::string name = "T10 (d) 受け付けない操作";
+		aq::level::LevelEditModel model;
+		if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const JsonValue original = model.ToJson();
+		const uint32_t  idA   = IdOf(model, "A");
+		const uint32_t  idA1a = IdOf(model, "A1a");
+		const uint32_t  idB   = IdOf(model, "B");
+		const uint32_t  idRef = IdOf(model, "Ref");
+
+		struct Case
+		{
+			const char* label;
+			bool        result;
+		};
+		const Case cases[] = {
+			{ "自分の下へ",                 model.MoveNode(idA, aq::level::NodeParent{ idA, -1 }, 0) },
+			{ "子孫の下へ",                 model.MoveNode(idA, aq::level::NodeParent{ idA1a, -1 }, 0) },
+			{ "参照ノードの下へ",           model.MoveNode(idB, aq::level::NodeParent{ idRef, -1 }, 0) },
+			{ "ファイル参照の subLevel へ", model.MoveNode(idB, aq::level::NodeParent{ 0, STRUCTURE_FILE_SUB }, 0) },
+			{ "範囲外の subLevel へ",       model.MoveNode(idB, aq::level::NodeParent{ 0, 9 }, 0) },
+			{ "無いノードの下へ",           model.MoveNode(idB, aq::level::NodeParent{ 99999, -1 }, 0) },
+			{ "無いノードを移す",           model.MoveNode(99999, aq::level::NodeParent{ 0, -1 }, 0) },
+		};
+		bool        allRejected = true;
+		std::string accepted;
+		for (const Case& c : cases) {
+			if (c.result) {
+				allRejected = false;
+				accepted += std::string(accepted.empty() ? "" : ", ") + c.label;
+			}
+		}
+		Report(results, name + " 移動は false", allRejected, allRejected ? std::string() : "通ってしまった: " + accepted);
+
+		const uint32_t insertedUnderRef = model.InsertNode(aq::level::NodeParent{ idRef, -1 }, 0, MakeEntityNode("X"));
+		Report(results, name + " 参照ノードへの挿入は 0", insertedUnderRef == 0, "ID " + std::to_string(insertedUnderRef) + " を返した");
+
+		const bool unchanged = JsonEquals(original, model.ToJson());
+		Report(results, name + " モデルは変わらない", unchanged, unchanged ? std::string() : "ToJson が元と違う: " + LevelOutline(model.ToJson()));
+	}
+
+
+	/** T10 (e): SetNodeName */
+	void RunStructureRenameTest(TestResults& results)
+	{
+		const std::string name = "T10 (e) SetNodeName";
+		aq::level::LevelEditModel model;
+		if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const bool renamed = model.SetNodeName(IdOf(model, "A1a"), "Renamed")
+			&& model.SetNodeName(IdOf(model, "Ref"), "RefRenamed")
+			&& model.SetNodeName(IdOf(model, "S1"), "S1Renamed");
+		Report(results, name + " 戻り値", renamed, "false を返した");
+		ReportOutline(results, name, model, "A(A1(Renamed),A2),B,RefRenamed|[Inline:S1Renamed][file:Other.level.json]");
+
+		const JsonValue before  = model.ToJson();
+		const bool      missing = model.SetNodeName(99999, "X");
+		Report(results, name + " 無い ID", !missing && JsonEquals(before, model.ToJson()), "無い ID の変更が通った / モデルが変わった");
+	}
+
+
+	/** T10 (e'): HasRelativeReferences は、相対の prefab / subLevel の path があるときだけ true */
+	void RunStructureRelativeReferenceTest(TestResults& results)
+	{
+		struct Case
+		{
+			const char* label;
+			const char* json;
+			bool        expected;
+		};
+		const Case cases[] = {
+			{ "参照なし", R"({"entities":[{"name":"A","components":{"Transform":{}}}],"subLevels":[{"level":{"name":"I","entities":[{"name":"S"}]}}]})", false },
+			{ "絶対パスだけ", R"({"entities":[{"name":"R","prefab":"/abs/x.prefab.json"},{"name":"D","prefab":"C:/abs/y.prefab.json"},{"name":"W","prefab":"C:\\abs\\z.prefab.json"}],"subLevels":[{"level":"D:/abs/a.level.json"},{"level":"/abs/b.level.json"}]})", false },
+			{ "トップの相対 prefab", R"({"entities":[{"name":"R","prefab":"Assets/x.prefab.json"}]})", true },
+			{ "子孫の相対 prefab", R"({"entities":[{"name":"A","children":[{"name":"B","children":[{"name":"R","prefab":"x.prefab.json"}]}]}]})", true },
+			{ "インライン subLevel の相対 prefab", R"({"entities":[],"subLevels":[{"level":{"name":"I","entities":[{"name":"R","prefab":"x.prefab.json"}]}}]})", true },
+			{ "入れ子のインライン subLevel の相対 prefab", R"({"entities":[],"subLevels":[{"level":{"name":"I","entities":[],"subLevels":[{"level":{"name":"J","entities":[{"name":"R","prefab":"x.prefab.json"}]}}]}}]})", true },
+			{ "ファイル参照の相対 path", R"({"entities":[],"subLevels":[{"level":"Other.level.json"}]})", true },
+			{ "入れ子のファイル参照の相対 path", R"({"entities":[],"subLevels":[{"level":{"name":"I","entities":[],"subLevels":[{"level":"Other.level.json"}]}}]})", true },
+			{ "絶対と相対が混ざる", R"({"entities":[{"name":"R","prefab":"/abs/x.prefab.json"}],"subLevels":[{"level":"Other.level.json"}]})", true },
+		};
+		for (const Case& c : cases) {
+			const std::string         name = std::string("T10 (e') HasRelativeReferences ") + c.label;
+			aq::level::LevelEditModel model;
+			if (!model.FromJson(aq::util::JsonParser::ParseString(c.json))) {
+				Report(results, name, false, "試験用 Level を読み込めない");
+				continue;
+			}
+			const bool actual = model.HasRelativeReferences();
+			Report(results, name, actual == c.expected, std::string("期待 ") + (c.expected ? "true" : "false"));
+		}
+
+		// 操作の結果が反映される(相対の参照ノードを外すと false、戻すと true)
+		aq::level::LevelEditModel model;
+		const std::string         name = "T10 (e') 操作の結果が反映される";
+		if (!model.FromJson(aq::util::JsonParser::ParseString(R"({"entities":[{"name":"R","prefab":"x.prefab.json"}]})"))) {
+			Report(results, name, false, "試験用 Level を読み込めない");
+			return;
+		}
+		auto       detached    = model.DetachNode(IdOf(model, "R"));
+		const bool afterDetach = model.HasRelativeReferences();
+		model.InsertNode(aq::level::NodeParent{ 0, -1 }, 0, std::move(detached));
+		const bool afterInsert = model.HasRelativeReferences();
+		Report(results, name, !afterDetach && afterInsert,
+			std::string("外した後 ") + (afterDetach ? "true" : "false") + " / 戻した後 " + (afterInsert ? "true" : "false"));
+	}
+
+
+	/** T10 (f): 操作の後に ToJson → FromJson → ToJson が一致する(保存できる形のまま) */
+	void RunStructureRoundTripTest(TestResults& results)
+	{
+		const std::string name = "T10 (f) 操作後の往復";
+		aq::level::LevelEditModel model;
+		if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		model.InsertNode(aq::level::NodeParent{ IdOf(model, "A1"), -1 }, STRUCTURE_APPEND, MakeEntityNode("N"));
+		model.MoveNode(IdOf(model, "A1"), aq::level::NodeParent{ 0, STRUCTURE_INLINE_SUB }, 0);
+		model.MoveNode(IdOf(model, "B"), aq::level::NodeParent{ IdOf(model, "A"), -1 }, 0);
+		model.SetNodeName(IdOf(model, "A2"), "A2Renamed");
+		auto detached = model.DetachNode(IdOf(model, "S1"));
+		model.InsertNode(aq::level::NodeParent{ 0, -1 }, STRUCTURE_APPEND, std::move(detached));
+
+		const JsonValue           first = model.ToJson();
+		aq::level::LevelEditModel model2;
+		if (!model2.FromJson(first)) { Report(results, name, false, "読み直せない"); return; }
+		const JsonValue second = model2.ToJson();
+		const bool      stable = JsonEquals(first, second);
+		Report(results, name, stable, stable ? std::string() : "1 回目と 2 回目で違う: " + DiffKeys(first, second));
+	}
+
+
+	/**
+	 * T10 構造操作
+	 *
+	 * LevelEditModel のノードの挿入・取り外し・移動・名前の変更と、相対参照の判定を、画面も Engine も作らずに試す
+	 * (モデルの JSON と ComponentRegistry だけを使う)。
+	 */
+	void RunStructureEditTests(TestResults& results)
+	{
+		RunStructureInsertTest(results);
+		RunStructureDetachTest(results);
+		RunStructureMoveTest(results);
+		RunStructureRejectTest(results);
+		RunStructureRenameTest(results);
+		RunStructureRelativeReferenceTest(results);
+		RunStructureRoundTripTest(results);
+	}
+#endif
 
 	using aq::level::LevelId;
 	using aq::level::LevelLoadHandle;
@@ -2374,6 +2805,12 @@ namespace
 		RunNumberFileTests(results);
 #else
 		std::printf("        T7 ファイル往復: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(編集ノードが無い)\n");
+#endif
+
+#ifdef AQ_DEBUG_IMGUI
+		RunStructureEditTests(results);
+#else
+		std::printf("        T10: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
 #endif
 
 		RunSpawnTests(results);

@@ -27,6 +27,7 @@ namespace aq
 
 		void LevelEditorPanel::DebugRenderMenu()
 		{
+			if (hostedByEditor_) { return; }
 			ImGui::MenuItem("Level Editor", nullptr, &show_);
 		}
 
@@ -37,7 +38,8 @@ namespace aq
 			// DebugRender は System の反復の外で呼ばれるので、GPU の完了待ちと Flush を行ってよい。
 			model_.ProcessPreviewRequest();
 
-			if (!show_) { return; }
+			// Editor が編集モデルを持つときは、このパネルのウィンドウは出さない。
+			if (hostedByEditor_ || !show_) { return; }
 
 			ImGui::SetNextWindowSize({ 780.0f, 560.0f }, ImGuiCond_FirstUseEver);
 			if (!ImGui::Begin("Level Editor", &show_)) {
@@ -136,9 +138,15 @@ namespace aq
 			if (ImGui::SmallButton("+ Prefab")) { AddEntityNode(list, true); }
 
 			// 各ノードは削除可能にするため root=nullptr、Transform 必須で描画する。
+			ecs::PrefabTreeDrawOptions options;
+			options.selected = selected_;
+			options.root     = nullptr;
+
+			std::vector<ecs::PrefabNodeOp> ops;
 			for (const auto& entity : list) {
-				ecs::PrefabNodeDrawTree(entity.get(), selected_, pendingDelete_, nullptr, 0, true);
+				ecs::PrefabNodeDrawTree(entity.get(), options, 0, ops);
 			}
+			ecs::PrefabNodeApplyOpsInPlace(ops, selected_, pendingDelete_, true);
 			ImGui::PopID();
 		}
 

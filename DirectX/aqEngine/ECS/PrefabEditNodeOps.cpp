@@ -369,49 +369,122 @@ namespace aq
 		}
 
 
-		void PrefabNodeDrawTree(PrefabEditNode* node, PrefabEditNode*& selected,
-			PrefabEditNode*& pendingDelete, const PrefabEditNode* root, const int depth,
-			const bool ensureTransform)
+		namespace
+		{
+			/** root 自身か、その子孫に target があれば true */
+			bool IsSelfOrDescendant(const PrefabEditNode* root, const PrefabEditNode* target)
+			{
+				if (!root || !target) { return false; }
+				if (root == target) { return true; }
+				for (const auto& child : root->children) {
+					if (IsSelfOrDescendant(child.get(), target)) { return true; }
+				}
+				return false;
+			}
+		}
+
+
+		void PrefabNodeDrawTree(const PrefabEditNode* node, const PrefabTreeDrawOptions& options, const int depth,
+			std::vector<PrefabNodeOp>& ops)
 		{
 			constexpr int MAX_DEPTH = 64;
 			if (!node || depth >= MAX_DEPTH) { return; }
+
+			// 要求のポインタは非 const（呼び出し側が同じフレームで適用するため）。ここでは書き換えない。
+			PrefabEditNode*  mutableNode = const_cast<PrefabEditNode*>(node);
+			const bool       isRef       = !node->prefabRef.empty();
 
 			ImGui::PushID(node);
 
 			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow
 			                         | ImGuiTreeNodeFlags_SpanAvailWidth
 			                         | ImGuiTreeNodeFlags_DefaultOpen;
-			if (selected == node)       { flags |= ImGuiTreeNodeFlags_Selected; }
-			if (node->children.empty()) { flags |= ImGuiTreeNodeFlags_Leaf; }
+			if (options.selected == node) { flags |= ImGuiTreeNodeFlags_Selected; }
+			if (node->children.empty())   { flags |= ImGuiTreeNodeFlags_Leaf; }
 
-			const bool opened = ImGui::TreeNodeEx("##node", flags, "%s", node->name.c_str());
+			const char* mark   = (options.markReference && isRef) ? " [prefab]" : "";
+			const bool  opened = ImGui::TreeNodeEx("##node", flags, "%s%s", node->name.c_str(), mark);
 			if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-				selected = node;
+				ops.push_back(PrefabNodeOp{ PrefabNodeOpKind::Select, mutableNode, nullptr });
 			}
 
-			// 右クリック: 子追加 / 削除（削除は描画後に予約実行）
-			if (ImGui::BeginPopupContextItem()) {
-				if (ImGui::MenuItem("Add Child")) {
-					auto child  = std::make_unique<PrefabEditNode>();
-					child->name = "Child";
-					if (ensureTransform) { PrefabNodeEnsureTransform(*child); }
-					selected    = child.get();
-					node->children.push_back(std::move(child));
+			// ドラッグアンドドロップ: ノードを別のノードの子の末尾へ移す要求を返す
+			if (options.enableMove) {
+				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+					ImGui::SetDragDropPayload(PREFAB_NODE_DRAG_PAYLOAD, &node, sizeof(node));
+					ImGui::TextUnformatted(node->name.c_str());
+					ImGui::EndDragDropSource();
 				}
-				if (node != root && ImGui::MenuItem("Delete")) {
-					pendingDelete = node;
+				if (ImGui::BeginDragDropTarget()) {
+					const ImGuiPayload* peek = ImGui::GetDragDropPayload();
+					bool acceptable = peek && peek->IsDataType(PREFAB_NODE_DRAG_PAYLOAD) && peek->DataSize == sizeof(node);
+					if (acceptable) {
+						const PrefabEditNode* dragged = *static_cast<const PrefabEditNode* const*>(peek->Data);
+						if (IsSelfOrDescendant(dragged, node))      { acceptable = false; }   // 自分と子孫の下へは移さない
+						if (isRef && !options.allowRefChild)        { acceptable = false; }
+					}
+					if (acceptable) {
+						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(PREFAB_NODE_DRAG_PAYLOAD)) {
+							PrefabEditNode* dragged = *static_cast<PrefabEditNode* const*>(payload->Data);
+							ops.push_back(PrefabNodeOp{ PrefabNodeOpKind::Move, dragged, mutableNode });
+						}
+					}
+					ImGui::EndDragDropTarget();
+				}
+			}
+
+			// 右クリック: 子追加 / 削除（どちらも要求を返すだけ）
+			if (ImGui::BeginPopupContextItem()) {
+				if ((!isRef || options.allowRefChild) && ImGui::MenuItem("Add Child")) {
+					ops.push_back(PrefabNodeOp{ PrefabNodeOpKind::AddChild, mutableNode, nullptr });
+				}
+				if (node != options.root && ImGui::MenuItem("Delete")) {
+					ops.push_back(PrefabNodeOp{ PrefabNodeOpKind::Delete, mutableNode, nullptr });
 				}
 				ImGui::EndPopup();
 			}
 
 			if (opened) {
 				for (const auto& child : node->children) {
-					PrefabNodeDrawTree(child.get(), selected, pendingDelete, root, depth + 1, ensureTransform);
+					PrefabNodeDrawTree(child.get(), options, depth + 1, ops);
 				}
 				ImGui::TreePop();
 			}
 
 			ImGui::PopID();
+		}
+
+
+		void PrefabNodeApplyOpsInPlace(const std::vector<PrefabNodeOp>& ops, PrefabEditNode*& selected,
+			PrefabEditNode*& pendingDelete, const bool ensureTransform)
+		{
+			for (const PrefabNodeOp& op : ops) {
+				if (!op.target) { continue; }
+				switch (op.kind) {
+				case PrefabNodeOpKind::Select:
+					selected = op.target;
+					break;
+
+				case PrefabNodeOpKind::AddChild:
+					{
+						auto child  = std::make_unique<PrefabEditNode>();
+						child->name = "Child";
+						if (ensureTransform) { PrefabNodeEnsureTransform(*child); }
+						selected = child.get();
+						op.target->children.push_back(std::move(child));
+					}
+					break;
+
+				case PrefabNodeOpKind::Delete:
+					pendingDelete = op.target;
+					// 削除するノードかその子孫が選択中だと、除去後に選択が解放済みを指すので外しておく
+					if (IsSelfOrDescendant(op.target, selected)) { selected = nullptr; }
+					break;
+
+				case PrefabNodeOpKind::Move:
+					break;   // その場適用の対象外（enableMove を使うのは Editor だけ）
+				}
+			}
 		}
 
 

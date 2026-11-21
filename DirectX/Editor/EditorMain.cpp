@@ -4,6 +4,8 @@
 #if defined(AQ_PLATFORM_WIN32)
 #include "GameModule.h"
 #include "Platform/PlatformWin32.h"
+#include "Core/AppHost.h"
+#include "Level/LevelEditor.h"
 #include "EditorLayer.h"
 #include <cstring>
 
@@ -39,6 +41,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			// AppHost は Initialize の中で生成されるので、登録は成功の後(最初のフレームより前)に行う。
 			// フックは毎フレームの更新の中で呼ばれるだけなので、初期化中に登録されている必要はない。
 			engineInstance.GetAppHost()->SetEditorLayer(&editorLayer);
+			// 編集モデルは Level エディタのパネルが持つものを使うが、Level エディタのウィンドウとメニューは出さない
+			// (同じモデルを 2 つの UI が触ると、Level エディタの選択が宙に浮き、変更がコマンドを通らないため)
+			if (aq::level::LevelEditorPanel* levelEditorPanel = engineInstance.GetAppHost()->GetLevelEditorPanel()) {
+				levelEditorPanel->SetHostedByEditor(true);
+			}
 			// Play/Stop 自己テスト(-editor-selftest)。エディタだけの指示なので LaunchOptions には足さず、ここで直接見る
 			// (LaunchOptions は未知のキーとしてログに出すだけで無視する)
 			if (lpCmdLine != nullptr && std::strstr(lpCmdLine, "-editor-selftest") != nullptr) {

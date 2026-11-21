@@ -56,7 +56,7 @@ namespace aq
 			// 描画後に削除予約ノードを除去する（ImGui スタックに影響しない安全なタイミング）。
 			if (pendingDelete_)
 			{
-				if (selected_ == pendingDelete_) selected_ = root_.get();
+				if (!selected_) selected_ = root_.get();   // 削除ノードかその子孫が選択中だった場合は ApplyOps が外している
 				RemoveNode(root_.get(), pendingDelete_);
 				pendingDelete_ = nullptr;
 			}
@@ -93,7 +93,13 @@ namespace aq
 		void PrefabEditorPanel::DrawTree(PrefabEditNode* node, int depth)
 		{
 			// Prefab エディタは Transform 必須化しない（従来どおり）。
-			PrefabNodeDrawTree(node, selected_, pendingDelete_, root_.get(), depth, false);
+			PrefabTreeDrawOptions options;
+			options.selected = selected_;
+			options.root     = root_.get();
+
+			std::vector<PrefabNodeOp> ops;
+			PrefabNodeDrawTree(node, options, depth, ops);
+			PrefabNodeApplyOpsInPlace(ops, selected_, pendingDelete_, false);
 		}
 
 

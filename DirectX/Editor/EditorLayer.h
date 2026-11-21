@@ -1,14 +1,18 @@
 #pragma once
 #include "Editor/IEditorLayer.h"
+#include "EditorContext.h"
 #include "GameViewInput.h"
 #include "PlayModeController.h"
 #include "PlayStopSelfTest.h"
+#include "Panels/HierarchyPanel.h"
+#include "Panels/LevelFileMenu.h"
+#include <cstdint>
 
 
 namespace editor
 {
 	/**
-	 * エディタの UI 層。ゲームビューと、再生・停止のツールバーを持つ。
+	 * エディタの UI 層。ゲームビュー、ヒエラルキー、インスペクター、メインメニューバー(File メニューと再生・停止のツールバー)を持つ。
 	 * AppHost がエディタ用の ImGui コンテキストを current にして呼ぶ。寿命は EditorMain が持つ
 	 */
 	class EditorLayer final : public aq::IEditorLayer
@@ -22,6 +26,16 @@ namespace editor
 
 		/** Play/Stop 自己テスト */
 		PlayStopSelfTest playStopSelfTest_;
+
+		/** 編集の状態(編集モデルへの参照・選択・コマンドの列) */
+		EditorContext editorContext_;
+
+		/** パネル */
+		HierarchyPanel hierarchyPanel_;
+		LevelFileMenu  levelFileMenu_;
+
+		/** 初期配置の要否を確かめたか(最初のフレームで 1 回だけ確かめる) */
+		bool isLayoutChecked_ = false;
 
 		/** 起動直後の最初のフレームか(ゲームビューにフォーカスを与える) */
 		bool isFirstFrame_ = true;
@@ -43,7 +57,19 @@ namespace editor
 		/** ゲームビュー。displayRT をアスペクト比を保って縮小表示し、このフレームの状態を返す */
 		GameViewState DrawGameView(const aq::rendering::RenderTargetHandle gameViewRT);
 
-		/** メインメニューバーに再生・一時停止・再開・停止のボタン、現在のモード、自己テストを置く */
+		/** メインメニューバー。左から File メニュー、再生のツールバー、今のパス */
+		void DrawMainMenuBar();
+
+		/** メインメニューバーの中に再生・一時停止・再開・停止のボタン、現在のモード、自己テストを置く */
 		void DrawPlayToolbar();
+
+		/** インスペクター。選択中のノードの名前を出すだけ(値の編集はまだ作っていない) */
+		void DrawInspector();
+
+		/**
+		 * ヒエラルキーの配置の保存が無いとき、最初のフレームに 1 回だけドックスペースを
+		 * 左(ヒエラルキー)・中央(ゲームビュー)・右(インスペクター)に分ける。分けたら true
+		 */
+		bool SetupInitialLayout(const uint32_t dockspaceId);
 	};
 }

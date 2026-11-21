@@ -33,6 +33,7 @@ namespace aq
 			char                 pathBuf_[260]  = "Assets/Levels/New.level.json";
 			LevelLoadHandle      lastAsync_;                     // 直近の LoadAsync 進捗（バー表示用）
 			bool                 locked_        = false;                 // 再生中は編集を受け付けない
+			bool                 hostedByEditor_ = false;                // true = Editor が編集モデルを使うので、メニュー項目とウィンドウを出さない
 
 
 		public:
@@ -49,6 +50,13 @@ namespace aq
 			/** 再生中などに編集を受け付けなくする。true の間はウィンドウの中身を操作不可にする */
 			void SetLocked(const bool locked) { locked_ = locked; }
 			bool IsLocked() const             { return locked_; }
+
+			/**
+			 * Editor が編集モデルを使うときに true にする。メニュー項目とウィンドウを出さず、
+			 * DebugRender はプレビューの要求の処理（ProcessPreviewRequest）だけを行う
+			 */
+			void SetHostedByEditor(const bool hosted) { hostedByEditor_ = hosted; }
+			bool IsHostedByEditor() const             { return hostedByEditor_; }
 
 
 		private:

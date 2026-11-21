@@ -1,16 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Commands">
+      <UniqueIdentifier>{0881A859-4CE9-4A5E-B3F2-E4A814E86706}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Panels">
+      <UniqueIdentifier>{3C85F431-1ACB-4A0B-A66D-4E1EA594A431}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="EditorMain.cpp" />
     <ClCompile Include="EditorLayer.cpp" />
     <ClCompile Include="GameViewInput.cpp" />
     <ClCompile Include="PlayModeController.cpp" />
     <ClCompile Include="PlayStopSelfTest.cpp" />
+    <ClCompile Include="EditorContext.cpp" />
+    <ClCompile Include="Commands\NodeCommands.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Panels\HierarchyPanel.cpp">
+      <Filter>Panels</Filter>
+    </ClCompile>
+    <ClCompile Include="Panels\LevelFileMenu.cpp">
+      <Filter>Panels</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EditorLayer.h" />
     <ClInclude Include="GameViewInput.h" />
     <ClInclude Include="PlayModeController.h" />
     <ClInclude Include="PlayStopSelfTest.h" />
+    <ClInclude Include="EditorContext.h" />
+    <ClInclude Include="Commands\IEditorCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\NodeCommands.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Panels\HierarchyPanel.h">
+      <Filter>Panels</Filter>
+    </ClInclude>
+    <ClInclude Include="Panels\LevelFileMenu.h">
+      <Filter>Panels</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

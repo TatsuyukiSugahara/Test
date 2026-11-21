@@ -1,7 +1,9 @@
 #include "stdafx.h"
 #include "EditorLayer.h"
 #include "Core/AppHost.h"
+#include "Level/LevelEditModel.h"
 #include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>   // DockBuilder(初期配置の関数だけで使う)
 
 
 namespace editor
@@ -11,6 +13,13 @@ namespace editor
 		/** ゲームビューのウィンドウ名。ドッキング配置は editor_layout.ini にこの名前で保存される */
 		static constexpr const char* GAME_VIEW_WINDOW_NAME = "Game View";
 
+		/** インスペクターのウィンドウ名 */
+		static constexpr const char* INSPECTOR_WINDOW_NAME = "Inspector";
+
+		/** 初期配置の幅の割合(ドックスペース全体に対して) */
+		static constexpr float HIERARCHY_WIDTH_RATIO = 0.20f;
+		static constexpr float INSPECTOR_WIDTH_RATIO = 0.25f;
+
 		/** ゲームビューへ追従させるレンダー解像度の下限(これより小さい領域では切り上げ、絵に余白が出る) */
 		static constexpr uint32_t MIN_GAME_VIEW_RENDER_SIZE = 64;
 	}
@@ -18,13 +27,17 @@ namespace editor
 
 	void EditorLayer::OnBeginFrame(ImGuiContext* gameContext)
 	{
-		// 再生・停止の遷移はここ(FlushRender の後・ECS の反復の外)でだけ行う。自己テストは遷移の前に進めて要求を出す。
+		// 編集コマンドの実行と再生・停止の遷移はここ(FlushRender の後・ECS の反復の外)でだけ行う。
+		// コマンド → 遷移の順にする(同じフレームに再生も要求されていたら、編集を反映してから再生する)。
+		// 自己テストは遷移の前に進めて要求を出す。
 		// ゲームの開始・終了処理やプレビューの作り直しは、ランタイムと同じくゲーム用コンテキストを current にして呼ぶ
 		{
 			ImGuiContext* editorContext = ImGui::GetCurrentContext();
 			if (gameContext != nullptr) {
 				ImGui::SetCurrentContext(gameContext);
 			}
+
+			editorContext_.ApplyPending();
 
 			if (startSelfTestOnLaunch_) {
 				startSelfTestOnLaunch_ = false;
@@ -43,13 +56,23 @@ namespace editor
 	void EditorLayer::OnBuildUI(const aq::rendering::RenderTargetHandle gameViewRT)
 	{
 		// メニューバーはドックスペースより先に置く(ドッキング先がメニューバーの下の領域になる)
-		DrawPlayToolbar();
+		DrawMainMenuBar();
+		// File メニューのモーダルと Ctrl+S(メニューバーの外の ID の階層で開く)
+		levelFileMenu_.DrawPopups(editorContext_);
 
 		// メインビューポート全体をドッキング先にする
 		const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport();
+		const bool isLayoutBuilt = SetupInitialLayout(dockspaceId);
+
+		// パネルはゲームビューより先に描く(現れたウィンドウはフォーカスを取るので、最初のフォーカスをゲームビューに残すため)
+		hierarchyPanel_.Draw(editorContext_);
+		DrawInspector();
 
 		// 配置の保存(editor_layout.ini)が無い初回だけ、ゲームビューをドックスペースいっぱいに置く
-		ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
+		// (初期配置で分けたときは、分けた中央に置いてあるので指定しない)
+		if (!isLayoutBuilt) {
+			ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
+		}
 		// 起動直後はゲームビューにフォーカスを与え、何もクリックしなくてもゲームを操作できるようにする(Game.exe と同じ始まり方)
 		if (isFirstFrame_) {
 			ImGui::SetNextWindowFocus();
@@ -150,10 +173,21 @@ namespace editor
 	}
 
 
-	void EditorLayer::DrawPlayToolbar()
+	void EditorLayer::DrawMainMenuBar()
 	{
 		if (!ImGui::BeginMainMenuBar()) return;
 
+		levelFileMenu_.DrawMenu(editorContext_);
+		ImGui::Separator();
+		DrawPlayToolbar();
+		levelFileMenu_.DrawStatus(editorContext_);
+
+		ImGui::EndMainMenuBar();
+	}
+
+
+	void EditorLayer::DrawPlayToolbar()
+	{
 		const aq::RunMode mode = aq::AppHost::Get().GetRunMode();
 		// 自己テストの実行中と、要求が実行待ちの間は操作を受け付けない(遷移はフレームの先頭で 1 つずつ行う)
 		const bool isBusy = playStopSelfTest_.IsRunning() || playModeController_.HasPendingRequest();
@@ -204,7 +238,58 @@ namespace editor
 			}
 			ImGui::EndDisabled();
 		}
+	}
 
-		ImGui::EndMainMenuBar();
+
+	void EditorLayer::DrawInspector()
+	{
+		if (ImGui::Begin(INSPECTOR_WINDOW_NAME)) {
+			// ImGui のフォントは ASCII のみを読み込んでいるので英語で出す
+			const aq::level::LevelEditModel* model = editorContext_.GetModel();
+			const aq::ecs::PrefabEditNode* node = nullptr;
+			if (aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) {
+				ImGui::TextUnformatted("Playing");
+			} else {
+				if (model != nullptr && editorContext_.GetSelectedId() != 0) {
+					node = model->FindNode(editorContext_.GetSelectedId());
+				}
+				if (node != nullptr) {
+					ImGui::Text("%s", node->name.c_str());
+				} else {
+					ImGui::TextUnformatted("No selection");
+				}
+			}
+		}
+		ImGui::End();
+	}
+
+
+	bool EditorLayer::SetupInitialLayout(const uint32_t dockspaceId)
+	{
+		if (isLayoutChecked_) return false;
+		isLayoutChecked_ = true;
+
+		// ヒエラルキーの配置が保存されていれば、利用者の配置を使う
+		if (ImGui::FindWindowSettingsByID(ImHashStr(HierarchyPanel::WINDOW_NAME)) != nullptr) return false;
+
+		// DockBuilder は ImGui の内部 API なので、使うのはこの関数だけにする
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::DockBuilderRemoveNode(dockspaceId);
+		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+		ImGui::DockBuilderSetNodeSize(dockspaceId, viewport->WorkSize);
+
+		// 左を切り出し、残りから右を切り出す(右の割合は残りに対する割合に直す)
+		ImGuiID leftId   = 0;
+		ImGuiID restId   = 0;
+		ImGuiID rightId  = 0;
+		ImGuiID centerId = 0;
+		ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Left, HIERARCHY_WIDTH_RATIO, &leftId, &restId);
+		ImGui::DockBuilderSplitNode(restId, ImGuiDir_Right, INSPECTOR_WIDTH_RATIO / (1.0f - HIERARCHY_WIDTH_RATIO), &rightId, &centerId);
+
+		ImGui::DockBuilderDockWindow(HierarchyPanel::WINDOW_NAME, leftId);
+		ImGui::DockBuilderDockWindow(GAME_VIEW_WINDOW_NAME, centerId);
+		ImGui::DockBuilderDockWindow(INSPECTOR_WINDOW_NAME, rightId);
+		ImGui::DockBuilderFinish(dockspaceId);
+		return true;
 	}
 }

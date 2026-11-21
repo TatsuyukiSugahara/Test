@@ -18,7 +18,13 @@
     <ClCompile Include="Commands\NodeCommands.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
+    <ClCompile Include="Commands\ComponentCommands.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
     <ClCompile Include="Panels\HierarchyPanel.cpp">
+      <Filter>Panels</Filter>
+    </ClCompile>
+    <ClCompile Include="Panels\InspectorPanel.cpp">
       <Filter>Panels</Filter>
     </ClCompile>
     <ClCompile Include="Panels\LevelFileMenu.cpp">
@@ -37,7 +43,13 @@
     <ClInclude Include="Commands\NodeCommands.h">
       <Filter>Commands</Filter>
     </ClInclude>
+    <ClInclude Include="Commands\ComponentCommands.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
     <ClInclude Include="Panels\HierarchyPanel.h">
+      <Filter>Panels</Filter>
+    </ClInclude>
+    <ClInclude Include="Panels\InspectorPanel.h">
       <Filter>Panels</Filter>
     </ClInclude>
     <ClInclude Include="Panels\LevelFileMenu.h">

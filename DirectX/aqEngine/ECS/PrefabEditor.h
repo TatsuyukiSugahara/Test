@@ -26,6 +26,7 @@ namespace aq
 			AlignedStorage       data;                                // 型は data.Type()
 			util::JsonValue      loadedJson;                          // 参照ノードの override: 読み込んだ直後の serializePtr の値。新しく足したものは空（Null）
 			PrefabOverrideSource source = PrefabOverrideSource::None; // 参照ノードの override: 読み込んだ出どころ
+			bool                 rebased = false;                     // 参照ノードの override: 基準を解決済みの値へ付け替え済みか（LevelEditModel::SetComponentField だけが立てる）
 		};
 
 		struct PrefabEditNode

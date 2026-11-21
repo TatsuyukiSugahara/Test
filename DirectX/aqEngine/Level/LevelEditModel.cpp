@@ -6,6 +6,9 @@
 #include "Level/LevelSerializer.h"
 #include "ECS/EntityContext.h"
 #include "ECS/PrefabEditNodeOps.h"
+#include "ECS/PrefabSerializer.h"
+#include "ECS/ComponentRegistry.h"
+#include <algorithm>
 #include <filesystem>
 #include <system_error>
 
@@ -235,6 +238,57 @@ namespace aq
 				}
 				return false;
 			}
+
+
+			/** PrefabSerializer の JoinPath と同じ規則で、dir 基準の rel を結合・正規化する（絶対パスなら rel のまま） */
+			std::string JoinReferencePath(const std::string& dir, const std::string& rel)
+			{
+				std::string relative = rel;
+				for (char& c : relative) { if (c == '\\') { c = '/'; } }
+				if (IsAbsolutePath(relative) || dir.empty()) { return relative; }
+
+				std::string joined = dir + "/" + relative;
+				for (char& c : joined) { if (c == '\\') { c = '/'; } }
+				return joined;
+			}
+
+
+			/** 参照ノードの JSON を PrefabSerializer で解決し、根の components を outComponents へ返す */
+			bool ResolveComponentsOf(const util::JsonValue& nodeJson, const std::string& baseDir, util::JsonValue& outComponents)
+			{
+				const ecs::Prefab prefab = ecs::PrefabSerializer::FromJson(nodeJson, baseDir.c_str());
+				if (!prefab.IsValid()) { return false; }
+				outComponents = prefab.Data()->root.components;
+				return true;
+			}
+
+
+			/** 参照ノードの JSON のうち、overrides を読み込んだときの生 JSON（overridesRaw）に差し替えたもの */
+			util::JsonValue MakeRawReferenceJson(const ecs::PrefabEditNode& node)
+			{
+				util::JsonValue json = util::JsonValue::MakeObject();
+				json.Set("name", util::JsonValue(node.name));
+				json.Set("prefab", util::JsonValue(node.prefabRef));
+				if (node.overridesRaw.IsObject() && !node.overridesRaw.GetObject().empty()) {
+					json.Set("overrides", node.overridesRaw);
+				}
+				return json;
+			}
+
+
+			ecs::PrefabEditComponent* FindEditComponent(ecs::PrefabEditNode& node, const ecs::TypeInfo& type)
+			{
+				for (ecs::PrefabEditComponent& component : node.components) {
+					if (component.data.Type() == type) { return &component; }
+				}
+				return nullptr;
+			}
+
+
+			void SetError(std::string* error, const std::string& message)
+			{
+				if (error) { *error = message; }
+			}
 		}
 
 
@@ -417,6 +471,140 @@ namespace aq
 		bool LevelEditModel::HasRelativeReferences() const
 		{
 			return NodesHaveRelativeReference(entities_) || SubLevelsHaveRelativeReference(subLevels_);
+		}
+
+
+		bool LevelEditModel::ResolveReferenceComponents(const uint32_t id, util::JsonValue& outComponents, std::string* error) const
+		{
+			const ecs::PrefabEditNode* node = FindNode(id);
+			if (!node || node->prefabRef.empty()) {
+				SetError(error, "参照ノードではない");
+				return false;
+			}
+
+			// 解決の結果が空でも失敗とは限らない（途中の失敗は ResolveNode がログだけで空を返す）ので、直接の参照先だけを先に確かめる
+			const std::string refPath = JoinReferencePath(baseDir_, node->prefabRef);
+			if (util::JsonParser::ParseFile(refPath.c_str()).IsNull()) {
+				SetError(error, "参照先を読めない: " + refPath);
+				return false;
+			}
+
+			util::JsonValue resolved;
+			if (!ResolveComponentsOf(ecs::PrefabNodeToJson(*node), baseDir_, resolved)) {
+				SetError(error, "参照先を解決できない: " + refPath);
+				return false;
+			}
+			outComponents = std::move(resolved);
+			return true;
+		}
+
+
+		bool LevelEditModel::SetComponentField(const uint32_t id, const std::string& typeName, const std::string& key, const util::JsonValue& value)
+		{
+			ecs::ComponentRegistry& registry = ecs::ComponentRegistry::Get();
+			const ecs::TypeInfo     type     = registry.TypeOf(typeName);
+			if (type == ecs::TypeInfo()) { return false; }
+			const ecs::ComponentMeta* meta = registry.Find(type.GetHash());
+			if (!meta || !meta->serializePtr || !meta->deserializePtr) { return false; }
+
+			ecs::PrefabEditNode* node = FindNode(id);
+			if (!node) { return false; }
+
+			util::JsonValue patch = util::JsonValue::MakeObject();
+			patch.Set(key, value);
+
+			ecs::PrefabEditComponent* existing = FindEditComponent(*node, type);
+
+			// 実体ノード: 持っているコンポーネントのキーだけを変える
+			if (node->prefabRef.empty()) {
+				if (!existing) { return false; }
+				meta->deserializePtr(existing->data.Get(), patch);
+				return true;
+			}
+
+			// 参照ノード: 参照先から除かれた型は、解決後の値が無い
+			if (std::find(node->removedComponents.begin(), node->removedComponents.end(), typeName) != node->removedComponents.end()) {
+				return false;
+			}
+
+			// 付け替え済み、または新しく足した（loadedJson が空 = 全フィールドを書く）コンポーネントはそのまま変える
+			if (existing && (existing->rebased || existing->loadedJson.IsNull())) {
+				meta->deserializePtr(existing->data.Get(), patch);
+				return true;
+			}
+
+			// 付け替え: R_cur（今の編集内容で解決した値）と R_raw（読み込んだ override だけで解決した値）を作る
+			util::JsonValue current;
+			if (!ResolveReferenceComponents(id, current, nullptr)) { return false; }
+			if (!current.IsObject() || !current.Contains(typeName)) { return false; }
+
+			util::JsonValue raw;
+			if (!ResolveComponentsOf(MakeRawReferenceJson(*node), baseDir_, raw)) { return false; }
+			if (!raw.IsObject() || !raw.Contains(typeName)) { return false; }
+
+			// 失敗してもモデルを変えないよう、作り終えてから差し替える
+			ecs::PrefabEditComponent rebased{ ecs::AlignedStorage(type) };
+			{
+				ecs::AlignedStorage base(type);
+				meta->deserializePtr(base.Get(), raw[typeName]);
+				meta->serializePtr(base.Get(), rebased.loadedJson);
+			}
+			meta->deserializePtr(rebased.data.Get(), current[typeName]);
+			meta->deserializePtr(rebased.data.Get(), patch);
+			rebased.source  = existing ? existing->source : ecs::PrefabOverrideSource::Components;
+			rebased.rebased = true;
+
+			if (existing) {
+				*existing = std::move(rebased);
+			} else {
+				node->components.push_back(std::move(rebased));
+			}
+			return true;
+		}
+
+
+		bool LevelEditModel::AddComponent(const uint32_t id, const std::string& typeName, const util::JsonValue* json)
+		{
+			ecs::ComponentRegistry& registry = ecs::ComponentRegistry::Get();
+			const ecs::TypeInfo     type     = registry.TypeOf(typeName);
+			if (type == ecs::TypeInfo()) { return false; }
+			const ecs::ComponentMeta* meta = registry.Find(type.GetHash());
+			if (!meta) { return false; }
+
+			ecs::PrefabEditNode* node = FindNode(id);
+			if (!node || !node->prefabRef.empty()) { return false; }
+			if (FindEditComponent(*node, type)) { return false; }
+
+			ecs::PrefabEditComponent component{ ecs::AlignedStorage(type) };
+			if (json && meta->deserializePtr) {
+				meta->deserializePtr(component.data.Get(), *json);
+			}
+			node->components.push_back(std::move(component));
+			return true;
+		}
+
+
+		bool LevelEditModel::RemoveComponent(const uint32_t id, const std::string& typeName, util::JsonValue* outJson)
+		{
+			ecs::ComponentRegistry& registry = ecs::ComponentRegistry::Get();
+			const ecs::TypeInfo     type     = registry.TypeOf(typeName);
+			if (type == ecs::TypeInfo()) { return false; }
+			const ecs::ComponentMeta* meta = registry.Find(type.GetHash());
+			if (!meta || !meta->addable) { return false; }   // Transform などは消さない
+
+			ecs::PrefabEditNode* node = FindNode(id);
+			if (!node || !node->prefabRef.empty()) { return false; }
+
+			for (size_t i = 0; i < node->components.size(); ++i) {
+				if (!(node->components[i].data.Type() == type)) { continue; }
+				if (outJson) {
+					*outJson = util::JsonValue();
+					if (meta->serializePtr) { meta->serializePtr(node->components[i].data.Get(), *outJson); }
+				}
+				node->components.erase(node->components.begin() + static_cast<std::ptrdiff_t>(i));
+				return true;
+			}
+			return false;
 		}
 
 

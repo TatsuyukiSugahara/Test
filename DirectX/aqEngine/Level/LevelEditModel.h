@@ -159,6 +159,38 @@ namespace aq
 
 
 		public:
+			/**
+			 * コンポーネントの値の操作。ノードは editId で指す。
+			 * 失敗（false）のときはモデルを変えない。
+			 */
+
+			/**
+			 * 参照ノードの解決済みのコンポーネント（{ typeName: JSON }）を outComponents へ返す。
+			 * PrefabSerializer::FromJson(PrefabNodeToJson(node), baseDir) の根の components と同じ（参照先の展開と override の適用を実行時と同じ経路で行う）。
+			 * 参照ノードでない・直接の参照先のファイルを読めないときは false（error に理由）。入れ子の参照の失敗はログだけで、結果はそのまま返す。
+			 * ファイルを読むので、毎フレームは呼ばない
+			 */
+			bool ResolveReferenceComponents(uint32_t id, util::JsonValue& outComponents, std::string* error = nullptr) const;
+
+			/**
+			 * typeName のコンポーネントの key だけを value に変える（deserializePtr に { key: value } を渡す）。
+			 * 実体ノードはそのコンポーネントを持つときだけ。参照ノードは、そのコンポーネントを初めて操作するときに
+			 * 基準を解決済みの値へ付け替えてから適用する（解決先に型が無い・解決に失敗したら false）。
+			 * 未登録の型・serializePtr / deserializePtr の無い型も false
+			 */
+			bool SetComponentField(uint32_t id, const std::string& typeName, const std::string& key, const util::JsonValue& value);
+
+			/** 実体ノードへコンポーネントを足す（json があれば deserializePtr）。既に持つ・未登録・参照ノードなら false */
+			bool AddComponent(uint32_t id, const std::string& typeName, const util::JsonValue* json = nullptr);
+
+			/**
+			 * 実体ノードからコンポーネントを外す。addable == false の型（Transform）・持っていない・参照ノードなら false。
+			 * outJson には外す前の serializePtr の値を返す
+			 */
+			bool RemoveComponent(uint32_t id, const std::string& typeName, util::JsonValue* outJson = nullptr);
+
+
+		public:
 			/** 完了待ち・Flush・前回プレビューのアンロード・Flush・登録の解除を行う（新しいプレビューは作らない） */
 			void ReleasePreview();
 

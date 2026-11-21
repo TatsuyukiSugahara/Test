@@ -12,6 +12,8 @@
 // ComponentMeta の型消去関数だけを通す。T4 / T5 は画面を持たない ImGui のコンテキストに
 // 入力を合成して行う(ImGui の Visitor は AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ)。
 // E7a で T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)を足した。画面も Engine も作らない(Debug 構成のみ)。
+// E7b で T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え)を足した。(a)〜(f)と(h)は画面も Engine も作らず TestData を読み、
+// (g)(保存した Level を生成して実体の値を確かめる)は T8 と同じ Engine + EntityContext の環境で行う(Debug 構成のみ)。
 // T6 と T7 のファイル往復も、編集ノード(PrefabEditNode)が AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
@@ -118,7 +120,8 @@ namespace
 			"      T8 Level の生成と取り消し(IsSpawned / Unload / LoadAsync の取り消し / Unregister)を試す。\n"
 			"      Debug 構成ではプレビューの置き換え(LevelEditModel)も行う。\n"
 			"      T9 実行モード(Edit / Play / Pause で動く System と、全モードでの Flush)を試す。\n"
-			"      Debug 構成では T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)も行う。\n");
+			"      Debug 構成では T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)も行う。\n"
+			"      Debug 構成では T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え、保存した Level の生成)も行う。\n");
 	}
 
 
@@ -1602,6 +1605,402 @@ namespace
 		RunStructureRelativeReferenceTest(results);
 		RunStructureRoundTripTest(results);
 	}
+
+
+	/** T11 で参照ノードを持つ試験用 Level(T6_Overrides.level.json)の、参照ノードの名前(RefFull は overrides.name が実行時の名前) */
+	static constexpr const char* VALUE_REF_FULL_NAME  = "RefFullRenamed";
+	static constexpr const char* VALUE_REF_PLAIN_NAME = "RefPlain";
+
+
+	/** T11 の試験用 Level(TestData の T6_Overrides.level.json)を読み込む。基準ディレクトリは TestData になる */
+	bool LoadValueTestModel(aq::level::LevelEditModel& model)
+	{
+		const std::string path = std::string(TEST_DATA_DIR) + "/" + OVERRIDE_TEST_LEVEL;
+		return model.LoadFile(path);
+	}
+
+
+	/** name のノードを書き出した JSON(無ければ Null) */
+	JsonValue NodeJsonOf(const aq::level::LevelEditModel& model, const std::string& name)
+	{
+		const PrefabEditNode* node = model.FindNode(IdOf(model, name));
+		return node ? aq::ecs::PrefabNodeToJson(*node) : JsonValue();
+	}
+
+
+	/** 参照ノード 1 つだけの Level の JSON(参照ノードの名前は R) */
+	JsonValue MakeReferenceLevelJson(const std::string& prefabPath)
+	{
+		JsonValue entity = JsonValue::MakeObject();
+		entity.Set("name", JsonValue(std::string("R")));
+		entity.Set("prefab", JsonValue(prefabPath));
+		JsonValue entities = JsonValue::MakeArray();
+		entities.PushBack(std::move(entity));
+		JsonValue level = JsonValue::MakeObject();
+		level.Set("name", JsonValue(std::string("T11_Ref")));
+		level.Set("entities", std::move(entities));
+		return level;
+	}
+
+
+	/** 2 つのノードの JSON が一字一句同じかを 1 件として出す */
+	void ReportNodeEquals(TestResults& results, const std::string& name, const JsonValue& actual, const JsonValue& expected)
+	{
+		const bool passed = JsonEqualsExact(actual, expected);
+		Report(results, name, passed, passed ? std::string() : "期待 " + StringifyOneLine(expected) + " / 実際 " + StringifyOneLine(actual));
+	}
+
+
+	/** T11 (a): 実体ノードの SetComponentField(float・Vector3・パス)で、そのキーだけが変わる */
+	void RunValueEntityTest(TestResults& results)
+	{
+		const std::string name = "T11 (a) 実体ノードの SetComponentField";
+		aq::level::LevelEditModel model;
+		if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const uint32_t  idChild      = IdOf(model, "InlineChild");
+		const uint32_t  idInline     = IdOf(model, "Inline");
+		const JsonValue beforeChild  = NodeJsonOf(model, "InlineChild");
+
+		// float(Spawner.interval)
+		const bool floatSet = model.SetComponentField(idChild, "Spawner", "interval", JsonValue(3.0));
+		JsonValue  spawner  = beforeChild["components"]["Spawner"];
+		spawner.Set("interval", JsonValue(3.0));
+		JsonValue expectedChild = WithMember(beforeChild, "components", "Spawner", spawner);
+		ReportNodeEquals(results, name + " float", NodeJsonOf(model, "InlineChild"), expectedChild);
+
+		// パス(Spawner.prefab。文字列を入れるだけでリソースは読まない)
+		const bool pathSet = model.SetComponentField(idChild, "Spawner", "prefab", JsonValue(std::string("x.prefab.json")));
+		spawner.Set("prefab", JsonValue(std::string("x.prefab.json")));
+		expectedChild = WithMember(beforeChild, "components", "Spawner", spawner);
+		ReportNodeEquals(results, name + " パス", NodeJsonOf(model, "InlineChild"), expectedChild);
+
+		// Vector3(Transform.position)
+		// Inline は子(InlineChild)を含むので、期待値は子を変えた後の JSON から作る
+		const JsonValue inlineBeforeVector = NodeJsonOf(model, "Inline");
+		const JsonValue position     = aq::util::JsonParser::ParseString("[4,5,6]");
+		const bool      vectorSet    = model.SetComponentField(idInline, "Transform", "position", position);
+		JsonValue       transform    = inlineBeforeVector["components"]["Transform"];
+		transform.Set("position", position);
+		ReportNodeEquals(results, name + " Vector3", NodeJsonOf(model, "Inline"), WithMember(inlineBeforeVector, "components", "Transform", transform));
+
+		// ほかのノードは変わらない
+		ReportNodeEquals(results, name + " ほかのノードは変わらない", NodeJsonOf(model, "InlineChild"), expectedChild);
+		Report(results, name + " 戻り値", floatSet && pathSet && vectorSet, "false を返した");
+	}
+
+
+	/** T11 (b): 参照ノードで override の無いコンポーネントのキーを変えると、そのキーだけが overrides.components.<型> に増える */
+	void RunValueReferenceNewOverrideTest(TestResults& results)
+	{
+		const std::string name = "T11 (b) override の無いコンポーネント";
+		aq::level::LevelEditModel model;
+		if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const uint32_t id = IdOf(model, VALUE_REF_PLAIN_NAME);
+		const bool     ok = model.SetComponentField(id, "Spawner", "interval", JsonValue(2.0));
+		const JsonValue expected = aq::util::JsonParser::ParseString(R"({"components":{"Spawner":{"interval":2}}})");
+		ReportOverrides(results, name, NodeJsonOf(model, VALUE_REF_PLAIN_NAME), expected);
+		Report(results, name + " 戻り値", ok, "false を返した");
+
+		// 参照先の名前とパスは変わらない
+		const JsonValue written = NodeJsonOf(model, VALUE_REF_PLAIN_NAME);
+		Report(results, name + " prefab", written["prefab"].IsString() && written["prefab"].AsString() == "T6_Base.prefab.json",
+			"prefab: " + written["prefab"].AsString());
+	}
+
+
+	/** T11 (c): override のある(出どころ components)コンポーネントでは、そのキーだけが足される */
+	void RunValueReferenceExistingOverrideTest(TestResults& results)
+	{
+		const std::string name = "T11 (c) override のあるコンポーネント";
+		aq::level::LevelEditModel model;
+		if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const std::string levelPath = std::string(TEST_DATA_DIR) + "/" + OVERRIDE_TEST_LEVEL;
+		const JsonValue   level     = aq::util::JsonParser::ParseFile(levelPath.c_str());
+		const JsonValue*  source    = FindEntity(level, OVERRIDE_TEST_NODE);
+		if (!source) { Report(results, name, false, "試験用のノードが無い"); return; }
+		const JsonValue& raw = OverridesOf(*source);
+
+		// Transform.scale(override に無いキー)を変える。position の override は一字一句変わらない
+		const uint32_t id = IdOf(model, VALUE_REF_FULL_NAME);
+		const bool     ok = model.SetComponentField(id, "Transform", "scale", aq::util::JsonParser::ParseString("[2,2,2]"));
+		JsonValue      transformWant = raw["components"]["Transform"];
+		transformWant.Set("scale", aq::util::JsonParser::ParseString("[2,2,2]"));
+		ReportOverrides(results, name, NodeJsonOf(model, VALUE_REF_FULL_NAME), WithMember(raw, "components", "Transform", transformWant));
+		Report(results, name + " 戻り値", ok, "false を返した");
+	}
+
+
+	/** T11 (c'): 付け替え。Prefab の値(3)を既定値(-1)に変えるとそのキーが書かれ、3 → 5 → 3 は何も増えない */
+	void RunValueRebaseTest(TestResults& results)
+	{
+		const std::string name = "T11 (c') 基準の付け替え";
+
+		// Prefab で 3(既定値は -1)・override 無し。-1 にすると、-1 で書かれる
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			const uint32_t id = IdOf(model, VALUE_REF_PLAIN_NAME);
+			const bool     ok = model.SetComponentField(id, "Spawner", "maxCount", JsonValue(-1.0));
+			ReportOverrides(results, name + " 3 → -1", NodeJsonOf(model, VALUE_REF_PLAIN_NAME),
+				aq::util::JsonParser::ParseString(R"({"components":{"Spawner":{"maxCount":-1}}})"));
+			Report(results, name + " 3 → -1 の戻り値", ok, "false を返した");
+		}
+
+		// 3 → 5 → 3 は、overrides を作らない(空の components も作らない)
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			const uint32_t id = IdOf(model, VALUE_REF_PLAIN_NAME);
+			const bool     ok = model.SetComponentField(id, "Spawner", "maxCount", JsonValue(5.0))
+				&& model.SetComponentField(id, "Spawner", "maxCount", JsonValue(3.0));
+			ReportOverrides(results, name + " 3 → 5 → 3", NodeJsonOf(model, VALUE_REF_PLAIN_NAME), JsonValue::MakeObject());
+			Report(results, name + " 3 → 5 → 3 の戻り値", ok, "false を返した");
+		}
+
+		// override の疎な JSON にあるキー(interval)を持つコンポーネントで、別のキー(maxCount)を変えても、既存のキーは一字一句変わらない
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+			const std::string levelPath = std::string(TEST_DATA_DIR) + "/" + OVERRIDE_TEST_LEVEL;
+			const JsonValue   level     = aq::util::JsonParser::ParseFile(levelPath.c_str());
+			const JsonValue*  source    = FindEntity(level, OVERRIDE_TEST_NODE);
+			if (!source) { Report(results, name, false, "試験用のノードが無い"); return; }
+			const JsonValue& raw = OverridesOf(*source);
+
+			const uint32_t id = IdOf(model, VALUE_REF_FULL_NAME);
+			const bool     ok = model.SetComponentField(id, "Spawner", "maxCount", JsonValue(7.0));
+			JsonValue      spawnerWant = raw["components"]["Spawner"];
+			spawnerWant.Set("maxCount", JsonValue(7.0));
+			ReportOverrides(results, name + " 既存のキーを保つ", NodeJsonOf(model, VALUE_REF_FULL_NAME),
+				WithMember(raw, "components", "Spawner", spawnerWant));
+			Report(results, name + " 既存のキーを保つ 戻り値", ok, "false を返した");
+		}
+	}
+
+
+	/** T11 (d): 変えて元に戻すと元と一致する(実体ノードも参照ノードも) */
+	void RunValueRevertTest(TestResults& results)
+	{
+		const std::string name = "T11 (d) 変えて元に戻す";
+		aq::level::LevelEditModel model;
+		if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		// 参照ノードの元の値は、Prefab 側の値を含む解決済みの値から取る
+		const uint32_t idFull  = IdOf(model, VALUE_REF_FULL_NAME);
+		const uint32_t idPlain = IdOf(model, VALUE_REF_PLAIN_NAME);
+		JsonValue      resolvedFull;
+		JsonValue      resolvedPlain;
+		if (!model.ResolveReferenceComponents(idFull, resolvedFull) || !model.ResolveReferenceComponents(idPlain, resolvedPlain)) {
+			Report(results, name, false, "参照ノードを解決できない");
+			return;
+		}
+		// 解決済みの値は Prefab ファイルに書かれた疎な JSON なので、キーが無ければ既定値が元の値になる
+		const JsonValue originalScale    = resolvedFull["Transform"].Contains("scale")
+			? resolvedFull["Transform"]["scale"] : aq::util::JsonParser::ParseString("[1,1,1]");
+		const JsonValue originalPosition = resolvedPlain["Transform"].Contains("position")
+			? resolvedPlain["Transform"]["position"] : aq::util::JsonParser::ParseString("[0,0,0]");
+
+		const JsonValue original = model.ToJson();
+		const bool ok =
+			model.SetComponentField(IdOf(model, "InlineChild"), "Spawner", "interval", JsonValue(9.0))
+			&& model.SetComponentField(IdOf(model, "InlineChild"), "Spawner", "interval", JsonValue(0.5))
+			&& model.SetComponentField(idFull, "Transform", "scale", aq::util::JsonParser::ParseString("[2,2,2]"))
+			&& model.SetComponentField(idFull, "Transform", "scale", originalScale)
+			&& model.SetComponentField(idPlain, "Transform", "position", aq::util::JsonParser::ParseString("[9,9,9]"))
+			&& model.SetComponentField(idPlain, "Transform", "position", originalPosition);
+		Report(results, name + " 戻り値", ok, "false を返した");
+
+		const JsonValue after = model.ToJson();
+		const bool      same  = JsonEqualsExact(original, after);
+		Report(results, name, same, same ? std::string() : "元と違う: " + StringifyOneLine(after));
+	}
+
+
+	/** T11 (e): ResolveReferenceComponents が Prefab 側の値と override を反映する。直接の参照先が無いと false */
+	void RunValueResolveTest(TestResults& results)
+	{
+		namespace fs = std::filesystem;
+
+		const std::string name = "T11 (e) ResolveReferenceComponents";
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+			// RefFull: override の値(Spawner.interval 2.5、Transform.position)と Prefab 側の値(Spawner.maxCount 3)、追加(AudioSource)、除去(AudioListener)
+			JsonValue   full;
+			std::string error;
+			const bool  fullOk = model.ResolveReferenceComponents(IdOf(model, VALUE_REF_FULL_NAME), full, &error);
+			const bool  fullValues = fullOk && full.IsObject()
+				&& full["Spawner"]["interval"].AsDouble() == 2.5 && full["Spawner"]["maxCount"].AsDouble() == 3.0
+				&& full["Transform"]["position"][0].AsDouble() == 1.5
+				&& full.Contains("AudioSource") && !full.Contains("AudioListener");
+			Report(results, name + " override あり", fullValues, fullOk ? "解決した値: " + StringifyOneLine(full) : error);
+
+			// RefPlain: Prefab 側の値そのまま
+			JsonValue  plain;
+			const bool plainOk = model.ResolveReferenceComponents(IdOf(model, VALUE_REF_PLAIN_NAME), plain, &error);
+			const bool plainValues = plainOk && plain.IsObject()
+				&& plain["Spawner"]["interval"].AsDouble() == 1.0 && plain["Spawner"]["maxCount"].AsDouble() == 3.0
+				&& plain.Contains("AudioListener");
+			Report(results, name + " override なし", plainValues, plainOk ? "解決した値: " + StringifyOneLine(plain) : error);
+
+			// 編集した値も反映される(まだ保存していない編集内容で解決する)
+			model.SetComponentField(IdOf(model, VALUE_REF_PLAIN_NAME), "Spawner", "maxCount", JsonValue(8.0));
+			JsonValue  edited;
+			const bool editedOk = model.ResolveReferenceComponents(IdOf(model, VALUE_REF_PLAIN_NAME), edited, &error);
+			Report(results, name + " 編集内容", editedOk && edited["Spawner"]["maxCount"].AsDouble() == 8.0,
+				editedOk ? "解決した値: " + StringifyOneLine(edited) : error);
+
+			// 参照ノードでない・無い ID は false
+			JsonValue  none;
+			const bool notRef = !model.ResolveReferenceComponents(IdOf(model, "Inline"), none, &error)
+				&& !model.ResolveReferenceComponents(99999, none, nullptr);
+			Report(results, name + " 参照ノードでない", notRef, "true を返した");
+		}
+
+		// 直接の参照先が無い → false で、error に理由が入る。
+		// 読めないファイルの ParseFile はアセットパスの候補を探すときに Engine を引くので、その間だけ Engine を作る(T8 と同じ)
+		{
+			const bool engineCreatedHere = !aq::Engine::IsCreated();
+			if (engineCreatedHere) aq::Engine::Create();
+			aq::level::LevelEditModel model;
+			model.FromJson(MakeReferenceLevelJson("NoSuchDirectory/NoSuch.prefab.json"));
+			JsonValue   out;
+			std::string error;
+			const bool  failed = !model.ResolveReferenceComponents(IdOf(model, "R"), out, &error);
+			Report(results, name + " 参照先が無い", failed && !error.empty(), failed ? "error が空" : "true を返した");
+			if (engineCreatedHere) aq::Engine::Release();
+		}
+
+		// コンポーネントを持たない Prefab → true で空のオブジェクト
+		{
+			std::error_code ec;
+			const fs::path  emptyPath = fs::temp_directory_path(ec) / "ReflectionTest_T11_Empty.prefab.json";
+			JsonValue       emptyPrefab = JsonValue::MakeObject();
+			emptyPrefab.Set("name", JsonValue(std::string("Empty")));
+			if (!aq::util::JsonSerializer::WriteFile(emptyPath.string().c_str(), emptyPrefab)) {
+				Report(results, name + " コンポーネントを持たない Prefab", false, "一時ファイルを書けない: " + emptyPath.string());
+			} else {
+				aq::level::LevelEditModel model;
+				model.FromJson(MakeReferenceLevelJson(emptyPath.generic_string()));
+				JsonValue   out;
+				std::string error;
+				const bool  ok = model.ResolveReferenceComponents(IdOf(model, "R"), out, &error);
+				Report(results, name + " コンポーネントを持たない Prefab", ok && out.IsObject() && out.GetObject().empty(),
+					ok ? "解決した値: " + StringifyOneLine(out) : error);
+			}
+			fs::remove(emptyPath, ec);
+		}
+	}
+
+
+	/** T11 (f): AddComponent / RemoveComponent(Transform は消せない、参照ノードは false) */
+	void RunValueAddRemoveTest(TestResults& results)
+	{
+		const std::string name = "T11 (f) AddComponent / RemoveComponent";
+		aq::level::LevelEditModel model;
+		if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const uint32_t  idChild      = IdOf(model, "InlineChild");   // Transform と Spawner を持つ実体ノード
+		const JsonValue beforeChild  = NodeJsonOf(model, "InlineChild");
+
+		// 足す: 既定値 / JSON 付き。既に持つ・未登録は false
+		const bool addedDefault  = model.AddComponent(idChild, "AudioListener");
+		const bool addedAgain    = model.AddComponent(idChild, "AudioListener");
+		const JsonValue audioJson = aq::util::JsonParser::ParseString(R"({"volume":0.25})");
+		const bool addedWithJson = model.AddComponent(idChild, "AudioSource", &audioJson);
+		const bool addedUnknown  = model.AddComponent(idChild, "NoSuchType");
+		const JsonValue added    = NodeJsonOf(model, "InlineChild");
+		const bool addedOk = addedDefault && !addedAgain && addedWithJson && !addedUnknown
+			&& added["components"].Contains("AudioListener")
+			&& added["components"]["AudioSource"]["volume"].AsDouble() == 0.25
+			&& added["components"].GetObject().size() == beforeChild["components"].GetObject().size() + 2;
+		Report(results, name + " 足す", addedOk, "足した後: " + StringifyOneLine(added));
+
+		// 消す: Transform(addable == false)は消せない。持っていない型・未登録も false
+		const JsonValue beforeRemove = NodeJsonOf(model, "InlineChild");
+		const bool removedTransform = model.RemoveComponent(idChild, "Transform");
+		const bool removedUnknown   = model.RemoveComponent(idChild, "NoSuchType");
+		const bool removedMissing   = model.RemoveComponent(IdOf(model, "Inline"), "Spawner");
+		Report(results, name + " 消せない型", !removedTransform && !removedUnknown && !removedMissing
+			&& JsonEqualsExact(beforeRemove, NodeJsonOf(model, "InlineChild")), "消せるはずのない型が消えた / モデルが変わった");
+
+		// 消す: 外す前の値が outJson に入る。2 回目は false
+		JsonValue  removedJson;
+		const bool removed      = model.RemoveComponent(idChild, "Spawner", &removedJson);
+		const bool removedAgain = model.RemoveComponent(idChild, "Spawner");
+		const JsonValue afterRemove = NodeJsonOf(model, "InlineChild");
+		const bool removeOk = removed && !removedAgain && JsonEqualsExact(removedJson, beforeRemove["components"]["Spawner"])
+			&& !afterRemove["components"].Contains("Spawner") && afterRemove["components"].Contains("Transform");
+		Report(results, name + " 消す", removeOk, "外した値: " + StringifyOneLine(removedJson));
+
+		// 参照ノードは足せも消せもない(モデルは変わらない)
+		const JsonValue beforeRef  = model.ToJson();
+		const bool refAdd    = model.AddComponent(IdOf(model, VALUE_REF_PLAIN_NAME), "AudioSource");
+		const bool refRemove = model.RemoveComponent(IdOf(model, VALUE_REF_FULL_NAME), "Spawner");
+		Report(results, name + " 参照ノード", !refAdd && !refRemove && JsonEqualsExact(beforeRef, model.ToJson()),
+			"参照ノードの追加・削除が通った / モデルが変わった");
+	}
+
+
+	/** T11 (h): 失敗する SetComponentField は false を返し、モデルを変えない */
+	void RunValueRejectTest(TestResults& results)
+	{
+		const std::string name = "T11 (h) 失敗はモデルを変えない";
+		aq::level::LevelEditModel model;
+		if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const JsonValue original = model.ToJson();
+		struct Case
+		{
+			const char* label;
+			bool        result;
+		};
+		const Case cases[] = {
+			{ "未登録の型",                     model.SetComponentField(IdOf(model, "Inline"), "NoSuchType", "x", JsonValue(1.0)) },
+			{ "実体ノードが持たない型",         model.SetComponentField(IdOf(model, "Inline"), "Spawner", "interval", JsonValue(1.0)) },
+			{ "参照先から除かれた型",           model.SetComponentField(IdOf(model, VALUE_REF_FULL_NAME), "AudioListener", "x", JsonValue(1.0)) },
+			{ "参照先に無い型",                 model.SetComponentField(IdOf(model, VALUE_REF_PLAIN_NAME), "AudioSource", "volume", JsonValue(0.1)) },
+			{ "無い ID",                        model.SetComponentField(99999, "Transform", "position", JsonValue(1.0)) },
+		};
+		std::string accepted;
+		for (const Case& c : cases) {
+			if (c.result) accepted += std::string(accepted.empty() ? "" : ", ") + c.label;
+		}
+		Report(results, name + " false", accepted.empty(), "通ってしまった: " + accepted);
+		Report(results, name + " 変わらない", JsonEqualsExact(original, model.ToJson()), "ToJson が元と違う");
+
+		// 直接の参照先が無い参照ノード
+		aq::level::LevelEditModel missing;
+		missing.FromJson(MakeReferenceLevelJson("NoSuchDirectory/NoSuch.prefab.json"));
+		const JsonValue missingOriginal = missing.ToJson();
+		const bool      missingSet      = missing.SetComponentField(IdOf(missing, "R"), "Spawner", "maxCount", JsonValue(1.0));
+		Report(results, name + " 参照先が無い", !missingSet && JsonEqualsExact(missingOriginal, missing.ToJson()),
+			"参照先が無いのに通った / モデルが変わった");
+	}
+
+
+	/**
+	 * T11 値の操作((a)〜(f)と(h)。(g)は Engine を作る T8 の環境の中で行う)
+	 *
+	 * LevelEditModel のコンポーネントの値・追加・削除と参照ノードの解決を、画面も Engine も作らずに試す
+	 * (TestData の Level と Prefab を読む)。
+	 */
+	void RunValueEditTests(TestResults& results)
+	{
+		RunValueEntityTest(results);
+		RunValueReferenceNewOverrideTest(results);
+		RunValueReferenceExistingOverrideTest(results);
+		RunValueRebaseTest(results);
+		RunValueRevertTest(results);
+		RunValueResolveTest(results);
+		RunValueAddRemoveTest(results);
+		RunValueRejectTest(results);
+	}
 #endif
 
 	using aq::level::LevelId;
@@ -1938,6 +2337,107 @@ namespace
 		LevelRegistry::Get().Unregister(model.GetPreviewKey());
 		ResetSpawnTestWorld();
 	}
+
+
+	/**
+	 * T11 (g): 値を変えた Level を一時ファイルへ SaveFile し、LevelSerializer で読んで Load → Flush すると、
+	 * エンティティが作られ、変えた値が実体のコンポーネント(serialize)に出る
+	 */
+	void RunValueSaveLoadTest(TestResults& results)
+	{
+		namespace fs = std::filesystem;
+
+		const std::string name = "T11 (g) 保存した Level の生成";
+		const std::string key  = "<t11-g>";
+
+		// 参照ノードは、保存先が一時ディレクトリでも指す先が変わらないよう、TestData の Prefab を絶対パスで指す
+		std::error_code ec;
+		const std::string levelPath  = (fs::temp_directory_path(ec) / "ReflectionTest_T11_Value.level.json").generic_string();
+		const std::string prefabPath = (fs::absolute(fs::path(TEST_DATA_DIR), ec) / "T6_Base.prefab.json").generic_string();
+
+		JsonValue plainComponents = JsonValue::MakeObject();
+		plainComponents.Set("Transform", JsonValue::MakeObject());
+		JsonValue plain = JsonValue::MakeObject();
+		plain.Set("name", JsonValue(std::string("Plain")));
+		plain.Set("components", std::move(plainComponents));
+		JsonValue ref = JsonValue::MakeObject();
+		ref.Set("name", JsonValue(std::string("Ref")));
+		ref.Set("prefab", JsonValue(prefabPath));
+		JsonValue entities = JsonValue::MakeArray();
+		entities.PushBack(std::move(plain));
+		entities.PushBack(std::move(ref));
+		JsonValue levelJson = JsonValue::MakeObject();
+		levelJson.Set("name", JsonValue(std::string("T11_G")));
+		levelJson.Set("entities", std::move(entities));
+
+		aq::level::LevelEditModel model;
+		if (!model.FromJson(levelJson)) { Report(results, name, false, "編集モデルへ読み込めない"); return; }
+
+		// 実体ノードの Vector3 と、参照ノードの override の無いコンポーネントの値を変える
+		const bool edited =
+			model.SetComponentField(IdOf(model, "Plain"), "Transform", "position", aq::util::JsonParser::ParseString("[4,5,6]"))
+			&& model.SetComponentField(IdOf(model, "Ref"), "Spawner", "maxCount", JsonValue(7.0));
+		if (!edited) { Report(results, name, false, "値を変えられない"); return; }
+
+		if (!model.SaveFile(levelPath)) { Report(results, name, false, "一時ファイルへ保存できない: " + levelPath); return; }
+
+		// 保存した参照ノードには、変えたキーだけが書かれる
+		const JsonValue saved = aq::util::JsonParser::ParseFile(levelPath.c_str());
+		const JsonValue expectedOverrides = aq::util::JsonParser::ParseString(R"({"components":{"Spawner":{"maxCount":7}}})");
+		ReportNodeEquals(results, name + " 保存した差分", OverridesOf(saved["entities"][1]), expectedOverrides);
+
+		// LevelSerializer で読んで生成する
+		std::shared_ptr<const aq::level::LevelData> data = aq::level::LevelSerializer::Load(levelPath.c_str());
+		if (!data) {
+			Report(results, name, false, "保存した Level を LevelSerializer で読めない");
+			fs::remove(fs::path(levelPath), ec);
+			return;
+		}
+		LevelRegistry::Get().Register(key, data);
+
+		LevelManager&           levelManager = LevelManager::Get();
+		aq::ecs::EntityContext& ctx          = aq::ecs::EntityContext::Get();
+		const LevelId           levelId      = levelManager.Load(key);
+		ctx.FlushPendingCommands();
+		const bool spawned = levelId.IsValid() && levelManager.IsSpawned(levelId);
+
+		std::vector<aq::ecs::EntityHandle> handles;
+		aq::ecs::Foreach<aq::ecs::TransformComponent>([&handles](const aq::ecs::Entity& entity, aq::ecs::TransformComponent*)
+			{
+				handles.push_back(entity.GetHandle());
+			});
+
+		const ComponentRegistry& registry      = ComponentRegistry::Get();
+		const ComponentMeta*     transformMeta = registry.Find("Transform");
+		const ComponentMeta*     spawnerMeta   = registry.Find("Spawner");
+		bool positionFound = false;
+		bool maxCountFound = false;
+		for (const aq::ecs::EntityHandle& handle : handles) {
+			if (transformMeta && transformMeta->serialize) {
+				JsonValue transform;
+				transformMeta->serialize(handle, transform);
+				const JsonValue& position = transform["position"];
+				if (position.Size() == 3 && position[0].AsDouble() == 4.0 && position[1].AsDouble() == 5.0 && position[2].AsDouble() == 6.0) {
+					positionFound = true;
+				}
+			}
+			if (spawnerMeta && spawnerMeta->has && spawnerMeta->serialize && spawnerMeta->has(handle)) {
+				JsonValue spawner;
+				spawnerMeta->serialize(handle, spawner);
+				if (spawner["maxCount"].AsDouble() == 7.0) { maxCountFound = true; }
+			}
+		}
+
+		const bool passed = spawned && handles.size() >= 2 && positionFound && maxCountFound;
+		Report(results, name, passed, passed ? std::string()
+			: std::string("IsSpawned ") + (spawned ? "true" : "false") + " / エンティティ数 " + std::to_string(handles.size())
+			  + " / Transform.position " + (positionFound ? "あり" : "なし") + " / Spawner.maxCount 7 " + (maxCountFound ? "あり" : "なし"));
+
+		// 後始末(Level と登録と一時ファイルを外す)
+		ResetSpawnTestWorld();
+		LevelRegistry::Get().Unregister(key);
+		fs::remove(fs::path(levelPath), ec);
+	}
 #endif
 
 
@@ -1965,8 +2465,9 @@ namespace
 		RunUnregisterTest(results);
 #ifdef AQ_DEBUG_IMGUI
 		RunPreviewReplaceTest(results);
+		RunValueSaveLoadTest(results);
 #else
-		std::printf("        T8 (f): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+		std::printf("        T8 (f) / T11 (g): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
 #endif
 
 		// 後始末
@@ -2809,8 +3310,9 @@ namespace
 
 #ifdef AQ_DEBUG_IMGUI
 		RunStructureEditTests(results);
+		RunValueEditTests(results);
 #else
-		std::printf("        T10: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+		std::printf("        T10 / T11: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
 #endif
 
 		RunSpawnTests(results);

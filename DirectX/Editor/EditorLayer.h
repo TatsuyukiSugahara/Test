@@ -5,6 +5,7 @@
 #include "PlayModeController.h"
 #include "PlayStopSelfTest.h"
 #include "Panels/HierarchyPanel.h"
+#include "Panels/InspectorPanel.h"
 #include "Panels/LevelFileMenu.h"
 #include <cstdint>
 
@@ -32,6 +33,7 @@ namespace editor
 
 		/** パネル */
 		HierarchyPanel hierarchyPanel_;
+		InspectorPanel inspectorPanel_;
 		LevelFileMenu  levelFileMenu_;
 
 		/** 初期配置の要否を確かめたか(最初のフレームで 1 回だけ確かめる) */
@@ -62,9 +64,6 @@ namespace editor
 
 		/** メインメニューバーの中に再生・一時停止・再開・停止のボタン、現在のモード、自己テストを置く */
 		void DrawPlayToolbar();
-
-		/** インスペクター。選択中のノードの名前を出すだけ(値の編集はまだ作っていない) */
-		void DrawInspector();
 
 		/**
 		 * ヒエラルキーの配置の保存が無いとき、最初のフレームに 1 回だけドックスペースを

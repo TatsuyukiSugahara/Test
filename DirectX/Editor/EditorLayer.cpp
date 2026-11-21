@@ -13,9 +13,6 @@ namespace editor
 		/** ゲームビューのウィンドウ名。ドッキング配置は editor_layout.ini にこの名前で保存される */
 		static constexpr const char* GAME_VIEW_WINDOW_NAME = "Game View";
 
-		/** インスペクターのウィンドウ名 */
-		static constexpr const char* INSPECTOR_WINDOW_NAME = "Inspector";
-
 		/** 初期配置の幅の割合(ドックスペース全体に対して) */
 		static constexpr float HIERARCHY_WIDTH_RATIO = 0.20f;
 		static constexpr float INSPECTOR_WIDTH_RATIO = 0.25f;
@@ -66,7 +63,7 @@ namespace editor
 
 		// パネルはゲームビューより先に描く(現れたウィンドウはフォーカスを取るので、最初のフォーカスをゲームビューに残すため)
 		hierarchyPanel_.Draw(editorContext_);
-		DrawInspector();
+		inspectorPanel_.Draw(editorContext_);
 
 		// 配置の保存(editor_layout.ini)が無い初回だけ、ゲームビューをドックスペースいっぱいに置く
 		// (初期配置で分けたときは、分けた中央に置いてあるので指定しない)
@@ -241,29 +238,6 @@ namespace editor
 	}
 
 
-	void EditorLayer::DrawInspector()
-	{
-		if (ImGui::Begin(INSPECTOR_WINDOW_NAME)) {
-			// ImGui のフォントは ASCII のみを読み込んでいるので英語で出す
-			const aq::level::LevelEditModel* model = editorContext_.GetModel();
-			const aq::ecs::PrefabEditNode* node = nullptr;
-			if (aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) {
-				ImGui::TextUnformatted("Playing");
-			} else {
-				if (model != nullptr && editorContext_.GetSelectedId() != 0) {
-					node = model->FindNode(editorContext_.GetSelectedId());
-				}
-				if (node != nullptr) {
-					ImGui::Text("%s", node->name.c_str());
-				} else {
-					ImGui::TextUnformatted("No selection");
-				}
-			}
-		}
-		ImGui::End();
-	}
-
-
 	bool EditorLayer::SetupInitialLayout(const uint32_t dockspaceId)
 	{
 		if (isLayoutChecked_) return false;
@@ -288,7 +262,7 @@ namespace editor
 
 		ImGui::DockBuilderDockWindow(HierarchyPanel::WINDOW_NAME, leftId);
 		ImGui::DockBuilderDockWindow(GAME_VIEW_WINDOW_NAME, centerId);
-		ImGui::DockBuilderDockWindow(INSPECTOR_WINDOW_NAME, rightId);
+		ImGui::DockBuilderDockWindow(InspectorPanel::WINDOW_NAME, rightId);
 		ImGui::DockBuilderFinish(dockspaceId);
 		return true;
 	}

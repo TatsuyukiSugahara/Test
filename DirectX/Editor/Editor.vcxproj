@@ -142,7 +142,13 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClCompile Include="Commands\NodeCommands.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Commands\ComponentCommands.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Panels\HierarchyPanel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Panels\InspectorPanel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Panels\LevelFileMenu.cpp">
@@ -157,7 +163,9 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClInclude Include="EditorContext.h" />
     <ClInclude Include="Commands\IEditorCommand.h" />
     <ClInclude Include="Commands\NodeCommands.h" />
+    <ClInclude Include="Commands\ComponentCommands.h" />
     <ClInclude Include="Panels\HierarchyPanel.h" />
+    <ClInclude Include="Panels\InspectorPanel.h" />
     <ClInclude Include="Panels\LevelFileMenu.h" />
   </ItemGroup>
   <ItemGroup>

@@ -3,6 +3,7 @@
 #include "../EditorContext.h"
 #include "../Commands/NodeCommands.h"
 #include "Core/AppHost.h"
+#include "ECS/SceneHierarchySystem.h"
 #include "Level/LevelEditModel.h"
 #include <imgui/imgui.h>
 #include <string>
@@ -23,8 +24,13 @@ namespace editor
 			const aq::level::LevelEditModel* model = context.GetModel();
 			// ImGui のフォントは ASCII のみを読み込んでいるので英語で出す
 			if (aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) {
-				// 再生中は実行中のワールドを出す(まだ作っていない)。編集モデルの木は出さない
-				ImGui::TextUnformatted("Playing");
+				// 再生中は実行中のワールドを出す。編集モデルの木は出さない。構造の変更は出さない
+				ImGui::TextUnformatted("Playing: changes are not saved");
+#ifdef AQ_DEBUG_IMGUI
+				if (aq::ecs::SceneHierarchySystem::IsAvailable()) {
+					aq::ecs::SceneHierarchySystem::Get().DrawHierarchyContents(false);
+				}
+#endif
 			} else if (model == nullptr) {
 				ImGui::TextUnformatted("Level editor is not available");
 			} else {

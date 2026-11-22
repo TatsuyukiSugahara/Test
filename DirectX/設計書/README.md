@@ -146,6 +146,11 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   `git diff` が読みにくくなり、ファイル先頭の説明コメント(`Main.level.json`、`Playground.level.json`、`Stage01.level.json` にある)が失われる。
   E7a の自動操作(Playground の編集・保存)で発見。`SimpleJson` のパーサがコメントを捨て、書き出しが `Stringify` の整形と
   `serializePtr` の全フィールドで行われるため。コメントの保持か、保存前の警告が要る。
+- (2026-11-21 発見)**Scene Hierarchy(`SceneHierarchySystem`)のコンポーネント削除・エンティティ破棄が、GPU の完了を待たずに実行される。**
+  削除・破棄は遅延コマンドで予約され、次のフレームの `EntityContext::Update` の Flush で `WaitForRenderIdle` なしに走る。
+  GPU リソースを自分で持つコンポーネント(D3D12 のバッファはデストラクタで即時 `Release`)だと、GPU が前フレームで使っている間に解放されうる。
+  パスのフィールドを変えたときのリソースの差し替えも同じ問題を持ちうる。エディタ設計 E7 の Codex レビューで発見(コードは変えていない)。
+  Editor の Play 中のパネルは構造の変更を出さない形にして避けた(ゲーム用のデバッグ UI には残る)。
 - (2026-09-30 発見)**依存の経路が無いまま同じ Component やカメラを触る System の組が 7 件ある。**
   うち同じ wave で実際に並列に走っていた `ActorStateMachineSystem` ↔ `SpeedCharacterSystem`(`TransformComponent` を両方が書く)と
   `CoinSystem` ↔ `AutoCameraSystem`(`TransformComponent` の書きと読み)の 2 組は、2026-11-11 に

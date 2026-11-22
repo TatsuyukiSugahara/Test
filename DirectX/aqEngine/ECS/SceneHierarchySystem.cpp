@@ -55,16 +55,29 @@ namespace aq
 				return;
 			}
 
+			DrawHierarchyContents(true);
+
+			ImGui::End();
+		}
+
+
+		// ── Hierarchy の中身（ウィンドウを開かない） ──────────────────────────────
+
+		void SceneHierarchySystem::DrawHierarchyContents(const bool allowStructuralEdit)
+		{
 			auto& ctx = EntityContext::Get();
 
 			// 新規エンティティ作成
-			if (ImGui::Button("+ New Entity"))
+			if (allowStructuralEdit)
 			{
-				Entity e = ctx.CreateEntity<TransformComponent, HierarchicalTransformComponent>();
-				selectedHandle_ = e.GetHandle();
-			}
+				if (ImGui::Button("+ New Entity"))
+				{
+					Entity e = ctx.CreateEntity<TransformComponent, HierarchicalTransformComponent>();
+					selectedHandle_ = e.GetHandle();
+				}
 
-			ImGui::Separator();
+				ImGui::Separator();
+			}
 
 			// 全ハンドルを収集
 			std::vector<EntityHandle> allHandles;
@@ -75,7 +88,7 @@ namespace aq
 
 			// "World" ラベルをドロップ先にして親子関係を解除
 			ImGui::TextDisabled("World");
-			if (ImGui::BeginDragDropTarget())
+			if (allowStructuralEdit && ImGui::BeginDragDropTarget())
 			{
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_HANDLE"))
 				{
@@ -109,26 +122,24 @@ namespace aq
 
 			// 子ありルートは階層描画(クリップ非対応・通常は少数)。
 			for (EntityHandle handle : nestedRoots)
-				DrawEntityNode(handle);
+				DrawEntityNode(handle, allowStructuralEdit);
 
 			// 子なしルートは可視行のみ描画。
-			DrawFlatList(flatRoots);
+			DrawFlatList(flatRoots, allowStructuralEdit);
 
 			// Other(HTC なし)
 			if (!otherFlat.empty())
 			{
 				ImGui::Separator();
 				ImGui::TextDisabled("Other (no transform)");
-				DrawFlatList(otherFlat);
+				DrawFlatList(otherFlat, allowStructuralEdit);
 			}
-
-			ImGui::End();
 		}
 
 
 		// ── エンティティノード（再帰） ────────────────────────────────────────────
 
-		void SceneHierarchySystem::DrawEntityNode(EntityHandle handle, int depth)
+		void SceneHierarchySystem::DrawEntityNode(EntityHandle handle, const bool allowStructuralEdit, int depth)
 		{
 			constexpr int kMaxDepth = 64;
 			if (depth >= kMaxDepth)
@@ -166,7 +177,7 @@ namespace aq
 				selectedHandle_ = handle;
 
 			// ドラッグソース
-			if (ImGui::BeginDragDropSource())
+			if (allowStructuralEdit && ImGui::BeginDragDropSource())
 			{
 				ImGui::SetDragDropPayload("ENTITY_HANDLE", &handle, sizeof(EntityHandle));
 				ImGui::Text("%s", name);
@@ -174,7 +185,7 @@ namespace aq
 			}
 
 			// ドロップターゲット：この Entity の子として付け替え
-			if (ImGui::BeginDragDropTarget())
+			if (allowStructuralEdit && ImGui::BeginDragDropTarget())
 			{
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_HANDLE"))
 				{
@@ -192,7 +203,7 @@ namespace aq
 				if (ImGui::MenuItem("Select"))
 					selectedHandle_ = handle;
 
-				if (htc && ctx.IsValid(htc->parentHandle))
+				if (allowStructuralEdit && htc && ctx.IsValid(htc->parentHandle))
 				{
 					ImGui::Separator();
 					if (ImGui::MenuItem("Detach from Parent"))
@@ -210,11 +221,11 @@ namespace aq
 					const int childCount = static_cast<int>(children.size());
 					for (int i = 0; i < childCount; ++i)
 					{
-						DrawInsertGap(handle, i);
+						if (allowStructuralEdit) DrawInsertGap(handle, i);
 						if (ctx.IsValid(children[i]))
-							DrawEntityNode(children[i], depth + 1);
+							DrawEntityNode(children[i], allowStructuralEdit, depth + 1);
 					}
-					DrawInsertGap(handle, childCount);
+					if (allowStructuralEdit) DrawInsertGap(handle, childCount);
 				}
 				ImGui::TreePop();
 			}
@@ -223,7 +234,7 @@ namespace aq
 
 		// ── フラットリスト（可視行のみ描画） ──────────────────────────────────────
 
-		void SceneHierarchySystem::DrawFlatList(const std::vector<EntityHandle>& handles)
+		void SceneHierarchySystem::DrawFlatList(const std::vector<EntityHandle>& handles, const bool allowStructuralEdit)
 		{
 			// 子を持たないエンティティ列。行高が一定なので ImGuiListClipper で可視範囲だけ描画する。
 			// 100+ の箱などを毎フレーム全部 TreeNodeEx + drag/drop で描画していた負荷を、可視分だけに削減。
@@ -232,7 +243,7 @@ namespace aq
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
-					DrawEntityNode(handles[i]);
+					DrawEntityNode(handles[i], allowStructuralEdit);
 			}
 		}
 
@@ -247,12 +258,21 @@ namespace aq
 				return;
 			}
 
+			DrawInspectorContents(true);
+
+			ImGui::End();
+		}
+
+
+		// ── Inspector の中身（ウィンドウを開かない） ──────────────────────────────
+
+		void SceneHierarchySystem::DrawInspectorContents(const bool allowStructuralEdit)
+		{
 			auto& ctx = EntityContext::Get();
 
 			if (!ctx.IsValid(selectedHandle_))
 			{
 				ImGui::TextDisabled("No entity selected.");
-				ImGui::End();
 				return;
 			}
 
@@ -272,7 +292,7 @@ namespace aq
 
 				bool isOpen = ImGui::CollapsingHeader(meta.displayName, ImGuiTreeNodeFlags_DefaultOpen);
 
-				if (meta.remove && ImGui::BeginPopupContextItem())
+				if (allowStructuralEdit && meta.remove && ImGui::BeginPopupContextItem())
 				{
 					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
 					if (ImGui::MenuItem("Remove Component"))
@@ -285,6 +305,9 @@ namespace aq
 
 				ImGui::PopID();
 			}
+
+			// 構造の変更（追加・破棄）は出さない
+			if (!allowStructuralEdit) return;
 
 			ImGui::Separator();
 
@@ -364,8 +387,6 @@ namespace aq
 
 				ImGui::EndPopup();
 			}
-
-			ImGui::End();
 		}
 
 

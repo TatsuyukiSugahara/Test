@@ -5,6 +5,7 @@
 #include "Core/AppHost.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/ImGuiEditEventVisitor.h"
+#include "ECS/SceneHierarchySystem.h"
 #include "Level/LevelEditModel.h"
 #include <imgui/imgui.h>
 #include <algorithm>
@@ -71,8 +72,13 @@ namespace editor
 			const aq::level::LevelEditModel* model = context.GetModel();
 			// ImGui のフォントは ASCII のみを読み込んでいるので英語で出す
 			if (aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) {
-				// 再生中は実行中のワールドを出す(まだ作っていない)。編集モデルは出さない
-				ImGui::TextUnformatted("Playing");
+				// 再生中は実行中のワールドを出す。編集モデルは出さない。構造の変更は出さない
+				ImGui::TextUnformatted("Playing: changes are not saved");
+#ifdef AQ_DEBUG_IMGUI
+				if (aq::ecs::SceneHierarchySystem::IsAvailable()) {
+					aq::ecs::SceneHierarchySystem::Get().DrawInspectorContents(false);
+				}
+#endif
 			} else if (model == nullptr) {
 				ImGui::TextUnformatted("Level editor is not available");
 			} else {

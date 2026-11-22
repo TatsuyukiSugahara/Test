@@ -304,6 +304,7 @@ namespace aq
 			entities_.clear();
 			subLevels_.clear();
 			baseDir_.clear();
+			leadingComments_.clear();
 
 			// 最初の空エンティティを 1 つ用意する（Transform 必須）。
 			auto entity  = std::make_unique<ecs::PrefabEditNode>();
@@ -321,6 +322,8 @@ namespace aq
 			if (!FromJson(root)) { return false; }
 
 			baseDir_ = DirOf(LevelRegistry::Normalize(path));
+			// 先頭のコメントを控え、保存で書き戻す（ルートの値の中のコメントはパーサーが残さないので保持しない）
+			leadingComments_ = util::JsonParser::ReadLeadingComments(path.c_str());
 			return true;
 		}
 
@@ -331,7 +334,7 @@ namespace aq
 
 			// 書き込み中に落ちても元のファイルが壊れないよう、一時ファイルに書いてから置き換える。
 			const std::string tempPath = path + ".tmp";
-			if (!util::JsonSerializer::WriteFile(tempPath.c_str(), ToJson())) {
+			if (!util::JsonSerializer::WriteFile(tempPath.c_str(), ToJson(), leadingComments_)) {
 				std::error_code removeError;
 				fs::remove(fs::path(tempPath), removeError);
 				return false;

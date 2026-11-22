@@ -118,6 +118,13 @@ namespace aq
 
 			// ファイルを読み込んで ParseString に渡す。
 			static JsonValue ParseFile(const char* path);
+
+			// テキストの先頭にあるコメント(ルートの値より前の // の行と空行)を、改行を LF にそろえて返す。
+			// 無ければ空。ルートの値の中のコメントは含まない(パーサーは読み飛ばすだけで内容を残さない)。
+			static std::string ExtractLeadingComments(std::string_view text);
+
+			// ファイルを ParseFile と同じ規則で開き、ExtractLeadingComments の結果を返す。開けなければ空。
+			static std::string ReadLeadingComments(const char* path);
 		};
 
 
@@ -130,6 +137,9 @@ namespace aq
 
 			// JSON 文字列をファイルへ書き込む。成功時 true。
 			static bool WriteFile(const char* path, const JsonValue& v);
+
+			// leadingComments(ExtractLeadingComments の結果)を先頭に書いてから JSON を書き込む。成功時 true。
+			static bool WriteFile(const char* path, const JsonValue& v, std::string_view leadingComments);
 		};
 
 	} // namespace util

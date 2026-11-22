@@ -15,6 +15,7 @@
 // E7b で T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え)を足した。(a)〜(f)と(h)は画面も Engine も作らず TestData を読み、
 // (g)(保存した Level を生成して実体の値を確かめる)は T8 と同じ Engine + EntityContext の環境で行う(Debug 構成のみ)。
 // T6 と T7 のファイル往復も、編集ノード(PrefabEditNode)が AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ。
+// E7 の後で T12 先頭コメントの保持(ExtractLeadingComments と、LevelEditModel の保存での書き戻し)を足した。(a) は全構成、(b) は Debug のみ。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -41,6 +42,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <string>
@@ -2003,6 +2005,99 @@ namespace
 	}
 #endif
 
+
+	/** T12 (a): ExtractLeadingComments が、ルートの値より前の // の行と空行だけを LF にそろえて返す */
+	void RunLeadingCommentExtractTest(TestResults& results)
+	{
+		const std::string name = "T12 (a) ExtractLeadingComments";
+		struct Case
+		{
+			const char* label;
+			std::string text;
+			std::string expected;
+		};
+		const Case cases[] = {
+			{ "コメント 2 行",       "// a\n// b\n{\"x\": 1}\n",                       "// a\n// b\n" },
+			{ "CRLF",               "// a\r\n// b\r\n{\"x\": 1}\r\n",                 "// a\n// b\n" },
+			{ "BOM",                "\xEF\xBB\xBF// a\n{}",                           "// a\n" },
+			{ "途中の空行を保つ",     "// a\n\n// b\n{}",                              "// a\n\n// b\n" },
+			{ "後ろの空行は落とす",   "// a\n\n\n{}",                                  "// a\n" },
+			{ "字下げしたコメント",   "  // a\n{}",                                    "  // a\n" },
+			{ "コメントなし",         "{\"x\": 1}",                                    "" },
+			{ "空行だけ",             "\n\n{}",                                        "" },
+			{ "値の中のコメントは含まない", "{\n  // inner\n  \"x\": 1\n}",              "" },
+			{ "ファイルの終わりまでコメント", "// a\n// b",                              "// a\n// b\n" },
+		};
+		for (const Case& c : cases) {
+			const std::string actual = aq::util::JsonParser::ExtractLeadingComments(c.text);
+			Report(results, name + " " + c.label, actual == c.expected,
+				"期待 [" + c.expected + "] / 実際 [" + actual + "]");
+		}
+	}
+
+
+#ifdef AQ_DEBUG_IMGUI
+	/** ファイルの中身を全部読む(読めなければ空) */
+	std::string ReadWholeFile(const std::string& path)
+	{
+		std::ifstream ifs(path, std::ios::binary);
+		if (!ifs.is_open()) return std::string();
+		return std::string(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+	}
+
+
+	/**
+	 * T12 (b): LevelEditModel が開いたファイルの先頭のコメントを保存で書き戻す。
+	 * 値は今までどおり書き出され、新規の Level にはコメントが付かない
+	 */
+	void RunLeadingCommentSaveTest(TestResults& results)
+	{
+		namespace fs = std::filesystem;
+
+		const std::string name      = "T12 (b) 先頭コメントの保存";
+		const std::string levelPath = std::string(TEST_DATA_DIR) + "/" + OVERRIDE_TEST_LEVEL;
+		const std::string expected  = aq::util::JsonParser::ExtractLeadingComments(ReadWholeFile(levelPath));
+		if (expected.empty()) {
+			Report(results, name, false, "試験用 Level に先頭のコメントが無い: " + levelPath);
+			return;
+		}
+
+		std::error_code ec;
+		const fs::path tempPath = fs::temp_directory_path(ec) / "ReflectionTest_T12.level.json";
+
+		aq::level::LevelEditModel model;
+		const bool loaded = model.LoadFile(levelPath);
+		Report(results, name + " 読み込みで控える", loaded && model.GetLeadingComments() == expected,
+			"控えた [" + model.GetLeadingComments() + "]");
+
+		const bool saved   = loaded && model.SaveFile(tempPath.generic_string());
+		const std::string written = ReadWholeFile(tempPath.string());
+		const bool hasHeader = saved && written.compare(0, expected.size(), expected) == 0;
+		Report(results, name + " 先頭に書き戻す", hasHeader, saved ? "書いたファイルの先頭: " + written.substr(0, 200) : "保存できない");
+
+		// コメントの後ろは今までどおりの JSON(読み直して ToJson と一致する)
+		const JsonValue reread = aq::util::JsonParser::ParseFile(tempPath.string().c_str());
+		Report(results, name + " 値は変わらない", saved && JsonEqualsExact(reread, model.ToJson()),
+			"読み直した値: " + StringifyOneLine(reread));
+
+		// 読み直して保存し直してもコメントが増えない
+		aq::level::LevelEditModel again;
+		const bool reloaded = again.LoadFile(tempPath.generic_string()) && again.SaveFile(tempPath.generic_string());
+		const std::string rewritten = ReadWholeFile(tempPath.string());
+		Report(results, name + " 保存し直しても増えない", reloaded && rewritten == written,
+			"1 回目と 2 回目で中身が違う");
+
+		// 新規の Level にはコメントが付かない
+		model.NewLevel();
+		const bool newSaved = model.SaveFile(tempPath.generic_string());
+		const std::string fresh = ReadWholeFile(tempPath.string());
+		Report(results, name + " 新規は付かない", newSaved && !fresh.empty() && fresh[0] == '{',
+			"新規の先頭: " + fresh.substr(0, 80));
+
+		fs::remove(tempPath, ec);
+	}
+#endif
+
 	using aq::level::LevelId;
 	using aq::level::LevelLoadHandle;
 	using aq::level::LevelManager;
@@ -3308,11 +3403,13 @@ namespace
 		std::printf("        T7 ファイル往復: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(編集ノードが無い)\n");
 #endif
 
+		RunLeadingCommentExtractTest(results);
 #ifdef AQ_DEBUG_IMGUI
 		RunStructureEditTests(results);
 		RunValueEditTests(results);
+		RunLeadingCommentSaveTest(results);
 #else
-		std::printf("        T10 / T11: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+		std::printf("        T10 / T11 / T12 (b): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
 #endif
 
 		RunSpawnTests(results);

@@ -216,6 +216,63 @@ namespace aq
 			return ParseString(buf);
 		}
 
+		std::string JsonParser::ExtractLeadingComments(std::string_view text)
+		{
+			// UTF-8 の BOM は読み飛ばす(書き戻すときは付けない)
+			if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF
+				&& static_cast<unsigned char>(text[1]) == 0xBB && static_cast<unsigned char>(text[2]) == 0xBF) {
+				text.remove_prefix(3);
+			}
+
+			// 行ごとに見て、空行か // で始まる行が続く間だけを取る。最初のそれ以外の行(ルートの値)で止める
+			std::string out;
+			size_t pos = 0;
+			while (pos < text.size()) {
+				const size_t lineEnd = text.find('\n', pos);
+				const size_t next    = (lineEnd == std::string_view::npos) ? text.size() : lineEnd + 1;
+				std::string_view line = text.substr(pos, next - pos);
+
+				// 行末の改行を外す(CRLF も LF にそろえる)
+				while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+					line.remove_suffix(1);
+				}
+				const size_t first     = line.find_first_not_of(" \t");
+				const bool   isBlank   = (first == std::string_view::npos);
+				const bool   isComment = !isBlank && line.substr(first, 2) == "//";
+				if (!isBlank && !isComment) break;
+
+				out.append(line.data(), line.size());
+				out += '\n';
+				pos = next;
+			}
+
+			// 先頭コメントの後ろに続く空行は落とす(書き出しで JSON の直前に空行が増えないように)
+			while (out.size() >= 2 && out[out.size() - 1] == '\n' && out[out.size() - 2] == '\n') {
+				out.pop_back();
+			}
+			// コメントが 1 行も無ければ空にする(空行だけのときに改行を書き足さない)
+			if (out.find("//") == std::string::npos) {
+				out.clear();
+			}
+			return out;
+		}
+
+		std::string JsonParser::ReadLeadingComments(const char* path)
+		{
+			if (path == nullptr) return std::string();
+
+			// ParseFile と同じく、アセット相対パスを開けるパスへ解決する
+			const std::string resolved = aq::res::ResolveExistingResourcePath(path);
+
+			std::ifstream ifs(resolved, std::ios::binary | std::ios::ate);
+			if (!ifs.is_open()) return std::string();
+			const auto size = static_cast<std::streamsize>(ifs.tellg());
+			ifs.seekg(0);
+			std::string buf(static_cast<size_t>(size), '\0');
+			ifs.read(buf.data(), size);
+			return ExtractLeadingComments(buf);
+		}
+
 
 		// ---- JsonSerializer -----------------------------------------------------
 
@@ -369,8 +426,16 @@ namespace aq
 
 		bool JsonSerializer::WriteFile(const char* path, const JsonValue& v)
 		{
-			std::ofstream ofs(path, std::ios::out | std::ios::trunc);
+			return WriteFile(path, v, std::string_view());
+		}
+
+		bool JsonSerializer::WriteFile(const char* path, const JsonValue& v, std::string_view leadingComments)
+		{
+			// バイナリで開き、改行はどのプラットフォームでも LF にする(テキストモードだと Windows では CRLF になり、
+			// LF で管理しているアセットを保存するたびにファイル全体の改行が変わる)
+			std::ofstream ofs(path, std::ios::out | std::ios::trunc | std::ios::binary);
 			if (!ofs.is_open()) return false;
+			ofs << leadingComments;
 			ofs << Stringify(v);
 			return ofs.good();
 		}

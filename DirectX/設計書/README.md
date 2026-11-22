@@ -141,11 +141,13 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
   `selected_` が解放済みのノードを指したまま残り、同じフレームの Inspector 描画で使われる。** E4b の実装中に発見(実装自体は変えていない)。
   [LevelEditor.cpp](../aqEngine/Level/LevelEditor.cpp) の `DrawSubLevels` / `DebugRender` で、削除予約の実行時に `selected_` が削除対象の子孫なら
   クリアする対応が要る。
-- (2026-11-21 発見)**`LevelEditModel::SaveFile`(Editor の Save と Level エディタの Save)で保存すると、`//` コメントが消え、
-  キーの並べ替え・既定値の書き足し・インデントの変更でファイル全体が書き直される。** 値は保たれる(11.4 節の意味の比較では一致)が、
-  `git diff` が読みにくくなり、ファイル先頭の説明コメント(`Main.level.json`、`Playground.level.json`、`Stage01.level.json` にある)が失われる。
-  E7a の自動操作(Playground の編集・保存)で発見。`SimpleJson` のパーサがコメントを捨て、書き出しが `Stringify` の整形と
-  `serializePtr` の全フィールドで行われるため。コメントの保持か、保存前の警告が要る。
+- ~~(2026-11-21 発見)`LevelEditModel::SaveFile`(Editor の Save と Level エディタの Save)で保存すると、`//` コメントが消える。~~
+  (2026-11-22 解消。ファイル先頭のコメント(ルートの値より前の `//` 行)を読み込みで控え、保存で先頭に書き戻すようにした。
+  Prefab エディタの保存も同じ。あわせて `JsonSerializer::WriteFile` をバイナリで開き、Windows でも LF で書くようにした
+  (テキストモードだと CRLF になり、LF で管理しているアセットの改行が保存のたびに全部変わっていた)。ReflectionTest T12 で確認)
+- (2026-11-22、上の解消の残り)**ルートの値の中に書いた `//` コメントは保存で消える。また、保存ではキーの並べ替え・既定値の書き足し・
+  インデントの変更でファイル全体が書き直される。** 値は保たれる(11.4 節の意味の比較では一致)。今のアセットのコメントはすべて先頭にあるので
+  実害は無いが、値の中にコメントを書くと消える。保持するには、パーサーがコメントを位置と一緒に残す仕組みが要る。
 - (2026-11-21 発見)**Scene Hierarchy(`SceneHierarchySystem`)のコンポーネント削除・エンティティ破棄が、GPU の完了を待たずに実行される。**
   削除・破棄は遅延コマンドで予約され、次のフレームの `EntityContext::Update` の Flush で `WaitForRenderIdle` なしに走る。
   GPU リソースを自分で持つコンポーネント(D3D12 のバッファはデストラクタで即時 `Release`)だと、GPU が前フレームで使っている間に解放されうる。

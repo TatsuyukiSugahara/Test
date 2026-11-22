@@ -75,6 +75,9 @@ namespace aq
 			/** 相対パス（Prefab・外部サブLevel）の解決基準。開いた / 保存したファイルのディレクトリ。新規では空 */
 			std::string                                       baseDir_;
 
+			/** 開いたファイルの先頭のコメント（ルートの値より前の // の行）。保存で先頭に書き戻す。新規では空 */
+			std::string                                       leadingComments_;
+
 			/** ノード ID の通し番号。0 は未採番なので 1 から始める */
 			uint32_t                                          nextEditId_ = 1;
 
@@ -225,6 +228,9 @@ namespace aq
 			inline const std::vector<SubLevelEdit>& GetSubLevels() const { return subLevels_; }
 
 			inline const std::string& GetBaseDir() const { return baseDir_; }
+
+			/** 開いたファイルの先頭のコメント（無ければ空）。保存で先頭に書き戻す */
+			inline const std::string& GetLeadingComments() const { return leadingComments_; }
 
 			/** 現在のプレビューの Level と in-memory 登録キー（プレビューが無ければ無効な LevelId と空文字列） */
 			inline LevelId            GetPreviewLevelId() const { return previewLevelId_; }

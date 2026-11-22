@@ -75,6 +75,7 @@ namespace aq
 			PrefabEditNode*                 pendingDelete_ = nullptr;   // 描画後に除去するノード
 			bool                            show_         = false;
 			char                            pathBuf_[260] = "Assets/Prefabs/New.prefab.json";
+			std::string                     leadingComments_;           // 開いたファイルの先頭のコメント（保存で先頭に書き戻す）
 		};
 	}
 }

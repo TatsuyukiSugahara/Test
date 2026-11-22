@@ -22,6 +22,7 @@ namespace aq
 			root_ = std::make_unique<PrefabEditNode>();
 			root_->name = "Root";
 			selected_   = root_.get();
+			leadingComments_.clear();
 		}
 
 
@@ -142,7 +143,7 @@ namespace aq
 		{
 			if (!root_) return;
 			const util::JsonValue json = NodeToJson(*root_);
-			if (!util::JsonSerializer::WriteFile(pathBuf_, json))
+			if (!util::JsonSerializer::WriteFile(pathBuf_, json, leadingComments_))
 				EngineAssertMsg(false, "PrefabEditor::Save: failed to write prefab JSON file");
 		}
 
@@ -157,6 +158,8 @@ namespace aq
 			}
 			root_     = JsonToNode(json);
 			selected_ = root_.get();
+			// 先頭のコメントを控え、保存で書き戻す（ルートの値の中のコメントは保持しない）
+			leadingComments_ = util::JsonParser::ReadLeadingComments(pathBuf_);
 		}
 
 

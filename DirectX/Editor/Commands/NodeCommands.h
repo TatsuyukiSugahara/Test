@@ -19,7 +19,7 @@ namespace editor
 
 	/**
 	 * 実体ノードを 1 つ作るコマンド。
-	 * 作るノードは名前と Transform だけを持つ。実行後に振られた ID を覚える
+	 * 作るノードは名前と Transform だけを持つ。実行後に振られた ID と実際に置かれた場所を覚える
 	 */
 	class CreateNodeCommand final : public IEditorCommand
 	{
@@ -35,12 +35,16 @@ namespace editor
 		/** 実行後に振られた ID(0 = まだ実行していない・失敗した) */
 		uint32_t createdId_ = 0;
 
+		/** 実行後に実際に置かれた場所(位置が範囲外なら末尾になるので、指定とは違うことがある) */
+		NodeParent placedParent_;
+		size_t     placedIndex_ = 0;
+
 
 	public:
 		CreateNodeCommand(const NodeParent& parent, const size_t index, const std::string& name);
 
 		bool        Execute(aq::level::LevelEditModel& model) override;
-		void        Undo(aq::level::LevelEditModel& model) override;
+		bool        Undo(aq::level::LevelEditModel& model) override;
 		const char* GetName() const override { return "Create Node"; }
 
 		inline uint32_t GetCreatedId() const { return createdId_; }
@@ -69,7 +73,7 @@ namespace editor
 		explicit DeleteNodeCommand(const uint32_t nodeId);
 
 		bool        Execute(aq::level::LevelEditModel& model) override;
-		void        Undo(aq::level::LevelEditModel& model) override;
+		bool        Undo(aq::level::LevelEditModel& model) override;
 		const char* GetName() const override { return "Delete Node"; }
 	};
 
@@ -97,7 +101,7 @@ namespace editor
 		MoveNodeCommand(const uint32_t nodeId, const NodeParent& newParent, const size_t newIndex);
 
 		bool        Execute(aq::level::LevelEditModel& model) override;
-		void        Undo(aq::level::LevelEditModel& model) override;
+		bool        Undo(aq::level::LevelEditModel& model) override;
 		const char* GetName() const override { return "Move Node"; }
 	};
 }

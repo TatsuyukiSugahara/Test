@@ -566,7 +566,60 @@ namespace aq
 		}
 
 
-		bool LevelEditModel::AddComponent(const uint32_t id, const std::string& typeName, const util::JsonValue* json)
+		bool LevelEditModel::GetComponentField(const uint32_t id, const std::string& typeName, const std::string& key, util::JsonValue& outValue) const
+		{
+			// 判定は SetComponentField と同じ順にする（取り消しの変更前を、実際に書き換える値から取るため）
+			ecs::ComponentRegistry& registry = ecs::ComponentRegistry::Get();
+			const ecs::TypeInfo     type     = registry.TypeOf(typeName);
+			if (type == ecs::TypeInfo()) { return false; }
+			const ecs::ComponentMeta* meta = registry.Find(type.GetHash());
+			if (!meta || !meta->serializePtr || !meta->deserializePtr) { return false; }
+
+			const ecs::PrefabEditNode* node = FindNode(id);
+			if (!node) { return false; }
+
+			const ecs::PrefabEditComponent* existing = nullptr;
+			for (const ecs::PrefabEditComponent& component : node->components) {
+				if (component.data.Type() == type) {
+					existing = &component;
+					break;
+				}
+			}
+
+			util::JsonValue serialized;
+			if (node->prefabRef.empty()) {
+				// 実体ノード: 持っているコンポーネントの今の値
+				if (!existing) { return false; }
+				meta->serializePtr(existing->data.Get(), serialized);
+			} else {
+				// 参照ノード: 参照先から除かれた型は、解決後の値が無い
+				if (std::find(node->removedComponents.begin(), node->removedComponents.end(), typeName) != node->removedComponents.end()) {
+					return false;
+				}
+
+				if (existing && (existing->rebased || existing->loadedJson.IsNull())) {
+					// 付け替え済み、または新しく足したものは、持っている値がそのまま書き換えの対象
+					meta->serializePtr(existing->data.Get(), serialized);
+				} else {
+					// まだ付け替えていなければ、SetComponentField が付け替えで作る値（既定値 ← 今の編集内容で解決した値）を作る。
+					// モデルには入れない
+					util::JsonValue current;
+					if (!ResolveReferenceComponents(id, current, nullptr)) { return false; }
+					if (!current.IsObject() || !current.Contains(typeName)) { return false; }
+
+					ecs::AlignedStorage resolved(type);
+					meta->deserializePtr(resolved.Get(), current[typeName]);
+					meta->serializePtr(resolved.Get(), serialized);
+				}
+			}
+
+			if (!serialized.IsObject() || !serialized.Contains(key)) { return false; }
+			outValue = serialized[key];
+			return true;
+		}
+
+
+		bool LevelEditModel::AddComponent(const uint32_t id, const std::string& typeName, const util::JsonValue* json, const size_t index)
 		{
 			ecs::ComponentRegistry& registry = ecs::ComponentRegistry::Get();
 			const ecs::TypeInfo     type     = registry.TypeOf(typeName);
@@ -582,12 +635,14 @@ namespace aq
 			if (json && meta->deserializePtr) {
 				meta->deserializePtr(component.data.Get(), *json);
 			}
-			node->components.push_back(std::move(component));
+			// 取り消しで元の並びに戻せるよう、位置を指定できる（範囲外は末尾）
+			const size_t pos = (index < node->components.size()) ? index : node->components.size();
+			node->components.insert(node->components.begin() + static_cast<std::ptrdiff_t>(pos), std::move(component));
 			return true;
 		}
 
 
-		bool LevelEditModel::RemoveComponent(const uint32_t id, const std::string& typeName, util::JsonValue* outJson)
+		bool LevelEditModel::RemoveComponent(const uint32_t id, const std::string& typeName, util::JsonValue* outJson, size_t* outIndex)
 		{
 			ecs::ComponentRegistry& registry = ecs::ComponentRegistry::Get();
 			const ecs::TypeInfo     type     = registry.TypeOf(typeName);
@@ -604,6 +659,7 @@ namespace aq
 					*outJson = util::JsonValue();
 					if (meta->serializePtr) { meta->serializePtr(node->components[i].data.Get(), *outJson); }
 				}
+				if (outIndex) { *outIndex = i; }
 				node->components.erase(node->components.begin() + static_cast<std::ptrdiff_t>(i));
 				return true;
 			}

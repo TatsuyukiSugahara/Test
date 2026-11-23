@@ -139,6 +139,9 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClCompile Include="EditorContext.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="CommandHistory.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Commands\NodeCommands.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -154,6 +157,9 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClCompile Include="Panels\LevelFileMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Panels\EditMenu.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EditorLayer.h" />
@@ -161,12 +167,14 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClInclude Include="PlayModeController.h" />
     <ClInclude Include="PlayStopSelfTest.h" />
     <ClInclude Include="EditorContext.h" />
+    <ClInclude Include="CommandHistory.h" />
     <ClInclude Include="Commands\IEditorCommand.h" />
     <ClInclude Include="Commands\NodeCommands.h" />
     <ClInclude Include="Commands\ComponentCommands.h" />
     <ClInclude Include="Panels\HierarchyPanel.h" />
     <ClInclude Include="Panels\InspectorPanel.h" />
     <ClInclude Include="Panels\LevelFileMenu.h" />
+    <ClInclude Include="Panels\EditMenu.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Game\GameLogic.vcxproj">

@@ -53,6 +53,16 @@ namespace editor
 			if (children.empty()) return name;
 			return name + "(" + JoinSorted(children, ",") + ")";
 		}
+
+
+		/** 履歴のログ 1 行。"[editor] <動作>: <名前> (undo=N redo=M)" の形(自動操作の確認用) */
+		void LogHistory(const char* action, const char* commandName, const CommandHistory& history)
+		{
+			const std::string line = std::string("[editor] ") + action + ": " + commandName
+			                       + " (undo=" + std::to_string(history.GetUndoCount())
+			                       + " redo=" + std::to_string(history.GetRedoCount()) + ")";
+			aq::StartupLog(line.c_str());
+		}
 	}
 
 
@@ -62,6 +72,21 @@ namespace editor
 		// 再生中は編集モデルを変えない。モードが変わるのはフレームの先頭だけなので、Edit で積んだものは Edit のうちに実行される
 		if (aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) return;
 		pendingCommands_.push_back(std::move(command));
+	}
+
+
+	void EditorContext::RequestUndo()
+	{
+		// Submit と同じく、再生中の要求は捨てる(再生中は編集モデルを変えない)
+		if (aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) return;
+		historyRequest_ = HistoryRequest::Undo;
+	}
+
+
+	void EditorContext::RequestRedo()
+	{
+		if (aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) return;
+		historyRequest_ = HistoryRequest::Redo;
 	}
 
 
@@ -100,7 +125,8 @@ namespace editor
 		// 編集モデルが無い、または再生中は何もしない(積まれたものは捨てる)
 		if (model == nullptr || aq::AppHost::Get().GetRunMode() != aq::RunMode::Edit) {
 			pendingCommands_.clear();
-			fileRequest_ = FileRequest::None;
+			historyRequest_ = HistoryRequest::None;
+			fileRequest_    = FileRequest::None;
 			fileRequestPath_.clear();
 			return;
 		}
@@ -112,10 +138,14 @@ namespace editor
 			needPreview = true;
 		}
 
-		// コマンド → ファイル操作の順(同じフレームに積まれた編集は、開き直しの前に反映してから捨てる)
+		// コマンド → 取り消し・やり直し → ファイル操作の順
+		// (同じフレームに積まれた編集は履歴に入れてから取り消しの対象にし、開き直しの前に反映してから捨てる)
 		if (ApplyCommands(*model)) {
 			++version_;
-			dirty_ = true;
+			needPreview = true;
+		}
+		if (ApplyHistoryRequest(*model)) {
+			++version_;
 			needPreview = true;
 		}
 		if (ApplyFileRequest(*model)) {
@@ -144,15 +174,47 @@ namespace editor
 		for (std::unique_ptr<IEditorCommand>& command : pendingCommands_) {
 			if (command->Execute(model)) {
 				anySucceeded = true;
+				// 名前はコマンドの持ち物なので、履歴へ移す前に控える
+				const std::string name = command->GetName();
+				history_.Push(std::move(command));
+				LogHistory("command", name.c_str(), history_);
 			} else {
+				// 失敗したコマンドはモデルを変えていないので、履歴に入れずに捨てる
 				const std::string message = std::string("[editor] command failed: ") + command->GetName()
 				                          + " (rejected by the edit model: target not found or invalid destination)";
 				aq::StartupLog(message.c_str());
 			}
 		}
-		// 取り消しの履歴はまだ無いので、実行したコマンドは捨てる
 		pendingCommands_.clear();
 		return anySucceeded;
+	}
+
+
+	bool EditorContext::ApplyHistoryRequest(aq::level::LevelEditModel& model)
+	{
+		const HistoryRequest request = historyRequest_;
+		historyRequest_ = HistoryRequest::None;
+
+		if (request == HistoryRequest::None) return false;
+		const bool isUndo = (request == HistoryRequest::Undo);
+
+		// 履歴が無ければ何もしない(メニューは無効にしているが、ショートカットと同じフレームに履歴が変わることがある)
+		const char* nameInHistory = isUndo ? history_.GetUndoName() : history_.GetRedoName();
+		if (nameInHistory == nullptr) return false;
+		// 失敗すると履歴ごと捨てられるので、名前は先に控える
+		const std::string name = nameInHistory;
+
+		const bool succeeded = isUndo ? history_.Undo(model) : history_.Redo(model);
+		if (!succeeded) {
+			// モデルとコマンドが食い違った(通常は起きない)。履歴は空になり、保存の印も一致しなくなる(変更ありのまま)
+			const std::string message = std::string("[editor] ") + (isUndo ? "undo" : "redo") + " failed: " + name
+			                          + " (the edit model did not match the command; history cleared)";
+			aq::StartupLog(message.c_str());
+			return false;
+		}
+
+		LogHistory(isUndo ? "undo" : "redo", name.c_str(), history_);
+		return true;
 	}
 
 
@@ -167,7 +229,8 @@ namespace editor
 		case FileRequest::New:
 			model.NewLevel();
 			currentPath_.clear();
-			dirty_ = false;
+			// モデル全体を入れ替えたので、前のモデルへの取り消しは使えない
+			history_.MarkCleanEmpty();
 			selectedId_ = 0;
 			++version_;
 			statusMessage_.clear();
@@ -181,7 +244,7 @@ namespace editor
 				return false;
 			}
 			currentPath_ = path;
-			dirty_ = false;
+			history_.MarkCleanEmpty();
 			selectedId_ = 0;
 			++version_;
 			statusMessage_.clear();
@@ -190,13 +253,14 @@ namespace editor
 
 		case FileRequest::Save:
 			// 変更が無ければファイルに触れない(更新時刻を変えない)
-			if (!dirty_ || currentPath_.empty()) return false;
+			if (!IsDirty() || currentPath_.empty()) return false;
 			if (!model.SaveFile(currentPath_)) {
 				statusMessage_ = "Save failed: " + currentPath_;
 				aq::StartupLog(("[editor] level save failed: " + currentPath_).c_str());
 				return false;
 			}
-			dirty_ = false;
+			// モデルは入れ替えないので履歴は残す(保存の後も取り消せる)
+			history_.MarkSaved();
 			selectedId_ = 0;
 			++version_;
 			statusMessage_.clear();
@@ -218,13 +282,20 @@ namespace editor
 				return false;
 			}
 			currentPath_ = path;
-			dirty_ = false;
+			const bool baseDirChanged = model.GetBaseDir() != oldBaseDir;
+			if (baseDirChanged) {
+				// 履歴の中には相対参照を持つノード(削除したサブツリー、変更前の Prefab の参照)が残りうる。
+				// 保存の後に取り消すと新しい基準で解決されて別のアセットを指すので、履歴を空にする
+				history_.MarkCleanEmpty();
+			} else {
+				history_.MarkSaved();
+			}
 			selectedId_ = 0;
 			++version_;
 			statusMessage_.clear();
 			aq::StartupLog(("[editor] level save as: " + path).c_str());
 			// 基準ディレクトリが変わったら、プレビューの基準もモデルに揃える
-			return model.GetBaseDir() != oldBaseDir;
+			return baseDirChanged;
 		}
 
 		default:

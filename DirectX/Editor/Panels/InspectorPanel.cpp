@@ -406,14 +406,13 @@ namespace editor
 
 			case aq::ecs::FieldEditPhase::Commit:
 			{
-				// 控えと組にしてコマンドにする。控えが無い(起きないはず)ときも、値はモデルへ送る(変更前は Null)
-				aq::util::JsonValue before;
+				// 操作を閉じてコマンドにする。変更前の値はコマンドが実行の時点のモデルから取るので、控えは渡さない
+				// (控えが無い(起きないはず)ときも、値はモデルへ送る)
 				std::vector<OpenEdit>::iterator found = FindOpenEdit(nodeId, typeName, event.key);
 				if (found != openEdits_.end()) {
-					before = std::move(found->before);
 					openEdits_.erase(found);
 				}
-				context.Submit(std::make_unique<SetFieldCommand>(nodeId, typeName, event.key, before, event.value));
+				context.Submit(std::make_unique<SetFieldCommand>(nodeId, typeName, event.key, event.value));
 				// 次のフレームに反映後のモデルから作り直す(コマンドが失敗しても、写しに確定していない値を残さない)
 				copiesValid_ = false;
 				break;

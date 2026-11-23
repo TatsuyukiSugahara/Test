@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "aq.h"
 #include "ComponentCommands.h"
 #include "Level/LevelEditModel.h"
 
@@ -15,14 +15,17 @@ namespace editor
 
 	bool RenameNodeCommand::Execute(aq::level::LevelEditModel& model)
 	{
+		// 取り消しで戻す名前は、積んだ時点ではなく実行の時点のモデルから取る(同じフレームの先の操作を反映した名前にする)
+		const aq::ecs::PrefabEditNode* node = model.FindNode(nodeId_);
+		if (node == nullptr) return false;
+		oldName_ = node->name;
 		return model.SetNodeName(nodeId_, newName_);
 	}
 
 
-	void RenameNodeCommand::Undo(aq::level::LevelEditModel& model)
+	bool RenameNodeCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		// Undo / Redo を作るときに実装する(nodeId_ の名前を SetNodeName で oldName_ へ戻す)
-		(void)model;
+		return model.SetNodeName(nodeId_, oldName_);
 	}
 
 
@@ -32,11 +35,10 @@ namespace editor
 
 
 	SetFieldCommand::SetFieldCommand(const uint32_t nodeId, const std::string& typeName, const std::string& key,
-	                                 const aq::util::JsonValue& oldValue, const aq::util::JsonValue& newValue)
+	                                 const aq::util::JsonValue& newValue)
 		: nodeId_(nodeId)
 		, typeName_(typeName)
 		, key_(key)
-		, oldValue_(oldValue)
 		, newValue_(newValue)
 	{
 	}
@@ -44,15 +46,19 @@ namespace editor
 
 	bool SetFieldCommand::Execute(aq::level::LevelEditModel& model)
 	{
+		// 変更前は書き換える直前のモデルから取る。参照ノードで未付け替えなら、付け替えで基準になる値(解決済みの値)が返る
+		oldValue_ = aq::util::JsonValue();
+		if (!model.GetComponentField(nodeId_, typeName_, key_, oldValue_)) return false;
+
 		// 参照ノードの基準の付け替えと、そのキーだけの書き換えはモデルが行う
 		return model.SetComponentField(nodeId_, typeName_, key_, newValue_);
 	}
 
 
-	void SetFieldCommand::Undo(aq::level::LevelEditModel& model)
+	bool SetFieldCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		// Undo / Redo を作るときに実装する(SetComponentField で key_ を oldValue_ へ戻す)
-		(void)model;
+		// 参照ノードの付け替えは取り消さない。変更前の値に戻せば保存の差分から消えるので、override に無かったキーは書かれない
+		return model.SetComponentField(nodeId_, typeName_, key_, oldValue_);
 	}
 
 
@@ -70,15 +76,14 @@ namespace editor
 
 	bool AddComponentCommand::Execute(aq::level::LevelEditModel& model)
 	{
-		// 既定値で足す。参照ノードや、すでに持っている型ならモデルが断る
+		// 既定値で末尾に足す。参照ノードや、すでに持っている型ならモデルが断る
 		return model.AddComponent(nodeId_, typeName_);
 	}
 
 
-	void AddComponentCommand::Undo(aq::level::LevelEditModel& model)
+	bool AddComponentCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		// Undo / Redo を作るときに実装する(RemoveComponent で typeName_ を取り外す)
-		(void)model;
+		return model.RemoveComponent(nodeId_, typeName_);
 	}
 
 
@@ -96,15 +101,17 @@ namespace editor
 
 	bool RemoveComponentCommand::Execute(aq::level::LevelEditModel& model)
 	{
-		// 取り外した値は捨てずに持つ(取り消しで同じ値のまま戻せるように)
-		removedJson_ = aq::util::JsonValue();
-		return model.RemoveComponent(nodeId_, typeName_, &removedJson_);
+		// 取り外した値と位置は捨てずに持つ(取り消しで同じ値・同じ並びに戻せるように)
+		removedJson_  = aq::util::JsonValue();
+		removedIndex_ = 0;
+		return model.RemoveComponent(nodeId_, typeName_, &removedJson_, &removedIndex_);
 	}
 
 
-	void RemoveComponentCommand::Undo(aq::level::LevelEditModel& model)
+	bool RemoveComponentCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		// Undo / Redo を作るときに実装する(AddComponent で typeName_ を removedJson_ の値で戻す)
-		(void)model;
+		// serializePtr の無い型は値を控えられないので、既定値で戻す
+		const aq::util::JsonValue* json = removedJson_.IsNull() ? nullptr : &removedJson_;
+		return model.AddComponent(nodeId_, typeName_, json, removedIndex_);
 	}
 }

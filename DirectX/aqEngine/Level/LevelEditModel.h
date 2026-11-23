@@ -183,14 +183,26 @@ namespace aq
 			 */
 			bool SetComponentField(uint32_t id, const std::string& typeName, const std::string& key, const util::JsonValue& value);
 
-			/** 実体ノードへコンポーネントを足す（json があれば deserializePtr）。既に持つ・未登録・参照ノードなら false */
-			bool AddComponent(uint32_t id, const std::string& typeName, const util::JsonValue* json = nullptr);
+			/**
+			 * SetComponentField が書き換える前の値（typeName のコンポーネントの key の JSON）を outValue へ返す。
+			 * 実体ノードは持っているコンポーネントを serializePtr した値の key。参照ノードは、付け替え済み・新しく足した
+			 * （loadedJson が空）ものはそのまま、まだなら「既定値 ← 解決済みの値」を serializePtr した値の key。
+			 * SetComponentField が false を返す条件（型が無い、removedComponents にある、解決できない）と、key が無いときは false。
+			 * モデルは変えない（付け替えもしない）。参照ノードで未付け替えのときはファイルを読むので、毎フレームは呼ばない
+			 */
+			bool GetComponentField(uint32_t id, const std::string& typeName, const std::string& key, util::JsonValue& outValue) const;
+
+			/**
+			 * 実体ノードへコンポーネントを足す（json があれば deserializePtr）。既に持つ・未登録・参照ノードなら false。
+			 * index はコンポーネントの列の中の位置（既定と範囲外は末尾）
+			 */
+			bool AddComponent(uint32_t id, const std::string& typeName, const util::JsonValue* json = nullptr, size_t index = APPEND);
 
 			/**
 			 * 実体ノードからコンポーネントを外す。addable == false の型（Transform）・持っていない・参照ノードなら false。
-			 * outJson には外す前の serializePtr の値を返す
+			 * outJson には外す前の serializePtr の値を、outIndex には外す前のコンポーネントの列の中の位置を返す
 			 */
-			bool RemoveComponent(uint32_t id, const std::string& typeName, util::JsonValue* outJson = nullptr);
+			bool RemoveComponent(uint32_t id, const std::string& typeName, util::JsonValue* outJson = nullptr, size_t* outIndex = nullptr);
 
 
 		public:

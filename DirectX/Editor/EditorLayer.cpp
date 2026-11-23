@@ -56,6 +56,8 @@ namespace editor
 		DrawMainMenuBar();
 		// File メニューのモーダルと Ctrl+S(メニューバーの外の ID の階層で開く)
 		levelFileMenu_.DrawPopups(editorContext_);
+		// Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z(Ctrl+S と同じく、どのウィンドウにフォーカスがあっても効かせる)
+		editMenu_.HandleShortcuts(editorContext_);
 
 		// メインビューポート全体をドッキング先にする
 		const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport();
@@ -175,6 +177,7 @@ namespace editor
 		if (!ImGui::BeginMainMenuBar()) return;
 
 		levelFileMenu_.DrawMenu(editorContext_);
+		editMenu_.DrawMenu(editorContext_);
 		ImGui::Separator();
 		DrawPlayToolbar();
 		levelFileMenu_.DrawStatus(editorContext_);

@@ -4,6 +4,7 @@
 #include "GameViewInput.h"
 #include "PlayModeController.h"
 #include "PlayStopSelfTest.h"
+#include "Panels/EditMenu.h"
 #include "Panels/HierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
 #include "Panels/LevelFileMenu.h"
@@ -13,7 +14,7 @@
 namespace editor
 {
 	/**
-	 * エディタの UI 層。ゲームビュー、ヒエラルキー、インスペクター、メインメニューバー(File メニューと再生・停止のツールバー)を持つ。
+	 * エディタの UI 層。ゲームビュー、ヒエラルキー、インスペクター、メインメニューバー(File / Edit メニューと再生・停止のツールバー)を持つ。
 	 * AppHost がエディタ用の ImGui コンテキストを current にして呼ぶ。寿命は EditorMain が持つ
 	 */
 	class EditorLayer final : public aq::IEditorLayer
@@ -35,6 +36,7 @@ namespace editor
 		HierarchyPanel hierarchyPanel_;
 		InspectorPanel inspectorPanel_;
 		LevelFileMenu  levelFileMenu_;
+		EditMenu       editMenu_;
 
 		/** 初期配置の要否を確かめたか(最初のフレームで 1 回だけ確かめる) */
 		bool isLayoutChecked_ = false;
@@ -59,7 +61,7 @@ namespace editor
 		/** ゲームビュー。displayRT をアスペクト比を保って縮小表示し、このフレームの状態を返す */
 		GameViewState DrawGameView(const aq::rendering::RenderTargetHandle gameViewRT);
 
-		/** メインメニューバー。左から File メニュー、再生のツールバー、今のパス */
+		/** メインメニューバー。左から File メニュー、Edit メニュー、再生のツールバー、今のパス */
 		void DrawMainMenuBar();
 
 		/** メインメニューバーの中に再生・一時停止・再開・停止のボタン、現在のモード、自己テストを置く */

@@ -16,6 +16,8 @@
 // (g)(保存した Level を生成して実体の値を確かめる)は T8 と同じ Engine + EntityContext の環境で行う(Debug 構成のみ)。
 // T6 と T7 のファイル往復も、編集ノード(PrefabEditNode)が AQ_DEBUG_IMGUI のときだけあるので Debug 構成のみ。
 // E7 の後で T12 先頭コメントの保持(ExtractLeadingComments と、LevelEditModel の保存での書き戻し)を足した。(a) は全構成、(b) は Debug のみ。
+// E8a で T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory の列と保存の印)を足した。Editor の Commands/*.cpp と
+// CommandHistory.cpp を直接コンパイルして使い、画面も Engine も作らない(Debug 構成のみ)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -33,6 +35,9 @@
 #include "ECS/ImGuiEditEventVisitor.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>   // T4 (7) で ImGuiContext::AnyIdHasBeenEditedThisFrame を直接立てる
+#include "CommandHistory.h"                // T13(Editor のソースを Debug だけ直接コンパイルする)
+#include "Commands/ComponentCommands.h"
+#include "Commands/NodeCommands.h"
 #endif
 
 #include <array>
@@ -123,7 +128,8 @@ namespace
 			"      Debug 構成ではプレビューの置き換え(LevelEditModel)も行う。\n"
 			"      T9 実行モード(Edit / Play / Pause で動く System と、全モードでの Flush)を試す。\n"
 			"      Debug 構成では T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)も行う。\n"
-			"      Debug 構成では T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え、保存した Level の生成)も行う。\n");
+			"      Debug 構成では T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え、保存した Level の生成)も行う。\n"
+			"      Debug 構成では T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory)も行う。\n");
 	}
 
 
@@ -2003,6 +2009,474 @@ namespace
 		RunValueAddRemoveTest(results);
 		RunValueRejectTest(results);
 	}
+
+
+	/** 1 試験の結果を出す。説明は失敗したときだけ出す */
+	void ReportOnFailure(TestResults& results, const std::string& testName, const bool passed, const std::string& detail)
+	{
+		Report(results, testName, passed, passed ? std::string() : detail);
+	}
+
+
+	/**
+	 * T13 (e) で使うテスト用のコマンド
+	 *
+	 * モデルに触れずに、Execute / Undo の成否だけを決められる。
+	 * failUndo なら Undo が false、failRedo なら 2 回目以降の Execute(やり直し)が false を返す。
+	 */
+	class HistoryTestCommand final : public editor::IEditorCommand
+	{
+	private:
+		/** 失敗させる操作 */
+		bool failUndo_;
+		bool failRedo_;
+
+		/** Execute を呼ばれた回数 */
+		uint32_t executeCount_ = 0;
+
+
+	public:
+		HistoryTestCommand(const bool failUndo, const bool failRedo)
+			: failUndo_(failUndo)
+			, failRedo_(failRedo)
+		{
+		}
+
+		bool Execute(aq::level::LevelEditModel& model) override
+		{
+			(void)model;
+			++executeCount_;
+			return !(failRedo_ && executeCount_ > 1);
+		}
+
+		bool Undo(aq::level::LevelEditModel& model) override
+		{
+			(void)model;
+			return !failUndo_;
+		}
+
+		const char* GetName() const override { return "History Test"; }
+	};
+
+
+	/** 成功するテスト用のコマンドを 1 つ実行して履歴に積む */
+	void PushHistoryTestCommand(editor::CommandHistory& history, aq::level::LevelEditModel& model,
+	                            const bool failUndo = false, const bool failRedo = false)
+	{
+		auto command = std::make_unique<HistoryTestCommand>(failUndo, failRedo);
+		command->Execute(model);
+		history.Push(std::move(command));
+	}
+
+
+	/** ノードのコンポーネントの型の並び(ToJson の components はオブジェクトで並びが出ないので、編集ノードから直接取る) */
+	std::vector<size_t> ComponentTypeOrder(const aq::level::LevelEditModel& model, const uint32_t id)
+	{
+		std::vector<size_t> order;
+		if (const PrefabEditNode* node = model.FindNode(id)) {
+			for (const PrefabEditComponent& component : node->components) {
+				order.push_back(component.data.Type().GetHash());
+			}
+		}
+		return order;
+	}
+
+
+	/** フィールドの今の値を double で返す(取れなければ NaN) */
+	double FieldAsDouble(const aq::level::LevelEditModel& model, const uint32_t id, const char* typeName, const char* key)
+	{
+		JsonValue value;
+		if (!model.GetComponentField(id, typeName, key, value) || !value.IsNumber()) return std::nan("");
+		return value.AsDouble();
+	}
+
+
+	/**
+	 * コマンド 1 つで Execute → Undo → Redo(Execute をもう一度)を行い、ToJson が
+	 * 「変わる → 元と一致 → 実行後と一致」になるかを確かめる(比較は JsonEqualsExact)。
+	 * expectedOutline が空でなければ、実行後のノードの並びも確かめる
+	 */
+	void CheckUndoRedo(TestResults& results, const std::string& name, aq::level::LevelEditModel& model,
+	                   editor::IEditorCommand& command, const std::string& expectedOutline = std::string())
+	{
+		const JsonValue original = model.ToJson();
+
+		const bool      executed     = command.Execute(model);
+		const JsonValue executedJson = model.ToJson();
+		const bool      changed      = !JsonEqualsExact(original, executedJson);
+		Report(results, name + " Execute", executed && changed,
+			executed && changed ? std::string() : (executed ? "ToJson が変わらない" : "false を返した"));
+		if (!expectedOutline.empty()) {
+			ReportOutline(results, name + " 実行後の並び", model, expectedOutline);
+		}
+
+		const bool      undone     = command.Undo(model);
+		const JsonValue undoneJson = model.ToJson();
+		const bool      restored   = JsonEqualsExact(original, undoneJson);
+		Report(results, name + " Undo", undone && restored,
+			undone && restored ? std::string() : (undone ? "元と違う: " + StringifyOneLine(undoneJson) : std::string("false を返した")));
+
+		const bool      redone     = command.Execute(model);
+		const JsonValue redoneJson = model.ToJson();
+		const bool      again      = JsonEqualsExact(executedJson, redoneJson);
+		Report(results, name + " Redo", redone && again,
+			redone && again ? std::string() : (redone ? "実行後と違う: " + StringifyOneLine(redoneJson) : std::string("false を返した")));
+	}
+
+
+	/** T13 (a): ノードの作成・削除・移動(別の親・同じ列の前へ・同じ列の後ろへ)・名前の変更 */
+	void RunUndoRedoNodeTest(TestResults& results)
+	{
+		const std::string name = "T13 (a)";
+
+		// 作成: やり直しで同じノード(同じ ID)が同じ位置に戻る
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::CreateNodeCommand command(aq::level::NodeParent{ IdOf(model, "A"), -1 }, 1, "New");
+			CheckUndoRedo(results, name + " CreateNode", model, command, "A(A1(A1a),New,A2),B,Ref|[Inline:S1][file:Other.level.json]");
+
+			// CheckUndoRedo の後はやり直した状態。もう一度取り消してやり直し、ID が変わらないかを見る
+			const uint32_t createdId = command.GetCreatedId();
+			const bool     undone    = command.Undo(model) && model.FindNode(createdId) == nullptr;
+			const bool     redone    = command.Execute(model);
+			const bool     sameId    = undone && redone && createdId != 0 && command.GetCreatedId() == createdId
+				&& model.FindNode(createdId) != nullptr && model.FindNode(createdId)->name == "New";
+			Report(results, name + " CreateNode やり直しで ID を保つ", sameId, sameId ? std::string() : "やり直した後に同じ ID で引けない");
+		}
+
+		// 削除: 取り消しで子孫の ID も元に戻る
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			const uint32_t idA   = IdOf(model, "A");
+			const uint32_t idA1a = IdOf(model, "A1a");
+			editor::DeleteNodeCommand command(idA);
+			const JsonValue original = model.ToJson();
+			command.Execute(model);
+			const bool undone  = command.Undo(model);
+			const bool idsKept = undone && JsonEqualsExact(original, model.ToJson())
+				&& model.FindNode(idA1a) != nullptr && model.FindNode(idA1a)->name == "A1a";
+			Report(results, name + " DeleteNode 取り消しで子孫の ID を保つ", idsKept, idsKept ? std::string() : "取り消した後に子孫が同じ ID で引けない");
+		}
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::DeleteNodeCommand command(IdOf(model, "A"));
+			CheckUndoRedo(results, name + " DeleteNode", model, command, "B,Ref|[Inline:S1][file:Other.level.json]");
+		}
+
+		// 移動: 別の親へ
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::MoveNodeCommand command(IdOf(model, "B"), aq::level::NodeParent{ IdOf(model, "A"), -1 }, STRUCTURE_APPEND);
+			CheckUndoRedo(results, name + " MoveNode 別の親", model, command, "A(A1(A1a),A2,B),Ref|[Inline:S1][file:Other.level.json]");
+		}
+
+		// 移動: 同じ列の前へ([A, B, Ref] の B を 0 へ)
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::MoveNodeCommand command(IdOf(model, "B"), aq::level::NodeParent{ 0, -1 }, 0);
+			CheckUndoRedo(results, name + " MoveNode 同じ列の前へ", model, command, "B,A(A1(A1a),A2),Ref|[Inline:S1][file:Other.level.json]");
+		}
+
+		// 移動: 同じ列の後ろへ([A, B, Ref] の A を、取り外した後の添字 2 へ)
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::MoveNodeCommand command(IdOf(model, "A"), aq::level::NodeParent{ 0, -1 }, 2);
+			CheckUndoRedo(results, name + " MoveNode 同じ列の後ろへ", model, command, "B,Ref,A(A1(A1a),A2)|[Inline:S1][file:Other.level.json]");
+		}
+
+		// 名前の変更: 変更前はコンストラクタの値ではなく、実行の時点のモデルから取る
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::RenameNodeCommand command(IdOf(model, "B"), "NotTheOldName", "B2");
+			CheckUndoRedo(results, name + " RenameNode", model, command, "A(A1(A1a),A2),B2,Ref|[Inline:S1][file:Other.level.json]");
+		}
+	}
+
+
+	/** T13 (a): フィールドの変更・コンポーネントの追加と削除(削除は先頭と中ほどで、型の並びまで戻る) */
+	void RunUndoRedoComponentTest(TestResults& results)
+	{
+		const std::string name = "T13 (a)";
+
+		// フィールドの変更(実体ノード)
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::SetFieldCommand command(IdOf(model, "InlineChild"), "Spawner", "interval", JsonValue(3.0));
+			CheckUndoRedo(results, name + " SetField", model, command);
+		}
+
+		// コンポーネントの追加
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::AddComponentCommand command(IdOf(model, "InlineChild"), "AudioListener");
+			CheckUndoRedo(results, name + " AddComponent", model, command);
+		}
+
+		// コンポーネントの削除。並びを決めたノード(AudioListener, Transform, AudioSource, Spawner)を置いて、先頭と中ほどを外す
+		struct RemoveCase
+		{
+			const char* label;
+			const char* typeName;
+		};
+		const RemoveCase cases[] = {
+			{ "先頭",   "AudioListener" },
+			{ "中ほど", "AudioSource" },
+		};
+		for (const RemoveCase& c : cases) {
+			const std::string caseName = name + " RemoveComponent " + c.label;
+
+			aq::level::LevelEditModel model;
+			if (!LoadStructureTestModel(model)) { Report(results, caseName, false, "試験用 Level を読み込めない"); return; }
+			auto node  = std::make_unique<PrefabEditNode>();
+			node->name = "Ordered";
+			AddEditComponent(*node, "AudioListener");
+			AddEditComponent(*node, "Transform");
+			PatchEditComponent(AddEditComponent(*node, "AudioSource"), R"({"volume":0.25,"loop":true})");
+			AddEditComponent(*node, "Spawner");
+			const uint32_t id = model.InsertNode(aq::level::NodeParent{ 0, -1 }, STRUCTURE_APPEND, std::move(node));
+			if (id == 0) { Report(results, caseName, false, "ノードを置けない"); continue; }
+
+			const std::vector<size_t> originalOrder = ComponentTypeOrder(model, id);
+			editor::RemoveComponentCommand command(id, c.typeName);
+			CheckUndoRedo(results, caseName, model, command);
+
+			// CheckUndoRedo の後はやり直した状態。取り消して、型の並びが元と一致するかを見る
+			const bool undone  = command.Undo(model);
+			const bool ordered = undone && ComponentTypeOrder(model, id) == originalOrder;
+			Report(results, caseName + " 型の並び", ordered, ordered ? std::string() : "取り消した後のコンポーネントの並びが元と違う");
+		}
+	}
+
+
+	/** T13 (b): 子のフィールドを変える → 親を削除 → 削除を取り消す → 子の変更を取り消す で、子の値と ToJson が元に戻る */
+	void RunUndoRedoDescendantTest(TestResults& results)
+	{
+		const std::string name = "T13 (b) 削除の取り消しの後の子の取り消し";
+		aq::level::LevelEditModel model;
+		if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		const uint32_t  idChild       = IdOf(model, "InlineChild");
+		const uint32_t  idParent      = IdOf(model, "Inline");
+		const JsonValue original      = model.ToJson();
+		const double    originalValue = FieldAsDouble(model, idChild, "Spawner", "interval");
+
+		editor::CommandHistory history;
+		auto setField     = std::make_unique<editor::SetFieldCommand>(idChild, "Spawner", "interval", JsonValue(3.0));
+		auto deleteParent = std::make_unique<editor::DeleteNodeCommand>(idParent);
+		const bool executed = setField->Execute(model) && FieldAsDouble(model, idChild, "Spawner", "interval") == 3.0;
+		history.Push(std::move(setField));
+		const bool deleted = deleteParent->Execute(model) && model.FindNode(idChild) == nullptr;
+		history.Push(std::move(deleteParent));
+		ReportOnFailure(results, name + " 実行", executed && deleted, "値の変更か親の削除ができない");
+
+		const bool undoneDelete = history.Undo(model) && model.FindNode(idChild) != nullptr;
+		const bool undoneField  = history.Undo(model);
+		const double value      = FieldAsDouble(model, idChild, "Spawner", "interval");
+		ReportOnFailure(results, name + " 子の値", undoneDelete && undoneField && value == originalValue,
+			"取り消した後の値: " + std::to_string(value) + " / 元: " + std::to_string(originalValue));
+		const JsonValue after = model.ToJson();
+		const bool      same  = JsonEqualsExact(original, after);
+		ReportOnFailure(results, name + " ToJson", same, same ? std::string() : "元と違う: " + StringifyOneLine(after));
+	}
+
+
+	/** T13 (c): 参照ノードの値を変えて取り消すと、ToJson が元と一字一句一致する(override に無いキーは残らない) */
+	void RunUndoRedoReferenceTest(TestResults& results)
+	{
+		const std::string name = "T13 (c) 参照ノード";
+
+		struct ReferenceCase
+		{
+			const char* label;
+			const char* nodeName;
+			const char* typeName;
+			const char* key;
+			const char* valueText;
+		};
+		const ReferenceCase cases[] = {
+			{ "override の無いコンポーネント", VALUE_REF_PLAIN_NAME, "Spawner",   "interval", "2" },
+			{ "override に無いキー",           VALUE_REF_FULL_NAME,  "Transform", "scale",    "[2,2,2]" },
+			{ "override にあるキー",           VALUE_REF_FULL_NAME,  "Spawner",   "interval", "7" },
+		};
+		for (const ReferenceCase& c : cases) {
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { ReportOnFailure(results, name, false, "試験用 Level を読み込めない"); return; }
+			editor::SetFieldCommand command(IdOf(model, c.nodeName), c.typeName, c.key, aq::util::JsonParser::ParseString(c.valueText));
+			CheckUndoRedo(results, name + " " + c.label, model, command);
+		}
+	}
+
+
+	/** T13 (d): 同じキーへの SetField を 2 つ続けて実行し、逆順に取り消すと元に戻る(変更前を実行の時点で取る) */
+	void RunUndoRedoSameKeyTest(TestResults& results)
+	{
+		const std::string name = "T13 (d) 同じキーへの 2 回の変更";
+
+		struct SameKeyCase
+		{
+			const char* label;
+			const char* nodeName;
+			const char* typeName;
+			const char* key;
+			double      first;
+			double      second;
+		};
+		const SameKeyCase cases[] = {
+			{ "実体ノード", "InlineChild",        "Spawner", "interval", 3.0, 4.0 },
+			{ "参照ノード", VALUE_REF_PLAIN_NAME, "Spawner", "maxCount", 5.0, 7.0 },
+		};
+		for (const SameKeyCase& c : cases) {
+			const std::string caseName = name + " " + c.label;
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { ReportOnFailure(results, caseName, false, "試験用 Level を読み込めない"); return; }
+
+			const uint32_t  id            = IdOf(model, c.nodeName);
+			const JsonValue original      = model.ToJson();
+			const double    originalValue = FieldAsDouble(model, id, c.typeName, c.key);
+
+			// インスペクターが同じフレームに 2 回積んだときと同じく、2 つとも作ってから順に実行する
+			editor::SetFieldCommand first(id, c.typeName, c.key, JsonValue(c.first));
+			editor::SetFieldCommand second(id, c.typeName, c.key, JsonValue(c.second));
+			const bool executed = first.Execute(model) && second.Execute(model)
+				&& FieldAsDouble(model, id, c.typeName, c.key) == c.second;
+			ReportOnFailure(results, caseName + " 実行", executed, "実行できない / 値が違う");
+
+			const bool   undoneSecond = second.Undo(model);
+			const double middle       = FieldAsDouble(model, id, c.typeName, c.key);
+			ReportOnFailure(results, caseName + " 2 つ目の取り消し", undoneSecond && middle == c.first,
+				"取り消した後の値: " + std::to_string(middle) + " / 期待: " + std::to_string(c.first));
+
+			const bool   undoneFirst = first.Undo(model);
+			const double restored    = FieldAsDouble(model, id, c.typeName, c.key);
+			const bool   same        = JsonEqualsExact(original, model.ToJson());
+			ReportOnFailure(results, caseName + " 1 つ目の取り消し", undoneFirst && restored == originalValue && same,
+				"取り消した後の値: " + std::to_string(restored) + " / 元: " + std::to_string(originalValue)
+				+ (same ? std::string() : " / ToJson が元と違う"));
+		}
+	}
+
+
+	/** T13 (e): CommandHistory の列の扱いと、保存の印 */
+	void RunCommandHistoryTest(TestResults& results)
+	{
+		const std::string         name = "T13 (e) CommandHistory";
+		aq::level::LevelEditModel model;
+
+		// Push で Redo の列が消える
+		{
+			editor::CommandHistory history;
+			const bool empty = !history.CanUndo() && !history.CanRedo() && history.GetUndoName() == nullptr && history.GetRedoName() == nullptr;
+			PushHistoryTestCommand(history, model);
+			PushHistoryTestCommand(history, model);
+			const bool undone   = history.Undo(model);
+			const bool hasRedo  = history.CanRedo() && history.GetRedoCount() == 1 && history.GetRedoName() != nullptr
+				&& std::string(history.GetRedoName()) == "History Test";
+			PushHistoryTestCommand(history, model);
+			const bool redoGone = !history.CanRedo() && history.GetRedoCount() == 0 && history.GetUndoCount() == 2;
+			ReportOnFailure(results, name + " Push で Redo が消える", empty && undone && hasRedo && redoGone,
+				"undo=" + std::to_string(history.GetUndoCount()) + " redo=" + std::to_string(history.GetRedoCount()));
+		}
+
+		// 上限を超えたら古いものから消える
+		{
+			editor::CommandHistory history;
+			for (size_t i = 0; i < editor::CommandHistory::MAX_ENTRIES + 10; ++i) {
+				PushHistoryTestCommand(history, model);
+			}
+			const bool capped = history.GetUndoCount() == editor::CommandHistory::MAX_ENTRIES;
+			size_t undoCount = 0;
+			while (history.Undo(model)) ++undoCount;
+			ReportOnFailure(results, name + " 上限", capped && undoCount == editor::CommandHistory::MAX_ENTRIES && !history.CanUndo(),
+				"積んだ後 " + std::to_string(editor::CommandHistory::MAX_ENTRIES) + " 件のはずが取り消せたのは " + std::to_string(undoCount) + " 件");
+		}
+
+		// 保存の印: 保存 → Undo で dirty → Redo で dirty でない → Undo して新しいコマンドで以後ずっと dirty
+		{
+			editor::CommandHistory history;
+			const bool cleanAtStart = history.IsAtSavedState();
+			PushHistoryTestCommand(history, model);
+			const bool dirtyAfterPush = !history.IsAtSavedState();
+			history.MarkSaved();
+			const bool cleanAfterSave = history.IsAtSavedState();
+			history.Undo(model);
+			const bool dirtyAfterUndo = !history.IsAtSavedState();
+			history.Redo(model);
+			const bool cleanAfterRedo = history.IsAtSavedState();
+			history.Undo(model);
+			PushHistoryTestCommand(history, model);
+			bool alwaysDirty = !history.IsAtSavedState();
+			history.Undo(model);
+			alwaysDirty = alwaysDirty && !history.IsAtSavedState();
+			history.Redo(model);
+			alwaysDirty = alwaysDirty && !history.IsAtSavedState();
+			ReportOnFailure(results, name + " 保存の印", cleanAtStart && dirtyAfterPush && cleanAfterSave && dirtyAfterUndo && cleanAfterRedo && alwaysDirty,
+				std::string("start ") + (cleanAtStart ? "clean" : "dirty") + " / push " + (dirtyAfterPush ? "dirty" : "clean")
+				+ " / save " + (cleanAfterSave ? "clean" : "dirty") + " / undo " + (dirtyAfterUndo ? "dirty" : "clean")
+				+ " / redo " + (cleanAfterRedo ? "clean" : "dirty") + " / 新しいコマンドの後 " + (alwaysDirty ? "dirty" : "clean"));
+		}
+
+		// 保存済みの空から上限 + 1 回積んで上限回取り消しても、捨てた項目の後の状態なので dirty のまま
+		{
+			editor::CommandHistory history;
+			history.MarkCleanEmpty();
+			for (size_t i = 0; i < editor::CommandHistory::MAX_ENTRIES + 1; ++i) {
+				PushHistoryTestCommand(history, model);
+			}
+			for (size_t i = 0; i < editor::CommandHistory::MAX_ENTRIES; ++i) {
+				history.Undo(model);
+			}
+			ReportOnFailure(results, name + " 上限で捨てた後の保存の印", !history.CanUndo() && !history.IsAtSavedState(),
+				"上限 + 1 回積んで上限回取り消したら、保存済みの状態と一致した");
+		}
+
+		// 失敗する Undo は false を返し、履歴が空になり、保存の印は一致しなくなる
+		{
+			editor::CommandHistory history;
+			PushHistoryTestCommand(history, model);
+			PushHistoryTestCommand(history, model, true, false);
+			history.MarkSaved();
+			const bool failed = !history.Undo(model);
+			ReportOnFailure(results, name + " Undo の失敗", failed && !history.CanUndo() && !history.CanRedo() && !history.IsAtSavedState(),
+				"undo=" + std::to_string(history.GetUndoCount()) + " redo=" + std::to_string(history.GetRedoCount()));
+		}
+
+		// 失敗する Redo も同じ
+		{
+			editor::CommandHistory history;
+			PushHistoryTestCommand(history, model);
+			PushHistoryTestCommand(history, model, false, true);
+			history.Undo(model);
+			const bool failed = !history.Redo(model);
+			ReportOnFailure(results, name + " Redo の失敗", failed && !history.CanUndo() && !history.CanRedo() && !history.IsAtSavedState(),
+				"undo=" + std::to_string(history.GetUndoCount()) + " redo=" + std::to_string(history.GetRedoCount()));
+		}
+	}
+
+
+	/**
+	 * T13 Undo / Redo
+	 *
+	 * Editor のコマンド(Commands/)と CommandHistory を直接コンパイルして、T10 / T11 の試験用 Level で
+	 * 取り消しとやり直しを試す。画面も Engine も作らない。
+	 */
+	void RunUndoRedoTests(TestResults& results)
+	{
+		RunUndoRedoNodeTest(results);
+		RunUndoRedoComponentTest(results);
+		RunUndoRedoDescendantTest(results);
+		RunUndoRedoReferenceTest(results);
+		RunUndoRedoSameKeyTest(results);
+		RunCommandHistoryTest(results);
+	}
 #endif
 
 
@@ -3408,8 +3882,9 @@ namespace
 		RunStructureEditTests(results);
 		RunValueEditTests(results);
 		RunLeadingCommentSaveTest(results);
+		RunUndoRedoTests(results);
 #else
-		std::printf("        T10 / T11 / T12 (b): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+		std::printf("        T10 / T11 / T12 (b) / T13: AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
 #endif
 
 		RunSpawnTests(results);

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "aq.h"
 #include "NodeCommands.h"
 #include "ECS/PrefabEditNodeOps.h"
 
@@ -25,14 +25,26 @@ namespace editor
 
 		// 失敗したとき InsertNode はノードを捨てる。失敗したコマンドは捨てるので持ち直さない
 		createdId_ = model.InsertNode(parent_, index_, std::move(node_));
-		return createdId_ != 0;
+		if (createdId_ == 0) return false;
+
+		// 位置が範囲外なら末尾に置かれるので、実際に置かれた場所を控える(取り消しの前に食い違いを確かめる)
+		return model.FindParent(createdId_, placedParent_, placedIndex_);
 	}
 
 
-	void CreateNodeCommand::Undo(aq::level::LevelEditModel& model)
+	bool CreateNodeCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		// Undo / Redo を作るときに実装する(createdId_ のノードを DetachNode して node_ へ戻す)
-		(void)model;
+		if (createdId_ == 0 || node_ != nullptr) return false;
+
+		// 置いた場所に無ければ、モデルとコマンドが食い違っている(取り外さずに断る)
+		NodeParent parent;
+		size_t     index = 0;
+		if (!model.FindParent(createdId_, parent, index)) return false;
+		if (parent.nodeId != placedParent_.nodeId || parent.subLevelIndex != placedParent_.subLevelIndex || index != placedIndex_) return false;
+
+		// 取り外したノードは持っておき、やり直しで同じノード(同じ ID)を置き直す
+		node_ = model.DetachNode(createdId_);
+		return node_ != nullptr;
 	}
 
 
@@ -55,10 +67,12 @@ namespace editor
 	}
 
 
-	void DeleteNodeCommand::Undo(aq::level::LevelEditModel& model)
+	bool DeleteNodeCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		// Undo / Redo を作るときに実装する(detached_ を oldParent_ / oldIndex_ へ InsertNode で戻す)
-		(void)model;
+		if (detached_ == nullptr) return false;
+
+		// InsertNode は採番済みの ID を変えないので、削除の前に子孫を対象にしていた履歴もそのまま使える
+		return model.InsertNode(oldParent_, oldIndex_, std::move(detached_)) == nodeId_;
 	}
 
 
@@ -83,9 +97,9 @@ namespace editor
 	}
 
 
-	void MoveNodeCommand::Undo(aq::level::LevelEditModel& model)
+	bool MoveNodeCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		// Undo / Redo を作るときに実装する(nodeId_ を oldParent_ / oldIndex_ へ MoveNode で戻す)
-		(void)model;
+		// 控えた位置は取り外す前の添字。同じ列の中でも、MoveNode は取り外した後の添字として扱うので元の並びに戻る
+		return model.MoveNode(nodeId_, oldParent_, oldIndex_);
 	}
 }

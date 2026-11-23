@@ -18,6 +18,8 @@
 // E7 の後で T12 先頭コメントの保持(ExtractLeadingComments と、LevelEditModel の保存での書き戻し)を足した。(a) は全構成、(b) は Debug のみ。
 // E8a で T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory の列と保存の印)を足した。Editor の Commands/*.cpp と
 // CommandHistory.cpp を直接コンパイルして使い、画面も Engine も作らない(Debug 構成のみ)。
+// E8b で T14 ログの通知(aq::debug::SetLogListener と、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を足した。
+// Editor の ConsoleLog.cpp を直接コンパイルして使い、画面も Engine も作らない(全構成)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -27,6 +29,7 @@
 #include "Level/LevelRegistry.h"
 #include "Level/LevelSerializer.h"
 #include "Util/SimpleJson.h"
+#include "ConsoleLog.h"                    // T14(Editor のソースを全構成で直接コンパイルする)
 #ifdef AQ_DEBUG_IMGUI
 #include "Level/LevelEditModel.h"
 #include "ECS/PrefabEditor.h"
@@ -50,8 +53,10 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 #include <algorithm>
 
@@ -129,7 +134,8 @@ namespace
 			"      T9 実行モード(Edit / Play / Pause で動く System と、全モードでの Flush)を試す。\n"
 			"      Debug 構成では T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)も行う。\n"
 			"      Debug 構成では T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え、保存した Level の生成)も行う。\n"
-			"      Debug 構成では T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory)も行う。\n");
+			"      Debug 構成では T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory)も行う。\n"
+			"      T14 ログの通知(SetLogListener、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を試す。\n");
 	}
 
 
@@ -3841,6 +3847,304 @@ namespace
 #endif
 
 
+	/** T14 (a) で受け取った文字列(どのスレッドからも来るのでミューテックスの下で控える) */
+	std::mutex               g_logListenerMutex;
+	std::vector<std::string> g_logListenerReceived;
+
+
+	/** T14 (a) で登録する関数 */
+	void LogListenerForTest(const char* text)
+	{
+		std::lock_guard<std::mutex> lock(g_logListenerMutex);
+		g_logListenerReceived.push_back(text);
+	}
+
+
+	/** T14 (a) で受け取った中に marker を含むものがあるか(あれば outText にその文字列) */
+	bool FindReceivedLog(const std::string& marker, std::string* outText)
+	{
+		std::lock_guard<std::mutex> lock(g_logListenerMutex);
+		for (const std::string& text : g_logListenerReceived) {
+			if (text.find(marker) == std::string::npos) continue;
+			if (outText != nullptr) {
+				*outText = text;
+			}
+			return true;
+		}
+		return false;
+	}
+
+
+	/** T14 (a): SetLogListener で登録した関数に StartupLog と EnginePrintf(Debug だけ)が届き、外すと届かない */
+	void RunLogListenerTest(TestResults& results)
+	{
+		const std::string name = "T14 (a)";
+		{
+			std::lock_guard<std::mutex> lock(g_logListenerMutex);
+			g_logListenerReceived.clear();
+		}
+		aq::debug::SetLogListener(&LogListenerForTest);
+
+		// StartupLog は StartupMark で整形した 1 行("[startup] 経過ms (+差分) 本文")で届く
+		aq::StartupLog("T14 startup marker");
+		std::string received;
+		const bool startupReceived  = FindReceivedLog("T14 startup marker", &received);
+		const bool startupFormatted = startupReceived && received.rfind("[startup] ", 0) == 0;
+		Report(results, name + " StartupLog が整形した 1 行で届く", startupFormatted,
+			startupFormatted ? std::string() : "受け取った [" + received + "]");
+
+		// EnginePrintf は Debug だけ出る(Release では式ごと消える)
+		EnginePrintf("T14 printf marker %d\n", 1);
+		const bool printfReceived = FindReceivedLog("T14 printf marker 1", nullptr);
+#ifdef _DEBUG
+		Report(results, name + " EnginePrintf が Debug で届く", printfReceived, printfReceived ? std::string() : "届かない");
+#else
+		Report(results, name + " EnginePrintf が Release で届かない", !printfReceived, printfReceived ? "届いた" : std::string());
+#endif
+
+		aq::debug::SetLogListener(nullptr);
+		aq::StartupLog("T14 detached marker");
+		const bool detachedReceived = FindReceivedLog("T14 detached marker", nullptr);
+		Report(results, name + " nullptr で外すと届かない", !detachedReceived, detachedReceived ? "外した後に届いた" : std::string());
+	}
+
+
+	/** 行の列を 1 行の文字列にする(失敗の詳細表示用) */
+	std::string JoinLinesForDetail(const std::vector<std::string>& lines)
+	{
+		std::string out = "[";
+		for (size_t i = 0; i < lines.size(); ++i) {
+			if (i > 0) out += ", ";
+			out += "\"" + lines[i] + "\"";
+		}
+		out += "]";
+		return out;
+	}
+
+
+	/** 重要度の表示名(失敗の詳細表示用) */
+	const char* SeverityName(const editor::LogSeverity severity)
+	{
+		switch (severity) {
+		case editor::LogSeverity::Info:    return "Info";
+		case editor::LogSeverity::Warning: return "Warning";
+		case editor::LogSeverity::Error:   return "Error";
+		}
+		return "?";
+	}
+
+
+	/** T14 (b): ConsoleLog の行の分割・重要度の推定・上限・CopySince・Clear・Attach と Detach */
+	void RunConsoleLogTest(TestResults& results)
+	{
+		const std::string name = "T14 (b) ConsoleLog";
+
+		// 改行での分割(\r を落とし、末尾の空行を落とし、途中の空行は残す)
+		{
+			struct Case
+			{
+				const char*              label;
+				const char*              text;
+				std::vector<std::string> expected;
+			};
+			const Case cases[] = {
+				{ "LF",                 "a\nb",       { "a", "b" } },
+				{ "CRLF",               "a\r\nb\r\n", { "a", "b" } },
+				{ "末尾の空行を落とす", "a\n\n\n",    { "a" } },
+				{ "途中の空行は残す",   "a\n\nb",     { "a", "", "b" } },
+				{ "改行なし",           "a",          { "a" } },
+				{ "空",                 "",           {} },
+				{ "改行だけ",           "\r\n",       {} },
+			};
+			for (const Case& c : cases) {
+				std::vector<std::string> actual;
+				editor::ConsoleLog::SplitLines(c.text, actual);
+				const bool passed = actual == c.expected;
+				Report(results, name + " 分割 " + c.label, passed,
+					passed ? std::string() : "期待 " + JoinLinesForDetail(c.expected) + " / 実際 " + JoinLinesForDetail(actual));
+			}
+		}
+
+		// 重要度の推定(英字は小文字にして探す)
+		{
+			struct Case
+			{
+				const char*         text;
+				editor::LogSeverity expected;
+			};
+			const Case cases[] = {
+				{ "Shader compile ERROR: x",                    editor::LogSeverity::Error },
+				{ "[editor] open failed: missing.level.json",   editor::LogSeverity::Error },
+				{ "Assertion failed: expr",                     editor::LogSeverity::Error },
+				{ "[crash] exception 0xC0000005",               editor::LogSeverity::Error },
+				{ "読み込みエラー",                             editor::LogSeverity::Error },
+				{ "保存に失敗しました",                         editor::LogSeverity::Error },
+				{ "WARNING: low memory",                        editor::LogSeverity::Warning },
+				{ "[vk] Warn: x",                               editor::LogSeverity::Warning },
+				{ "警告: 何か",                                 editor::LogSeverity::Warning },
+				{ "[startup]     12.0 ms  (+    1.0)  WinMain", editor::LogSeverity::Info },
+				{ "loaded 3 entities",                          editor::LogSeverity::Info },
+				{ "",                                           editor::LogSeverity::Info },
+			};
+			for (const Case& c : cases) {
+				const editor::LogSeverity actual = editor::ConsoleLog::EstimateSeverity(c.text);
+				Report(results, name + " 重要度 \"" + c.text + "\"", actual == c.expected,
+					actual == c.expected ? std::string() : std::string("期待 ") + SeverityName(c.expected) + " / 実際 " + SeverityName(actual));
+			}
+		}
+
+		// Append は行ごとに通し番号と重要度を付ける
+		{
+			editor::ConsoleLog log;
+			log.Append("info line\nwarning line\r\nerror line\n\n");
+			std::vector<editor::ConsoleLine> lines;
+			const uint64_t last = log.CopySince(0, lines);
+			const bool passed = lines.size() == 3 && last == 3
+				&& lines[0].serial == 1 && lines[0].text == "info line"    && lines[0].severity == editor::LogSeverity::Info
+				&& lines[1].serial == 2 && lines[1].text == "warning line" && lines[1].severity == editor::LogSeverity::Warning
+				&& lines[2].serial == 3 && lines[2].text == "error line"   && lines[2].severity == editor::LogSeverity::Error;
+			Report(results, name + " Append", passed,
+				passed ? std::string() : "行数 " + std::to_string(lines.size()) + " / 最後の番号 " + std::to_string(last));
+		}
+
+		// 上限を超えたら古いものから消える
+		{
+			static constexpr size_t OVERFLOW_COUNT = 10;
+			editor::ConsoleLog log;
+			for (size_t i = 0; i < editor::ConsoleLog::MAX_LINES + OVERFLOW_COUNT; ++i) {
+				log.Append(("line " + std::to_string(i)).c_str());
+			}
+			std::vector<editor::ConsoleLine> lines;
+			const uint64_t last = log.CopySince(0, lines);
+			bool contiguous = lines.size() == editor::ConsoleLog::MAX_LINES;
+			for (size_t i = 0; contiguous && i < lines.size(); ++i) {
+				contiguous = lines[i].serial == OVERFLOW_COUNT + 1 + i && lines[i].text == "line " + std::to_string(OVERFLOW_COUNT + i);
+			}
+			const bool passed = log.GetLineCount() == editor::ConsoleLog::MAX_LINES && contiguous
+				&& last == editor::ConsoleLog::MAX_LINES + OVERFLOW_COUNT;
+			Report(results, name + " 上限 " + std::to_string(editor::ConsoleLog::MAX_LINES) + " 行", passed,
+				passed ? std::string() : "行数 " + std::to_string(lines.size()) + " / 最後の番号 " + std::to_string(last)
+					+ (lines.empty() ? std::string() : " / 先頭 [" + lines.front().text + "]"));
+		}
+
+		// CopySince は新しい行だけを返し、Clear は通し番号を戻さない
+		{
+			editor::ConsoleLog log;
+			log.Append("a\nb");
+			std::vector<editor::ConsoleLine> first;
+			const uint64_t afterFirst = log.CopySince(0, first);
+			log.Append("c");
+			std::vector<editor::ConsoleLine> second;
+			const uint64_t afterSecond = log.CopySince(afterFirst, second);
+			std::vector<editor::ConsoleLine> none;
+			const uint64_t afterNone = log.CopySince(afterSecond, none);
+			const bool sincePassed = first.size() == 2 && afterFirst == 2
+				&& second.size() == 1 && second[0].text == "c" && second[0].serial == 3 && afterSecond == 3
+				&& none.empty() && afterNone == 3;
+			Report(results, name + " CopySince が新しい行だけを返す", sincePassed,
+				sincePassed ? std::string() : "1 回目 " + std::to_string(first.size()) + " 行 / 2 回目 " + std::to_string(second.size())
+					+ " 行 / 3 回目 " + std::to_string(none.size()) + " 行");
+
+			log.Clear();
+			std::vector<editor::ConsoleLine> cleared;
+			const uint64_t afterClear = log.CopySince(0, cleared);
+			log.Append("d");
+			std::vector<editor::ConsoleLine> appended;
+			log.CopySince(afterSecond, appended);
+			const bool clearPassed = cleared.empty() && afterClear == 0 && log.GetLineCount() == 1
+				&& appended.size() == 1 && appended[0].text == "d" && appended[0].serial == 4;
+			Report(results, name + " Clear", clearPassed,
+				clearPassed ? std::string() : "Clear の後に " + std::to_string(cleared.size()) + " 行 / 足した後に " + std::to_string(appended.size()) + " 行");
+		}
+
+		// Attach で NotifyLogListener が届き、Detach で届かなくなる
+		{
+			editor::ConsoleLog log;
+			log.Attach();
+			aq::debug::NotifyLogListener("attached line\n");
+			log.Detach();
+			aq::debug::NotifyLogListener("detached line\n");
+			std::vector<editor::ConsoleLine> lines;
+			log.CopySince(0, lines);
+			const bool passed = lines.size() == 1 && lines[0].text == "attached line";
+			Report(results, name + " Attach と Detach", passed, passed ? std::string() : "行数 " + std::to_string(lines.size()));
+		}
+	}
+
+
+	/** T14 (c): 4 スレッドから同時に 1000 行ずつ送り、行数と各スレッドの順序が保たれる */
+	void RunConsoleLogThreadTest(TestResults& results)
+	{
+		static constexpr int THREAD_COUNT     = 4;
+		static constexpr int LINES_PER_THREAD = 1000;
+		static_assert(static_cast<size_t>(THREAD_COUNT * LINES_PER_THREAD) <= editor::ConsoleLog::MAX_LINES,
+			"上限を超えると古い行が消えて数えられない");
+
+		const std::string  name = "T14 (c) 複数スレッド";
+		editor::ConsoleLog log;
+		log.Attach();
+		{
+			std::vector<std::thread> threads;
+			for (int t = 0; t < THREAD_COUNT; ++t) {
+				threads.emplace_back([t]()
+					{
+						char text[64];
+						for (int i = 0; i < LINES_PER_THREAD; ++i) {
+							std::snprintf(text, sizeof(text), "T14c %d %d\n", t, i);
+							aq::debug::NotifyLogListener(text);
+						}
+					});
+			}
+			for (std::thread& thread : threads) {
+				thread.join();
+			}
+		}
+		log.Detach();
+
+		std::vector<editor::ConsoleLine> lines;
+		log.CopySince(0, lines);
+
+		// 各スレッドの行が 0 から順に並んでいるか(ほかのログが混ざっても数えない)
+		std::array<int, THREAD_COUNT> nextIndex = {};
+		size_t testLineCount = 0;
+		bool   ordered       = true;
+		for (const editor::ConsoleLine& line : lines) {
+			int thread = -1;
+			int index  = -1;
+			if (std::sscanf(line.text.c_str(), "T14c %d %d", &thread, &index) != 2) continue;
+			++testLineCount;
+			if (thread < 0 || thread >= THREAD_COUNT || index != nextIndex[static_cast<size_t>(thread)]) {
+				ordered = false;
+				continue;
+			}
+			++nextIndex[static_cast<size_t>(thread)];
+		}
+		bool complete = true;
+		for (const int count : nextIndex) {
+			complete = complete && count == LINES_PER_THREAD;
+		}
+
+		const bool passed = testLineCount == static_cast<size_t>(THREAD_COUNT * LINES_PER_THREAD) && ordered && complete;
+		Report(results, name, passed,
+			passed ? std::string() : "行数 " + std::to_string(testLineCount) + " / 順序 " + (ordered ? "OK" : "NG"));
+	}
+
+
+	/**
+	 * T14 ログの通知
+	 *
+	 * エンジンの SetLogListener と、Editor の ConsoleLog(ConsoleLog.cpp を直接コンパイルする)を試す。
+	 * 画面も Engine も作らない。登録した関数は最後に必ず外す(後のログが試験用の関数へ流れないように)
+	 */
+	void RunLogTests(TestResults& results)
+	{
+		RunLogListenerTest(results);
+		RunConsoleLogTest(results);
+		RunConsoleLogThreadTest(results);
+		aq::debug::SetLogListener(nullptr);
+	}
+
+
 	int RunSelfTest(const Options& options)
 	{
 		// コンポーネントの登録(Application::Initialize と同じ順)
@@ -3889,6 +4193,7 @@ namespace
 
 		RunSpawnTests(results);
 		RunRunModeTests(results);
+		RunLogTests(results);
 
 		std::printf("[selftest] PASS %u / FAIL %u / XFAIL %u / XPASS %u\n",
 			results.passCount, results.failCount, results.xfailCount, results.xpassCount);

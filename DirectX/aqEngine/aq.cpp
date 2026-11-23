@@ -1,5 +1,6 @@
 #include "aq.h"
 #include "Platform/Common/DebugOutput.h"
+#include <atomic>
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -40,6 +41,10 @@ namespace aq
 		char line[512];
 		snprintf(line, sizeof(line), "[startup] %9.1f ms  (+%8.1f)  %s", ms, ms - lastMs, label ? label : "");
 		lastMs = ms;
+
+		// 受け取る側(エディタのコンソール)へは整形した 1 行を渡す。ロックの中で渡すので、
+		// 複数のスレッドから来ても受け取る順はファイルへ書く順と同じになる
+		aq::debug::NotifyLogListener(line);
 
 #if defined(AQ_PLATFORM_UWP)
 		// UWP は CWD がパッケージの読み取り専用フォルダで、ここにファイルを作れない
@@ -149,6 +154,33 @@ namespace aq
 		StartupMark(msg);
 	}
 #endif
+
+
+	namespace debug
+	{
+		namespace
+		{
+			/** ログを受け取る関数。どのスレッドからも読まれるので atomic で持つ */
+			std::atomic<LogListener> g_logListener{ nullptr };
+		}
+
+
+		void SetLogListener(LogListener listener)
+		{
+			g_logListener.store(listener);
+		}
+
+
+		void NotifyLogListener(const char* text)
+		{
+			if (text == nullptr) return;
+
+			const LogListener listener = g_logListener.load();
+			if (listener != nullptr) {
+				listener(text);
+			}
+		}
+	}
 
 
 #if defined(AQ_PLATFORM_WIN32)

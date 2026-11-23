@@ -6,6 +6,7 @@
 #include "Platform/PlatformWin32.h"
 #include "Core/AppHost.h"
 #include "Level/LevelEditor.h"
+#include "ConsoleLog.h"
 #include "EditorLayer.h"
 #include <cstring>
 
@@ -20,8 +21,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	// スコープで囲むのは、リーク報告(ShutdownMemory)を platform の破棄より後に出すため。
 	{
 		aq::platform::PlatformWin32 platform(hInstance, nCmdShow);
+		// コンソールの中身。エンジンの初期化のログから溜めるので、最初の StartupMark より前に受け取りを始める。
+		// EditorLayer が参照するので、EditorLayer より先に置く(後に壊れる)。
+		editor::ConsoleLog consoleLog;
+		consoleLog.Attach();
 		// エディタの UI 層。AppHost は所有せず参照するだけなので、Engine の Finalize より長く生かす。
-		editor::EditorLayer editorLayer;
+		editor::EditorLayer editorLayer(consoleLog);
 
 		aq::StartupMark("WinMain");
 		aq::Engine::Create();
@@ -59,6 +64,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		}
 		engineInstance.Finalize();
 		aq::Engine::Release();
+		// ワーカーのスレッドが止まった後に受け取りをやめる
+		consoleLog.Detach();
 	}
 
 	// Engine もプラットフォームも壊れた後に畳む。ここで初めてリーク報告が意味を持つ。

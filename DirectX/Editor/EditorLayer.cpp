@@ -17,8 +17,17 @@ namespace editor
 		static constexpr float HIERARCHY_WIDTH_RATIO = 0.20f;
 		static constexpr float INSPECTOR_WIDTH_RATIO = 0.25f;
 
+		/** 初期配置でコンソールに充てる高さの割合(中央の領域に対して) */
+		static constexpr float CONSOLE_HEIGHT_RATIO = 0.25f;
+
 		/** ゲームビューへ追従させるレンダー解像度の下限(これより小さい領域では切り上げ、絵に余白が出る) */
 		static constexpr uint32_t MIN_GAME_VIEW_RENDER_SIZE = 64;
+	}
+
+
+	EditorLayer::EditorLayer(ConsoleLog& consoleLog)
+		: consoleLog_(consoleLog)
+	{
 	}
 
 
@@ -66,6 +75,8 @@ namespace editor
 		// パネルはゲームビューより先に描く(現れたウィンドウはフォーカスを取るので、最初のフォーカスをゲームビューに残すため)
 		hierarchyPanel_.Draw(editorContext_);
 		inspectorPanel_.Draw(editorContext_);
+		// 既にある配置(ヒエラルキーの保存あり)を使うときは、コンソールの保存が無ければ画面下の中央に浮かせて出す
+		consolePanel_.Draw(consoleLog_, !isLayoutBuilt);
 
 		// 配置の保存(editor_layout.ini)が無い初回だけ、ゲームビューをドックスペースいっぱいに置く
 		// (初期配置で分けたときは、分けた中央に置いてあるので指定しない)
@@ -178,11 +189,26 @@ namespace editor
 
 		levelFileMenu_.DrawMenu(editorContext_);
 		editMenu_.DrawMenu(editorContext_);
+		DrawWindowMenu();
 		ImGui::Separator();
 		DrawPlayToolbar();
 		levelFileMenu_.DrawStatus(editorContext_);
 
 		ImGui::EndMainMenuBar();
+	}
+
+
+	void EditorLayer::DrawWindowMenu()
+	{
+		// ImGui のフォントは ASCII のみを読み込んでいるので英語で出す
+		if (!ImGui::BeginMenu("Window")) return;
+
+		bool isConsoleOpen = consolePanel_.IsOpen();
+		if (ImGui::MenuItem(ConsolePanel::WINDOW_NAME, nullptr, &isConsoleOpen)) {
+			consolePanel_.SetOpen(isConsoleOpen);
+		}
+
+		ImGui::EndMenu();
 	}
 
 
@@ -255,17 +281,21 @@ namespace editor
 		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
 		ImGui::DockBuilderSetNodeSize(dockspaceId, viewport->WorkSize);
 
-		// 左を切り出し、残りから右を切り出す(右の割合は残りに対する割合に直す)
-		ImGuiID leftId   = 0;
-		ImGuiID restId   = 0;
-		ImGuiID rightId  = 0;
-		ImGuiID centerId = 0;
+		// 左を切り出し、残りから右を切り出す(右の割合は残りに対する割合に直す)。中央は下にコンソールを切り出す
+		ImGuiID leftId    = 0;
+		ImGuiID restId    = 0;
+		ImGuiID rightId   = 0;
+		ImGuiID centerId  = 0;
+		ImGuiID consoleId = 0;
+		ImGuiID gameId    = 0;
 		ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Left, HIERARCHY_WIDTH_RATIO, &leftId, &restId);
 		ImGui::DockBuilderSplitNode(restId, ImGuiDir_Right, INSPECTOR_WIDTH_RATIO / (1.0f - HIERARCHY_WIDTH_RATIO), &rightId, &centerId);
+		ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Down, CONSOLE_HEIGHT_RATIO, &consoleId, &gameId);
 
 		ImGui::DockBuilderDockWindow(HierarchyPanel::WINDOW_NAME, leftId);
-		ImGui::DockBuilderDockWindow(GAME_VIEW_WINDOW_NAME, centerId);
+		ImGui::DockBuilderDockWindow(GAME_VIEW_WINDOW_NAME, gameId);
 		ImGui::DockBuilderDockWindow(InspectorPanel::WINDOW_NAME, rightId);
+		ImGui::DockBuilderDockWindow(ConsolePanel::WINDOW_NAME, consoleId);
 		ImGui::DockBuilderFinish(dockspaceId);
 		return true;
 	}

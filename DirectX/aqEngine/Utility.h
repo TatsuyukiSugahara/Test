@@ -80,6 +80,8 @@ namespace aq
 
 			vsnprintf(temp, sizeof(temp), format, ap);
 			aq::debug::OutputString(temp);
+			// エディタのコンソールなど、ログを受け取る側へも渡す
+			aq::debug::NotifyLogListener(temp);
 
 			va_end(ap);
 		}

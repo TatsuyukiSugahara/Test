@@ -3,6 +3,7 @@
 #include "PrefabEditor.h"
 #include "Util/SimpleJson.h"
 #include <memory>
+#include <string>
 #include <vector>
 
 
@@ -39,6 +40,7 @@ namespace aq
 			AddChild,   // target の子を末尾に追加する
 			Delete,     // target を削除する
 			Move,       // target を newParent の子の末尾へ移す
+			DropPrefab, // target の子の末尾へ assetPath の Prefab を参照ノードとして置く
 		};
 
 
@@ -50,6 +52,7 @@ namespace aq
 			PrefabNodeOpKind kind;
 			PrefabEditNode*  target    = nullptr;   // Select / AddChild の親 / Delete / Move の移すノード
 			PrefabEditNode*  newParent = nullptr;   // Move の移動先
+			std::string      assetPath;             // DropPrefab の Prefab のパス(Assets/... の '/' 区切り)。target は親のノード
 		};
 
 
@@ -61,6 +64,7 @@ namespace aq
 			bool                  enableMove    = false;     // ドラッグアンドドロップで Move を出す
 			bool                  allowRefChild = true;      // false なら参照ノードに Add Child を出さず、ドロップも受けない
 			bool                  markReference = false;     // 参照ノードの名前に印を付ける
+			bool                  acceptPrefabDrop = false;  // ノードの上で AQ_ASSET(Prefab)を受けて DropPrefab を出す(enableMove が false でも受ける)
 		};
 
 

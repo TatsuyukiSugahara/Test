@@ -1,6 +1,7 @@
 #pragma once
 #include "ECS/PrefabEditNodeOps.h"
 #include <memory>
+#include <string>
 #include <vector>
 
 
@@ -59,8 +60,12 @@ namespace editor
 		/** ツリーの操作要求をノード ID に直し、選択の更新かコマンドにする(要求のポインタはこのフレームのうちだけ有効) */
 		static void ApplyTreeOps(EditorContext& context, const std::vector<aq::ecs::PrefabNodeOp>& ops);
 
-		/** node が今のモデルのノードか(ドラッグの荷物のポインタを使う前に、モデルが変わって無効になっていないかを確かめる) */
-		static bool ContainsNode(const aq::level::LevelEditModel& model, const aq::ecs::PrefabEditNode* node);
+		/**
+		 * parent の子の末尾に、assetPath の Prefab の参照ノードを作るコマンドを積む
+		 * @param parentNodeId 親のノード ID(0 ならルート列。そのとき subLevelIndex の列)
+		 */
+		static void SubmitCreateReference(EditorContext& context, const aq::level::LevelEditModel& model,
+		                                  const uint32_t parentNodeId, const int subLevelIndex, const std::string& assetPath);
 
 		/** ルート列の末尾に新しい実体ノードを作るコマンドを積む */
 		static void SubmitCreateAtRoot(EditorContext& context, const int subLevelIndex);

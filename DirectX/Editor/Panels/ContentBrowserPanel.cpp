@@ -1,7 +1,13 @@
 #include "stdafx.h"
 #include "ContentBrowserPanel.h"
+#include "../Commands/NodeCommands.h"
+#include "../EditorContext.h"
+#include "../PrefabAuthoring.h"
 #include "Core/AppHost.h"
+#include "ECS/PrefabEditNodeOps.h"
+#include "Level/LevelEditModel.h"
 #include "Editor/AssetDragDrop.h"
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -44,12 +50,14 @@ namespace editor
 	}
 
 
-	void ContentBrowserPanel::Draw(const bool placeFloatingIfNew)
+	void ContentBrowserPanel::Draw(EditorContext& context, const bool placeFloatingIfNew)
 	{
 		if (!isOpen_) return;
 
-		// 初めて描くときに読む(その後は Refresh ボタンだけ)
-		if (!catalog_.IsLoaded()) {
+		// 初めて描くときと、前のフレームに読み直しを頼まれたときに読む
+		// (Prefab を作った直後は木をたどる途中なので、その場では読み直さずに次のフレームのここで読む)
+		if (!catalog_.IsLoaded() || isRefreshRequested_) {
+			isRefreshRequested_ = false;
 			Refresh();
 		}
 
@@ -63,16 +71,19 @@ namespace editor
 		}
 
 		if (ImGui::Begin(WINDOW_NAME, &isOpen_)) {
+			if (!errorText_.empty()) {
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", errorText_.c_str());
+			}
 			if (ImGui::BeginTable("ContentBrowserTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
 				ImGui::TableSetupColumn("Folders", ImGuiTableColumnFlags_WidthFixed, TREE_COLUMN_WIDTH);
 				ImGui::TableSetupColumn("Contents", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableNextRow();
 
 				ImGui::TableSetColumnIndex(0);
-				DrawFolderTree();
+				DrawFolderTree(context);
 
 				ImGui::TableSetColumnIndex(1);
-				DrawContents();
+				DrawContents(context);
 
 				ImGui::EndTable();
 			}
@@ -93,6 +104,7 @@ namespace editor
 	void ContentBrowserPanel::Refresh()
 	{
 		catalog_.Refresh();
+		errorText_.clear();
 
 		// 選んでいたフォルダが無くなっていたら根に戻す
 		if (selectedFolderPath_.empty() || catalog_.FindFolder(selectedFolderPath_) == nullptr) {
@@ -101,15 +113,15 @@ namespace editor
 	}
 
 
-	void ContentBrowserPanel::DrawFolderTree()
+	void ContentBrowserPanel::DrawFolderTree(EditorContext& context)
 	{
 		ImGui::BeginChild("FolderTree");
-		DrawFolderNode(catalog_.GetTree());
+		DrawFolderNode(context, catalog_.GetTree());
 		ImGui::EndChild();
 	}
 
 
-	void ContentBrowserPanel::DrawFolderNode(const AssetFolder& folder)
+	void ContentBrowserPanel::DrawFolderNode(EditorContext& context, const AssetFolder& folder)
 	{
 		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
 		if (folder.folders.empty()) {
@@ -130,16 +142,17 @@ namespace editor
 		if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
 			selectedFolderPath_ = folder.path;
 		}
+		AcceptNodeDrop(context, folder.path);
 		if (isOpenNode) {
 			for (const AssetFolder& child : folder.folders) {
-				DrawFolderNode(child);
+				DrawFolderNode(context, child);
 			}
 			ImGui::TreePop();
 		}
 	}
 
 
-	void ContentBrowserPanel::DrawContents()
+	void ContentBrowserPanel::DrawContents(EditorContext& context)
 	{
 		// ImGui のフォントは ASCII のみを読み込んでいるので英語で出す
 		ImGui::TextUnformatted(selectedFolderPath_.c_str());
@@ -157,6 +170,8 @@ namespace editor
 			DrawEntries(*folder);
 		}
 		ImGui::EndChild();
+		// 一覧の空いた所(子ウィンドウ全体)も、今のフォルダのドロップ先にする(項目はドロップ先ではないので重ならない)
+		AcceptNodeDrop(context, selectedFolderPath_);
 	}
 
 
@@ -227,7 +242,60 @@ namespace editor
 				pendingOpenLevel_ = entry.path;
 			}
 		}
-		// .prefab.json を Prefab エディタで開くのは E9b
+
+		// Prefab エディタで開く(モデルは変えないので、再生中でもよい)
+		if (entry.kind == aq::ecs::AssetKind::Prefab) {
+			if (aq::AppHost::Get().OpenPrefabEditor(entry.path)) {
+				errorText_.clear();
+			} else {
+				errorText_ = "Failed to open prefab: " + entry.path;
+			}
+		}
+	}
+
+
+	void ContentBrowserPanel::AcceptNodeDrop(EditorContext& context, const std::string& folderPath)
+	{
+		if (!ImGui::BeginDragDropTarget()) return;
+
+		// 受ける前に、荷物が今のモデルの実体ノードか確かめる(ポインタは比べるだけで、確かめるまで読まない)
+		const ImGuiPayload* peek = ImGui::GetDragDropPayload();
+		const aq::level::LevelEditModel* model = context.GetModel();
+		bool acceptable = peek != nullptr
+		               && peek->IsDataType(aq::ecs::PREFAB_NODE_DRAG_PAYLOAD)
+		               && peek->DataSize == static_cast<int>(sizeof(const aq::ecs::PrefabEditNode*))
+		               && model != nullptr
+		               && aq::AppHost::Get().GetRunMode() == aq::RunMode::Edit;
+		if (acceptable) {
+			const aq::ecs::PrefabEditNode* node = *static_cast<const aq::ecs::PrefabEditNode* const*>(peek->Data);
+			acceptable = EditorContext::ContainsNode(*model, node) && node->prefabRef.empty() && node->editId != 0;
+		}
+
+		if (acceptable) {
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(aq::ecs::PREFAB_NODE_DRAG_PAYLOAD)) {
+				const aq::ecs::PrefabEditNode* node = *static_cast<const aq::ecs::PrefabEditNode* const*>(payload->Data);
+				const uint32_t    editId   = node->editId;
+				const std::string nodeName = node->name;
+
+				std::string outPath;
+				std::string error;
+				if (PrefabAuthoring::CreatePrefabFromNode(*model, editId, folderPath, outPath, &error)) {
+					context.Submit(std::make_unique<ReplaceWithReferenceCommand>(
+						editId, PrefabAuthoring::MakeReferencePath(model->GetBaseDir(), outPath), nodeName));
+
+					// 作ったフォルダとファイルを選び、木は次のフレームの先頭で読み直す
+					// (このドロップ先は木をたどる途中にもあるので、ここで読み直すとたどっている参照が無効になる)
+					isRefreshRequested_ = true;
+					errorText_.clear();
+					selectedFolderPath_ = folderPath;
+					revealFolderPath_   = folderPath;
+					selectedFilePath_   = outPath;
+				} else {
+					errorText_ = "Failed to create prefab: " + error;
+				}
+			}
+		}
+		ImGui::EndDragDropTarget();
 	}
 
 

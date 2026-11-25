@@ -654,6 +654,20 @@ namespace aq
 	}
 
 
+	bool AppHost::OpenPrefabEditor(const std::string& path)
+	{
+#ifdef AQ_DEBUG_IMGUI
+		if (!prefabEditorPanel_) return false;
+		if (!prefabEditorPanel_->OpenFile(path)) return false;
+		showDebugUI_ = true;   // DebugUI を隠していても、開いたパネルが見えるようにする
+		return true;
+#else
+		(void)path;
+		return false;
+#endif
+	}
+
+
 	void AppHost::Finalize()
 	{
 		module_->OnFinalize();

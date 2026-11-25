@@ -362,6 +362,33 @@ namespace editor
 	}
 
 
+	bool EditorContext::ContainsNode(const aq::level::LevelEditModel& model, const aq::ecs::PrefabEditNode* node)
+	{
+		if (node == nullptr) return false;
+
+		// 深さ優先でアドレスを比べる(ポインタは比べるだけで、見つかるまで読まない)
+		std::vector<const aq::ecs::PrefabEditNode*> stack;
+		for (const std::unique_ptr<aq::ecs::PrefabEditNode>& root : model.GetEntities()) {
+			stack.push_back(root.get());
+		}
+		for (const aq::level::SubLevelEdit& subLevel : model.GetSubLevels()) {
+			if (!subLevel.isInline) continue;
+			for (const std::unique_ptr<aq::ecs::PrefabEditNode>& root : subLevel.entities) {
+				stack.push_back(root.get());
+			}
+		}
+		while (!stack.empty()) {
+			const aq::ecs::PrefabEditNode* current = stack.back();
+			stack.pop_back();
+			if (current == node) return true;
+			for (const std::unique_ptr<aq::ecs::PrefabEditNode>& child : current->children) {
+				stack.push_back(child.get());
+			}
+		}
+		return false;
+	}
+
+
 	aq::level::LevelEditModel* EditorContext::FindModel()
 	{
 		return PlayModeController::FindLevelEditModel();

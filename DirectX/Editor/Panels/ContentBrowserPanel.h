@@ -8,6 +8,7 @@ namespace editor
 {
 	struct AssetFolder;
 	struct AssetEntry;
+	class EditorContext;
 
 
 
@@ -16,6 +17,7 @@ namespace editor
 	 * コンテンツブラウザ(アセットのフォルダの木と一覧)。
 	 * 左にフォルダの木、右に今のフォルダのパス・絞り込み・サブフォルダとファイルの列を出す。
 	 * 種類のあるファイルはインスペクターのパスのフィールドへドラッグできる。
+	 * ヒエラルキーのノードをフォルダへ落とすと Prefab を作って参照ノードに置き換える(コマンドは EditorContext へ Submit する)。
 	 * Level を開く要求は持つだけで、LevelFileMenu へ渡すのは EditorLayer が行う(パネルは他のパネルを呼ばない)
 	 */
 	class ContentBrowserPanel
@@ -41,8 +43,14 @@ namespace editor
 		/** 取り出されていない Level を開く要求(パス。空なら無い) */
 		std::string pendingOpenLevel_;
 
+		/** ブラウザの上に赤で出す失敗の理由(空なら出さない)。次の成功・Refresh で消す */
+		std::string errorText_;
+
 		/** 名前の絞り込み(部分一致、大文字小文字を無視) */
 		ImGuiTextFilter filter_;
+
+		/** 次のフレームの先頭で木を読み直す */
+		bool isRefreshRequested_ = false;
 
 		/** ウィンドウを出すか */
 		bool isOpen_ = true;
@@ -53,7 +61,7 @@ namespace editor
 		 * ウィンドウを描く
 		 * @param placeFloatingIfNew 配置の保存が無いとき、画面下の中央に浮かせて出すか
 		 */
-		void Draw(const bool placeFloatingIfNew);
+		void Draw(EditorContext& context, const bool placeFloatingIfNew);
 
 		/** Level を開く要求を取り出す。要求が無ければ空文字列。取り出したら要求は空になる */
 		std::string TakeOpenLevelRequest();
@@ -69,13 +77,13 @@ namespace editor
 		void Refresh();
 
 		/** 左の列(フォルダの木) */
-		void DrawFolderTree();
+		void DrawFolderTree(EditorContext& context);
 
 		/** 木の 1 フォルダとその子を描く */
-		void DrawFolderNode(const AssetFolder& folder);
+		void DrawFolderNode(EditorContext& context, const AssetFolder& folder);
 
 		/** 右の列(パス・Refresh・絞り込み・一覧) */
-		void DrawContents();
+		void DrawContents(EditorContext& context);
 
 		/** 右の列の一覧(サブフォルダとファイル) */
 		void DrawEntries(const AssetFolder& folder);
@@ -83,7 +91,14 @@ namespace editor
 		/** ファイル 1 件(選択・ツールチップ・ドラッグ元・ダブルクリック・右クリック) */
 		void DrawFileEntry(const AssetEntry& entry);
 
-		/** ファイルのダブルクリック(.level.json は Edit のときだけ要求を作る。.prefab.json は E9b) */
+		/**
+		 * 直前の項目(フォルダの木の項目、一覧の子ウィンドウ)をヒエラルキーのノードのドロップ先にし、
+		 * 落とされたら folderPath に Prefab を作って元のノードを参照ノードに置き換える。
+		 * 受けられない荷物(Edit でない・参照ノード・editId が 0・今のモデルのノードでない)には AcceptDragDropPayload を呼ばない
+		 */
+		void AcceptNodeDrop(EditorContext& context, const std::string& folderPath);
+
+		/** ファイルのダブルクリック(.level.json は Edit のときだけ要求を作る。.prefab.json は Prefab エディタで開く) */
 		void OnFileDoubleClicked(const AssetEntry& entry);
 
 		/** 右クリックのメニュー(Copy Path) */

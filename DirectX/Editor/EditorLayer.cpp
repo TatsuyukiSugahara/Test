@@ -78,7 +78,7 @@ namespace editor
 		inspectorPanel_.Draw(editorContext_);
 		// 既にある配置(ヒエラルキーの保存あり)を使うときは、コンソールの保存が無ければ画面下の中央に浮かせて出す
 		consolePanel_.Draw(consoleLog_, !isLayoutBuilt);
-		contentBrowserPanel_.Draw(!isLayoutBuilt);
+		contentBrowserPanel_.Draw(editorContext_, !isLayoutBuilt);
 
 		// コンテンツブラウザで Level がダブルクリックされていたら、File メニューの流れで開く(未保存なら確認が出る)
 		const std::string openLevelPath = contentBrowserPanel_.TakeOpenLevelRequest();

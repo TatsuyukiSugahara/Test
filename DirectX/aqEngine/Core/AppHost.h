@@ -5,6 +5,7 @@
 #include "Rendering/RenderThread.h"
 #include "Rendering/Pipeline/PipelinePresets.h"
 #include <memory>
+#include <string>
 #ifdef AQ_DEBUG_IMGUI
 #include "Rendering/Debug/RenderingDebugPanel.h"
 #include "Rendering/Debug/LightingDebugPanel.h"
@@ -110,6 +111,12 @@ namespace aq
 		/** 全シーン共通の Level エディタパネル(無ければ nullptr)。Editor が再生中のロックと編集モデルの参照に使う */
 		inline aq::level::LevelEditorPanel* GetLevelEditorPanel() { return levelEditorPanel_.get(); }
 #endif
+
+		/**
+		 * Prefab エディタ(DebugUI)で path の Prefab を開く。成功したら DebugUI を表示にする。
+		 * Prefab エディタが無い(AQ_DEBUG_IMGUI なし)・開けなかったときは false
+		 */
+		bool OpenPrefabEditor(const std::string& path);
 
 		/** メイン描画のレンダラ */
 		inline rendering::Renderer& GetRenderer() { return renderer_; }

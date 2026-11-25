@@ -2,7 +2,9 @@
 #include "HierarchyPanel.h"
 #include "../EditorContext.h"
 #include "../Commands/NodeCommands.h"
+#include "../PrefabAuthoring.h"
 #include "Core/AppHost.h"
+#include "Editor/AssetDragDrop.h"
 #include "ECS/SceneHierarchySystem.h"
 #include "Level/LevelEditModel.h"
 #include <imgui/imgui.h>
@@ -49,6 +51,7 @@ namespace editor
 		options.enableMove    = true;
 		options.allowRefChild = false;     // 参照ノードの下には作らない・移さない(override の編集は別に作る)
 		options.markReference = true;
+		options.acceptPrefabDrop = true;   // コンテンツブラウザの Prefab を落とすと、そのノードの子の末尾に参照ノードを作る
 
 		std::vector<aq::ecs::PrefabNodeOp> ops;
 
@@ -99,13 +102,18 @@ namespace editor
 				if (payload->DataSize == static_cast<int>(sizeof(const aq::ecs::PrefabEditNode*))) {
 					// 荷物はドラッグを始めたフレームのポインタなので、今のモデルにあるノードかを確かめてから読む
 					const aq::ecs::PrefabEditNode* node = *static_cast<const aq::ecs::PrefabEditNode* const*>(payload->Data);
-					if (ContainsNode(model, node) && node->editId != 0) {
+					if (EditorContext::ContainsNode(model, node) && node->editId != 0) {
 						NodeParent parent;
 						parent.nodeId        = 0;
 						parent.subLevelIndex = subLevelIndex;
 						context.Submit(std::make_unique<MoveNodeCommand>(node->editId, parent, NODE_INDEX_APPEND));
 					}
 				}
+			}
+			// コンテンツブラウザの Prefab は、その列の末尾に参照ノードとして作る
+			std::string assetPath;
+			if (aq::editor::AcceptAssetDragPayload(aq::ecs::AssetKind::Prefab, assetPath)) {
+				SubmitCreateReference(context, model, 0, subLevelIndex, assetPath);
 			}
 			ImGui::EndDragDropTarget();
 		}
@@ -160,6 +168,14 @@ namespace editor
 				context.Submit(std::make_unique<DeleteNodeCommand>(targetId));
 				break;
 
+			case aq::ecs::PrefabNodeOpKind::DropPrefab:
+			{
+				const aq::level::LevelEditModel* model = context.GetModel();
+				if (model == nullptr) break;
+				SubmitCreateReference(context, *model, targetId, -1, op.assetPath);
+				break;
+			}
+
 			case aq::ecs::PrefabNodeOpKind::Move:
 			{
 				if (op.newParent == nullptr || op.newParent->editId == 0) break;
@@ -173,30 +189,16 @@ namespace editor
 	}
 
 
-	bool HierarchyPanel::ContainsNode(const aq::level::LevelEditModel& model, const aq::ecs::PrefabEditNode* node)
+	void HierarchyPanel::SubmitCreateReference(EditorContext& context, const aq::level::LevelEditModel& model,
+	                                           const uint32_t parentNodeId, const int subLevelIndex, const std::string& assetPath)
 	{
-		if (node == nullptr) return false;
-
-		// 深さ優先でアドレスを比べる(ポインタは比べるだけで、見つかるまで読まない)
-		std::vector<const aq::ecs::PrefabEditNode*> stack;
-		for (const std::unique_ptr<aq::ecs::PrefabEditNode>& root : model.GetEntities()) {
-			stack.push_back(root.get());
-		}
-		for (const aq::level::SubLevelEdit& subLevel : model.GetSubLevels()) {
-			if (!subLevel.isInline) continue;
-			for (const std::unique_ptr<aq::ecs::PrefabEditNode>& root : subLevel.entities) {
-				stack.push_back(root.get());
-			}
-		}
-		while (!stack.empty()) {
-			const aq::ecs::PrefabEditNode* current = stack.back();
-			stack.pop_back();
-			if (current == node) return true;
-			for (const std::unique_ptr<aq::ecs::PrefabEditNode>& child : current->children) {
-				stack.push_back(child.get());
-			}
-		}
-		return false;
+		if (assetPath.empty()) return;
+		NodeParent parent;
+		parent.nodeId        = parentNodeId;
+		parent.subLevelIndex = subLevelIndex;
+		context.Submit(std::make_unique<CreateReferenceNodeCommand>(
+			parent, NODE_INDEX_APPEND, PrefabAuthoring::ReferenceNameFromPath(assetPath),
+			PrefabAuthoring::MakeReferencePath(model.GetBaseDir(), assetPath)));
 	}
 
 

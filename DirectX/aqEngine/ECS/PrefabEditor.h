@@ -53,6 +53,12 @@ namespace aq
 			void        DebugRenderMenu() override;
 			void        DebugRender()     override;
 
+			/**
+			 * path の Prefab を読んでウィンドウを表示にする(コンテンツブラウザから開く用。ImGui には触れない)。
+			 * pathBuf_ に入らない長さ(NUL を除いて 259 バイト超)・読めない・解析できないときは assert せず false(ログに理由)
+			 */
+			bool OpenFile(const std::string& path);
+
 		private:
 			void DrawTree(PrefabEditNode* node, int depth);
 			void DrawInspector();
@@ -68,6 +74,7 @@ namespace aq
 			void NewPrefab();
 			void Save();
 			void Load();
+			bool LoadFromPathBuf(std::string* error);   // pathBuf_ のファイルを読む(失敗で false。assert しない)
 			void SpawnPreview();   // 現在の編集ツリーをランタイム Prefab 化してシーンへ遅延生成
 
 			std::unique_ptr<PrefabEditNode> root_;
@@ -75,6 +82,7 @@ namespace aq
 			PrefabEditNode*                 pendingDelete_ = nullptr;   // 描画後に除去するノード
 			bool                            show_         = false;
 			char                            pathBuf_[260] = "Assets/Prefabs/New.prefab.json";
+			std::string                     baseDir_;                   // プレビューで相対の参照を解決する基準(Load / OpenFile で読んだファイルのディレクトリ。新規は空。Save では変えない)
 			std::string                     leadingComments_;           // 開いたファイルの先頭のコメント（保存で先頭に書き戻す）
 		};
 	}

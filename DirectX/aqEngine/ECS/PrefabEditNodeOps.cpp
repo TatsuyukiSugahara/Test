@@ -2,6 +2,7 @@
 #ifdef AQ_DEBUG_IMGUI
 #include "PrefabEditNodeOps.h"
 #include "ComponentRegistry.h"
+#include "Editor/AssetDragDrop.h"
 #include <imgui/imgui.h>
 
 
@@ -415,7 +416,10 @@ namespace aq
 					ImGui::TextUnformatted(node->name.c_str());
 					ImGui::EndDragDropSource();
 				}
-				if (ImGui::BeginDragDropTarget()) {
+			}
+			// ドロップ先(ImGui は 1 項目に 1 回の BeginDragDropTarget なので、ノードと Prefab の荷物を同じ中で扱う)
+			if ((options.enableMove || options.acceptPrefabDrop) && ImGui::BeginDragDropTarget()) {
+				if (options.enableMove) {
 					const ImGuiPayload* peek = ImGui::GetDragDropPayload();
 					bool acceptable = peek && peek->IsDataType(PREFAB_NODE_DRAG_PAYLOAD) && peek->DataSize == sizeof(node);
 					if (acceptable) {
@@ -429,8 +433,16 @@ namespace aq
 							ops.push_back(PrefabNodeOp{ PrefabNodeOpKind::Move, dragged, mutableNode });
 						}
 					}
-					ImGui::EndDragDropTarget();
 				}
+				if (options.acceptPrefabDrop && (!isRef || options.allowRefChild)) {
+					std::string assetPath;
+					if (editor::AcceptAssetDragPayload(AssetKind::Prefab, assetPath)) {
+						PrefabNodeOp op{ PrefabNodeOpKind::DropPrefab, mutableNode, nullptr };
+						op.assetPath = std::move(assetPath);
+						ops.push_back(std::move(op));
+					}
+				}
+				ImGui::EndDragDropTarget();
 			}
 
 			// 右クリック: 子追加 / 削除（どちらも要求を返すだけ）
@@ -482,7 +494,8 @@ namespace aq
 					break;
 
 				case PrefabNodeOpKind::Move:
-					break;   // その場適用の対象外（enableMove を使うのは Editor だけ）
+				case PrefabNodeOpKind::DropPrefab:
+					break;   // その場適用の対象外（enableMove / acceptPrefabDrop を使うのは Editor だけ）
 				}
 			}
 		}

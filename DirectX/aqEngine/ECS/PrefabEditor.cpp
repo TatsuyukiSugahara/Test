@@ -6,6 +6,7 @@
 #include "Prefab.h"
 #include "EntityContext.h"
 #include <imgui/imgui.h>
+#include <cstring>
 
 namespace aq
 {
@@ -23,6 +24,7 @@ namespace aq
 			root_->name = "Root";
 			selected_   = root_.get();
 			leadingComments_.clear();
+			baseDir_.clear();
 		}
 
 
@@ -148,18 +150,57 @@ namespace aq
 		}
 
 
-		void PrefabEditorPanel::Load()
+		bool PrefabEditorPanel::LoadFromPathBuf(std::string* error)
 		{
 			const util::JsonValue json = util::JsonParser::ParseFile(pathBuf_);
 			if (json.IsNull())
 			{
-				EngineAssertMsg(false, "PrefabEditor::Load: failed to parse prefab JSON file");
-				return;
+				if (error) { *error = std::string("failed to parse prefab JSON file: ") + pathBuf_; }
+				return false;
 			}
 			root_     = JsonToNode(json);
 			selected_ = root_.get();
 			// 先頭のコメントを控え、保存で書き戻す（ルートの値の中のコメントは保持しない）
 			leadingComments_ = util::JsonParser::ReadLeadingComments(pathBuf_);
+			// プレビューの参照解決の基準は、読んだファイルのディレクトリ
+			const std::string loaded = pathBuf_;
+			const size_t      slash  = loaded.find_last_of("/\\");
+			baseDir_ = (slash == std::string::npos) ? std::string() : loaded.substr(0, slash);
+			return true;
+		}
+
+
+		void PrefabEditorPanel::Load()
+		{
+			if (!LoadFromPathBuf(nullptr))
+			{
+				EngineAssertMsg(false, "PrefabEditor::Load: failed to parse prefab JSON file");
+			}
+		}
+
+
+		bool PrefabEditorPanel::OpenFile(const std::string& path)
+		{
+			if (path.empty() || path.size() >= sizeof(pathBuf_))
+			{
+				aq::StartupLog("[editor] prefab editor: path is empty or too long");
+				return false;
+			}
+
+			// 失敗したときに今の入力欄を壊さないよう、パスは読めてから確定する
+			char previous[sizeof(pathBuf_)];
+			std::memcpy(previous, pathBuf_, sizeof(pathBuf_));
+			std::memcpy(pathBuf_, path.c_str(), path.size() + 1);
+
+			std::string error;
+			if (!LoadFromPathBuf(&error))
+			{
+				std::memcpy(pathBuf_, previous, sizeof(pathBuf_));
+				aq::StartupLog(("[editor] prefab editor: " + error).c_str());
+				return false;
+			}
+			show_ = true;
+			return true;
 		}
 
 
@@ -168,7 +209,7 @@ namespace aq
 			if (!root_) return;
 			// 編集ツリー → JSON → ランタイム Prefab（FromJson）→ 遅延生成。Reflect 経路を共有する。
 			const util::JsonValue json = NodeToJson(*root_);
-			Prefab prefab = PrefabSerializer::FromJson(json);
+			Prefab prefab = PrefabSerializer::FromJson(json, baseDir_.c_str());
 			if (prefab.IsValid())
 				prefab.Instantiate();
 		}

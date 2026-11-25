@@ -22,6 +22,8 @@
 // Editor の ConsoleLog.cpp を直接コンパイルして使い、画面も Engine も作らない(全構成)。
 // E9a で T15 (a) アセットの一覧(Editor の AssetCatalog の ClassifyAsset と、TestData/T15_Assets の木の読み込み)を足した。
 // Editor の AssetCatalog.cpp を直接コンパイルして使い、画面も Engine も作らない(全構成)。
+// E9b で T15 (b) Prefab の作成(ファイル名の決定、参照パスの計算、ノードからの Prefab 作成、ReplaceWithReferenceCommand / CreateReferenceNodeCommand)を足した。
+// Editor の PrefabAuthoring.cpp と Commands/NodeCommands.cpp を直接コンパイルして使う(Debug 構成のみ。Prefab の読み直しの間だけ Engine を Create する)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -34,6 +36,8 @@
 #include "ConsoleLog.h"                    // T14(Editor のソースを全構成で直接コンパイルする)
 #include "AssetCatalog.h"                  // T15(Editor のソースを全構成で直接コンパイルする)
 #ifdef AQ_DEBUG_IMGUI
+#include "PrefabAuthoring.h"               // T15 (b)(Editor のソースを Debug だけ直接コンパイルする)
+#include "ECS/PrefabSerializer.h"
 #include "Level/LevelEditModel.h"
 #include "ECS/PrefabEditor.h"
 #include "ECS/PrefabEditNodeOps.h"
@@ -4330,16 +4334,444 @@ namespace
 	}
 
 
+#ifdef AQ_DEBUG_IMGUI
+	/** T15 (b) の試験用 Level と、その中のノードの名前 */
+	static constexpr const char* T15_PREFAB_LEVEL = "T15_Prefab.level.json";
+
+
+	/** T15 (b): ファイル名の決定(SanitizeFileName / FindFreePrefabPath / ReferenceNameFromPath) */
+	void RunPrefabFileNameTest(TestResults& results, const std::filesystem::path& tempRoot)
+	{
+		namespace fs = std::filesystem;
+
+		const std::string name = "T15 (b) ファイル名";
+
+		struct SanitizeCase
+		{
+			const char* label;
+			std::string input;
+			std::string expected;
+		};
+		const SanitizeCase sanitizeCases[] = {
+			{ "そのまま",         "Enemy",                  "Enemy" },
+			{ "禁止文字",         "a\\b/c:d*e?f\"g<h>i|j",  "a_b_c_d_e_f_g_h_i_j" },
+			{ "制御文字",         std::string("a\tb\x01" "c"), "a_b_c" },
+			{ "前後の空白",       "  Name \t",              "Name" },
+			{ "途中の空白は残す", "My Node",                "My Node" },
+			{ "空",               "",                       "Node" },
+			{ "空白だけ",         " \t ",                   "Node" },
+			{ "日本語",           "敵 キャラ",              "敵 キャラ" },
+		};
+		for (const SanitizeCase& c : sanitizeCases) {
+			const std::string actual = editor::PrefabAuthoring::SanitizeFileName(c.input);
+			Report(results, name + " SanitizeFileName " + c.label, actual == c.expected, "期待 [" + c.expected + "] / 実際 [" + actual + "]");
+		}
+
+		// FindFreePrefabPath: 既存のファイルがあれば _1 _2 と進み、上書きしない
+		std::error_code ec;
+		const fs::path  folder = tempRoot / "free";
+		fs::create_directories(folder, ec);
+		const std::string folderText = folder.generic_string();
+		auto touch = [&](const std::string& fileName) {
+			std::ofstream ofs((folder / fileName).string(), std::ios::binary);
+			ofs << "{}";
+		};
+
+		const std::string empty    = editor::PrefabAuthoring::FindFreePrefabPath(folderText, "Foo");
+		Report(results, name + " FindFreePrefabPath 空き", empty == folderText + "/Foo.prefab.json", "実際 [" + empty + "]");
+		touch("Foo.prefab.json");
+		const std::string first    = editor::PrefabAuthoring::FindFreePrefabPath(folderText, "Foo");
+		Report(results, name + " FindFreePrefabPath _1", first == folderText + "/Foo_1.prefab.json", "実際 [" + first + "]");
+		touch("Foo_1.prefab.json");
+		const std::string second   = editor::PrefabAuthoring::FindFreePrefabPath(folderText + "/", "Foo");
+		Report(results, name + " FindFreePrefabPath _2(末尾の / あり)", second == folderText + "/Foo_2.prefab.json", "実際 [" + second + "]");
+		const std::string sanitized = editor::PrefabAuthoring::FindFreePrefabPath(folderText, "a/b");
+		Report(results, name + " FindFreePrefabPath 禁止文字", sanitized == folderText + "/a_b.prefab.json", "実際 [" + sanitized + "]");
+
+		// ReferenceNameFromPath
+		struct NameCase
+		{
+			const char* path;
+			const char* expected;
+		};
+		const NameCase nameCases[] = {
+			{ "Assets/Prefabs/Enemy.prefab.json", "Enemy" },
+			{ "Enemy.prefab.json",                "Enemy" },
+			{ "Assets\\Prefabs\\Enemy.Prefab.JSON", "Enemy" },
+			{ "Assets/Prefabs/Plain.json",        "Plain.json" },
+			{ "Assets/Prefabs/Two.prefab.json.prefab.json", "Two.prefab.json" },
+		};
+		for (const NameCase& c : nameCases) {
+			const std::string actual = editor::PrefabAuthoring::ReferenceNameFromPath(c.path);
+			Report(results, std::string(name) + " ReferenceNameFromPath " + c.path, actual == c.expected, std::string("実際 [") + actual + "]");
+		}
+	}
+
+
+	/** T15 (b): パスの計算(MakeReferencePath / RebaseReference) */
+	void RunPrefabReferencePathTest(TestResults& results)
+	{
+		namespace fs = std::filesystem;
+
+		const std::string name = "T15 (b) 参照パス";
+
+		std::error_code ec;
+		const std::string currentDir = fs::current_path(ec).generic_string();
+
+		struct MakeCase
+		{
+			const char* label;
+			std::string baseDir;
+			std::string assetPath;
+			std::string expected;
+		};
+		const MakeCase makeCases[] = {
+			{ "baseDir 空",                   "",              "Assets/Prefabs/X.prefab.json",        "Assets/Prefabs/X.prefab.json" },
+			{ "同じフォルダ",                 "Assets/Levels", "Assets/Levels/X.prefab.json",         "X.prefab.json" },
+			{ "子のフォルダ",                 "Assets/Levels", "Assets/Levels/Sub/X.prefab.json",     "Sub/X.prefab.json" },
+			{ "兄弟フォルダ",                 "Assets/Levels", "Assets/Prefabs/X.prefab.json",        "../Prefabs/X.prefab.json" },
+			{ "baseDir 末尾の /",             "Assets/Levels/", "Assets/Prefabs/X.prefab.json",       "../Prefabs/X.prefab.json" },
+			{ "'\\' 区切り",                  "Assets\\Levels", "Assets\\Prefabs\\X.prefab.json",     "../Prefabs/X.prefab.json" },
+			{ "両方絶対",                     "/a/b/Levels",   "/a/c/X.prefab.json",                  "../../c/X.prefab.json" },
+			{ "baseDir 絶対・asset 相対",     currentDir + "/Assets/Levels", "Assets/Prefabs/X.prefab.json", "../Prefabs/X.prefab.json" },
+			{ "baseDir 相対・asset 絶対",     "Assets/Levels", currentDir + "/Assets/Prefabs/X.prefab.json", "../Prefabs/X.prefab.json" },
+		};
+		for (const MakeCase& c : makeCases) {
+			const std::string actual = editor::PrefabAuthoring::MakeReferencePath(c.baseDir, c.assetPath);
+			Report(results, name + " MakeReferencePath " + c.label, actual == c.expected, "期待 [" + c.expected + "] / 実際 [" + actual + "]");
+		}
+
+		struct RebaseCase
+		{
+			const char* label;
+			std::string ref;
+			std::string fromDir;
+			std::string toDir;
+			std::string expected;
+		};
+		const RebaseCase rebaseCases[] = {
+			{ "同じ階層のまま",               "T6_Base.prefab.json",        "Tools/TestData", "Tools/TestData",     "T6_Base.prefab.json" },
+			{ "1 つ深いフォルダへ",           "T6_Base.prefab.json",        "Tools/TestData", "Tools/TestData/sub", "../T6_Base.prefab.json" },
+			{ "兄弟のフォルダへ",             "../Prefabs/X.prefab.json",   "Assets/Levels",  "Assets/Prefabs/Sub", "../X.prefab.json" },
+			{ "子のフォルダを指す",           "Sub/X.prefab.json",          "Assets/Levels",  "Assets/Other",       "../Levels/Sub/X.prefab.json" },
+			{ "絶対はそのまま",               "/a/b/X.prefab.json",         "Assets/Levels",  "Assets/Other",       "/a/b/X.prefab.json" },
+			{ "ドライブ付きの絶対はそのまま", "C:/a/X.prefab.json",        "Assets/Levels",  "Assets/Other",       "C:/a/X.prefab.json" },
+			{ "fromDir 空(作業ディレクトリ基準)", "Assets/Prefabs/X.prefab.json", "",         "Assets/Levels",      "../Prefabs/X.prefab.json" },
+			{ "toDir 空(作業ディレクトリ基準へ)", "X.prefab.json",         "Assets/Levels",  "",                   "Assets/Levels/X.prefab.json" },
+		};
+		for (const RebaseCase& c : rebaseCases) {
+			const std::string actual = editor::PrefabAuthoring::RebaseReference(c.ref, c.fromDir, c.toDir);
+			Report(results, name + " RebaseReference " + c.label, actual == c.expected, "期待 [" + c.expected + "] / 実際 [" + actual + "]");
+		}
+
+		Report(results, name + " IsAbsoluteReference",
+			editor::PrefabAuthoring::IsAbsoluteReference("/a") && editor::PrefabAuthoring::IsAbsoluteReference("C:\\a")
+			&& !editor::PrefabAuthoring::IsAbsoluteReference("a/b") && !editor::PrefabAuthoring::IsAbsoluteReference("../a")
+			&& !editor::PrefabAuthoring::IsAbsoluteReference(""), std::string());
+	}
+
+
+	/** PrefabNodeData を根から全子孫まで比べる(名前・子の数と順序・components)。違えば理由を返す(同じなら空) */
+	std::string ComparePrefabNodes(const aq::ecs::PrefabNodeData& a, const aq::ecs::PrefabNodeData& b, const std::string& path)
+	{
+		if (a.name != b.name) return path + " の名前 [" + a.name + "] / [" + b.name + "]";
+		if (!JsonEqualsExact(a.components, b.components)) {
+			return path + " の components: " + StringifyOneLine(a.components) + " / " + StringifyOneLine(b.components);
+		}
+		if (a.children.size() != b.children.size()) {
+			return path + " の子の数 " + std::to_string(a.children.size()) + " / " + std::to_string(b.children.size());
+		}
+		for (size_t i = 0; i < a.children.size(); ++i) {
+			const std::string reason = ComparePrefabNodes(a.children[i], b.children[i], path + "/" + a.children[i].name);
+			if (!reason.empty()) return reason;
+		}
+		return std::string();
+	}
+
+
+	/** PrefabNodeData の子から名前で探す(無ければ nullptr) */
+	const aq::ecs::PrefabNodeData* FindPrefabChild(const aq::ecs::PrefabNodeData& node, const std::string& childName)
+	{
+		for (const aq::ecs::PrefabNodeData& child : node.children) {
+			if (child.name == childName) return &child;
+		}
+		return nullptr;
+	}
+
+
+	/** 一時フォルダの下のファイルの数(再帰) */
+	size_t CountFiles(const std::filesystem::path& root)
+	{
+		std::error_code ec;
+		size_t          count = 0;
+		for (std::filesystem::recursive_directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+			if (it->is_regular_file()) ++count;
+		}
+		return count;
+	}
+
+
+	/** T15 (b): CreatePrefabFromNode。別のディレクトリへ書き、参照の書き換えと読み直した結果を確かめる */
+	void RunPrefabCreateTest(TestResults& results, const std::filesystem::path& tempRoot)
+	{
+		namespace fs = std::filesystem;
+
+		const std::string name = "T15 (b) CreatePrefabFromNode";
+
+		aq::level::LevelEditModel model;
+		if (!model.LoadFile(std::string(TEST_DATA_DIR) + "/" + T15_PREFAB_LEVEL)) {
+			Report(results, name, false, "試験用 Level を読み込めない");
+			return;
+		}
+		const std::string baseDir = model.GetBaseDir();
+
+		std::error_code ec;
+		const fs::path  subDir = tempRoot / "create" / "sub";
+		fs::create_directories(subDir, ec);
+		const std::string subText = subDir.generic_string();
+
+		// 参照ノードそのもの・無い ID・ID 0 は false でファイルを作らない
+		{
+			const size_t filesBefore = CountFiles(tempRoot / "create");
+			bool         allRejected = true;
+			std::string  detail;
+			const uint32_t ids[] = { IdOf(model, "RefPlain"), IdOf(model, "RefExtra"), 0xFFFFFFu, 0u };
+			for (const uint32_t id : ids) {
+				std::string path  = "untouched";
+				std::string error;
+				if (editor::PrefabAuthoring::CreatePrefabFromNode(model, id, subText, path, &error)) { allRejected = false; detail += "true を返した ID " + std::to_string(id) + " "; }
+				else if (error.empty() || path != "untouched") { allRejected = false; detail += "error が空 / outPath を触った ID " + std::to_string(id) + " "; }
+			}
+			if (CountFiles(tempRoot / "create") != filesBefore) { allRejected = false; detail += "ファイルが作られた "; }
+			Report(results, name + " 参照ノード・無い ID は false", allRejected, detail);
+		}
+
+		// Group から作る
+		const uint32_t groupId = IdOf(model, "Group");
+		const JsonValue modelBefore = model.ToJson();
+		std::string outPath;
+		std::string error;
+		const bool  created = editor::PrefabAuthoring::CreatePrefabFromNode(model, groupId, subText, outPath, &error);
+		Report(results, name + " 作成", created && outPath == subText + "/Group.prefab.json" && fs::exists(fs::path(outPath), ec),
+			created ? "outPath [" + outPath + "]" : error);
+		if (!created) return;
+		Report(results, name + " モデルを変えない", JsonEqualsExact(modelBefore, model.ToJson()), "ToJson が変わった");
+
+		// 同じノードからもう一度作ると、上書きせず _1
+		{
+			std::string secondPath;
+			const bool  second = editor::PrefabAuthoring::CreatePrefabFromNode(model, groupId, subText, secondPath, &error);
+			Report(results, name + " 2 回目は上書きしない", second && secondPath == subText + "/Group_1.prefab.json", second ? secondPath : error);
+		}
+
+		// 書いた JSON の参照が sub/ から見て TestData を指す(overrides.children の中も)
+		const JsonValue written = aq::util::JsonParser::ParseFile(outPath.c_str());
+		const fs::path  expectedTarget = (fs::path(baseDir) / "T6_Base.prefab.json").lexically_normal();
+		auto pointsToBase = [&](const JsonValue& ref) {
+			if (!ref.IsString() || editor::PrefabAuthoring::IsAbsoluteReference(ref.AsString())) return false;
+			return (subDir / ref.AsString()).lexically_normal() == expectedTarget;
+		};
+		const JsonValue& childrenJson = written["children"];
+		const bool       shapeOk      = written.IsObject() && childrenJson.IsArray() && childrenJson.Size() == 3;
+		Report(results, name + " 書いた JSON の形", shapeOk, "children が 3 つではない: " + StringifyOneLine(written));
+		if (shapeOk) {
+			Report(results, name + " RefPlain の prefab が書き換わる", pointsToBase(childrenJson[0]["prefab"]),
+				"prefab [" + childrenJson[0]["prefab"].AsString() + "]");
+			Report(results, name + " RefExtra の prefab が書き換わる", pointsToBase(childrenJson[1]["prefab"]),
+				"prefab [" + childrenJson[1]["prefab"].AsString() + "]");
+			const JsonValue& extra = childrenJson[1]["overrides"]["children"][0];
+			Report(results, name + " overrides.children の prefab が書き換わる", extra["name"].AsString() == "Extra" && pointsToBase(extra["prefab"]),
+				"prefab [" + extra["prefab"].AsString() + "]");
+			Report(results, name + " 元の相対のままではない", childrenJson[0]["prefab"].AsString() != "T6_Base.prefab.json", std::string());
+		}
+
+		// 読み直した PrefabData が、元の Level の基準で解決した PrefabData と同じ
+		// (読めないファイルの ParseFile はアセットパスの候補を探すときに Engine を引くので、その間だけ Engine を作る)
+		const bool engineCreatedHere = !aq::Engine::IsCreated();
+		if (engineCreatedHere) aq::Engine::Create();
+		{
+			const aq::ecs::Prefab loaded   = aq::ecs::PrefabSerializer::Load(outPath.c_str());
+			const aq::ecs::Prefab expected = aq::ecs::PrefabSerializer::FromJson(aq::ecs::PrefabNodeToJson(*model.FindNode(groupId)), baseDir.c_str());
+			if (loaded.Data() == nullptr || expected.Data() == nullptr) {
+				Report(results, name + " 読み直した PrefabData", false, "Prefab を作れない");
+			} else {
+				const std::string reason = ComparePrefabNodes(loaded.Data()->root, expected.Data()->root, loaded.Data()->root.name);
+				Report(results, name + " 読み直した PrefabData が元の解決結果と同じ", reason.empty(), reason);
+
+				// 参照先が読めずに欠けるのを見逃さない: (1)(2) の子に T6_Base 由来の Spawner と ChildA / ChildB がある
+				const aq::ecs::PrefabNodeData& root = loaded.Data()->root;
+				for (const char* refName : { "RefPlain", "RefExtra" }) {
+					const aq::ecs::PrefabNodeData* node = FindPrefabChild(root, refName);
+					const bool ok = node != nullptr && node->components.Contains("Spawner")
+						&& FindPrefabChild(*node, "ChildA") != nullptr && FindPrefabChild(*node, "ChildB") != nullptr;
+					Report(results, name + " " + refName + " に T6_Base の Spawner と子がある", ok, ok ? std::string() : "欠けている");
+				}
+				const aq::ecs::PrefabNodeData* refExtra = FindPrefabChild(root, "RefExtra");
+				const aq::ecs::PrefabNodeData* extra    = refExtra ? FindPrefabChild(*refExtra, "Extra") : nullptr;
+				Report(results, name + " overrides.children で足した Extra に T6_Base の Spawner がある",
+					extra != nullptr && extra->components.Contains("Spawner"), "Extra が無い / Spawner が無い");
+			}
+		}
+		if (engineCreatedHere) aq::Engine::Release();
+	}
+
+
+	/** T15 (b): ReplaceWithReferenceCommand と CreateReferenceNodeCommand の実行・取り消し・やり直し */
+	void RunPrefabCommandTest(TestResults& results)
+	{
+		const std::string name = "T15 (b) コマンド";
+		const std::string path = std::string(TEST_DATA_DIR) + "/" + T15_PREFAB_LEVEL;
+		const char*       ref  = "T6_Base.prefab.json";
+
+		// ReplaceWithReferenceCommand
+		{
+			aq::level::LevelEditModel model;
+			if (!model.LoadFile(path)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+			const uint32_t groupId      = IdOf(model, "Group");
+			const uint32_t solidId      = IdOf(model, "Solid");
+			const uint32_t solidChildId = IdOf(model, "SolidChild");
+			const JsonValue original    = model.ToJson();
+
+			editor::ReplaceWithReferenceCommand command(groupId, ref, "GroupRef");
+			if (std::string(command.GetName()) != "Make Prefab") Report(results, name + " Replace GetName", false, command.GetName());
+
+			const bool executed = command.Execute(model);
+			const uint32_t refId = command.GetReferenceId();
+			const JsonValue executedJson = model.ToJson();
+			const aq::ecs::PrefabEditNode* refNode = model.FindNode(refId);
+			const bool replaced = executed && refId != 0 && refNode != nullptr && refNode->name == "GroupRef" && refNode->prefabRef == ref
+				&& refNode->components.empty() && refNode->children.empty()
+				&& model.FindNode(groupId) == nullptr && model.FindNode(solidId) == nullptr && model.FindNode(solidChildId) == nullptr
+				&& executedJson["entities"].Size() == 1 && executedJson["entities"][0]["prefab"].AsString() == ref;
+			Report(results, name + " Replace 実行", replaced, "参照ノードに置き換わっていない: " + StringifyOneLine(executedJson));
+
+			const bool undone = command.Undo(model);
+			const bool restored = undone && JsonEqualsExact(original, model.ToJson()) && model.FindNode(refId) == nullptr
+				&& model.FindNode(groupId) != nullptr && model.FindNode(groupId)->name == "Group"
+				&& model.FindNode(solidId) != nullptr && model.FindNode(solidChildId) != nullptr && model.FindNode(solidChildId)->name == "SolidChild";
+			Report(results, name + " Replace 取り消し(JSON と子孫の ID が戻る)", restored, undone ? "ToJson / ID が元と違う" : "false を返した");
+
+			const bool redone = command.Execute(model);
+			const bool again  = redone && command.GetReferenceId() == refId && JsonEqualsExact(executedJson, model.ToJson())
+				&& model.FindNode(refId) != nullptr && model.FindNode(groupId) == nullptr;
+			Report(results, name + " Replace やり直し(参照ノードの ID が同じ)", again, redone ? "ID / JSON が実行後と違う" : "false を返した");
+
+			// もう一度取り消して、元に戻る
+			const bool undoneAgain = command.Undo(model) && JsonEqualsExact(original, model.ToJson());
+			Report(results, name + " Replace 2 回目の取り消し", undoneAgain, "元に戻らない");
+		}
+
+		// 参照ノードは置き換えない・無い ID・空の参照先は false でモデルを変えない
+		{
+			aq::level::LevelEditModel model;
+			if (!model.LoadFile(path)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			const JsonValue original = model.ToJson();
+
+			bool        rejected = true;
+			std::string detail;
+			const struct { uint32_t id; const char* ref; const char* label; } cases[] = {
+				{ IdOf(model, "RefPlain"), ref, "RefPlain " },
+				{ IdOf(model, "RefExtra"), ref, "RefExtra " },
+				{ 0xFFFFFFu,               ref, "無い ID " },
+				{ IdOf(model, "Solid"),    "",  "空の参照先 " },
+			};
+			for (const auto& c : cases) {
+				editor::ReplaceWithReferenceCommand command(c.id, c.ref, "X");
+				if (command.Execute(model)) { rejected = false; detail += std::string("true を返した: ") + c.label; }
+				if (!JsonEqualsExact(original, model.ToJson())) { rejected = false; detail += std::string("モデルが変わった: ") + c.label; }
+			}
+			Report(results, name + " Replace 参照ノード・無い ID は false でモデルを変えない", rejected, detail);
+		}
+
+		// CreateReferenceNodeCommand
+		{
+			aq::level::LevelEditModel model;
+			if (!model.LoadFile(path)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+			const uint32_t groupId   = IdOf(model, "Group");
+			const JsonValue original = model.ToJson();
+
+			editor::CreateReferenceNodeCommand command(aq::level::NodeParent{ groupId, -1 }, 1, "Placed", ref);
+			if (std::string(command.GetName()) != "Place Prefab") Report(results, name + " Place GetName", false, command.GetName());
+
+			const bool executed = command.Execute(model);
+			const uint32_t createdId = command.GetCreatedId();
+			const JsonValue executedJson = model.ToJson();
+			const aq::ecs::PrefabEditNode* group   = model.FindNode(groupId);
+			const aq::ecs::PrefabEditNode* created = model.FindNode(createdId);
+			const bool placed = executed && createdId != 0 && created != nullptr && created->prefabRef == ref && created->name == "Placed"
+				&& created->components.empty() && group != nullptr && group->children.size() == 4 && group->children[1].get() == created;
+			Report(results, name + " Place 実行", placed, "参照ノードが 1 番目に置かれていない: " + StringifyOneLine(executedJson));
+
+			const bool undone = command.Undo(model);
+			Report(results, name + " Place 取り消し", undone && JsonEqualsExact(original, model.ToJson()) && model.FindNode(createdId) == nullptr,
+				undone ? "ToJson が元と違う" : "false を返した");
+
+			const bool redone = command.Execute(model);
+			Report(results, name + " Place やり直し(ID が同じ)", redone && command.GetCreatedId() == createdId && JsonEqualsExact(executedJson, model.ToJson()),
+				redone ? "ID / JSON が実行後と違う" : "false を返した");
+
+			// 参照ノードの下・無い親・空の参照先へは作れない
+			const JsonValue current = model.ToJson();
+			bool        rejected = true;
+			std::string detail;
+			const struct { aq::level::NodeParent parent; const char* ref; const char* label; } cases[] = {
+				{ aq::level::NodeParent{ IdOf(model, "RefPlain"), -1 }, ref, "参照ノードの下 " },
+				{ aq::level::NodeParent{ createdId, -1 },               ref, "置いた参照ノードの下 " },
+				{ aq::level::NodeParent{ 0xFFFFFFu, -1 },               ref, "無い親 " },
+				{ aq::level::NodeParent{ groupId, -1 },                 "",  "空の参照先 " },
+			};
+			for (const auto& c : cases) {
+				editor::CreateReferenceNodeCommand rejectedCommand(c.parent, editor::NODE_INDEX_APPEND, "X", c.ref);
+				if (rejectedCommand.Execute(model)) { rejected = false; detail += std::string("true を返した: ") + c.label; }
+				if (!JsonEqualsExact(current, model.ToJson())) { rejected = false; detail += std::string("モデルが変わった: ") + c.label; }
+			}
+			Report(results, name + " Place 参照ノードの下・無い親は false", rejected, detail);
+		}
+	}
+
+
+	/** T15 (b): ファイル名・パスの計算・Prefab の作成・コマンド。一時フォルダは最後に消す */
+	void RunPrefabAuthoringTests(TestResults& results)
+	{
+		namespace fs = std::filesystem;
+
+		std::error_code ec;
+		fs::path        tempRoot = fs::temp_directory_path(ec) / "ReflectionTest_T15_Prefab";
+		fs::remove_all(tempRoot, ec);
+		fs::create_directories(tempRoot, ec);
+
+		// 字句だけで作る相対パス(../ の列)は、途中にシンボリックリンクがあると実際のファイルシステムでずれる
+		// (macOS の /var は /private/var へのリンク)。読み直す試験が正しく解決できるよう、リンクを解いた絶対パスにする
+		const fs::path canonicalRoot = fs::canonical(tempRoot, ec);
+		if (!ec) tempRoot = canonicalRoot;
+
+		RunPrefabFileNameTest(results, tempRoot);
+		RunPrefabReferencePathTest(results);
+		RunPrefabCreateTest(results, tempRoot);
+		RunPrefabCommandTest(results);
+
+		fs::remove_all(tempRoot, ec);
+	}
+#endif
+
+
 	/**
 	 * T15 アセットの一覧とドラッグ(E9)
 	 *
 	 * (a) は Editor の AssetCatalog.cpp を直接コンパイルして使う(ImGui に依らないので全構成)。
-	 * (b)(E9b)はまだ足していない
+	 * (b)(E9b。Debug のみ)は Editor の PrefabAuthoring.cpp と NodeCommands.cpp を直接コンパイルして使う
 	 */
 	void RunAssetTests(TestResults& results)
 	{
 		RunAssetClassifyTest(results);
 		RunAssetCatalogTest(results);
+#ifdef AQ_DEBUG_IMGUI
+		RunPrefabAuthoringTests(results);
+#else
+		std::printf("        T15 (b): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+#endif
 	}
 
 

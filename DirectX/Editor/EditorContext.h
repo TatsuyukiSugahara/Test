@@ -10,6 +10,11 @@
 
 namespace aq
 {
+	namespace ecs
+	{
+		struct PrefabEditNode;
+	}
+
 	namespace level
 	{
 		class LevelEditModel;
@@ -157,6 +162,9 @@ namespace editor
 
 		/** path のディレクトリ(編集モデルの基準ディレクトリと同じ求め方) */
 		static std::string DirectoryOf(const std::string& path);
+
+		/** node が model のノード(トップレベルとインラインの subLevel の entities の木)か。ドラッグの荷物のポインタを使う前に、モデルが変わって無効になっていないかを確かめる(比べるだけで読まない) */
+		static bool ContainsNode(const aq::level::LevelEditModel& model, const aq::ecs::PrefabEditNode* node);
 
 
 	private:

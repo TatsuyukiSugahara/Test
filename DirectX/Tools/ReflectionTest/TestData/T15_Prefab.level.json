@@ -1,0 +1,26 @@
+// T15 (b) の試験用データ(エディタ全体設計.md 7.10 節「テスト方針」)。ノードから Prefab を作る試験で使う。
+//   Group     : 実体ノード(Transform あり)。この子を Prefab にして、別のディレクトリへ書く
+//   RefPlain  : T6_Base.prefab.json の参照ノード(override なし)
+//   RefExtra  : T6_Base.prefab.json の参照ノードで、overrides.children に T6_Base.prefab.json を参照する子 Extra を足したもの
+//   Solid     : 実体の子(孫 SolidChild 付き)
+{
+  "name": "T15_Prefab",
+  "entities": [
+    { "name": "Group",
+      "components": { "Transform": { "position": [1, 2, 3] } },
+      "children": [
+        { "name": "RefPlain", "prefab": "T6_Base.prefab.json" },
+        { "name": "RefExtra", "prefab": "T6_Base.prefab.json",
+          "overrides": {
+            "children": [
+              { "name": "Extra", "prefab": "T6_Base.prefab.json" }
+            ]
+          } },
+        { "name": "Solid",
+          "components": { "Transform": { "position": [0, 1, 0] } },
+          "children": [
+            { "name": "SolidChild", "components": { "Transform": { "scale": [2, 2, 2] } } }
+          ] }
+      ] }
+  ]
+}

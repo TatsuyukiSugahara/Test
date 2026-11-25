@@ -18,6 +18,7 @@
     <ClCompile Include="CommandHistory.cpp" />
     <ClCompile Include="ConsoleLog.cpp" />
     <ClCompile Include="AssetCatalog.cpp" />
+    <ClCompile Include="PrefabAuthoring.cpp" />
     <ClCompile Include="Commands\NodeCommands.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
@@ -52,6 +53,7 @@
     <ClInclude Include="CommandHistory.h" />
     <ClInclude Include="ConsoleLog.h" />
     <ClInclude Include="AssetCatalog.h" />
+    <ClInclude Include="PrefabAuthoring.h" />
     <ClInclude Include="Commands\IEditorCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>

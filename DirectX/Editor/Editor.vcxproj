@@ -166,6 +166,12 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClCompile Include="Panels\ConsolePanel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="AssetCatalog.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Panels\ContentBrowserPanel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EditorLayer.h" />
@@ -183,6 +189,8 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClInclude Include="Panels\LevelFileMenu.h" />
     <ClInclude Include="Panels\EditMenu.h" />
     <ClInclude Include="Panels\ConsolePanel.h" />
+    <ClInclude Include="AssetCatalog.h" />
+    <ClInclude Include="Panels\ContentBrowserPanel.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Game\GameLogic.vcxproj">

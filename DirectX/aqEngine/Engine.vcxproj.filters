@@ -958,6 +958,9 @@
     <ClInclude Include="Core\AppModuleRegistry.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="Editor\AssetDragDrop.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
     <ClInclude Include="Editor\IEditorLayer.h">
       <Filter>Editor</Filter>
     </ClInclude>

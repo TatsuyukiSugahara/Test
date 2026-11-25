@@ -14,6 +14,7 @@ E7a で、`LevelEditModel` のノードの構造操作(挿入・取り外し・�
 (同 7.9 節「10.」)。
 E7b で、`LevelEditModel` のコンポーネントの値・追加・削除と参照ノードの解決(基準の付け替え)を検査する T11 を足した
 (同 7.9 節「8.」「10.」)。
+E9a で、コンテンツブラウザのアセットの一覧(`AssetCatalog`)を検査する T15 を足した(同 7.10 節)。
 
 E6a でエンジンを変える前に現状の出力(T3)を控え、E6b の変更の前後で既存アセットの保存結果が
 変わらないことを機械的に比べるために使う。
@@ -69,6 +70,7 @@ build/macos-ninja-metal/bin/Debug/ReflectionTest --selftest --assets Game/Assets
 | T9 実行モード(E5a) | T8 と同じく画面無しで `Engine::Create()` + `ThreadPool::Initialize` + `ecs::EntityContext::Initialize()` を使い(T8 の後始末の後に作り直す。System は `FinalizeRegistration` の後に足せないため)、試験用の System 4 種(`GetRunModes` を上書きしない・`Play`・`All`・`Edit \| Play` の宣言)を登録して、`EntityContext::Update(RunMode::Edit / Play / Pause)` を 1 回ずつ呼ぶ。各モードで: (1) System ごとの `Update` の回数が宣言どおり(`Edit`: All と Edit\|Play の 1 回ずつ、`Play`: 4 種とも 1 回、`Pause`: All だけ)。(2) `RequestCreateEntity` で積んだ生成が、`Update` の前は反映されず、`Update` の後(= Flush の後)に 1 つ増える(Flush はモードに関係なく行う)。Release でも動く |
 | T10 構造操作(E7a) | 画面も `Engine` も作らず、コード内の試験用 Level(トップレベル 3 つ(実体 2・参照ノード 1)、子と孫、インラインの subLevel 1 つ、ファイル参照の subLevel 1 つ)を `LevelEditModel` へ読み込んで試す。(a) `InsertNode`(トップ・子・subLevel のルート・範囲外の index)で ID が振られ `ToJson` の位置に出る。採番済みの ID は変えず、参照ノードの下・ファイル参照の subLevel・存在しない親への挿入は 0 を返してモデルを変えない。(b) `DetachNode` で外したサブツリーは子孫の `editId` を保ち、`FindParent` で得た元の置き場所へ戻すと `ToJson` が元と一致し、同じ ID で `FindNode` できる。(c) `MoveNode` でトップ ↔ 子 ↔ subLevel のルートへ子孫ごと移る(同じ列の中で後ろへ動かすときは取り外した後の添字)。(d) 自分・子孫・参照ノード・ファイル参照の subLevel への移動は false でモデルが変わらない。(e) `SetNodeName`。(e') `HasRelativeReferences` は、相対の `prefab` / subLevel の `path`(トップレベル・子孫・インライン subLevel・入れ子を含む)があるときだけ true で、絶対パス(`/` 始まり・`X:`)だけなら false。(f) 操作の後に `ToJson` → `FromJson` → `ToJson` が一致する。Debug 構成のみ(`LevelEditModel` が `AQ_DEBUG_IMGUI` のときだけあるため) |
 | T11 値の操作(E7b) | `TestData/T6_Overrides.level.json`(参照ノード `RefFull` / `RefPlain`、基準ディレクトリは TestData)と `T6_Base.prefab.json` を `LevelEditModel` へ読み込んで試す。(a) 実体ノードの `SetComponentField`(float・Vector3・パス)で、そのキーだけが変わり、ほかのノードは変わらない。(b) 参照ノードで override の無いコンポーネント(`RefPlain` の Spawner)のキーを変えると、`overrides.components.<型>` にそのキーだけが増える。(c) override のあるコンポーネント(`RefFull` の Transform)では、そのキーだけが足され、既存の override は一字一句変わらない。(c') 基準の付け替え: Prefab で 3 のキー(`maxCount`)を既定値と同じ `-1` にするとそのキーが `-1` で書かれ、`3 → 5 → 3` は何も増えない。override の疎な JSON にあるキー(`interval`)を持つコンポーネントで別のキーを変えても既存のキーは変わらない。(d) 変えて元に戻すと(実体ノードも参照ノードも)Level 全体の `ToJson` が元と一致する。(e) `ResolveReferenceComponents` が Prefab 側の値・override の値・追加・除去・編集中の値を反映する。参照ノードでない・直接の参照先が無いと false(error に理由)、コンポーネントを持たない Prefab は true で空。(f) `AddComponent` / `RemoveComponent`(既に持つ・未登録・Transform・持たない型・参照ノードは false で、外す前の値が `outJson` に入る)。(g) 値を変えた Level(参照ノードは TestData の Prefab を絶対パスで指す)を一時ファイルへ `SaveFile` し、変えたキーだけが書かれていることを確かめてから、`LevelSerializer::Load` → `LevelRegistry::Register` → `LevelManager::Load` → Flush で、変えた値(Transform の位置・Spawner の `maxCount`)が実体のコンポーネント(`serialize`)に出る。(g) だけは T8 と同じ `Engine::Create()` + `ecs::EntityContext::Initialize()` の環境で行い、一時ファイルは終わりに消す。(h) 失敗する `SetComponentField`(未登録の型・持たない型・参照先から除かれた型・参照先に無い型・無い ID・参照先が無い参照ノード)は false で、モデルを変えない。Debug 構成のみ |
+| T15 アセットの一覧(E9a) | Editor の `AssetCatalog.cpp` を直接コンパイルして試す。(a) `ClassifyAsset` の 15 例(大文字の `.DDS`・`.Prefab.JSON`、`.json` だけ、拡張子なし、フォルダ名に拡張子を含むパスなど)、`GetKindTag`、`TestData/T15_Assets/` を根にした `AssetCatalog` の木の形・フォルダとファイルの並び(大文字小文字を無視)・種類・`.` で始まるものが出ないこと・`FindFolder`・読み直し・根が無い / ファイルのとき。全構成 |
 
 T7 の表記の期待値(設計書 7.8 節「1. 数値」の 3 分岐: 整数で絶対値が 2^53 未満 → 小数点なし、
 float に狭めても同じ値 → float の最短表現、それ以外 → double の最短表現):
@@ -92,6 +94,7 @@ float に狭めても同じ値 → float の最短表現、それ以外 → doub
 | `T6_Overrides.level.json` | 実体ノード(子付き)、`overrides` の `name` / `components` / `addedComponents` / `removedComponents` / `children` / `removedChildren` をすべて持つ参照ノード `RefFull`、overrides の無い参照ノード、2 段のインライン subLevel(E4b 用) |
 | `T6_Nested.prefab.json` | 入れ子の参照ノード(子の override を持つ)を持つ Prefab(Prefab エディタの経路) |
 | `T7_Numbers.level.json` | 7 桁以上の小数を持つ float のフィールドと、float に狭めると変わる override の値 |
+| `T15_Assets/` | T15 の `AssetCatalog` の根にする小さな木(フォルダ 2 段、各種類のファイル、`.` で始まるファイルとフォルダ)。中身は空か `{}`。T6 の往復の対象からは外す |
 
 場所は `CMakeLists.txt` がソースの位置(`REFLECTION_TEST_DATA_DIR`)を埋め込むので、カレントディレクトリに依らない。
 

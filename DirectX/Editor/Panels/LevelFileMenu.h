@@ -45,6 +45,7 @@ namespace editor
 		/** 未保存の確認のモーダル */
 		ConfirmAction confirmAction_    = ConfirmAction::None;
 		bool          openConfirmPopup_ = false;  // 次の DrawPopups で開く
+		std::string   confirmOpenPath_;           // 確認の後に開くパス(コンテンツブラウザから開くとき。空ならパスのモーダルを出す)
 
 
 	public:
@@ -56,6 +57,9 @@ namespace editor
 
 		/** モーダルと Ctrl+S。メインメニューバーの外(EndMainMenuBar の後)で毎フレーム呼ぶ */
 		void DrawPopups(EditorContext& context);
+
+		/** パスを決めて開く(コンテンツブラウザから。未保存なら確認してから、パスのモーダルを出さずに開く) */
+		void BeginOpenPath(EditorContext& context, const std::string& path);
 
 
 	private:

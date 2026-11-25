@@ -6,6 +6,7 @@
 #include "PlayModeController.h"
 #include "PlayStopSelfTest.h"
 #include "Panels/ConsolePanel.h"
+#include "Panels/ContentBrowserPanel.h"
 #include "Panels/EditMenu.h"
 #include "Panels/HierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
@@ -43,6 +44,7 @@ namespace editor
 		LevelFileMenu  levelFileMenu_;
 		EditMenu       editMenu_;
 		ConsolePanel   consolePanel_;
+		ContentBrowserPanel contentBrowserPanel_;
 
 		/** 初期配置の要否を確かめたか(最初のフレームで 1 回だけ確かめる) */
 		bool isLayoutChecked_ = false;

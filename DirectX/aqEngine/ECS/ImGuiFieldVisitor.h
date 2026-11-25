@@ -3,6 +3,7 @@
 #include "Math/Vector.h"
 #include "Math/Matrix.h"
 #include "FieldAttr.h"
+#include "Editor/AssetDragDrop.h"
 #include <imgui/imgui.h>
 #include <algorithm>
 #include <cfloat>
@@ -211,6 +212,17 @@ namespace aq
 				const bool committed = ImGui::InputText(
 					label, buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue);
 				CaptureItem(item);
+
+				// アセットのパスのフィールドは、コンテンツブラウザからのドラッグのドロップ先にする(設計 7.10 節 3)。
+				// readOnly のときは付けない。受けたパスが今の値と違うときだけ、Enter で確定したのと同じ扱いにする。
+				std::string dropped;
+				bool        hasDropped = false;
+				if (attr.asset != AssetKind::None && !attr.readOnly && ImGui::BeginDragDropTarget())
+				{
+					hasDropped = aq::editor::AcceptAssetDragPayload(attr.asset, dropped) && dropped != value;
+					ImGui::EndDragDropTarget();
+				}
+
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled))
 				{
 					// 既存の「Press Enter to apply」に、属性のツールチップを改行して続ける。
@@ -220,6 +232,12 @@ namespace aq
 						ImGui::SetTooltip("Press Enter to apply");
 				}
 				ImGui::EndDisabled();
+
+				if (hasDropped)
+				{
+					value = dropped;
+					return true;
+				}
 
 				if (!committed || value == buf) return false;
 				value = buf;

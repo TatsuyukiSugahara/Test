@@ -112,10 +112,25 @@ namespace editor
 	{
 		if (context.IsDirty()) {
 			confirmAction_    = ConfirmAction::Open;
+			confirmOpenPath_.clear();
 			openConfirmPopup_ = true;
 			return;
 		}
 		OpenPathDialog(context, PathDialog::Open);
+	}
+
+
+	void LevelFileMenu::BeginOpenPath(EditorContext& context, const std::string& path)
+	{
+		if (path.empty()) return;
+
+		if (context.IsDirty()) {
+			confirmAction_    = ConfirmAction::Open;
+			confirmOpenPath_  = path;
+			openConfirmPopup_ = true;
+			return;
+		}
+		context.RequestOpen(path);
 	}
 
 
@@ -191,15 +206,22 @@ namespace editor
 				if (confirmAction_ == ConfirmAction::New) {
 					context.RequestNew();
 				} else if (confirmAction_ == ConfirmAction::Open) {
-					OpenPathDialog(context, PathDialog::Open);
+					// 控えたパスがあればパスのモーダルを出さずに開く(コンテンツブラウザから)
+					if (confirmOpenPath_.empty()) {
+						OpenPathDialog(context, PathDialog::Open);
+					} else {
+						context.RequestOpen(confirmOpenPath_);
+					}
 				}
 			}
 			confirmAction_ = ConfirmAction::None;
+			confirmOpenPath_.clear();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel")) {
 			confirmAction_ = ConfirmAction::None;
+			confirmOpenPath_.clear();
 			ImGui::CloseCurrentPopup();
 		}
 

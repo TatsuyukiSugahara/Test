@@ -4,6 +4,7 @@
 #include "Level/LevelEditModel.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>   // DockBuilder(初期配置の関数だけで使う)
+#include <string>
 
 
 namespace editor
@@ -77,6 +78,13 @@ namespace editor
 		inspectorPanel_.Draw(editorContext_);
 		// 既にある配置(ヒエラルキーの保存あり)を使うときは、コンソールの保存が無ければ画面下の中央に浮かせて出す
 		consolePanel_.Draw(consoleLog_, !isLayoutBuilt);
+		contentBrowserPanel_.Draw(!isLayoutBuilt);
+
+		// コンテンツブラウザで Level がダブルクリックされていたら、File メニューの流れで開く(未保存なら確認が出る)
+		const std::string openLevelPath = contentBrowserPanel_.TakeOpenLevelRequest();
+		if (!openLevelPath.empty()) {
+			levelFileMenu_.BeginOpenPath(editorContext_, openLevelPath);
+		}
 
 		// 配置の保存(editor_layout.ini)が無い初回だけ、ゲームビューをドックスペースいっぱいに置く
 		// (初期配置で分けたときは、分けた中央に置いてあるので指定しない)
@@ -208,6 +216,11 @@ namespace editor
 			consolePanel_.SetOpen(isConsoleOpen);
 		}
 
+		bool isContentBrowserOpen = contentBrowserPanel_.IsOpen();
+		if (ImGui::MenuItem(ContentBrowserPanel::WINDOW_NAME, nullptr, &isContentBrowserOpen)) {
+			contentBrowserPanel_.SetOpen(isContentBrowserOpen);
+		}
+
 		ImGui::EndMenu();
 	}
 
@@ -296,6 +309,7 @@ namespace editor
 		ImGui::DockBuilderDockWindow(GAME_VIEW_WINDOW_NAME, gameId);
 		ImGui::DockBuilderDockWindow(InspectorPanel::WINDOW_NAME, rightId);
 		ImGui::DockBuilderDockWindow(ConsolePanel::WINDOW_NAME, consoleId);
+		ImGui::DockBuilderDockWindow(ContentBrowserPanel::WINDOW_NAME, consoleId);
 		ImGui::DockBuilderFinish(dockspaceId);
 		return true;
 	}

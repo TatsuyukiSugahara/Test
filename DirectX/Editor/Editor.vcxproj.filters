@@ -17,6 +17,7 @@
     <ClCompile Include="EditorContext.cpp" />
     <ClCompile Include="CommandHistory.cpp" />
     <ClCompile Include="ConsoleLog.cpp" />
+    <ClCompile Include="AssetCatalog.cpp" />
     <ClCompile Include="Commands\NodeCommands.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
@@ -38,6 +39,9 @@
     <ClCompile Include="Panels\ConsolePanel.cpp">
       <Filter>Panels</Filter>
     </ClCompile>
+    <ClCompile Include="Panels\ContentBrowserPanel.cpp">
+      <Filter>Panels</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EditorLayer.h" />
@@ -47,6 +51,7 @@
     <ClInclude Include="EditorContext.h" />
     <ClInclude Include="CommandHistory.h" />
     <ClInclude Include="ConsoleLog.h" />
+    <ClInclude Include="AssetCatalog.h" />
     <ClInclude Include="Commands\IEditorCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
@@ -69,6 +74,9 @@
       <Filter>Panels</Filter>
     </ClInclude>
     <ClInclude Include="Panels\ConsolePanel.h">
+      <Filter>Panels</Filter>
+    </ClInclude>
+    <ClInclude Include="Panels\ContentBrowserPanel.h">
       <Filter>Panels</Filter>
     </ClInclude>
   </ItemGroup>

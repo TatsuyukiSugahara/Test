@@ -20,6 +20,8 @@
 // CommandHistory.cpp を直接コンパイルして使い、画面も Engine も作らない(Debug 構成のみ)。
 // E8b で T14 ログの通知(aq::debug::SetLogListener と、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を足した。
 // Editor の ConsoleLog.cpp を直接コンパイルして使い、画面も Engine も作らない(全構成)。
+// E9a で T15 (a) アセットの一覧(Editor の AssetCatalog の ClassifyAsset と、TestData/T15_Assets の木の読み込み)を足した。
+// Editor の AssetCatalog.cpp を直接コンパイルして使い、画面も Engine も作らない(全構成)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -30,6 +32,7 @@
 #include "Level/LevelSerializer.h"
 #include "Util/SimpleJson.h"
 #include "ConsoleLog.h"                    // T14(Editor のソースを全構成で直接コンパイルする)
+#include "AssetCatalog.h"                  // T15(Editor のソースを全構成で直接コンパイルする)
 #ifdef AQ_DEBUG_IMGUI
 #include "Level/LevelEditModel.h"
 #include "ECS/PrefabEditor.h"
@@ -94,6 +97,9 @@ namespace
 	static constexpr const char* TEST_DATA_DIR = "Tools/ReflectionTest/TestData";
 #endif
 
+	/** T15 の試験データのフォルダ名(TEST_DATA_DIR の下) */
+	static constexpr const char* T15_ASSETS_DIR = "T15_Assets";
+
 
 	/**
 	 * 実行時オプション
@@ -135,7 +141,8 @@ namespace
 			"      Debug 構成では T10 構造操作(LevelEditModel のノードの挿入・取り外し・移動・名前・相対参照の判定)も行う。\n"
 			"      Debug 構成では T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え、保存した Level の生成)も行う。\n"
 			"      Debug 構成では T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory)も行う。\n"
-			"      T14 ログの通知(SetLogListener、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を試す。\n");
+			"      T14 ログの通知(SetLogListener、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を試す。\n"
+			"      T15 (a) アセットの一覧(Editor の AssetCatalog の ClassifyAsset と、TestData/T15_Assets の木の読み込み)を試す。\n");
 	}
 
 
@@ -645,7 +652,13 @@ namespace
 
 		std::vector<std::string> relativePaths;
 		std::error_code          ec;
-		for (const fs::directory_entry& entry : fs::recursive_directory_iterator(root, ec)) {
+		for (fs::recursive_directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+			const fs::directory_entry& entry = *it;
+			// T15 の試験データ(中身が空に近い木)は T6 の往復の対象にしない
+			if (entry.is_directory() && entry.path().filename() == T15_ASSETS_DIR) {
+				it.disable_recursion_pending();
+				continue;
+			}
 			if (!entry.is_regular_file()) continue;
 			const std::string fileName = entry.path().filename().string();
 			const bool isPrefab = fileName.size() > 12 && fileName.ends_with(".prefab.json");
@@ -4145,6 +4158,191 @@ namespace
 	}
 
 
+	/** T15 (a) ClassifyAsset: 拡張子の大文字小文字、二重拡張子、フォルダを含むパス、種類にならないもの */
+	void RunAssetClassifyTest(TestResults& results)
+	{
+		using aq::ecs::AssetKind;
+
+		struct Case
+		{
+			const char* path;
+			AssetKind   expected;
+		};
+		const Case cases[] = {
+			{ "Assets/Character/Character.fbx",    AssetKind::Model },
+			{ "Assets/Old/Stage.tkm",              AssetKind::Model },
+			{ "Assets/Tex/Wall.DDS",               AssetKind::Texture },
+			{ "Assets/Tex/Wall.png",               AssetKind::Texture },
+			{ "Assets/Tex/Photo.jpeg",             AssetKind::Texture },
+			{ "Assets/Tex/Photo.jpg",              AssetKind::Texture },
+			{ "Assets/Tex/Normal.tga",             AssetKind::Texture },
+			{ "Assets/Prefabs/Enemy.Prefab.JSON",  AssetKind::Prefab },
+			{ "Assets/Levels/Stage.level.json",    AssetKind::Level },
+			{ "Assets/Fx/Fire.particle",           AssetKind::Particle },
+			{ "Assets/Sound/Hit.wav",              AssetKind::Audio },
+			{ "Assets/Sound/Bgm.OGG",              AssetKind::Audio },
+			{ "Assets/Data/config.json",           AssetKind::None },
+			{ "Assets/Data/README",                AssetKind::None },
+			{ "Assets/dir.png/readme",             AssetKind::None },
+		};
+
+		for (const Case& c : cases) {
+			const AssetKind actual = editor::AssetCatalog::ClassifyAsset(c.path);
+			Report(results, std::string("T15 (a) ClassifyAsset ") + c.path, actual == c.expected,
+				actual == c.expected ? std::string() : "種類 " + std::to_string(static_cast<int>(actual)));
+		}
+
+		struct TagCase
+		{
+			AssetKind   kind;
+			const char* tag;
+		};
+		const TagCase tagCases[] = {
+			{ AssetKind::Model, "[M]" }, { AssetKind::Texture, "[T]" }, { AssetKind::Prefab, "[P]" },
+			{ AssetKind::Level, "[L]" }, { AssetKind::Particle, "[FX]" }, { AssetKind::Audio, "[A]" },
+			{ AssetKind::None, "" },
+		};
+		bool tagsPassed = true;
+		for (const TagCase& c : tagCases) {
+			if (std::string(editor::AssetCatalog::GetKindTag(c.kind)) != c.tag) tagsPassed = false;
+		}
+		Report(results, "T15 (a) GetKindTag", tagsPassed, std::string());
+	}
+
+
+	/** フォルダの子の名前を ',' でつないだ文字列(試験の比較用) */
+	std::string JoinFolderNames(const editor::AssetFolder& folder)
+	{
+		std::string text;
+		for (const editor::AssetFolder& child : folder.folders) {
+			if (!text.empty()) text += ",";
+			text += child.name;
+		}
+		return text;
+	}
+
+
+	/** フォルダのファイルを「名前:種類のタグ」で ',' でつないだ文字列(試験の比較用。タグが空なら名前だけ) */
+	std::string JoinFileNames(const editor::AssetFolder& folder)
+	{
+		std::string text;
+		for (const editor::AssetEntry& file : folder.files) {
+			if (!text.empty()) text += ",";
+			text += file.name;
+			const std::string tag = editor::AssetCatalog::GetKindTag(file.kind);
+			if (!tag.empty()) text += ":" + tag;
+		}
+		return text;
+	}
+
+
+	/** 実際の文字列が期待と同じか確かめ、違えば detail に残す */
+	bool ExpectText(std::string& detail, const char* label, const std::string& actual, const std::string& expected)
+	{
+		if (actual == expected) return true;
+		detail += std::string(label) + " 期待 [" + expected + "] 実際 [" + actual + "] ";
+		return false;
+	}
+
+
+	/** T15 (a) AssetCatalog: TestData/T15_Assets の木を読み、木の形・並び・種類・隠しファイル・FindFolder を確かめる */
+	void RunAssetCatalogTest(TestResults& results)
+	{
+		const std::string name = "T15 (a) AssetCatalog";
+		const std::string root = std::string(TEST_DATA_DIR) + "/" + T15_ASSETS_DIR;
+
+		editor::AssetCatalog catalog(root);
+		const bool wasLoadedBefore = catalog.IsLoaded();
+		const bool refreshed       = catalog.Refresh();
+
+		std::string detail;
+		bool        passed = true;
+
+		if (wasLoadedBefore || !refreshed || !catalog.IsLoaded()) {
+			detail += "Refresh / IsLoaded ";
+			passed = false;
+		}
+		passed &= ExpectText(detail, "根のパス", catalog.GetRoot(), root);
+
+		const editor::AssetFolder& tree = catalog.GetTree();
+		passed &= ExpectText(detail, "根の path", tree.path, root);
+
+		// 根: フォルダは misc, Models, Textures(大文字小文字を無視した順)。.hidden_dir は出ない
+		passed &= ExpectText(detail, "根のフォルダ", JoinFolderNames(tree), "misc,Models,Textures");
+		// 根のファイル: .hidden は出ない。None の Note.txt は一覧に出る
+		passed &= ExpectText(detail, "根のファイル", JoinFileNames(tree),
+			"Enemy.prefab.json:[P],Fire.particle:[FX],Hit.wav:[A],Note.txt,Stage.level.json:[L]");
+
+		const editor::AssetFolder* models   = catalog.FindFolder(root + "/Models");
+		const editor::AssetFolder* sub      = catalog.FindFolder(root + "/Models/Sub");
+		const editor::AssetFolder* misc     = catalog.FindFolder(root + "/misc");
+		const editor::AssetFolder* textures = catalog.FindFolder(root + "/Textures");
+		if (models == nullptr || sub == nullptr || misc == nullptr || textures == nullptr) {
+			detail += "FindFolder が見つからない ";
+			passed = false;
+		} else {
+			passed &= ExpectText(detail, "Models のフォルダ", JoinFolderNames(*models), "Sub");
+			passed &= ExpectText(detail, "Models のファイル", JoinFileNames(*models), "Hero.fbx:[M]");
+			passed &= ExpectText(detail, "Sub のファイル", JoinFileNames(*sub), "Old.tkm:[M]");
+			passed &= ExpectText(detail, "misc のファイル", JoinFileNames(*misc), "Beep.ogg:[A]");
+			// A.png と b.png の並び(大文字小文字を無視)と、大文字の拡張子 .DDS
+			passed &= ExpectText(detail, "Textures のファイル", JoinFileNames(*textures), "A.png:[T],b.png:[T],c.DDS:[T]");
+			passed &= ExpectText(detail, "Sub の path", sub->path, root + "/Models/Sub");
+			passed &= ExpectText(detail, "Sub の name", sub->name, "Sub");
+			if (!textures->files.empty()) {
+				passed &= ExpectText(detail, "ファイルの path", textures->files[0].path, root + "/Textures/A.png");
+			}
+		}
+
+		// FindFolder: 根自身は見つかり、無いパス・ファイル・前方一致だけのパス・空は nullptr
+		if (catalog.FindFolder(root) != &tree) {
+			detail += "FindFolder(根) ";
+			passed = false;
+		}
+		if (catalog.FindFolder(root + "/Mod") != nullptr || catalog.FindFolder(root + "/Nothing") != nullptr
+			|| catalog.FindFolder(root + "/Textures/A.png") != nullptr || catalog.FindFolder(root + "/.hidden_dir") != nullptr
+			|| catalog.FindFolder(std::string()) != nullptr) {
+			detail += "FindFolder(無いパス) ";
+			passed = false;
+		}
+
+		// 読み直しても同じ(Refresh は木を作り直す)
+		if (!catalog.Refresh() || JoinFolderNames(catalog.GetTree()) != "misc,Models,Textures") {
+			detail += "再 Refresh ";
+			passed = false;
+		}
+
+		// 根が無いときは空の木にして false
+		editor::AssetCatalog missing(root + "/NoSuchFolder");
+		if (missing.Refresh() || !missing.IsLoaded() || !missing.GetTree().folders.empty() || !missing.GetTree().files.empty()) {
+			detail += "根が無いとき ";
+			passed = false;
+		}
+
+		// 根がファイルのときも false
+		editor::AssetCatalog notFolder(root + "/Note.txt");
+		if (notFolder.Refresh()) {
+			detail += "根がファイルのとき ";
+			passed = false;
+		}
+
+		Report(results, name, passed, detail);
+	}
+
+
+	/**
+	 * T15 アセットの一覧とドラッグ(E9)
+	 *
+	 * (a) は Editor の AssetCatalog.cpp を直接コンパイルして使う(ImGui に依らないので全構成)。
+	 * (b)(E9b)はまだ足していない
+	 */
+	void RunAssetTests(TestResults& results)
+	{
+		RunAssetClassifyTest(results);
+		RunAssetCatalogTest(results);
+	}
+
+
 	int RunSelfTest(const Options& options)
 	{
 		// コンポーネントの登録(Application::Initialize と同じ順)
@@ -4194,6 +4392,7 @@ namespace
 		RunSpawnTests(results);
 		RunRunModeTests(results);
 		RunLogTests(results);
+		RunAssetTests(results);
 
 		std::printf("[selftest] PASS %u / FAIL %u / XFAIL %u / XPASS %u\n",
 			results.passCount, results.failCount, results.xfailCount, results.xpassCount);

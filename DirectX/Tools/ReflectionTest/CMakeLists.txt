@@ -7,6 +7,7 @@
 #  T6 編集ノードの往復(Debug のみ)と T7 数値の書き出し(E4a)も行う。
 #  T13 Undo / Redo(E8a。Debug のみ)は Editor のコマンドと履歴の .cpp を直接コンパイルして試す。
 #  T14 ログの通知(E8b。全構成)は Editor の ConsoleLog.cpp を直接コンパイルして試す。
+#  T15 (a) アセットの一覧(E9a。全構成)は Editor の AssetCatalog.cpp を直接コンパイルして試す。
 #  設計書 エディタ全体設計.md 6.4 節「5. 検査ツール」(E6a / E6b)、7.8 節「9. 検査ツールの追加」(E4a)。
 #
 #  CMake 専用。vcxproj は用意していない(使い方は README.md)。
@@ -23,6 +24,10 @@ target_sources(ReflectionTest PRIVATE
 # T14 ログの通知は Editor の ConsoleLog をそのままコンパイルして使う。ImGui にも LevelEditModel にも依らないので全構成で足す。
 target_sources(ReflectionTest PRIVATE
 	"${CMAKE_SOURCE_DIR}/Editor/ConsoleLog.cpp")
+
+# T15 (a) アセットの一覧は Editor の AssetCatalog をそのままコンパイルして使う。ImGui に依らないので全構成で足す。
+target_sources(ReflectionTest PRIVATE
+	"${CMAKE_SOURCE_DIR}/Editor/AssetCatalog.cpp")
 
 # ComponentRegistry とコンポーネントの実体はすべて aqEngine にあるので、aqEngine ごとリンクする。
 target_link_libraries(ReflectionTest PRIVATE aqEngine)

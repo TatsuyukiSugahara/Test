@@ -147,11 +147,29 @@ namespace aq
 			bool SupportsRenderResize() const override { return true; }
 
 			/**
-			 * メイン RT / 深度を reqW × reqH で作り直す。WaitIdle 済みの区間(在フライトのコマンドが
-			 * 旧 RT を参照しない)でゲームスレッドから呼ぶこと。新 RT を全部作れてから入れ替え、
-			 * 失敗時は旧を残して false を返す。ハンドル(添字)は変わらない。
+			 * 提示面とメイン RT / 深度を reqW × reqH で作り直す(ResizeRenderTargets → ResizePresentSurface の順)。
+			 * WaitIdle 済みの区間(在フライトのコマンドが旧 RT を参照しない)でゲームスレッドから呼ぶこと。
+			 * RT の作成に失敗したときは提示面も RT も旧のまま false を返す。ハンドル(添字)は変わらない。
 			 */
 			bool ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH) override;
+
+			/** 提示面とメイン RT を別々に作り直せる(設計書/エディタ/E10_Macのエディタ.md 決定 4) */
+			bool SupportsSeparatePresentSize() const override { return true; }
+
+			/**
+			 * 提示面(layer.drawableSize・width_ / height_・スワップチェーンプロキシ)だけを w × h で作り直す。
+			 * メイン RT とパスには関係しない。WaitIdle 済みの区間でゲームスレッドから呼ぶこと。
+			 * @return 成功したら true。寸法が 0 / 未初期化なら false
+			 */
+			bool ResizePresentSurface(uint32_t w, uint32_t h) override;
+
+			/**
+			 * メイン RT / 深度だけを reqW × reqH で作り直す。提示面は触らない。
+			 * 新 RT を全部作れてから入れ替えるので、失敗時は旧 RT を残して false を返す(Metal 固有の保証)。
+			 * ハンドル(添字)は変わらない。WaitIdle 済みの区間でゲームスレッドから呼ぶこと。
+			 * @param outW / outH 実際に作った寸法(Metal は要求値と同じ)
+			 */
+			bool ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH) override;
 
 			/**
 			 * オフスクリーン RT を 1 本解放し、ハンドルを空き番号へ登録する(vector の要素は動かさない)。

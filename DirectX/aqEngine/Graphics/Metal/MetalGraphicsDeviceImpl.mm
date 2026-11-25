@@ -1141,9 +1141,51 @@ namespace aq
 
 		bool MetalGraphicsDeviceImpl::ResizeMainTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
 		{
+			// RT → 提示面の順(D3D12 と逆)。RT の作成が失敗したときに提示面も旧のまま残すため。
+			// 提示面の作り直しは RT が通った引数・状態では失敗しないので、片方だけ進むことは無い。
+			if (!ResizeRenderTargets(reqW, reqH, outW, outH)) {
+				return false;
+			}
+			return ResizePresentSurface(outW, outH);
+		}
+
+
+		bool MetalGraphicsDeviceImpl::ResizePresentSurface(uint32_t w, uint32_t h)
+		{
+			if (w == 0 || h == 0 || objects_ == nullptr || objects_->device == nil) {
+				return false;
+			}
+
+			// 呼び出し側が待った後の区間だが、契約どおり作り直しの前に GPU の完了を待つ(済んでいれば即戻る)。
+			WaitIdle();
+
+			// PlatformMac は drawableSize をビュー bounds に合わせるので通常は一致する。
+			// ずれていたときだけ合わせる(描画の宛先は drawable なので寸法差を残さない)。
+			if (objects_->layer != nil) {
+				const CGSize drawableSize = [objects_->layer drawableSize];
+				if (static_cast<uint32_t>(drawableSize.width)  != w ||
+				    static_cast<uint32_t>(drawableSize.height) != h) {
+					[objects_->layer setDrawableSize:CGSizeMake(w, h)];
+				}
+			}
+
+			width_  = w;
+			height_ = h;
+			if (swapchainRT_ != nullptr) {
+				swapchainRT_->InitAsSwapchainProxy(width_, height_, metal::SWAPCHAIN_PIXEL_FORMAT);
+			}
+			return true;
+		}
+
+
+		bool MetalGraphicsDeviceImpl::ResizeRenderTargets(uint32_t reqW, uint32_t reqH, uint32_t& outW, uint32_t& outH)
+		{
 			if (reqW == 0 || reqH == 0 || objects_ == nullptr || objects_->device == nil) {
 				return false;
 			}
+
+			// 呼び出し側が待った後の区間だが、契約どおり作り直しの前に GPU の完了を待つ(済んでいれば即戻る)。
+			WaitIdle();
 
 			// 作成は一時領域へ行い、全部成功してから入れ替える(失敗時に旧 RT を残すため)。
 			const MTLPixelFormat mainColorFormat = metal::ToMTLPixelFormat(PixelFormat::R16G16B16A16_Float);
@@ -1157,28 +1199,14 @@ namespace aq
 				}
 			}
 
-			// PlatformMac は drawableSize をビュー bounds に合わせるので通常は一致する。
-			// ずれていたときだけ合わせる(CopyToBackBuffer の宛先は drawable なので寸法差を残さない)。
-			if (objects_->layer != nil) {
-				const CGSize drawableSize = [objects_->layer drawableSize];
-				if (static_cast<uint32_t>(drawableSize.width)  != reqW ||
-				    static_cast<uint32_t>(drawableSize.height) != reqH) {
-					[objects_->layer setDrawableSize:CGSizeMake(reqW, reqH)];
-				}
-			}
-
-			// 旧 RT は WaitIdle 済みの区間なのでここで解放してよい。ImGui 用のビューも一緒に捨てる。
+			// 旧 RT は WaitIdle 済みの区間なのでここで解放してよい。
+			// ImGui 用のビューは入れ替えの前に捨てる(旧テクスチャを指すビューを残さない)。
 			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i) {
 				DiscardImGuiTextureView(mainRTs_[i].get());
 				mainRTs_[i] = std::move(newRTs[i]);
 			}
 
-			width_  = reqW;
-			height_ = reqH;
-			if (swapchainRT_ != nullptr) {
-				swapchainRT_->InitAsSwapchainProxy(width_, height_, metal::SWAPCHAIN_PIXEL_FORMAT);
-			}
-
+			// 提示面(drawable)とは独立。エディタではゲームビューの寸法になり、drawable と違ってよい。
 			outW = reqW;
 			outH = reqH;
 			return true;

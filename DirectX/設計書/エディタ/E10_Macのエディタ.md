@@ -116,6 +116,16 @@ E10 を 2 段に分ける。**E10a: ビルドと表示**(Editor が Mac で起�
   - `GameViewInput`: 押したかどうかの控え(`keySent_`)は入れ替え直した後のキーで付ける。
 - 未確認(後回し): テスト方針の E10a の自動確認とユーザー確認のすべて。
 
+### E10b の結果(2026-11-25、Mac 機。実装とビルドまで)
+
+- E10a と同じく、動作確認(リサイズの撮影、E9 の自動操作)とユーザー確認は後回し(ユーザー決定)。**確かめたのはビルドだけ**: 通常のツリーの Game・Sample・ReflectionTest の Debug / Release(警告は既存の `MTLGPUFamilyMac2` の deprecated だけ)、ReflectionTest は Debug 413/413・Release 171/171、エディタのツリーの Editor.app の Debug / Release。
+- 実装で決めたこと:
+  - `SupportsSeparatePresentSize` を true にし、`ResizeMainTargets` の中身を `ResizePresentSurface`(`layer.drawableSize`・`width_` / `height_`・`swapchainRT_` の作り直し)と `ResizeRenderTargets`(新しい RT を一時領域に全部作ってから入れ替える。入れ替えの前に ImGui のビューを捨てる)に分けた。どちらも中で `WaitIdle()` する(抽象の契約では呼び出し側が待つが、D3D12 も中で待つのに合わせた。Engine が直前に待っているので、すぐ戻る)。
+  - **`ResizeMainTargets` は「RT → 提示面」の順に呼ぶ**(D3D12 とは逆)。RT の作成が先なら、失敗したときに提示面も古いまま残り、分ける前の「失敗しても古い状態が残る」性質を保てるため。成功したときの最終状態は分ける前と同じで、GPU に積むコマンドも無いので、Game の経路の結果は変わらない。
+  - `ResizeRenderTargets` の `outW` / `outH` は要求した値(D3D12 と同じ。Engine はこの値でパスを作る)。
+  - drawable と RT の大きさが違ってよいことをコードで確かめた: `CopyToBackBuffer` は大きさが違うと blit ではなく全面の変換描画になる(エディタでは呼ばれない)、`RenderEditorOverlay` は drawable の全面をクリアして描く、ゲーム用 ImGui は displayRT へ描く、ビューポートは束ねている RT の大きさで丸める、`swapchainRT_` は外から引かれない。
+- 未確認(後回し): テスト方針の E10b の自動確認とユーザー確認のすべて(E9 の Mac での確認を含む)。
+
 ---
 
 ## 評価チェックリスト(旧 11.3 節)

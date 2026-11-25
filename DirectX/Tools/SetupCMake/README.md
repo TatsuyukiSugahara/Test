@@ -188,6 +188,33 @@ METAL_DEVICE_WRAPPER_TYPE=1 ../build/macos-ninja-metal/bin/Debug/Game.app/Conten
 この環境変数が唯一の手段**。Metal の検証は既定で無効なので、**付け忘れると
 「エラーが出ていない」のか「検証していない」のか区別がつかない**点に注意。
 
+### 5.2.0a エディタ(Editor.app)をビルド・実行する
+
+Mac のエディタ(設計書 `エディタ/E10_Macのエディタ.md` の E10a)は**専用のツリー**で作る。
+`AQ_BUILD_EDITOR=ON` は macOS かつ `AQ_GRAPHICS_API=Metal` のときだけ指定でき、
+`aqEngine` に `AQ_EDITOR=1` と全構成の `AQ_DEBUG_IMGUI` を足し、`Game` は静的ライブラリ
+`GameLogic`、実行ファイルは `Editor`(.app)になる。Sample と Tools(MixerTest / ReflectionTest)は
+このツリーでは作らない。通常のツリー(`macos-ninja-metal`)とは別の `build/` に置くので併存する。
+
+```bash
+source ~/.local/aq-mac-env.sh
+cd <repo>/DirectX
+cmake --preset macos-ninja-metal-editor          # Xcode なら macos-xcode-metal-editor
+cmake --build --preset macos-ninja-metal-editor-debug     # Release は -release
+
+# 作業ディレクトリは Game/(.app へ Assets を同梱しないので、aqBundleApp 相当は無い)
+cd Game && ../build/macos-ninja-metal-editor/bin/Debug/Editor.app/Contents/MacOS/Editor
+```
+
+作業ディレクトリに `Assets` が無いと、エディタはエラーを出して終了する。
+Play/Stop の自己テストは `Editor -editor-selftest`。
+
+**Metal API Validation** は `MTL_DEBUG_LAYER=1` を付けて起動する(既定はオフ)。
+
+```bash
+MTL_DEBUG_LAYER=1 ../build/macos-ninja-metal-editor/bin/Debug/Editor.app/Contents/MacOS/Editor
+```
+
 ### 5.2.1 Xcode でビルド・実行する
 
 **Xcode プロジェクトは CMake が生成する**。`.xcodeproj` はリポジトリに入っていないので、

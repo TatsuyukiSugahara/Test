@@ -63,6 +63,11 @@ namespace aq
 		void GraphicsDevice::ImGuiShutdown()              { if (impl_) impl_->ImGuiShutdown(); }
 		void GraphicsDevice::ImGuiNewFrame()              { if (impl_) impl_->ImGuiNewFrame(); }
 		void GraphicsDevice::ImGuiRender(ImDrawData* drawData) { if (impl_) impl_->ImGuiRender(drawData); }
+		void GraphicsDevice::SetImGuiRenderTarget(rendering::RenderTargetHandle rt)
+		{
+			// 無効なハンドルは nullptr として渡す(バックエンドは「描画先なし」として扱う)
+			if (impl_) impl_->SetImGuiRenderTarget(GetRenderTarget(rt));
+		}
 		bool GraphicsDevice::CanToggleVSync() const       { return impl_ ? impl_->CanToggleVSync() : false; }
 		bool GraphicsDevice::GetVSync() const             { return impl_ ? impl_->GetVSync() : true; }
 		void GraphicsDevice::SetVSync(bool enabled)       { if (impl_) impl_->SetVSync(enabled); }

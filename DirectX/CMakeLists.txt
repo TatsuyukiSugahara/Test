@@ -96,6 +96,23 @@ message(STATUS "AquaDash: AQ_GRAPHICS_API = ${AQ_GRAPHICS_API}")
 
 
 # ----------------------------------------------------------------------------
+#  エディタ構成(設計書/エディタ/E10_Macのエディタ.md E10a)
+#
+#  ON のツリーは**エディタ専用**になる(aqEngine へ AQ_EDITOR=1 を足し、Game は
+#  静的ライブラリ GameLogic、実行ファイルは Editor。Sample と Tools は作らない)。
+#  Windows のエディタは VS の Editor_Debug / Editor_Release で作るので対象外。
+#  OFF のときの生成物は従来と同じ。
+# ----------------------------------------------------------------------------
+option(AQ_BUILD_EDITOR "エディタ構成でビルドする (macOS + Metal のみ)" OFF)
+if(AQ_BUILD_EDITOR)
+	if(NOT APPLE OR IOS OR NOT AQ_GRAPHICS_API STREQUAL "Metal")
+		message(FATAL_ERROR "AQ_BUILD_EDITOR=ON は macOS(iOS 以外)かつ AQ_GRAPHICS_API=Metal のときだけ指定できます (現在: AQ_GRAPHICS_API=${AQ_GRAPHICS_API})")
+	endif()
+	message(STATUS "AquaDash: エディタ構成 (AQ_BUILD_EDITOR=ON)")
+endif()
+
+
+# ----------------------------------------------------------------------------
 #  Vulkan SDK の解決
 #
 #  AQ_GRAPHICS_API=Vulkan のときだけ環境変数 VULKAN_SDK を要求する。それ以外の
@@ -157,18 +174,24 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>")
 add_subdirectory(ThirdParty)
 add_subdirectory(aqEngine)
 add_subdirectory(Game)
-# 最小サンプル(新規プロジェクトの雛形)。iOS / Android では作らない
-# (エントリを Windows / macOS の 2 本しか持たないため。設計書/使いやすさ改善設計.md P3-B)。
-if(NOT IOS AND NOT ANDROID)
-	add_subdirectory(Sample)
-endif()
+if(AQ_BUILD_EDITOR)
+	# エディタ構成: Game は静的ライブラリ GameLogic になり、実行ファイルは Editor。
+	# Sample と Tools は AQ_EDITOR=1 では意味が無いので作らない。
+	add_subdirectory(Editor)
+else()
+	# 最小サンプル(新規プロジェクトの雛形)。iOS / Android では作らない
+	# (エントリを Windows / macOS の 2 本しか持たないため。設計書/使いやすさ改善設計.md P3-B)。
+	if(NOT IOS AND NOT ANDROID)
+		add_subdirectory(Sample)
+	endif()
 
-# 開発用ツール(CMake 専用。vcxproj は用意しない)
-# Android / iOS では実行ファイルを端末上で直接叩けないため配線しない
-# (iOS では .app にまとめられてしまい、ビルド時間だけが増える)。
-if(NOT ANDROID AND NOT IOS)
-	add_subdirectory(Tools/MixerTest)
-	add_subdirectory(Tools/ReflectionTest)
+	# 開発用ツール(CMake 専用。vcxproj は用意しない)
+	# Android / iOS では実行ファイルを端末上で直接叩けないため配線しない
+	# (iOS では .app にまとめられてしまい、ビルド時間だけが増える)。
+	if(NOT ANDROID AND NOT IOS)
+		add_subdirectory(Tools/MixerTest)
+		add_subdirectory(Tools/ReflectionTest)
+	endif()
 endif()
 
 # ----------------------------------------------------------------------------
@@ -227,7 +250,12 @@ if(AQ_GRAPHICS_API STREQUAL "Metal")
 		endif()
 	endif()
 	aq_add_compile_msl_target(aqCompileMsl)
-	add_dependencies(Game aqCompileMsl)
+	if(AQ_BUILD_EDITOR)
+		# エディタ構成には Game の実行ファイルが無い(GameLogic は静的ライブラリ)ので Editor にぶら下げる
+		add_dependencies(Editor aqCompileMsl)
+	else()
+		add_dependencies(Game aqCompileMsl)
+	endif()
 endif()
 
 # VS 生成時のスタートアッププロジェクト

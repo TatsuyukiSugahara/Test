@@ -29,6 +29,12 @@ namespace aq
 			{
 				/** バックエンド初期化済みか (Init 失敗時に Shutdown / Render を呼ばないため) */
 				bool g_initialized = false;
+
+				/** エディタ用コンテキストのバックエンド初期化済みか (InitEditor が立て、ShutdownEditor が倒す) */
+				bool g_editorInitialized = false;
+
+				/** InitEditor で接続したエディタ用コンテキスト (ShutdownEditor で current にするため) */
+				ImGuiContext* g_editorContext = nullptr;
 			}
 
 
@@ -60,6 +66,52 @@ namespace aq
 			}
 
 
+			bool InitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx)
+			{
+				// ゲーム用の Init が先(IGraphicsDeviceImpl::ImGuiInitEditor の契約)。二重の接続はしない。
+				if (!g_initialized || g_editorInitialized || gameCtx == nullptr || editorCtx == nullptr) {
+					return false;
+				}
+
+				MetalGraphicsDeviceImpl* device = MetalGraphicsDeviceImpl::GetInstance();
+				if (device == nullptr) return false;
+
+				id<MTLDevice> mtlDevice = static_cast<id<MTLDevice>>(device->GetMTLDeviceHandle());
+				if (mtlDevice == nil) return false;
+
+				// 公式は current コンテキストの io.BackendRendererUserData に状態を作るので、
+				// エディタ用を current にして呼ぶ。呼び出し元の current は戻しておく。
+				ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+				ImGui::SetCurrentContext(editorCtx);
+				const bool ok = ImGui_ImplMetal_Init(mtlDevice);
+				ImGui::SetCurrentContext(prevCtx);
+				if (!ok) {
+					EngineAssertMsg(false, "ImGui Metal バックエンド初期化失敗 (エディタ用)");
+					return false;
+				}
+
+				g_editorInitialized = true;
+				g_editorContext     = editorCtx;
+				return true;
+			}
+
+
+			void ShutdownEditor()
+			{
+				// Shutdown と同じく GPU の完了待ちの後に呼ぶ。共有フォントアトラスのテクスチャは
+				// 公式の参照数に任せる(AppHost がエディタ用を先に畳む。D3D12 と同じ前提)。
+				if (!g_editorInitialized) return;
+
+				ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+				ImGui::SetCurrentContext(g_editorContext);
+				ImGui_ImplMetal_Shutdown();
+				ImGui::SetCurrentContext(prevCtx);
+
+				g_editorInitialized = false;
+				g_editorContext     = nullptr;
+			}
+
+
 			void NewFrame()
 			{
 				// 何もしない。公式の ImGui_ImplMetal_NewFrame は描画先のレンダーパス記述子
@@ -78,8 +130,14 @@ namespace aq
 					return;
 				}
 
+				// current のコンテキストに公式バックエンドが繋がっていなければ描かない
+				// (エディタ用の接続に失敗した・current の切り替え忘れで、公式の assert を踏まないため)。
+				if (ImGui::GetCurrentContext() == nullptr || ImGui::GetIO().BackendRendererUserData == nullptr) {
+					return;
+				}
+
 				// 頂点が 0 でもテクスチャ(動的フォント)の更新があり得るため、RenderDrawData は常に呼ぶ。
-				// 一時オブジェクトの autorelease は呼び出し側(CopyToBackBuffer)の @autoreleasepool が受ける。
+				// 一時オブジェクトの autorelease は呼び出し側の @autoreleasepool が受ける。
 				ImGui_ImplMetal_NewFrame(renderPassDescriptor);
 				ImGui_ImplMetal_RenderDrawData(drawData, commandBuffer, encoder);
 			}

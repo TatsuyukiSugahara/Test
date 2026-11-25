@@ -12,6 +12,7 @@
 #include "Graphics/IGraphicsDeviceImpl.h"
 
 struct ImDrawData;
+struct ImGuiContext;
 
 
 namespace aq
@@ -94,6 +95,16 @@ namespace aq
 			 * CopyToBackBuffer の末尾で drawable へ描いたら nullptr へ戻す(1 フレーム限りのため)。
 			 */
 			ImDrawData* imguiDrawData_;
+
+			/**
+			 * エディタ構成の ImGui コンテキスト(ImGuiInitEditor で控える。Game では nullptr のまま)。
+			 * gameImGuiCtx_ があるときは、ゲーム用 ImGui を CopyToBackBuffer ではなく ImGuiRender で displayRT へ描く。
+			 */
+			ImGuiContext* gameImGuiCtx_;
+			ImGuiContext* editorImGuiCtx_;
+
+			/** ゲーム用 ImGui の描画先(SetImGuiRenderTarget で受ける。レンダースレッドの ImGuiRender の間だけ有効) */
+			IRenderTarget* imguiRenderTarget_;
 
 
 		public:
@@ -200,12 +211,45 @@ namespace aq
 			 */
 			inline void SetImGuiDrawData(ImDrawData* data) { imguiDrawData_ = data; }
 
-			/** IGraphicsDeviceImpl の ImGui フック(MetalImGui へ委譲。ImGuiRender は SetImGuiDrawData と同じ) */
+			/** IGraphicsDeviceImpl の ImGui フック(MetalImGui へ委譲) */
 			bool ImGuiInit() override;
 			void ImGuiShutdown() override;
 			void ImGuiNewFrame() override;
-			void ImGuiRender(ImDrawData* drawData) override { SetImGuiDrawData(drawData); }
+
+			/**
+			 * ゲーム用 ImGui を描く(レンダースレッド)。
+			 * Game(gameImGuiCtx_ なし)は SetImGuiDrawData と同じで、CopyToBackBuffer の末尾で drawable へ描く。
+			 * エディタ構成は SetImGuiRenderTarget で受けた displayRT へ、ゲーム用コンテキストでその場で描く。
+			 */
+			void ImGuiRender(ImDrawData* drawData) override;
+
+			/** ゲーム用 ImGui の描画先を受け取る(ImGuiRenderCommand が ImGuiRender の直前に渡す) */
+			void SetImGuiRenderTarget(IRenderTarget* rt) override { imguiRenderTarget_ = rt; }
+
+			/** エディタ用コンテキストの接続(MetalImGui::InitEditor へ委譲)。NewFrame は何もしない(公式の NewFrame は描画時に呼ぶ) */
+			bool ImGuiInitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx) override;
+			void ImGuiShutdownEditor() override;
+			void ImGuiNewFrameEditor() override {}
+
+			/** drawable を黒でクリアし、エディタ用コンテキストの ImGui を描く(CopyToBackBuffer の代わり。レンダースレッド) */
+			void RenderEditorOverlay(ImDrawData* editorDrawData) override;
+
+			/**
+			 * RT のカラーをアルファ 1 で読むスウィズル(R, G, B, One)のビューを返す(id<MTLTexture>)。
+			 * ビューはテクスチャごとに 1 つ控え、RT を作り直す・捨てるときに捨てる。作れなければ nullptr。
+			 * メインスレッドから呼ぶ(控えの表はメインスレッドだけが触る)。
+			 */
+			void* GetImGuiTextureId(IRenderTarget* rt) override;
+
 			const char* GetBackendName() const override { return "Metal"; }
+
+
+		private:
+			/** rt のカラーのテクスチャから作った ImGui 用のビューを捨てる(RT を作り直す・捨てる前に呼ぶ。メインスレッド) */
+			void DiscardImGuiTextureView(MetalRenderTarget* rt);
+
+			/** ImGui 用のビューを全部捨てる(Finalize) */
+			void DiscardAllImGuiTextureViews();
 
 
 			/**

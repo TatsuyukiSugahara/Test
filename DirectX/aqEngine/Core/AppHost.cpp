@@ -668,6 +668,21 @@ namespace aq
 	}
 
 
+	void AppHost::SetEditorLayer(IEditorLayer* layer)
+	{
+		editorLayer_ = layer;
+#if AQ_EDITOR
+		// AppHost の初期化はゲーム用を current にして終わるので、そのままだと最初の PumpEvents の入力が
+		// ゲーム用に入る(Mac の公式 osx はイベントが来た時点で current のコンテキストへ入れる)。
+		// 2 フレーム目からは FlushRender の末尾でエディタ用にするので、最初のフレームもそれに揃える。
+		// フレームの中は Update がゲーム用へ明示的に切り替えるので、ほかの経路は変わらない。
+		if (editorLayer_ && editorImGuiContext_) {
+			ImGui::SetCurrentContext(editorImGuiContext_);
+		}
+#endif
+	}
+
+
 	void AppHost::Finalize()
 	{
 		module_->OnFinalize();

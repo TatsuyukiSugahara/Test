@@ -87,9 +87,17 @@ namespace aq
 
 			/**
 			 * ImGui の描画データを描く(ImGuiRenderCommand::Execute から、レンダースレッドで呼ばれる)。
-			 * Vulkan / Metal は描画データを保持し、CopyToBackBuffer 後に swapchain / drawable へ描く。
+			 * Vulkan / Metal は描画データを保持し、CopyToBackBuffer 後に swapchain / drawable へ描く
+			 * (Metal のエディタ構成だけは、SetImGuiRenderTarget で渡された displayRT へその場で描く)。
 			 */
 			virtual void ImGuiRender(ImDrawData* /*drawData*/) {}
+
+			/**
+			 * ゲーム用 ImGui の描画先(FrameContext の displayRT)を受け取る(レンダースレッドで、ImGuiRender の直前に呼ばれる)。
+			 * 束ねている RT を外から読めないバックエンド(Metal)がエディタ構成で displayRT へ描くのに使う。既定 no-op。
+			 * 渡された RT はこのフレームの ImGuiRender の間だけ有効。
+			 */
+			virtual void SetImGuiRenderTarget(IRenderTarget* /*rt*/) {}
 
 			/**
 			 * エディタ用 ImGui コンテキストのバックエンド接続(AQ_EDITOR 構成のみ使う。既定 no-op)。

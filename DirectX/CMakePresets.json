@@ -92,6 +92,22 @@
       "generator": "Xcode"
     },
     {
+      "name": "macos-ninja-metal-editor",
+      "displayName": "macOS / Ninja Multi-Config (Metal・エディタ)",
+      "description": "設計書/エディタ/E10_Macのエディタ.md の E10a。AQ_EDITOR=1 のエディタ専用ツリー(Game は GameLogic、実行ファイルは Editor。Sample と Tools は作らない)。",
+      "inherits": "macos-ninja-metal",
+      "cacheVariables": {
+        "AQ_BUILD_EDITOR": "ON"
+      }
+    },
+    {
+      "name": "macos-xcode-metal-editor",
+      "displayName": "macOS / Xcode (Metal・エディタ)",
+      "description": "設計書/エディタ/E10_Macのエディタ.md の E10a。",
+      "inherits": "macos-ninja-metal-editor",
+      "generator": "Xcode"
+    },
+    {
       "name": "ios-base",
       "hidden": true,
       "inherits": "base",
@@ -239,6 +255,26 @@
     {
       "name": "macos-xcode-metal-release",
       "configurePreset": "macos-xcode-metal",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-ninja-metal-editor-debug",
+      "configurePreset": "macos-ninja-metal-editor",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-ninja-metal-editor-release",
+      "configurePreset": "macos-ninja-metal-editor",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-xcode-metal-editor-debug",
+      "configurePreset": "macos-xcode-metal-editor",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-xcode-metal-editor-release",
+      "configurePreset": "macos-xcode-metal-editor",
       "configuration": "Release"
     },
     {

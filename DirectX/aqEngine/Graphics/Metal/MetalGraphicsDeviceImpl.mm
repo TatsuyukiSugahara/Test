@@ -12,6 +12,7 @@
 #include "Graphics/RenderContext.h"
 #ifdef AQ_IMGUI
 #include "Graphics/Metal/MetalImGui.h"
+#include <imgui/imgui.h>
 #endif
 #include <filesystem>   // フルスクリーン blit のシェーダパス組み立て
 
@@ -78,6 +79,19 @@ namespace aq
 			id<MTLRenderPipelineState> blitPipeline  = nil;
 			id<MTLSamplerState>        blitSampler   = nil;
 			MTLPixelFormat             blitDstFormat = MTLPixelFormatInvalid;
+
+			/**
+			 * GetImGuiTextureId が返すスウィズル(R, G, B, One)のビュー。元のテクスチャごとに 1 つ。
+			 * source は比較用で retain しない(ビューが親を保持するので、控えている間は解放されず番地も再利用されない)。
+			 * view は new... の +1 を持ち、DiscardImGuiTextureView / DiscardAllImGuiTextureViews で release する。
+			 * メインスレッドだけが触る(RT の作り直し・解放もメインスレッドの完了待ちの後)。
+			 */
+			struct ImGuiTextureView
+			{
+				id<MTLTexture> source = nil;
+				id<MTLTexture> view   = nil;
+			};
+			std::vector<ImGuiTextureView> imguiTextureViews;
 		};
 
 
@@ -124,6 +138,9 @@ namespace aq
 				}
 				return "unknown";
 			}
+
+			/** GetImGuiTextureId のビュー生成の失敗ログ。毎フレーム呼ばれるので 1 度だけ出す */
+			bool g_imguiTextureViewFailureLogged = false;
 
 			/** CopyToBackBuffer の失敗ログ(PSO が作れなかった等)。同上 */
 			bool g_copyFailureLogged = false;
@@ -425,6 +442,9 @@ namespace aq
 			, frameOpen_(false)
 			, frameAcquireFailed_(false)
 			, imguiDrawData_(nullptr)
+			, gameImGuiCtx_(nullptr)
+			, editorImGuiCtx_(nullptr)
+			, imguiRenderTarget_(nullptr)
 		{
 			g_staticDevice = this;
 		}
@@ -617,6 +637,9 @@ namespace aq
 			// この後にセマフォを壊しても signal が空振りすることはない。
 			WaitIdle();
 
+			// ImGui 用のビューは元の RT より先に捨てる(ビューが親のテクスチャを保持しているため)。
+			DiscardAllImGuiTextureViews();
+
 			// 生成と逆順に解放する。
 			offscreenRTs_.clear();
 			freeOffscreenSlots_.clear();
@@ -709,6 +732,7 @@ namespace aq
 #ifdef AQ_IMGUI
 			MetalImGui::Shutdown();
 #endif
+			gameImGuiCtx_ = nullptr;
 		}
 
 
@@ -717,6 +741,249 @@ namespace aq
 #ifdef AQ_IMGUI
 			MetalImGui::NewFrame();
 #endif
+		}
+
+
+		void MetalGraphicsDeviceImpl::ImGuiRender(ImDrawData* drawData)
+		{
+#ifdef AQ_IMGUI
+			// Game(エディタ用コンテキストを繋いでいない)は従来どおり控えて、CopyToBackBuffer の末尾で drawable へ描く。
+			if (gameImGuiCtx_ == nullptr) {
+				SetImGuiDrawData(drawData);
+				return;
+			}
+
+			// エディタ構成は CopyToBackBuffer が呼ばれない(RenderEditorOverlay が代わる)ので、ここで displayRT へ描く。
+			// 描画先は ImGuiRenderCommand が直前に渡した displayRT。1 フレーム限りなので受けたら消す。
+			IRenderTarget* target = imguiRenderTarget_;
+			imguiRenderTarget_ = nullptr;
+			imguiDrawData_     = nullptr;
+			if (drawData == nullptr || target == nullptr || objects_ == nullptr) {
+				return;
+			}
+
+			auto& renderTarget = static_cast<MetalRenderTarget&>(*target);
+			id<MTLTexture> dstTexture = renderTarget.GetTexture();
+			if (dstTexture == nil) {
+				return;
+			}
+
+			// コマンドバッファはフレームの開始で取る。drawable が取れず捨てたフレームなら描かない。
+			BeginFrameIfNeeded();
+			if (!frameOpen_) {
+				return;
+			}
+
+			// エンコーダは入れ子にできない。保留クリアを先に確定してから閉じる(CopyToBackBuffer と同じ順)。
+			// 閉じるだけではクリアの予約が残り、ここで描いた ImGui が後で消される。
+			if (activeContext_ != nullptr) {
+				activeContext_->FlushPendingClears();
+				activeContext_->EndEncodingIfActive();
+			}
+
+			@autoreleasepool
+			{
+				// 既に出ているゲームの画を消さないよう loadAction = Load で開く。
+				MTLRenderPassDescriptor* imguiPass = [MTLRenderPassDescriptor renderPassDescriptor];
+				imguiPass.colorAttachments[0].texture     = dstTexture;
+				imguiPass.colorAttachments[0].loadAction  = MTLLoadActionLoad;
+				imguiPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+				id<MTLRenderCommandEncoder> imguiEncoder =
+					[objects_->currentCommandBuffer renderCommandEncoderWithDescriptor:imguiPass];
+				if (imguiEncoder != nil)
+				{
+					// 公式バックエンドは current なコンテキストの状態を読むので、ゲーム用へ切り替えてから描く。
+					// ImGui を使う構成は直列実行に固定しており(RenderConfig.h)、メインスレッドは FlushRender で
+					// この描画の完了を待っているので、ここで current を切り替えても競合しない。描いたら戻す。
+					ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+					ImGui::SetCurrentContext(gameImGuiCtx_);
+					MetalImGui::Render(objects_->currentCommandBuffer, imguiEncoder, imguiPass, drawData);
+					ImGui::SetCurrentContext(prevCtx);
+					[imguiEncoder endEncoding];
+				}
+			}
+#else
+			(void)drawData;
+#endif
+		}
+
+
+		bool MetalGraphicsDeviceImpl::ImGuiInitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx)
+		{
+#ifdef AQ_IMGUI
+			// 公式バックエンドの接続と current の出し入れは MetalImGui::InitEditor が受け持つ。
+			if (!MetalImGui::InitEditor(gameCtx, editorCtx)) {
+				return false;
+			}
+
+			gameImGuiCtx_   = gameCtx;
+			editorImGuiCtx_ = editorCtx;
+			return true;
+#else
+			(void)gameCtx;
+			(void)editorCtx;
+			return false;
+#endif
+		}
+
+
+		void MetalGraphicsDeviceImpl::ImGuiShutdownEditor()
+		{
+#ifdef AQ_IMGUI
+			MetalImGui::ShutdownEditor();
+#endif
+			editorImGuiCtx_ = nullptr;
+		}
+
+
+		void MetalGraphicsDeviceImpl::RenderEditorOverlay(ImDrawData* editorDrawData)
+		{
+#ifdef AQ_IMGUI
+			if (editorDrawData == nullptr || editorImGuiCtx_ == nullptr || objects_ == nullptr) {
+				return;
+			}
+
+			BeginFrameIfNeeded();
+			if (!frameOpen_) {
+				return;
+			}
+
+			// エンコーダは入れ子にできない。保留クリアを確定してから閉じる(CopyToBackBuffer と同じ順)。
+			if (activeContext_ != nullptr) {
+				activeContext_->FlushPendingClears();
+				activeContext_->EndEncodingIfActive();
+			}
+
+			id<MTLTexture> dstTexture = swapchainRT_->GetTexture();
+			if (dstTexture == nil) {
+				return;
+			}
+
+			@autoreleasepool
+			{
+				// ゲームビューの外(パネルの隙間など)に前フレームの内容が残らないよう、毎フレーム黒で消す。
+				MTLRenderPassDescriptor* editorPass = [MTLRenderPassDescriptor renderPassDescriptor];
+				editorPass.colorAttachments[0].texture     = dstTexture;
+				editorPass.colorAttachments[0].loadAction  = MTLLoadActionClear;
+				editorPass.colorAttachments[0].clearColor  = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+				editorPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+				id<MTLRenderCommandEncoder> editorEncoder =
+					[objects_->currentCommandBuffer renderCommandEncoderWithDescriptor:editorPass];
+				if (editorEncoder != nil)
+				{
+					// 公式バックエンドは current なコンテキストの状態を読むので、エディタ用へ切り替えてから描く。
+					// メインスレッドは FlushRender でこの完了を待っている(直列実行)ので、切り替えても競合しない。
+					ImGuiContext* prevCtx = ImGui::GetCurrentContext();
+					ImGui::SetCurrentContext(editorImGuiCtx_);
+					MetalImGui::Render(objects_->currentCommandBuffer, editorEncoder, editorPass, editorDrawData);
+					ImGui::SetCurrentContext(prevCtx);
+					[editorEncoder endEncoding];
+				}
+			}
+#else
+			(void)editorDrawData;
+#endif
+		}
+
+
+		void* MetalGraphicsDeviceImpl::GetImGuiTextureId(IRenderTarget* rt)
+		{
+#ifdef AQ_IMGUI
+			if (rt == nullptr || objects_ == nullptr) {
+				return nullptr;
+			}
+
+			// Metal の RT はすべて MetalRenderTarget。プロキシ(drawable)は毎フレーム変わるので対象外。
+			auto* target = static_cast<MetalRenderTarget*>(rt);
+			if (target->IsProxy()) {
+				return nullptr;
+			}
+			id<MTLTexture> texture = target->GetTexture();
+			if (texture == nil) {
+				return nullptr;
+			}
+
+			for (const MetalDeviceObjects::ImGuiTextureView& entry : objects_->imguiTextureViews) {
+				if (entry.source == texture) {
+					return entry.view;
+				}
+			}
+
+			// アルファを 1 として読むビュー(D3D12 の「アルファを 1 として読む SRV」と同じ目的。displayRT の
+			// アルファが 1 でないと ImGui のブレンドで透けるため)。フォーマットは同じでスウィズルだけ変えるので
+			// MTLTextureUsagePixelFormatView は要らない(Validation で確認済み。フォーマットを変えるときだけ要る)。
+			id<MTLTexture> view = nil;
+			@autoreleasepool
+			{
+				const MTLTextureSwizzleChannels swizzle = MTLTextureSwizzleChannelsMake(
+					MTLTextureSwizzleRed, MTLTextureSwizzleGreen, MTLTextureSwizzleBlue, MTLTextureSwizzleOne);
+				view = [texture newTextureViewWithPixelFormat:[texture pixelFormat]
+				                                  textureType:[texture textureType]
+				                                       levels:NSMakeRange(0, [texture mipmapLevelCount])
+				                                       slices:NSMakeRange(0, 1)
+				                                      swizzle:swizzle];  // MRR: +1
+			}
+
+			// 作れなければ元のテクスチャは返さない(アルファで透け、「アルファを 1 として読む」契約を破る)。
+			// nullptr なら EditorLayer が「not supported」の表示を出す。
+			if (view == nil) {
+				if (!g_imguiTextureViewFailureLogged) {
+					g_imguiTextureViewFailureLogged = true;
+					aq::StartupMarkf("  [metal] GetImGuiTextureId: swizzle view creation failed (fmt %lu)",
+					                 static_cast<unsigned long>([texture pixelFormat]));
+				}
+				return nullptr;
+			}
+
+			MetalDeviceObjects::ImGuiTextureView entry;
+			entry.source = texture;
+			entry.view   = view;
+			objects_->imguiTextureViews.push_back(entry);
+			return view;
+#else
+			(void)rt;
+			return nullptr;
+#endif
+		}
+
+
+		void MetalGraphicsDeviceImpl::DiscardImGuiTextureView(MetalRenderTarget* rt)
+		{
+			if (rt == nullptr || objects_ == nullptr) {
+				return;
+			}
+
+			id<MTLTexture> texture = rt->GetTexture();
+			if (texture == nil) {
+				return;
+			}
+
+			std::vector<MetalDeviceObjects::ImGuiTextureView>& views = objects_->imguiTextureViews;
+			for (size_t i = 0; i < views.size(); ++i)
+			{
+				if (views[i].source == texture)
+				{
+					[views[i].view release];
+					views[i] = views.back();
+					views.pop_back();
+					return;
+				}
+			}
+		}
+
+
+		void MetalGraphicsDeviceImpl::DiscardAllImGuiTextureViews()
+		{
+			if (objects_ == nullptr) {
+				return;
+			}
+
+			for (MetalDeviceObjects::ImGuiTextureView& entry : objects_->imguiTextureViews) {
+				[entry.view release];
+			}
+			objects_->imguiTextureViews.clear();
 		}
 
 
@@ -900,8 +1167,9 @@ namespace aq
 				}
 			}
 
-			// 旧 RT は WaitIdle 済みの区間なのでここで解放してよい。
+			// 旧 RT は WaitIdle 済みの区間なのでここで解放してよい。ImGui 用のビューも一緒に捨てる。
 			for (uint32_t i = 0; i < MAIN_RT_COUNT; ++i) {
+				DiscardImGuiTextureView(mainRTs_[i].get());
 				mainRTs_[i] = std::move(newRTs[i]);
 			}
 
@@ -930,6 +1198,7 @@ namespace aq
 			}
 
 			// 呼び出しは WaitIdle 済みの区間が前提(在フライトのコマンドがこの RT を参照しない)。
+			DiscardImGuiTextureView(offscreenRTs_[slot].get());
 			offscreenRTs_[slot].reset();
 			freeOffscreenSlots_.push_back(slot);
 		}

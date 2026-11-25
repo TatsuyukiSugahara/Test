@@ -500,6 +500,16 @@ namespace aq
 		}
 
 
+		bool PlatformMac::IsAppActive() const
+		{
+			// NSApp が無い(NSApplication の用意前)ときは判定できないので、既定と同じ true を返す。
+			if (NSApp == nil) {
+				return true;
+			}
+			return [NSApp isActive] == YES;
+		}
+
+
 		const char* PlatformMac::GetUserDataDirectory()
 		{
 			if (!userDataDirectoryResolved_)

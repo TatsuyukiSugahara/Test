@@ -129,9 +129,11 @@ namespace aq
 
 		/**
 		 * エディタの UI 層を登録する(所有しない。layer は AppHost より長く生かすこと)。
-		 * 呼び出しはエディタ構成(AQ_EDITOR)でだけ意味を持つ。ランタイムで登録してもフックは呼ばれない
+		 * 呼び出しはエディタ構成(AQ_EDITOR)でだけ意味を持つ。ランタイムで登録してもフックは呼ばれない。
+		 * エディタ構成では、最初のフレームの入力がエディタ用に入るよう、エディタ用のコンテキストを current にする
+		 * (Initialize の後・RunGame の前に 1 回呼ぶ前提)
 		 */
-		inline void SetEditorLayer(IEditorLayer* layer) { editorLayer_ = layer; }
+		void SetEditorLayer(IEditorLayer* layer);
 
 		/**
 		 * 提出済みの描画が CPU・GPU とも完了するまで待つ。

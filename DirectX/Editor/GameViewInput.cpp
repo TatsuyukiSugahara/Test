@@ -27,6 +27,24 @@ namespace editor
 		{
 			return x > -FLT_MAX && y > -FLT_MAX;
 		}
+
+
+		/**
+		 * io.ConfigMacOSXBehaviors の AddKeyEvent が行う Ctrl と Super(Command)の入れ替えを戻す(imgui.cpp の AddKeyEvent の逆)。
+		 * エディタ用の列は入れ替え済みなので、そのままゲーム用の AddKeyEvent へ入れるともう一度入れ替わって逆になる
+		 */
+		ImGuiKey UndoMacOSXKeySwap(const ImGuiKey key)
+		{
+			switch (key) {
+			case ImGuiMod_Ctrl:        return ImGuiMod_Super;
+			case ImGuiMod_Super:       return ImGuiMod_Ctrl;
+			case ImGuiKey_LeftCtrl:    return ImGuiKey_LeftSuper;
+			case ImGuiKey_LeftSuper:   return ImGuiKey_LeftCtrl;
+			case ImGuiKey_RightCtrl:   return ImGuiKey_RightSuper;
+			case ImGuiKey_RightSuper:  return ImGuiKey_RightCtrl;
+			default:                   return key;
+			}
+		}
 	}
 
 
@@ -40,6 +58,9 @@ namespace editor
 		aq::Engine& engine = aq::Engine::Get();
 		const aq::platform::IPlatform* platform = engine.GetPlatform();
 		const bool appActive = (platform != nullptr) ? platform->IsAppActive() : true;
+
+		// エディタ用の列のキーは AddKeyEvent で Ctrl と Super が入れ替わっている(Apple の既定)。ゲーム用へ入れる前に戻す
+		const bool undoMacOSXKeySwap = ImGui::GetIO().ConfigMacOSXBehaviors;
 
 		// ImGui の内部構造(ImGuiContext::InputEventsQueue / ImGuiInputEvent)に頼る唯一の箇所。ImGui を更新して形が変わったらここを直す
 		const ImVector<ImGuiInputEvent>& queue = editorContext->InputEventsQueue;
@@ -126,17 +147,18 @@ namespace editor
 
 			case ImGuiInputEventType_Key: {
 				// マウスの別名やゲームパッドは扱わない(別名は AddKeyEvent で assert する)
-				const int slot = GetKeySlot(e.Key.Key);
+				const ImGuiKey key  = undoMacOSXKeySwap ? UndoMacOSXKeySwap(e.Key.Key) : e.Key.Key;
+				const int      slot = GetKeySlot(key);
 				if (slot < 0) {
 					break;
 				}
 				if (e.Key.Down) {
 					if (gameFocus_) {
-						gameIO.AddKeyEvent(e.Key.Key, true);
+						gameIO.AddKeyEvent(key, true);
 						keySent_[slot] = true;
 					}
 				} else if (keySent_[slot]) {
-					gameIO.AddKeyEvent(e.Key.Key, false);
+					gameIO.AddKeyEvent(key, false);
 					keySent_[slot] = false;
 				}
 				break;

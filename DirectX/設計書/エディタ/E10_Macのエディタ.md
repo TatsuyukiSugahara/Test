@@ -104,6 +104,18 @@ E10 を 2 段に分ける。**E10a: ビルドと表示**(Editor が Mac で起�
 | E10a | 通常のツリー(`macos-ninja-metal`)で Game・Sample・ReflectionTest の Debug / Release がビルドでき、警告が増えず、T1〜T15 の件数が変わらない(Game の経路を変えていないこと)。Game.app を起動して FPS 表示とデバッグ UI が今までどおり出る(撮影)。エディタのツリー(`macos-ninja-metal-editor`)で Editor の Debug / Release がビルドできる。Metal の API Validation を有効にして Editor を起動し、Validation のエラーが無い・`startup_timing.log` に `[crash]` が無い。`-editor-selftest` が Debug / Release で PASS。撮影で、メニューバー・Hierarchy・Inspector・Console・Content Browser・Game View が出て、Game View にゲームの画(アルファで透けない)とゲーム用のデバッグ UI が出る。合成入力(1 手ずつ撮影)で、Hierarchy のノードを選ぶとインスペクターが変わる、Game View の中のクリックがゲーム用の UI に届く、`Ctrl+Z`(Mac では Command)で Undo のログが出る | エディタの操作感(クリック・キー・スクロール・ドラッグ)。アプリを裏に回したときにゲームのキーが押しっぱなしにならない |
 | E10b | エディタのツリーと通常のツリーのビルド・警告・T1〜T15。ウィンドウの大きさを 10 回以上変え、Game View の大きさに描画解像度が追従する(ログの解像度と撮影)・最小化から戻せる・Validation のエラーが無い。Game.app でウィンドウの大きさを変えても今までどおり(撮影)。E9 のテスト方針(7.10 節)の自動操作を Mac で行う(パス欄へのドロップと Undo、Prefab の作成と配置、Prefab エディタで開く) | E9 の操作感(Mac で。7.10 節のユーザー確認)。リサイズの見た目 |
 
+### E10a の結果(2026-11-25、Mac 機。実装とビルドまで)
+
+- ユーザー決定で、動作確認(起動・撮影・合成入力・Validation での起動・自己テスト)とユーザー確認は後回しにした。**確かめたのはビルドだけ**: 通常のツリー(`macos-ninja-metal`)で Game・Sample・ReflectionTest の Debug / Release が通り、警告は既存のもの(`AppHost.h` の `editorImGuiContext_` の unused-private-field は元から)。ReflectionTest は Debug 413/413・Release 171/171。再構成の後にコンパイルし直しが起きないこと(OFF のときに定義が変わらないこと)を確かめた。エディタのツリー(`macos-ninja-metal-editor`)で Editor.app の Debug / Release がビルドとリンクまで通る。Xcode のジェネレータ(`macos-xcode-metal-editor`)は未確認。
+- 実装で決めたこと:
+  - CMake: ON のときは `Game/CMakeLists.txt` が `GameLogic` を作った直後に `return()` し、.app の設定と `aqBundleApp` は作らない(`Game` ターゲットが無いため)。`Editor` の include に `Editor/` を足した。プリセットは configure に `macos-ninja-metal-editor` / `macos-xcode-metal-editor`、build にそれぞれの `-debug` / `-release`。手順は `Tools/SetupCMake/README.md` の 5.2.0a。
+  - `EditorMacMain.mm`: 作業ディレクトリに `Assets` が無ければ標準エラーに出して終了コード 1。
+  - Metal: `MetalImGui::Render` は、current のコンテキストに公式バックエンドが繋がっていなければ(`io.BackendRendererUserData` が null)描かずに戻る。`ImGuiRender` / `RenderEditorOverlay` は `BeginFrameIfNeeded` の後に `frameOpen_` を見て、drawable を取れず捨てたフレームでは描かない。描いた後は current を呼ぶ前のものへ戻す。
+  - `GetImGuiTextureId` のビュー: **`MTLTextureUsagePixelFormatView` は要らなかった**(同じフォーマットのスウィズルのビューは、`MTL_DEBUG_LAYER=1` の小さな試験プログラムでフラグ無しでも assert せず、alpha = One になった。フォーマットを変えるビューではフラグ無しで assert するので、Validation は効いている。`MetalDepthMap.mm` も同じフォーマットのビューをフラグ無しで作っている)。ビューの表は `MetalDeviceObjects::imguiTextureViews`(元のテクスチャは比較だけで retain しない。ビューが親を保持するので番地は再利用されない)。捨てるのは `ResizeMainTargets`(入れ替えの前)・`ReleaseOffscreenRenderTarget`・`Finalize`。メインスレッドだけが触る。プロキシの RT(drawable)は対象外で nullptr。**E10b で `ResizeRenderTargets` を足すときも、入れ替えの前にビューを捨てる**。
+  - `SetEditorLayer` はヘッダのインラインから .cpp へ移した。
+  - `GameViewInput`: 押したかどうかの控え(`keySent_`)は入れ替え直した後のキーで付ける。
+- 未確認(後回し): テスト方針の E10a の自動確認とユーザー確認のすべて。
+
 ---
 
 ## 評価チェックリスト(旧 11.3 節)

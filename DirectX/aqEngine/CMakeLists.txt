@@ -213,9 +213,17 @@ string(TOUPPER "${AQ_GRAPHICS_API}" AQ_GRAPHICS_API_UPPER)
 
 target_compile_definitions(aqEngine PUBLIC
 	AQ_IMGUI
-	$<$<CONFIG:Debug>:AQ_DEBUG_IMGUI>
 	ENGINE_GRAPHICS_${AQ_GRAPHICS_API_UPPER}
 )
+
+#  エディタ構成(AQ_BUILD_EDITOR=ON)は AQ_EDITOR=1 と全構成の AQ_DEBUG_IMGUI を足す
+#  (Editor.props と同じ。AppHost のメンバが #if AQ_EDITOR で変わるので、ゲームロジックと
+#  Editor にも PUBLIC で同じ値を伝える)。OFF は従来どおり Debug だけ。
+if(AQ_BUILD_EDITOR)
+	target_compile_definitions(aqEngine PUBLIC AQ_EDITOR=1 AQ_DEBUG_IMGUI)
+else()
+	target_compile_definitions(aqEngine PUBLIC $<$<CONFIG:Debug>:AQ_DEBUG_IMGUI>)
+endif()
 
 #  ECS の Chunk 使用状況の統計(ECS/ChunkStats.h、設計書/アロケーター改良設計.md §0.3)。
 #  Debug 専用にしない(Release での時間比較に使う)。OFF なら計測コードは残らない。

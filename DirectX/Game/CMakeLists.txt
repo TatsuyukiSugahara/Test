@@ -25,6 +25,35 @@ endif()
 
 
 # ----------------------------------------------------------------------------
+#  エディタ構成(AQ_BUILD_EDITOR=ON。設計書/エディタ/E10_Macのエディタ.md E10a)
+#
+#  実行ファイルの代わりに静的ライブラリ GameLogic を作り、Editor/CMakeLists.txt の
+#  実行ファイル Editor がリンクする。エントリ(各プラットフォームの main)は Editor 側が持つので除く。
+#  aqEngine へは PUBLIC でリンクする(AQ_EDITOR / AQ_IMGUI / AQ_PLATFORM_* とエンジンの
+#  include を Editor へ伝えるため)。.app の情報・同梱はここでは扱わない。
+# ----------------------------------------------------------------------------
+if(AQ_BUILD_EDITOR)
+	aq_exclude_sources(AQ_GAME_SOURCES
+		"/Application/Main\\.cpp$"
+		"/Application/MacMain\\.mm$"
+		"/Application/iOSMain\\.mm$"
+		"/Application/AndroidMain\\.cpp$"
+	)
+
+	add_library(GameLogic STATIC ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
+	source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${AQ_GAME_SOURCES} ${AQ_GAME_HEADERS})
+	aq_apply_common_compile_options(GameLogic)
+	target_include_directories(GameLogic PUBLIC
+		"${CMAKE_CURRENT_SOURCE_DIR}"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Application"
+	)
+	target_link_libraries(GameLogic PUBLIC aqEngine)
+	target_precompile_headers(GameLogic PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Application/stdafx.h")
+	return()
+endif()
+
+
+# ----------------------------------------------------------------------------
 #  実行ファイル
 #
 #  Windows は WIN32(SubSystem=Windows / WinMain)。既存 DirectX.vcxproj の

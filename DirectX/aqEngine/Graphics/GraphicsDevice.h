@@ -73,6 +73,7 @@ namespace aq
 			void ImGuiShutdown();
 			void ImGuiNewFrame();
 			void ImGuiRender(ImDrawData* drawData);
+			void SetImGuiRenderTarget(rendering::RenderTargetHandle rt);   // ImGuiRender の直前に描画先を渡す(既定 no-op)
 			bool CanToggleVSync() const;
 			bool GetVSync() const;
 			void SetVSync(bool enabled);

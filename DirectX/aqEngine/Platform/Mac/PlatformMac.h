@@ -54,6 +54,9 @@ namespace aq
 			/** 描画面のピクセル寸法。UpdateLayerBacking が drawableSize に使うビュー bounds と同じ値(メインスレッド) */
 			bool        GetClientPixelSize(uint32_t& outWidth, uint32_t& outHeight) const override;
 
+			/** アプリが前面か(NSApp.isActive。メインスレッド)。HasInputFocus は既定のまま(Mac には埋め込み起動が無い) */
+			bool        IsAppActive() const override;
+
 			// アプリ終了を要求する(ウィンドウデリゲートから呼ぶ)。
 			inline void RequestExit() override { exitRequested_ = true; }
 		};

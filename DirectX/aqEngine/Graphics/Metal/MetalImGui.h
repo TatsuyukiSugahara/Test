@@ -11,6 +11,7 @@
 #endif
 
 struct ImDrawData;
+struct ImGuiContext;
 
 
 namespace aq
@@ -24,17 +25,36 @@ namespace aq
 		// 描画は device の CopyToBackBuffer が drawable へ変換出力した**後**に重ねる。
 		// スレッド: Init / Shutdown / NewFrame はメインスレッド、Render はレンダースレッド。
 		// 公式のデータは Render(レンダースレッド)だけが触る(Init / Shutdown の間は描画していない)。
+		// 公式のデータは current コンテキストの io.BackendRendererUserData にあるので、エディタ構成
+		// (設計書「エディタ」E10 の 3.)はコンテキストごとに Init する。Render は current のコンテキストの
+		// バックエンドで描くので、呼び出し側が描く方のコンテキストを current にしておく。
 		namespace MetalImGui
 		{
 			bool Init();
 			void Shutdown();
 			void NewFrame();  // 何もしない(公式の NewFrame は Render の中で呼ぶ。理由は .mm)
 
+			/**
+			 * エディタ用コンテキストにも公式バックエンドを接続する(Init の後。メインスレッド)。
+			 * エディタ用を current にして公式の Init を呼び、current は呼ぶ前のものへ戻す。
+			 * @param gameCtx   ゲーム用コンテキスト(Init 済みであること)
+			 * @param editorCtx エディタ用コンテキスト
+			 * @return 接続できたら true
+			 */
+			bool InitEditor(ImGuiContext* gameCtx, ImGuiContext* editorCtx);
+
+			/**
+			 * InitEditor で接続したエディタ用コンテキストのバックエンドを畳む(Shutdown より前。メインスレッド)。
+			 * current は呼ぶ前のものへ戻す。共有フォントアトラスのテクスチャの破棄は公式の参照数に任せる。
+			 */
+			void ShutdownEditor();
+
 #ifdef __OBJC__
 			/**
-			 * drawable を対象に開いた(loadAction = Load の)レンダーパスへ ImGui を記録する
+			 * 開いた(loadAction = Load / Clear の)レンダーパスへ、current のコンテキストの ImGui を記録する
 			 *
-			 * エンコーダの開閉は呼び出し側(MetalGraphicsDeviceImpl::CopyToBackBuffer)の担当。
+			 * エンコーダの開閉と current の切り替えは呼び出し側(MetalGraphicsDeviceImpl の
+			 * CopyToBackBuffer / ImGuiRender / RenderEditorOverlay)の担当。
 			 * @param commandBuffer        記録先のコマンドバッファ(公式が完了ハンドラでバッファを回収する)
 			 * @param encoder              記録先のレンダーコマンドエンコーダ
 			 * @param renderPassDescriptor encoder を開いたレンダーパス記述子(PSO のフォーマットを決める)

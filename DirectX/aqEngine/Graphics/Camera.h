@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "Math/Bounds.h"
 
 namespace aq
 {
@@ -142,6 +143,18 @@ namespace aq
 		{
 			return cameraRotation_;
 		}
+
+		/**
+		 * ビューポートの中の正規化座標からワールドのレイを作る。
+		 * (u, v) は左上 (0,0) 〜 右下 (1,1)。始点は近平面上の点、direction は正規化済み。
+		 * 行列は Update が作ったもの(アスペクト比の変更は次の Update から反映される)
+		 */
+		math::Ray ScreenPointToRay(float u, float v) const;
+		/**
+		 * ワールドの点をクリップ空間(同次座標。w で割る前)へ写す。深度は [0, 1]。
+		 * 線を近い面(z = 0)で切ってから w で割りたいとき用
+		 */
+		math::Vector4 WorldToClip(const math::Vector3& worldPosition) const;
 
 		/** カメラの前方向をXZ平面に投影して正規化 */
 		math::Vector3 GetForwardXZ() const;

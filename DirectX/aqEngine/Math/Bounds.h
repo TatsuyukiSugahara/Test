@@ -66,6 +66,59 @@ namespace aq
 		};
 
 
+		/** レイ(始点と向き)。向きは正規化されている前提で、交差の距離はワールドの長さになる */
+		struct Ray
+		{
+			Vector3 origin;
+			Vector3 direction;
+
+			Ray() : origin(0.0f, 0.0f, 0.0f), direction(0.0f, 0.0f, 1.0f) {}
+			Ray(const Vector3& o, const Vector3& d) : origin(o), direction(d) {}
+		};
+
+
+		/**
+		 * レイと AABB の交差判定(スラブ法)。
+		 * 始点が箱の中なら距離 0 で true。箱が始点の後ろにあるとき(後ろ向き)は外れ。
+		 * 向きの成分が 0 の軸は、始点がその軸の範囲の外なら外れ。空の AABB は外れ。
+		 * @param ray          レイ(direction は正規化済み)
+		 * @param box          ワールド空間の AABB
+		 * @param outDistance  当たったときの、始点から入口までの距離(外れたときは変更しない)
+		 */
+		inline bool IntersectRayAABB(const Ray& ray, const AABB& box, float& outDistance)
+		{
+			if (box.IsEmpty()) return false;
+
+			const float origin[3] = { ray.origin.x, ray.origin.y, ray.origin.z };
+			const float dir[3]    = { ray.direction.x, ray.direction.y, ray.direction.z };
+			const float center[3] = { box.center.x, box.center.y, box.center.z };
+			const float extent[3] = { box.extent.x, box.extent.y, box.extent.z };
+
+			float tMin = 0.0f;       // 始点より後ろは数えない(始点が中なら 0 のまま)
+			float tMax = FLT_MAX;
+			for (int i = 0; i < 3; ++i)
+			{
+				const float lo = center[i] - extent[i];
+				const float hi = center[i] + extent[i];
+				if (std::fabs(dir[i]) < 1e-8f)
+				{
+					// 軸に平行。範囲の外にいるなら永久に交わらない
+					if (origin[i] < lo || origin[i] > hi) return false;
+					continue;
+				}
+				const float inv = 1.0f / dir[i];
+				float t0 = (lo - origin[i]) * inv;
+				float t1 = (hi - origin[i]) * inv;
+				if (t0 > t1) { const float tmp = t0; t0 = t1; t1 = tmp; }
+				if (t0 > tMin) tMin = t0;
+				if (t1 < tMax) tMax = t1;
+				if (tMin > tMax) return false;
+			}
+			outDistance = tMin;
+			return true;
+		}
+
+
 		/** ロード時に頂点列から AABB を求めるためのビルダ */
 		class AABBBuilder
 		{

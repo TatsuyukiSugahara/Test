@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "GameViewInput.h"
+#include "Core/AppHost.h"
 #include "HID/Input.h"
 #include "Platform/IPlatform.h"
 // InputEventsQueue / ImGuiInputEvent を読むため。Editor で imgui_internal.h を使うのはこのファイルだけ
@@ -58,6 +59,11 @@ namespace editor
 		aq::Engine& engine = aq::Engine::Get();
 		const aq::platform::IPlatform* platform = engine.GetPlatform();
 		const bool appActive = (platform != nullptr) ? platform->IsAppActive() : true;
+
+		// Edit 中は編集用カメラの操作をゲーム用へ流さない。右ドラッグ(飛行)中はキーとテキストも流さない
+		// (OnBeginFrame の遷移の後に呼ばれるので、今のモードを読んでよい)
+		const bool isEdit    = (aq::AppHost::Get().GetRunMode() == aq::RunMode::Edit);
+		const bool blockKeys = isEdit && prevState_.sceneCameraFlying;
 
 		// エディタ用の列のキーは AddKeyEvent で Ctrl と Super が入れ替わっている(Apple の既定)。ゲーム用へ入れる前に戻す
 		const bool undoMacOSXKeySwap = ImGui::GetIO().ConfigMacOSXBehaviors;
@@ -124,8 +130,12 @@ namespace editor
 					break;
 				}
 				if (e.MouseButton.Down) {
-					// 押下は中のときだけ。中なら位置は直前の ForwardMousePos で送ってある
-					if (IsInside(mouseKnown_, mouseX_, mouseY_)) {
+					// 押下は中のときだけ。中なら位置は直前の ForwardMousePos で送ってある。
+					// Edit の右・中ボタンと Alt + 左ボタンは編集用カメラの操作なので送らない(離しは送った押下の分だけなので影響しない)
+					const bool isCameraButton = isEdit
+						&& (button == ImGuiMouseButton_Right || button == ImGuiMouseButton_Middle
+						    || (button == ImGuiMouseButton_Left && altDown_));
+					if (!isCameraButton && IsInside(mouseKnown_, mouseX_, mouseY_)) {
 						gameIO.AddMouseButtonEvent(button, true);
 						buttonSent_[button] = true;
 					}
@@ -140,7 +150,8 @@ namespace editor
 			}
 
 			case ImGuiInputEventType_MouseWheel:
-				if (IsInside(mouseKnown_, mouseX_, mouseY_)) {
+				// Edit のホイールは編集用カメラ(寄る・移動速度)が使う
+				if (!isEdit && IsInside(mouseKnown_, mouseX_, mouseY_)) {
 					gameIO.AddMouseWheelEvent(e.MouseWheel.WheelX, e.MouseWheel.WheelY);
 				}
 				break;
@@ -148,12 +159,15 @@ namespace editor
 			case ImGuiInputEventType_Key: {
 				// マウスの別名やゲームパッドは扱わない(別名は AddKeyEvent で assert する)
 				const ImGuiKey key  = undoMacOSXKeySwap ? UndoMacOSXKeySwap(e.Key.Key) : e.Key.Key;
+				if (key == ImGuiMod_Alt || key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt) {
+					altDown_ = e.Key.Down;
+				}
 				const int      slot = GetKeySlot(key);
 				if (slot < 0) {
 					break;
 				}
 				if (e.Key.Down) {
-					if (gameFocus_) {
+					if (gameFocus_ && !blockKeys) {
 						gameIO.AddKeyEvent(key, true);
 						keySent_[slot] = true;
 					}
@@ -165,13 +179,20 @@ namespace editor
 			}
 
 			case ImGuiInputEventType_Text:
-				if (gameFocus_) {
+				if (gameFocus_ && !blockKeys) {
 					gameIO.AddInputCharacter(e.Text.Char);
 				}
 				break;
 
+			case ImGuiInputEventType_Focus:
+				// アプリを離れている間の Alt の離しは届かないので、押していない扱いに戻す
+				if (!e.AppFocused.Focused) {
+					altDown_ = false;
+				}
+				break;
+
 			default:
-				// win32 のフォーカス、ビューポートなどは送らない
+				// ビューポートなどは送らない
 				break;
 			}
 		}

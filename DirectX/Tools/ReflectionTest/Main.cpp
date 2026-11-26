@@ -24,6 +24,7 @@
 // Editor の AssetCatalog.cpp を直接コンパイルして使い、画面も Engine も作らない(全構成)。
 // E9b で T15 (b) Prefab の作成(ファイル名の決定、参照パスの計算、ノードからの Prefab 作成、ReplaceWithReferenceCommand / CreateReferenceNodeCommand)を足した。
 // Editor の PrefabAuthoring.cpp と Commands/NodeCommands.cpp を直接コンパイルして使う(Debug 構成のみ。Prefab の読み直しの間だけ Engine を Create する)。
+// E11a で T16 (a) シーンビューの数学(Math/Bounds.h の IntersectRayAABB と、Camera の ScreenPointToRay / WorldToClip の往復)を足した。画面も Engine も作らない(全構成)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -146,7 +147,8 @@ namespace
 			"      Debug 構成では T11 値の操作(LevelEditModel のコンポーネントの値・追加・削除、参照ノードの解決と基準の付け替え、保存した Level の生成)も行う。\n"
 			"      Debug 構成では T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory)も行う。\n"
 			"      T14 ログの通知(SetLogListener、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を試す。\n"
-			"      T15 (a) アセットの一覧(Editor の AssetCatalog の ClassifyAsset と、TestData/T15_Assets の木の読み込み)を試す。\n");
+			"      T15 (a) アセットの一覧(Editor の AssetCatalog の ClassifyAsset と、TestData/T15_Assets の木の読み込み)を試す。\\n"
+			"      T16 (a) シーンビューの数学(IntersectRayAABB と、Camera の ScreenPointToRay / WorldToClip の往復)を試す。\n");
 	}
 
 
@@ -4775,6 +4777,146 @@ namespace
 	}
 
 
+	/** T16 (a) のレイと箱の例 1 件 */
+	struct RayBoxCase
+	{
+		const char* name;
+		aq::math::Vector3 origin;
+		aq::math::Vector3 direction;
+		bool  expectedHit;
+		float expectedDistance;
+	};
+
+
+	/** T16 (a) IntersectRayAABB: 当たる・外れる・始点が中・軸に平行・後ろ向き・空の箱 */
+	void RunRayAABBTest(TestResults& results)
+	{
+		using aq::math::AABB;
+		using aq::math::Ray;
+		using aq::math::Vector3;
+
+		// 中心 (0,0,0)、半分の大きさ (1,1,1) の箱
+		const AABB box(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f));
+		const float invSqrt2 = 0.70710678f;
+
+		const RayBoxCase cases[] = {
+			{ "正面から当たる",               Vector3(0.0f, 0.0f, -5.0f), Vector3(0.0f, 0.0f, 1.0f),  true,  4.0f },
+			{ "斜めに角をかすめず当たる",     Vector3(-5.0f, 0.0f, -5.0f), Vector3(invSqrt2, 0.0f, invSqrt2), true, 4.0f * 1.41421356f },
+			{ "横へ外れる",                   Vector3(3.0f, 0.0f, -5.0f), Vector3(0.0f, 0.0f, 1.0f),  false, 0.0f },
+			{ "始点が箱の中なら距離 0",       Vector3(0.5f, 0.0f, 0.0f),  Vector3(0.0f, 1.0f, 0.0f),  true,  0.0f },
+			{ "軸に平行で範囲の中",           Vector3(0.5f, 0.5f, -3.0f), Vector3(0.0f, 0.0f, 1.0f),  true,  2.0f },
+			{ "軸に平行で範囲の外",           Vector3(1.5f, 0.0f, -3.0f), Vector3(0.0f, 0.0f, 1.0f),  false, 0.0f },
+			{ "後ろ向きは外れ",               Vector3(0.0f, 0.0f, -5.0f), Vector3(0.0f, 0.0f, -1.0f), false, 0.0f },
+			{ "箱の後ろから離れる向きは外れ", Vector3(0.0f, 0.0f, 5.0f),  Vector3(0.0f, 0.0f, 1.0f),  false, 0.0f },
+			{ "上から当たる",                 Vector3(0.0f, 10.0f, 0.0f), Vector3(0.0f, -1.0f, 0.0f), true,  9.0f },
+		};
+
+		for (const RayBoxCase& c : cases) {
+			float distance = -1.0f;
+			const bool  hit    = aq::math::IntersectRayAABB(Ray(c.origin, c.direction), box, distance);
+			const bool  passed = (hit == c.expectedHit) && (!hit || std::fabs(distance - c.expectedDistance) < 1e-4f);
+			Report(results, std::string("T16 (a) IntersectRayAABB ") + c.name, passed,
+				passed ? std::string() : "当たり " + std::to_string(hit) + " 距離 " + std::to_string(distance));
+		}
+
+		// 空の箱(FromMinMax で潰れた状態)は外れ
+		{
+			AABB empty;
+			empty.extent = Vector3(-1.0f, -1.0f, -1.0f);
+			float distance = 0.0f;
+			const bool hit = aq::math::IntersectRayAABB(Ray(Vector3(0.0f, 0.0f, -5.0f), Vector3(0.0f, 0.0f, 1.0f)), empty, distance);
+			Report(results, "T16 (a) IntersectRayAABB 空の箱", !hit, hit ? "当たった" : std::string());
+		}
+
+		// 外れたとき outDistance は変えない
+		{
+			float distance = 123.0f;
+			aq::math::IntersectRayAABB(Ray(Vector3(3.0f, 0.0f, -5.0f), Vector3(0.0f, 0.0f, 1.0f)), box, distance);
+			Report(results, "T16 (a) IntersectRayAABB 外れで距離を変えない", distance == 123.0f, std::string());
+		}
+	}
+
+
+	/** T16 (a) ScreenPointToRay と WorldToClip の往復: 画面の中央・四隅・いくつかの点で、レイの上の点を写すと元の正規化座標に戻る */
+	void RunCameraRoundTripTest(TestResults& results)
+	{
+		aq::Camera camera;
+		camera.SetPosition(aq::math::Vector3(3.0f, 10.0f, -20.0f));
+		camera.SetTarget(aq::math::Vector3(1.0f, 0.5f, 2.0f));
+		camera.SetViewAngle(aq::math::DegToRadian(60.0f));
+		camera.SetNear(0.1f);
+		camera.SetFar(1000.0f);
+		camera.SetAspect(16.0f / 9.0f);
+		camera.Update();
+
+		const float points[][2] = {
+			{ 0.5f, 0.5f }, { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 0.25f, 0.8f }, { 0.9f, 0.3f },
+		};
+		const float distances[] = { 1.0f, 25.0f, 400.0f };
+
+		bool        passed = true;
+		std::string detail;
+		for (const auto& p : points) {
+			const aq::math::Ray ray = camera.ScreenPointToRay(p[0], p[1]);
+			// 向きは正規化されている
+			const float length = std::sqrt(ray.direction.x * ray.direction.x + ray.direction.y * ray.direction.y + ray.direction.z * ray.direction.z);
+			if (std::fabs(length - 1.0f) > 1e-4f) {
+				passed = false;
+				detail = "向きが正規化されていない (" + std::to_string(p[0]) + ", " + std::to_string(p[1]) + ")";
+				break;
+			}
+			for (const float t : distances) {
+				const aq::math::Vector3 world = ray.origin + ray.direction * t;
+				const aq::math::Vector4 clip  = camera.WorldToClip(world);
+				const float u = (clip.x / clip.w + 1.0f) * 0.5f;
+				const float v = (1.0f - clip.y / clip.w) * 0.5f;
+				if (std::fabs(u - p[0]) > 1e-4f || std::fabs(v - p[1]) > 1e-4f) {
+					passed = false;
+					detail = "(" + std::to_string(p[0]) + ", " + std::to_string(p[1]) + ") 距離 " + std::to_string(t)
+						+ " → (" + std::to_string(u) + ", " + std::to_string(v) + ")";
+				}
+			}
+		}
+		Report(results, "T16 (a) ScreenPointToRay と WorldToClip の往復", passed, detail);
+
+		// 画面の中央のレイはカメラの前方向(注視点の方向)で、始点は近平面上(カメラから near だけ前)
+		{
+			const aq::math::Ray ray = camera.ScreenPointToRay(0.5f, 0.5f);
+			aq::math::Vector3 forward = aq::math::Vector3(1.0f, 0.5f, 2.0f) - camera.GetPosition();
+			forward.TryNormalize();
+			const aq::math::Vector3 toOrigin = ray.origin - camera.GetPosition();
+			const float dot = toOrigin.x * forward.x + toOrigin.y * forward.y + toOrigin.z * forward.z;
+			const float aligned = ray.direction.x * forward.x + ray.direction.y * forward.y + ray.direction.z * forward.z;
+			const bool centerPassed = std::fabs(dot - 0.1f) < 1e-3f && aligned > 0.9999f;
+			Report(results, "T16 (a) ScreenPointToRay 中央のレイ", centerPassed,
+				centerPassed ? std::string() : "近平面までの距離 " + std::to_string(dot) + " 前方向との一致 " + std::to_string(aligned));
+		}
+
+		// 近い面より手前の点はクリップ空間の z が負、奥の点は z が [0, w]
+		{
+			const aq::math::Vector3 forward = aq::math::Vector3(1.0f, 0.5f, 2.0f) - camera.GetPosition();
+			aq::math::Vector3 dir = forward;
+			dir.TryNormalize();
+			const aq::math::Vector4 behind = camera.WorldToClip(camera.GetPosition() - dir * 5.0f);
+			const aq::math::Vector4 ahead  = camera.WorldToClip(camera.GetPosition() + dir * 5.0f);
+			const bool depthPassed = behind.z < 0.0f && ahead.z >= 0.0f && ahead.z <= ahead.w;
+			Report(results, "T16 (a) WorldToClip の深度", depthPassed, depthPassed ? std::string() : "手前 z " + std::to_string(behind.z) + " 奥 z " + std::to_string(ahead.z));
+		}
+	}
+
+
+	/**
+	 * T16 シーンビュー(E11)
+	 *
+	 * (a)(E11a。全構成)は Math/Bounds.h の IntersectRayAABB と Camera の ScreenPointToRay / WorldToClip を試す(画面も Engine も作らない)
+	 */
+	void RunSceneViewTests(TestResults& results)
+	{
+		RunRayAABBTest(results);
+		RunCameraRoundTripTest(results);
+	}
+
+
 	int RunSelfTest(const Options& options)
 	{
 		// コンポーネントの登録(Application::Initialize と同じ順)
@@ -4825,6 +4967,7 @@ namespace
 		RunRunModeTests(results);
 		RunLogTests(results);
 		RunAssetTests(results);
+		RunSceneViewTests(results);
 
 		std::printf("[selftest] PASS %u / FAIL %u / XFAIL %u / XPASS %u\n",
 			results.passCount, results.failCount, results.xfailCount, results.xpassCount);

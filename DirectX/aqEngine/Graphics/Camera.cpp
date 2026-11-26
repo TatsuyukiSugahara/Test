@@ -115,6 +115,47 @@ namespace aq
 
 
 
+	math::Ray Camera::ScreenPointToRay(float u, float v) const
+	{
+		const float nx =  2.0f * u - 1.0f;
+		const float ny = -(2.0f * v - 1.0f);
+
+		math::Matrix4x4 vpInverse;
+		vpInverse.Inverse(viewProjectionMatrix_);
+		const DirectX::XMMATRIX xmVP = vpInverse;
+
+		const DirectX::XMVECTOR nearClip = DirectX::XMVector4Transform(DirectX::XMVectorSet(nx, ny, 0.0f, 1.0f), xmVP);
+		const DirectX::XMVECTOR farClip  = DirectX::XMVector4Transform(DirectX::XMVectorSet(nx, ny, 1.0f, 1.0f), xmVP);
+		const float wNear = DirectX::XMVectorGetW(nearClip);
+		const float wFar  = DirectX::XMVectorGetW(farClip);
+		if (std::fabs(wNear) < 1e-12f || std::fabs(wFar) < 1e-12f)
+		{
+			// 行列が作られていない・特異。カメラの前方を返す
+			math::Vector3 forward = targetPosition_ - position_;
+			if (!forward.TryNormalize()) forward = math::Vector3(0.0f, 0.0f, 1.0f);
+			return math::Ray(position_, forward);
+		}
+
+		DirectX::XMFLOAT3 nearPoint, farPoint;
+		DirectX::XMStoreFloat3(&nearPoint, DirectX::XMVectorScale(nearClip, 1.0f / wNear));
+		DirectX::XMStoreFloat3(&farPoint,  DirectX::XMVectorScale(farClip,  1.0f / wFar));
+
+		const math::Vector3 origin(nearPoint.x, nearPoint.y, nearPoint.z);
+		math::Vector3 direction = math::Vector3(farPoint.x, farPoint.y, farPoint.z) - origin;
+		if (!direction.TryNormalize()) direction = math::Vector3(0.0f, 0.0f, 1.0f);
+		return math::Ray(origin, direction);
+	}
+
+
+	math::Vector4 Camera::WorldToClip(const math::Vector3& worldPosition) const
+	{
+		const DirectX::XMVECTOR clip = DirectX::XMVector4Transform(
+			DirectX::XMVectorSet(worldPosition.x, worldPosition.y, worldPosition.z, 1.0f), viewProjectionMatrix_);
+		return math::Vector4(DirectX::XMVectorGetX(clip), DirectX::XMVectorGetY(clip),
+		                     DirectX::XMVectorGetZ(clip), DirectX::XMVectorGetW(clip));
+	}
+
+
 	math::Vector3 Camera::GetForwardXZ() const
 	{
 		// 逆ビュー行列の行2 = カメラ前方（ワールド空間）

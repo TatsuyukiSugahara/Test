@@ -278,6 +278,7 @@ aqEngine の概要設計、バックエンド詳細、データ仕様、移植�
 - (2026-11-25 発見)**Prefab エディタで、相対の参照(`"prefab"`)を持つ Prefab を別のフォルダへ保存すると、参照先がずれる。**[PrefabEditor.cpp](../aqEngine/ECS/PrefabEditor.cpp) の `Save()` はパス欄のパスへ JSON をそのまま書き、参照は読んだファイルのディレクトリ基準のまま残る。Level には別のディレクトリへの保存を止める規則(`EditorContext::CanSaveTo`)があるが、Prefab エディタには無い。直すなら、同じ規則で止めるか、保存先に合わせて参照を書き換える(エディタ全体設計 7.10 節の Codex レビューで発見)。
 - (2026-11-25 発見)**Prefab エディタは変更の有無を持たず、Load / New で編集中の内容が確認なしに捨てられる。**E9b のコンテンツブラウザのダブルクリック(エディタ全体設計 7.10 節 8.)でも同じ。
 - (2026-11-25 発見)**エディタの Prefab の参照パスの計算は字句だけで行い、シンボリックリンクを解決しない。**[PrefabAuthoring.cpp](../Editor/PrefabAuthoring.cpp) の `MakeReferencePath` / `RebaseReference` は `lexically_relative` を使うので、基準のディレクトリと Prefab のパスの片方だけがリンクを含む絶対パスだと、`..` の列が実際のフォルダとずれる。通常の使い方(どちらも作業ディレクトリからの `Assets/...`)では起きない。直すなら、両方を `weakly_canonical` にしてから相対にする(エディタ全体設計 7.10 節「E9b の結果」)。
+- (2026-11-26 記録)**スクリーン → ワールドのレイの計算が 3 か所にある。**エディタのシーンビュー(E11a)で `Camera::ScreenPointToRay` を足したが、[HeightmapPainter.cpp](../aqEngine/Terrain/HeightmapPainter.cpp) と [SplatmapPainter.cpp](../aqEngine/Terrain/SplatmapPainter.cpp) の私的な `ScreenToRay` は挙動を変えないために置き換えていない。直すなら、2 つを `Camera::ScreenPointToRay` に置き換える(引数の正規化座標の取り方に注意。エディタ/E11_シーンビュー.md の 4.)。
 
 ## 文書管理方針
 

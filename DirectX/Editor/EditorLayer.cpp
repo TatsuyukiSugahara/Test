@@ -2,6 +2,7 @@
 #include "EditorLayer.h"
 #include "Core/AppHost.h"
 #include "Level/LevelEditModel.h"
+#include "SceneOverlay.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>   // DockBuilder(初期配置の関数だけで使う)
 #include <string>
@@ -11,8 +12,20 @@ namespace editor
 {
 	namespace
 	{
-		/** ゲームビューのウィンドウ名。ドッキング配置は editor_layout.ini にこの名前で保存される */
-		static constexpr const char* GAME_VIEW_WINDOW_NAME = "Game View";
+		/**
+		 * ゲームビューのウィンドウ名。ID は `###` より後ろ(`Game View`)だけから決まり、ドッキング配置は editor_layout.ini にこの ID で保存される
+		 * (ImHashStr は `###` を読むとそこまでを捨てるので、`Scene###Game View` と `Game View` は同じ ID)。
+		 * 表示名だけを Edit 中は Scene、Play / Pause 中は Game にする
+		 */
+		static constexpr const char* GAME_VIEW_WINDOW_NAME      = "Game View";   // 初期配置(DockBuilderDockWindow)用。ID は下の 2 つと同じ
+		static constexpr const char* GAME_VIEW_WINDOW_NAME_EDIT = "Scene###Game View";
+		static constexpr const char* GAME_VIEW_WINDOW_NAME_PLAY = "Game###Game View";
+
+		/** 左上のカメラ表示の余白・文字色・背景色 */
+		static constexpr float    CAMERA_LABEL_MARGIN     = 8.0f;
+		static constexpr float    CAMERA_LABEL_PADDING    = 4.0f;
+		static constexpr ImU32    CAMERA_LABEL_TEXT_COLOR = IM_COL32(235, 235, 235, 255);
+		static constexpr ImU32    CAMERA_LABEL_BACK_COLOR = IM_COL32(0, 0, 0, 140);
 
 		/** 初期配置の幅の割合(ドックスペース全体に対して) */
 		static constexpr float HIERARCHY_WIDTH_RATIO = 0.20f;
@@ -51,6 +64,16 @@ namespace editor
 				playStopSelfTest_.Start(true);
 			}
 			playStopSelfTest_.Tick(playModeController_);
+
+			// 編集用カメラをメインカメラへ書く(Edit のときだけ。Play / Pause はゲームが動かす)。
+			// 再生の開始が同じフレームに来ていても、遷移の前に書くので、控えるカメラは編集用カメラの最新の状態になる。
+			// OnBuildUI で読んだ入力はここ(次のフレーム)で反映される
+			if (aq::AppHost::Get().GetRunMode() == aq::RunMode::Edit) {
+				if (aq::Camera* mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main)) {
+					sceneCamera_.ApplyTo(*mainCamera);
+				}
+			}
+
 			playModeController_.ApplyPendingRequest();
 
 			ImGui::SetCurrentContext(editorContext);
@@ -114,10 +137,12 @@ namespace editor
 		GameViewState state;
 		// 入力用のボタンがアクティブか(エディタの別の項目をマウスで操作中かの判定から除くため)
 		bool isInputButtonActive = false;
+		// Edit 中はシーンビュー(編集用カメラの画)、Play / Pause 中はゲームビュー(ゲームのカメラの画)
+		const bool isEdit = (aq::AppHost::Get().GetRunMode() == aq::RunMode::Edit);
 
 		// 絵を内側の余白なしで領域いっぱいに使う
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-		const bool opened = ImGui::Begin(GAME_VIEW_WINDOW_NAME, nullptr,
+		const bool opened = ImGui::Begin(isEdit ? GAME_VIEW_WINDOW_NAME_EDIT : GAME_VIEW_WINDOW_NAME_PLAY, nullptr,
 		                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 		ImGui::PopStyleVar();
 
@@ -176,9 +201,17 @@ namespace editor
 					state.imageMinY = itemMin.y;
 					state.imageMaxX = itemMax.x;
 					state.imageMaxY = itemMax.y;
+
+					DrawSceneViewOverlay(isEdit, itemMin, itemMax, ImGui::IsItemHovered());
 				}
 			}
 		}
+
+		// 編集用カメラを操作できないとき(Play / Pause、画像が見えない)はドラッグを続けない
+		if (!isEdit || !state.visible) {
+			sceneCamera_.CancelDrag();
+		}
+		state.sceneCameraFlying = isEdit && sceneCamera_.IsFlying();
 
 		// 画像を描かなかった(閉じている・畳まれている・未対応の API)ときはフォーカスも無い扱いにする
 		state.focused = state.visible && ImGui::IsWindowFocused();
@@ -188,6 +221,36 @@ namespace editor
 		state.editorHoldsMouse = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)
 		                      || (ImGui::IsAnyItemActive() && !isInputButtonActive && ImGui::IsAnyMouseDown());
 		return state;
+	}
+
+
+	void EditorLayer::DrawSceneViewOverlay(const bool isEdit, const ImVec2& imageMin, const ImVec2& imageMax, const bool isHovered)
+	{
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		// 左上に今のカメラ(ImGui のフォントは ASCII のみ)
+		char label[128];
+		if (isEdit) {
+			// 入力を読んで編集用カメラの状態を更新する(メインカメラへ書くのは次のフレームの OnBeginFrame)
+			sceneCamera_.OnBuildUI(isHovered, imageMax.y - imageMin.y);
+
+			// 画像はこのフレームのメインカメラで描かれているので、補助線も同じカメラで描く
+			if (const aq::Camera* mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main)) {
+				SceneOverlay::DrawGrid(drawList, *mainCamera, imageMin, imageMax);
+			}
+			std::snprintf(label, sizeof(label), "Scene Camera  (%.1f, %.1f, %.1f)  speed %.1f",
+				sceneCamera_.GetPositionX(), sceneCamera_.GetPositionY(), sceneCamera_.GetPositionZ(), sceneCamera_.GetMoveSpeed());
+		} else {
+			std::snprintf(label, sizeof(label), "Game Camera");
+		}
+
+		const ImVec2 textSize = ImGui::CalcTextSize(label);
+		const ImVec2 textPos(imageMin.x + CAMERA_LABEL_MARGIN + CAMERA_LABEL_PADDING, imageMin.y + CAMERA_LABEL_MARGIN + CAMERA_LABEL_PADDING);
+		drawList->AddRectFilled(
+			ImVec2(textPos.x - CAMERA_LABEL_PADDING, textPos.y - CAMERA_LABEL_PADDING),
+			ImVec2(textPos.x + textSize.x + CAMERA_LABEL_PADDING, textPos.y + textSize.y + CAMERA_LABEL_PADDING),
+			CAMERA_LABEL_BACK_COLOR, 3.0f);
+		drawList->AddText(textPos, CAMERA_LABEL_TEXT_COLOR, label);
 	}
 
 

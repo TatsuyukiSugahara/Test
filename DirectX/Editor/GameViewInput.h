@@ -13,6 +13,7 @@ namespace editor
 		bool  visible          = false;     // ゲームビューに displayRT の画像を描いた
 		bool  focused          = false;     // ゲームビューのウィンドウがエディタ内でフォーカスを持つ
 		bool  editorHoldsMouse = false;     // エディタがマウスを使っている(ポップアップが開いている、別の項目をマウスで操作中)
+		bool  sceneCameraFlying = false;    // Edit 中に編集用カメラの右ドラッグ(飛行)をしている(SceneCamera の印。キーを転送しない)
 		float imageMinX = 0.0f, imageMinY = 0.0f;   // 画像の左上
 		float imageMaxX = 0.0f, imageMaxY = 0.0f;   // 画像の右下(黒帯を含まない)
 	};
@@ -23,7 +24,8 @@ namespace editor
 	/**
 	 * ゲームビューへの入力の転送。
 	 * エディタ用コンテキストの入力キューを覗き見て、ゲームビュー向けの入力をゲーム用コンテキストへ積み直し、
-	 * ゲーム本体の入力(InputManager)にフォーカスとポインタの範囲を指示する
+	 * ゲーム本体の入力(InputManager)にフォーカスとポインタの範囲を指示する。
+	 * Edit 中は編集用カメラの操作(右・中ボタン、ホイール、Alt + 左ボタン)を転送せず、右ドラッグ中はキーも転送しない(E11a)。Play / Pause はすべて転送する
 	 */
 	class GameViewInput
 	{
@@ -53,6 +55,9 @@ namespace editor
 		bool buttonSent_[ImGuiMouseButton_COUNT] = {}; // 押下を送ったボタン
 		bool keySent_[KEY_SLOT_COUNT]            = {}; // 押下を送ったキー
 		bool gameFocus_                          = true; // ゲーム用コンテキストへ最後に伝えたフォーカス(ImGui の初期値に合わせる)
+
+		/** Alt を押している(エディタ用の列のキーイベントから追う。Edit の Alt + 左ボタンを転送しない判定に使う) */
+		bool altDown_ = false;
 
 
 	public:

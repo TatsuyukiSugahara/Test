@@ -5,6 +5,7 @@
 #include "GameViewInput.h"
 #include "PlayModeController.h"
 #include "PlayStopSelfTest.h"
+#include "SceneCamera.h"
 #include "Panels/ConsolePanel.h"
 #include "Panels/ContentBrowserPanel.h"
 #include "Panels/EditMenu.h"
@@ -25,6 +26,9 @@ namespace editor
 	private:
 		/** ゲームビューへの入力の転送 */
 		GameViewInput gameViewInput_;
+
+		/** シーンビュー(Edit 中のゲームビュー)の編集用カメラ */
+		SceneCamera sceneCamera_;
 
 		/** 再生・一時停止・停止の遷移 */
 		PlayModeController playModeController_;
@@ -73,6 +77,12 @@ namespace editor
 	private:
 		/** ゲームビュー。displayRT をアスペクト比を保って縮小表示し、このフレームの状態を返す */
 		GameViewState DrawGameView(const aq::rendering::RenderTargetHandle gameViewRT);
+
+		/**
+		 * ゲームビューの画像の上の重ね描き。Edit のときは編集用カメラの入力処理とグリッドを描く。左上に今のカメラの表示を出す。
+		 * ゲームビューのウィンドウの Begin 〜 End の間に呼ぶ(ウィンドウの描画リストへ描く)
+		 */
+		void DrawSceneViewOverlay(const bool isEdit, const ImVec2& imageMin, const ImVec2& imageMax, const bool isHovered);
 
 		/** メインメニューバー。左から File メニュー、Edit メニュー、Window メニュー、再生のツールバー、今のパス */
 		void DrawMainMenuBar();

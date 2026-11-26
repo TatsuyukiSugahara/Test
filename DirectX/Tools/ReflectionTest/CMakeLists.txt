@@ -9,6 +9,7 @@
 #  T14 ログの通知(E8b。全構成)は Editor の ConsoleLog.cpp を直接コンパイルして試す。
 #  T15 (a) アセットの一覧(E9a。全構成)は Editor の AssetCatalog.cpp を直接コンパイルして試す。
 #  T15 (b) Prefab の作成(E9b。Debug のみ)は Editor の PrefabAuthoring.cpp と NodeCommands.cpp を直接コンパイルして試す。
+#  T16 (a) シーンビューの数学(E11a。全構成)は aqEngine の Math/Bounds.h と Graphics/Camera だけを使う(追加のソースは無い)。
 #  設計書 エディタ全体設計.md 6.4 節「5. 検査ツール」(E6a / E6b)、7.8 節「9. 検査ツールの追加」(E4a)。
 #
 #  CMake 専用。vcxproj は用意していない(使い方は README.md)。

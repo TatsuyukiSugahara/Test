@@ -5,6 +5,7 @@
 #include "SceneOverlay.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>   // DockBuilder(初期配置の関数だけで使う)
+#include <cmath>
 #include <string>
 
 
@@ -207,9 +208,10 @@ namespace editor
 			}
 		}
 
-		// 編集用カメラを操作できないとき(Play / Pause、画像が見えない)はドラッグを続けない
+		// 編集用カメラを操作できないとき(Play / Pause、画像が見えない)はドラッグとクリックを続けない
 		if (!isEdit || !state.visible) {
 			sceneCamera_.CancelDrag();
+			scenePicker_.CancelClick();
 		}
 		state.sceneCameraFlying = isEdit && sceneCamera_.IsFlying();
 
@@ -234,9 +236,33 @@ namespace editor
 			// 入力を読んで編集用カメラの状態を更新する(メインカメラへ書くのは次のフレームの OnBeginFrame)
 			sceneCamera_.OnBuildUI(isHovered, imageMax.y - imageMin.y);
 
-			// 画像はこのフレームのメインカメラで描かれているので、補助線も同じカメラで描く
+			// 選んだノードの境界(F・選択の箱で使う)。対応表は前のフレームまでの Flush で埋まっている
+			const aq::level::LevelEditModel* model = editorContext_.GetModel();
+			const uint32_t  selectedId = editorContext_.GetSelectedId();
+			SceneNodeBounds selection;
+			if (model != nullptr && selectedId != 0) {
+				selection = ScenePicker::ComputeNodeBounds(*model, selectedId);
+			}
+
+			// F: 選んだノードの AABB(無ければ位置)へ寄る。反映は編集用カメラの操作と同じく次のフレーム
+			if (isHovered && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+				const float aspect = (imageMax.x - imageMin.x) / std::max(imageMax.y - imageMin.y, 1.0f);
+				if (selection.hasBounds) {
+					const aq::math::Vector3& extent = selection.bounds.extent;
+					const float radius = std::sqrt(extent.x * extent.x + extent.y * extent.y + extent.z * extent.z);
+					sceneCamera_.Focus(selection.bounds.center, radius, aspect);
+				} else if (selection.hasPosition) {
+					sceneCamera_.Focus(selection.position, 0.0f, aspect);
+				}
+			}
+
+			// 画像はこのフレームのメインカメラで描かれているので、クリック選択と補助線も同じカメラで行う
 			if (const aq::Camera* mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main)) {
+				// 編集用カメラのドラッグ中(右・中・Alt + 左)はクリック選択を始めない。ギズモの上の判定は E11c で渡す
+				scenePicker_.OnBuildUI(editorContext_, *mainCamera, imageMin, imageMax, isHovered && !sceneCamera_.IsDragging(), false);
+
 				SceneOverlay::DrawGrid(drawList, *mainCamera, imageMin, imageMax);
+				SceneOverlay::DrawSelection(drawList, *mainCamera, imageMin, imageMax, selection);
 			}
 			std::snprintf(label, sizeof(label), "Scene Camera  (%.1f, %.1f, %.1f)  speed %.1f",
 				sceneCamera_.GetPositionX(), sceneCamera_.GetPositionY(), sceneCamera_.GetPositionZ(), sceneCamera_.GetMoveSpeed());

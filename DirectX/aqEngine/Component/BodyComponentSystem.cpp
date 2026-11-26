@@ -127,6 +127,20 @@ namespace aq
 				const float dz = point.z - std::fmin(std::fmax(point.z, minZ), maxZ);
 				return dx * dx + dy * dy + dz * dz;
 			}
+
+
+			/**
+			 * 描画と同じ境界(FillRenderItem が載せる localBounds × ワールド行列)をワールドの AABB にする。
+			 * 読み込み前(FillRenderItem が false)・境界の無いメッシュは false
+			 */
+			template <typename TMesh>
+			bool ComputeRenderWorldBounds(const TMesh& mesh, aq::math::AABB& out)
+			{
+				aq::rendering::RenderItem item;
+				if (!mesh.FillRenderItem(item) || !item.hasBounds) return false;
+				out = item.localBounds.Transformed(item.worldMatrix);
+				return true;
+			}
 		}
 
 
@@ -171,6 +185,13 @@ namespace aq
 					break;
 				}
 			}
+		}
+
+
+		bool BoxStaticMeshComponent::GetWorldBounds(aq::math::AABB& out) const
+		{
+			if (!IsCompleted()) return false;
+			return ComputeRenderWorldBounds(staticMesh_, out);
 		}
 
 
@@ -358,6 +379,13 @@ namespace aq
 			}
 		}
 
+		bool StaticMeshComponent::GetWorldBounds(aq::math::AABB& out) const
+		{
+			if (!IsCompleted()) return false;
+			return ComputeRenderWorldBounds(staticMesh_, out);
+		}
+
+
 		void StaticMeshComponent::Update()
 		{
 			switch (componentState_)
@@ -493,6 +521,14 @@ namespace aq
 			if (componentState_ == ComponentState::Completed) {
 				skeletalMesh_.SetLocalMatrix(modelLocalMatrix_);
 			}
+		}
+
+
+		bool SkeletalMeshComponent::GetWorldBounds(aq::math::AABB& out) const
+		{
+			// SkeletalMesh::FillRenderItem がバインドポーズの AABB を 1.5 倍にしたもの(描画のカリングと同じ)
+			if (!IsCompleted()) return false;
+			return ComputeRenderWorldBounds(skeletalMesh_, out);
 		}
 
 

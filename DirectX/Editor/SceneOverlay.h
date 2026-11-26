@@ -10,10 +10,13 @@ namespace aq
 
 namespace editor
 {
+	struct SceneNodeBounds;
+
+
 	/**
 	 * シーンビューの補助線。ゲームビューのウィンドウの描画リストへ、エディタ用 ImGui で描く(レンダラーには線の描画を足さない)。
 	 * 線は Camera::WorldToClip の結果をクリップ空間で近い面(z = 0)に切ってから w で割る(カメラの後ろへ回り込んだ線が画面を横切らないように)。
-	 * 選んだノードの箱は E11b で足す
+	 * 選んだノードの箱は E11b
 	 */
 	class SceneOverlay
 	{
@@ -34,5 +37,12 @@ namespace editor
 		 */
 		static bool DrawWorldLine(ImDrawList* drawList, const aq::Camera& camera, const ImVec2& imageMin, const ImVec2& imageMax,
 		                          const float (&from)[3], const float (&to)[3], const ImU32 color, const float thickness);
+
+		/**
+		 * 選んだノードの印を黄色で描く。ワールド AABB があればその箱(12 本の辺)、無ければ位置に小さな十字(画面の大きさで一定)。
+		 * どちらも無ければ何も描かない
+		 */
+		static void DrawSelection(ImDrawList* drawList, const aq::Camera& camera, const ImVec2& imageMin, const ImVec2& imageMax,
+		                          const SceneNodeBounds& selection);
 	};
 }

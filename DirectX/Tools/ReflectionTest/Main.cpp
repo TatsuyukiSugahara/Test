@@ -25,6 +25,7 @@
 // E9b で T15 (b) Prefab の作成(ファイル名の決定、参照パスの計算、ノードからの Prefab 作成、ReplaceWithReferenceCommand / CreateReferenceNodeCommand)を足した。
 // Editor の PrefabAuthoring.cpp と Commands/NodeCommands.cpp を直接コンパイルして使う(Debug 構成のみ。Prefab の読み直しの間だけ Engine を Create する)。
 // E11a で T16 (a) シーンビューの数学(Math/Bounds.h の IntersectRayAABB と、Camera の ScreenPointToRay / WorldToClip の往復)を足した。画面も Engine も作らない(全構成)。
+// E11b で T16 (b) ノードとエンティティの対応表(LevelEditModel::FindPreviewEntities / FindEditIdOfEntity)を足した。T8 と同じ Engine + EntityContext の環境で行う(Debug 構成のみ)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -148,7 +149,8 @@ namespace
 			"      Debug 構成では T13 Undo / Redo(Editor のコマンドの取り消しとやり直し、CommandHistory)も行う。\n"
 			"      T14 ログの通知(SetLogListener、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を試す。\n"
 			"      T15 (a) アセットの一覧(Editor の AssetCatalog の ClassifyAsset と、TestData/T15_Assets の木の読み込み)を試す。\\n"
-			"      T16 (a) シーンビューの数学(IntersectRayAABB と、Camera の ScreenPointToRay / WorldToClip の往復)を試す。\n");
+			"      T16 (a) シーンビューの数学(IntersectRayAABB と、Camera の ScreenPointToRay / WorldToClip の往復)を試す。\n"
+			"      Debug 構成では T16 (b) ノードとエンティティの対応表(プレビューの生成・参照ノードの部分木・ReleasePreview)も試す。\n");
 	}
 
 
@@ -4905,15 +4907,200 @@ namespace
 	}
 
 
+#ifdef AQ_DEBUG_IMGUI
+	/** nodes とその子孫のうち、実体ノード(参照ノードでない)を out へ集める */
+	void CollectPlainNodes(const std::vector<std::unique_ptr<PrefabEditNode>>& nodes, std::vector<const PrefabEditNode*>& out)
+	{
+		for (const auto& node : nodes) {
+			if (node->prefabRef.empty()) out.push_back(node.get());
+			CollectPlainNodes(node->children, out);
+		}
+	}
+
+
+	/** root とその子孫(ECS の親子)のハンドルを前順で out へ集める */
+	void CollectEntitySubtree(const aq::ecs::EntityHandle root, std::vector<aq::ecs::EntityHandle>& out)
+	{
+		out.push_back(root);
+		for (const aq::ecs::EntityHandle child : aq::ecs::EntityContext::Get().GetChildren(root)) {
+			CollectEntitySubtree(child, out);
+		}
+	}
+
+
+	/**
+	 * T16 (b) ノードとエンティティの対応表(E11b。Debug)
+	 *
+	 * T6_Overrides.level.json(実体ノードと子・参照ノード 2 つ・2 段のインライン subLevel)を LevelEditModel に読んでプレビューを作り、
+	 * Flush してから: (1) 対応表の対象(トップレベルと 1 段目のインライン subLevel)のすべての実体ノードに、エンティティが 1 つずつある。
+	 * (2) 参照ノードの部分木(ECS の親子をたどったもの)のエンティティがすべてその参照ノードの editId に引け、列の先頭が根で、数が一致する。
+	 * (3) 列のすべてのエンティティが FindEditIdOfEntity で逆に引ける。(4) 2 段目の subLevel のノードは表に無い(1 段目まで)。
+	 * (5) ReleasePreview で表が空になり、その後に同期の Load で生成しても表に入らない(観測が外れている)
+	 */
+	void RunPreviewEntityTableTest(TestResults& results)
+	{
+		const std::string name = "T16 (b) 対応表";
+		const std::string path = std::string(TEST_DATA_DIR) + "/" + OVERRIDE_TEST_LEVEL;
+
+		aq::level::LevelEditModel model;
+		if (!model.LoadFile(path)) {
+			Report(results, name, false, "読み込み失敗: " + path);
+			return;
+		}
+
+		aq::ecs::EntityContext& ctx = aq::ecs::EntityContext::Get();
+		model.RequestPreview();
+		model.ProcessPreviewRequest();
+		const bool beforeFlushEmpty = model.FindPreviewEntities(IdOf(model, "Inline")) == nullptr;   // 生成は次の Flush
+		ctx.FlushPendingCommands();
+
+		const LevelId previewId = model.GetPreviewLevelId();
+		Report(results, name + " プレビューの生成", LevelManager::Get().IsSpawned(previewId) && beforeFlushEmpty,
+			std::string("IsSpawned ") + (LevelManager::Get().IsSpawned(previewId) ? "true" : "false")
+			+ " / Flush 前に空 " + (beforeFlushEmpty ? "true" : "false"));
+
+		// (1) 実体ノード(トップレベルと 1 段目のインライン subLevel)
+		{
+			std::vector<const PrefabEditNode*> plainNodes;
+			CollectPlainNodes(model.GetEntities(), plainNodes);
+			for (const aq::level::SubLevelEdit& sub : model.GetSubLevels()) {
+				if (sub.isInline) CollectPlainNodes(sub.entities, plainNodes);
+			}
+			std::string missing;
+			for (const PrefabEditNode* node : plainNodes) {
+				const std::vector<aq::ecs::EntityHandle>* entities = model.FindPreviewEntities(node->editId);
+				if (entities == nullptr || entities->size() != 1) missing += (missing.empty() ? "" : ", ") + node->name;
+			}
+			// T6_Overrides は Inline・InlineChild・Inner1Node の 3 つ
+			const bool passed = plainNodes.size() == 3 && missing.empty();
+			Report(results, name + " 実体ノード", passed, passed ? std::string()
+				: "実体ノード " + std::to_string(plainNodes.size()) + " / 期待 3 / エンティティが 1 つでない: " + missing);
+		}
+
+		// (2)(3) 参照ノード: 部分木のすべてがその editId に引け、先頭が根
+		std::vector<aq::ecs::EntityHandle> releasedHandles;
+		for (const char* refName : { VALUE_REF_FULL_NAME, VALUE_REF_PLAIN_NAME }) {
+			const uint32_t refId = IdOf(model, refName);
+			const std::vector<aq::ecs::EntityHandle>* entities = model.FindPreviewEntities(refId);
+			if (refId == 0 || entities == nullptr || entities->empty()) {
+				Report(results, name + " 参照ノード " + refName, false, "エンティティの列が無い");
+				continue;
+			}
+			std::vector<aq::ecs::EntityHandle> subtree;
+			const aq::ecs::EntityHandle root = entities->front();
+			CollectEntitySubtree(root, subtree);
+
+			bool allMapped = true;
+			for (const aq::ecs::EntityHandle handle : subtree) {
+				if (model.FindEditIdOfEntity(handle) != refId) allMapped = false;
+			}
+			bool allReverse = true;
+			for (const aq::ecs::EntityHandle handle : *entities) {
+				if (model.FindEditIdOfEntity(handle) != refId) allReverse = false;
+				releasedHandles.push_back(handle);
+			}
+			const bool rootIsTop = !ctx.GetParent(root).IsValid();
+			// 展開後はどちらも根 + 子 2 つ(RefFull: ChildA・ChildNew、RefPlain: ChildA・ChildB)
+			const bool passed = allMapped && allReverse && rootIsTop && subtree.size() == entities->size() && entities->size() == 3;
+			Report(results, name + " 参照ノード " + refName, passed, passed ? std::string()
+				: "列 " + std::to_string(entities->size()) + " / 部分木 " + std::to_string(subtree.size()) + " / 期待 3"
+				  + " / 部分木がすべて引ける " + (allMapped ? "true" : "false") + " / 列が逆に引ける " + (allReverse ? "true" : "false")
+				  + " / 先頭が根 " + (rootIsTop ? "true" : "false"));
+		}
+
+		// (3) 実体ノードの逆引き
+		{
+			bool allReverse = true;
+			for (const char* plainName : { "Inline", "InlineChild", "Inner1Node" }) {
+				const uint32_t id = IdOf(model, plainName);
+				const std::vector<aq::ecs::EntityHandle>* entities = model.FindPreviewEntities(id);
+				if (entities == nullptr) { allReverse = false; continue; }
+				for (const aq::ecs::EntityHandle handle : *entities) {
+					if (model.FindEditIdOfEntity(handle) != id) allReverse = false;
+					releasedHandles.push_back(handle);
+				}
+			}
+			const bool unknownIsZero = model.FindEditIdOfEntity(aq::ecs::EntityHandle()) == 0;
+			Report(results, name + " FindEditIdOfEntity", allReverse && unknownIsZero,
+				std::string("逆に引ける ") + (allReverse ? "true" : "false") + " / 無効なハンドルが 0 " + (unknownIsZero ? "true" : "false"));
+		}
+
+		// (4) 2 段目の subLevel(Inner1 の中の Inner2)のノードは対象外。エンティティ自体は生成されている
+		{
+			uint32_t inner2Id = 0;
+			const auto& subLevels = model.GetSubLevels();
+			if (!subLevels.empty() && !subLevels[0].subLevels.empty() && !subLevels[0].subLevels[0].entities.empty()) {
+				inner2Id = subLevels[0].subLevels[0].entities[0]->editId;
+			}
+			// トップ 1 + 1、参照 3 + 3、Inner1Node 1、Inner2Node 1
+			const uint32_t entityCount = CountEntities();
+			const bool passed = inner2Id != 0 && model.FindPreviewEntities(inner2Id) == nullptr && entityCount == 10;
+			Report(results, name + " 2 段目の subLevel は対象外", passed, passed ? std::string()
+				: "Inner2Node の ID " + std::to_string(inner2Id) + " / 表にある " + (model.FindPreviewEntities(inner2Id) ? "true" : "false")
+				  + " / " + CountDetail("エンティティ数", entityCount, 10));
+		}
+
+		// (5) ReleasePreview で空になり、観測も外れる
+		{
+			model.ReleasePreview();
+			bool empty = true;
+			for (const char* nodeName : { "Inline", "InlineChild", VALUE_REF_FULL_NAME, VALUE_REF_PLAIN_NAME, "Inner1Node" }) {
+				if (model.FindPreviewEntities(IdOf(model, nodeName)) != nullptr) empty = false;
+			}
+			for (const aq::ecs::EntityHandle handle : releasedHandles) {
+				if (model.FindEditIdOfEntity(handle) != 0) empty = false;
+			}
+
+			// 同じ内容を同期の Load で生成しても、表に入らない
+			const std::string key = "<t16-b-after-release>";
+			std::shared_ptr<const aq::level::LevelData> data = aq::level::LevelSerializer::FromJson(model.ToJson(), model.GetBaseDir().c_str());
+			bool observerRemoved = false;
+			if (data) {
+				LevelRegistry::Get().Register(key, data);
+				LevelManager::Get().Load(key);
+				ctx.FlushPendingCommands();
+				observerRemoved = model.FindPreviewEntities(IdOf(model, "Inline")) == nullptr;
+			}
+			const bool passed = empty && releasedHandles.size() == 9 && observerRemoved;
+			Report(results, name + " ReleasePreview で空になる", passed, passed ? std::string()
+				: std::string("空 ") + (empty ? "true" : "false") + " / 引けていたエンティティ " + std::to_string(releasedHandles.size())
+				  + " / 期待 9 / 後の Load で入らない " + (observerRemoved ? "true" : "false"));
+
+			ResetSpawnTestWorld();
+			LevelRegistry::Get().Unregister(key);
+		}
+	}
+#endif
+
+
 	/**
 	 * T16 シーンビュー(E11)
 	 *
-	 * (a)(E11a。全構成)は Math/Bounds.h の IntersectRayAABB と Camera の ScreenPointToRay / WorldToClip を試す(画面も Engine も作らない)
+	 * (a)(E11a。全構成)は Math/Bounds.h の IntersectRayAABB と Camera の ScreenPointToRay / WorldToClip を試す(画面も Engine も作らない)。
+	 * (b)(E11b。Debug)は LevelEditModel のノードとエンティティの対応表を試す。T8 と同じく画面無しで Engine(Create のみ)と
+	 * EntityContext を作り(System は登録しない)、遅延生成は FlushPendingCommands で進める。後始末も T8 と同じ順
 	 */
 	void RunSceneViewTests(TestResults& results)
 	{
 		RunRayAABBTest(results);
 		RunCameraRoundTripTest(results);
+
+#ifdef AQ_DEBUG_IMGUI
+		{
+			const bool engineCreatedHere = !aq::Engine::IsCreated();
+			if (engineCreatedHere) aq::Engine::Create();
+			aq::ecs::EntityContext::Initialize();
+
+			RunPreviewEntityTableTest(results);
+
+			ResetSpawnTestWorld();
+			LevelRegistry::Get().Clear();
+			aq::ecs::EntityContext::Finalize();
+			if (engineCreatedHere) aq::Engine::Release();
+		}
+#else
+		std::printf("        T16 (b): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+#endif
 	}
 
 

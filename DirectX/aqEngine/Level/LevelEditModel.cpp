@@ -11,12 +11,34 @@
 #include <algorithm>
 #include <filesystem>
 #include <system_error>
+#include <unordered_map>
 
 
 namespace aq
 {
 	namespace level
 	{
+		/**
+		 * プレビューのノードとエンティティの対応表（エディタ E11 5.）
+		 *
+		 * nodeToEditId はプレビューを作るときに作り、ほかの 2 つは LevelManager の生成の観測（Flush の中）で埋める。
+		 * nodeToEditId のキーは登録した LevelData の中のノードを指すので、登録の間だけ有効（キーとして比べるだけで、たどらない）
+		 */
+		struct PreviewEntityTable
+		{
+			std::unordered_map<const ecs::PrefabNodeData*, uint32_t>     nodeToEditId;
+			std::unordered_map<uint32_t, std::vector<ecs::EntityHandle>> entitiesOfEditId;   // 先頭がそのノードの根（生成は前順）
+			std::unordered_map<uint64_t, uint32_t>                      editIdOfEntity;     // キーは EntityKey
+
+			void Clear()
+			{
+				nodeToEditId.clear();
+				entitiesOfEditId.clear();
+				editIdOfEntity.clear();
+			}
+		};
+
+
 		namespace
 		{
 			/**
@@ -289,10 +311,66 @@ namespace aq
 			{
 				if (error) { *error = message; }
 			}
+
+
+			/** 対応表の editIdOfEntity のキー（id と世代をまとめる） */
+			uint64_t EntityKey(const ecs::EntityHandle& handle)
+			{
+				return (static_cast<uint64_t>(handle.id) << 32) | static_cast<uint64_t>(handle.generation);
+			}
+
+
+			/** 対応表を作るときの、並びの食い違いのログを 1 回だけにする印 */
+			struct PreviewMapContext
+			{
+				PreviewEntityTable& table;
+				bool                mismatchLogged = false;
+			};
+
+
+			void LogPreviewMismatch(PreviewMapContext& context, const char* where, const size_t editCount, const size_t dataCount)
+			{
+				if (context.mismatchLogged) { return; }
+				context.mismatchLogged = true;
+				EnginePrintf("[LevelEditModel] preview entity table: %s count mismatch (model %zu / data %zu). skipped below\n",
+					where, editCount, dataCount);
+			}
+
+
+			/** 参照ノードを展開した部分木のすべてのノードを editId に結ぶ */
+			void MapPreviewSubtree(PreviewMapContext& context, const ecs::PrefabNodeData& data, const uint32_t editId)
+			{
+				context.table.nodeToEditId[&data] = editId;
+				for (const ecs::PrefabNodeData& child : data.children) {
+					MapPreviewSubtree(context, child, editId);
+				}
+			}
+
+
+			/** 編集ノードの列と、そこから作った PrefabNodeData の列を並べて結ぶ。数が合わなければその列から下は結ばない */
+			void MapPreviewNodes(PreviewMapContext& context, const NodeList& editNodes, const std::vector<ecs::PrefabNodeData>& dataNodes, const char* where)
+			{
+				if (editNodes.size() != dataNodes.size()) {
+					LogPreviewMismatch(context, where, editNodes.size(), dataNodes.size());
+					return;
+				}
+				for (size_t i = 0; i < editNodes.size(); ++i) {
+					const ecs::PrefabEditNode&  edit = *editNodes[i];
+					const ecs::PrefabNodeData& data = dataNodes[i];
+					if (!edit.prefabRef.empty()) {
+						// 参照ノードは 1 つが部分木に展開される（override で足した子も含む）。どれもこのノードとして扱う
+						MapPreviewSubtree(context, data, edit.editId);
+					} else {
+						context.table.nodeToEditId[&data] = edit.editId;
+						MapPreviewNodes(context, edit.children, data.children, "children");
+					}
+				}
+			}
 		}
 
 
 		LevelEditModel::LevelEditModel()
+			: previewTable_(std::make_shared<PreviewEntityTable>())
 		{
 			NewLevel();
 		}
@@ -691,10 +769,82 @@ namespace aq
 		}
 
 
+		void LevelEditModel::BeginPreviewEntityTable(const LevelData& data)
+		{
+			EndPreviewEntityTable();
+			if (!previewTable_) { return; }
+
+			// トップレベルは添字で、子は並びで結ぶ（LevelSerializer はこのモデルの ToJson の列をそのまま同じ順に作る）
+			PreviewMapContext context{ *previewTable_ };
+			MapPreviewNodes(context, entities_, data.entities, "entities");
+
+			// インラインの subLevel は 1 段目まで（UI と同じ）。ファイル参照の subLevel は対象外
+			if (subLevels_.size() != data.subLevels.size()) {
+				LogPreviewMismatch(context, "subLevels", subLevels_.size(), data.subLevels.size());
+			} else {
+				for (size_t i = 0; i < subLevels_.size(); ++i) {
+					const SubLevelEdit& sub = subLevels_[i];
+					if (!sub.isInline) { continue; }
+					const std::shared_ptr<const LevelData>& inlineData = data.subLevels[i].inlineData;
+					if (!inlineData) {
+						LogPreviewMismatch(context, "inline subLevel", 1, 0);
+						continue;
+					}
+					MapPreviewNodes(context, sub.entities, inlineData->entities, "subLevel entities");
+				}
+			}
+
+			// 生成を観測して埋める。インライン subLevel は親と別の LevelId で生成されるので、levelId ではなく
+			// 生成元のノード（このプレビューの LevelData の中のノードか）で見分ける。
+			// 観測の関数は this ではなく対応表を共有で持つ（モデルが先に破棄されても壊れた先を指さない）
+			std::shared_ptr<PreviewEntityTable> table = previewTable_;
+			LevelManager::Get().SetSpawnObserver(
+				[table](LevelId, ecs::Entity entity, const ecs::PrefabNodeData& node)
+				{
+					const auto found = table->nodeToEditId.find(&node);
+					if (found == table->nodeToEditId.end()) { return; }
+					const ecs::EntityHandle handle = entity.GetHandle();
+					table->entitiesOfEditId[found->second].push_back(handle);
+					table->editIdOfEntity[EntityKey(handle)] = found->second;
+				});
+			spawnObserverSet_ = true;
+		}
+
+
+		void LevelEditModel::EndPreviewEntityTable()
+		{
+			if (spawnObserverSet_) {
+				LevelManager::Get().SetSpawnObserver(nullptr);
+				spawnObserverSet_ = false;
+			}
+			if (previewTable_) { previewTable_->Clear(); }
+		}
+
+
+		const std::vector<ecs::EntityHandle>* LevelEditModel::FindPreviewEntities(const uint32_t editId) const
+		{
+			if (!previewTable_ || editId == 0) { return nullptr; }
+			const auto found = previewTable_->entitiesOfEditId.find(editId);
+			return (found != previewTable_->entitiesOfEditId.end()) ? &found->second : nullptr;
+		}
+
+
+		uint32_t LevelEditModel::FindEditIdOfEntity(const ecs::EntityHandle entity) const
+		{
+			if (!previewTable_ || !entity.IsValid()) { return 0; }
+			const auto found = previewTable_->editIdOfEntity.find(EntityKey(entity));
+			return (found != previewTable_->editIdOfEntity.end()) ? found->second : 0;
+		}
+
+
 		void LevelEditModel::ReleasePreview()
 		{
 			LevelManager&       levelManager = LevelManager::Get();
 			ecs::EntityContext& ctx          = ecs::EntityContext::Get();
+
+			// 0. 対応表を空にして生成の観測を外す。表のノードのポインタは登録を外すまでしか有効でなく、
+			//    この後の Flush で生成される前回のプレビューのエンティティは、すぐに破棄されるので表に入れない。
+			EndPreviewEntityTable();
 
 			// 1. 次の Flush は予約済みの破棄（同じフレームの自動リロードが予約したものなど）も実行するので、
 			//    その前に CPU と GPU の完了を待つ。直列構成でもレンダースレッドの完了だけでは GPU が前フレームの
@@ -748,11 +898,20 @@ namespace aq
 			if (!data) { return; }
 
 			const std::string key = "<level-editor-preview-" + std::to_string(previewCounter++) + ">";
-			LevelRegistry::Get().Register(key, data);
+			const std::shared_ptr<const LevelData> registered = LevelRegistry::Get().Register(key, data);
 
-			// 7. 新しい LevelId とキーを記録する。
+			// 7. ノードとエンティティの対応表を作り、生成の観測を始める（エディタ E11 5.）。生成は Load が予約し、次の Flush で行われる。
+			//    表は Load が使うものと同じ（登録した）LevelData のノードを指す。
+			if (registered) {
+				BeginPreviewEntityTable(*registered);
+			}
+
+			// 8. 新しい LevelId とキーを記録する。
 			previewLevelId_ = levelManager.Load(key);
 			previewKey_     = key;
+			if (!previewLevelId_.IsValid()) {
+				EndPreviewEntityTable();
+			}
 		}
 	}
 }

@@ -1,6 +1,7 @@
 #pragma once
 #ifdef AQ_DEBUG_IMGUI
 #include "ECS/PrefabEditor.h"   // ecs::PrefabEditNode
+#include "ECS/Entity.h"         // ecs::EntityHandle
 #include "Level/LevelId.h"
 #include "Util/SimpleJson.h"
 #include <cstdint>
@@ -46,6 +47,11 @@ namespace aq
 		};
 
 
+		/** プレビューのノードとエンティティの対応表（中身は .cpp。エディタ E11 5.） */
+		struct PreviewEntityTable;
+		struct LevelData;
+
+
 		/** index に渡すと列の末尾を指す */
 		static constexpr size_t APPEND = SIZE_MAX;
 
@@ -86,8 +92,22 @@ namespace aq
 			LevelId                                           previewLevelId_;   // 現在のプレビューの Level
 			std::string                                       previewKey_;       // 現在のプレビューの in-memory 登録キー
 
+			/**
+			 * プレビューのノードとエンティティの対応表（エディタ E11 5.）。
+			 * LevelManager の生成の観測の関数もこれを共有で持つ（モデルが先に破棄されても観測の関数が壊れた先を指さないように）。
+			 * 中のノードのポインタはプレビューの登録の間（Register から Unregister まで）だけ有効なので、ReleasePreview で空にする
+			 */
+			std::shared_ptr<PreviewEntityTable>               previewTable_;
+			bool                                              spawnObserverSet_ = false;   // LevelManager に観測の関数を設定している
+
 			/** subLevels を再帰し、インライン定義の entities のルートへ AssignId を呼ぶ */
 			void AssignIdsInSubLevels(std::vector<SubLevelEdit>& subLevels);
+
+			/** data（このモデルの ToJson から作ったもの）とモデルを並べて歩き、ノード → editId の表を作って生成の観測を始める */
+			void BeginPreviewEntityTable(const LevelData& data);
+
+			/** 生成の観測を外し、対応表を空にする */
+			void EndPreviewEntityTable();
 
 
 		public:
@@ -227,6 +247,21 @@ namespace aq
 			 * @return プレビューがあって片付けたら true
 			 */
 			bool ClearPreview();
+
+
+		public:
+			/**
+			 * プレビューのノードとエンティティの対応表（エディタ E11 5.）。プレビューを作る（ProcessPreviewRequest）ときに作り、
+			 * 次の Flush でエンティティが生成されたときに埋まり、ReleasePreview で空になる。
+			 * 対象はトップレベルと 1 段目のインライン subLevel のノード（UI と同じ）。参照ノードは展開された部分木のすべての
+			 * エンティティがその参照ノードの editId に結ばれる。
+			 */
+
+			/** editId のノードから生成されたエンティティの列（先頭がそのノードの根）。無ければ nullptr */
+			const std::vector<ecs::EntityHandle>* FindPreviewEntities(uint32_t editId) const;
+
+			/** entity を生成したノードの editId。対応表に無ければ 0 */
+			uint32_t FindEditIdOfEntity(ecs::EntityHandle entity) const;
 
 
 		public:

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "SceneOverlay.h"
+#include "ScenePicker.h"
 #include <algorithm>
 #include <cmath>
 
@@ -25,6 +26,11 @@ namespace editor
 		static constexpr ImU32 X_AXIS_COLOR = IM_COL32(230, 70, 70, 220);
 		static constexpr ImU32 Z_AXIS_COLOR = IM_COL32(70, 110, 240, 220);
 		static constexpr float AXIS_THICKNESS = 1.5f;
+
+		/** 選んだノードの印 */
+		static constexpr ImU32 SELECTION_COLOR     = IM_COL32(255, 220, 40, 255);
+		static constexpr float SELECTION_THICKNESS = 1.5f;
+		static constexpr float SELECTION_CROSS_SIZE = 6.0f;   // 十字の腕の長さ [px]
 
 		/** クリップ空間の同次座標の点 */
 		struct ClipPoint
@@ -128,6 +134,52 @@ namespace editor
 			const float zFrom[3] = { 0.0f, 0.0f, std::min(minZ, 0.0f) };
 			const float zTo[3]   = { 0.0f, 0.0f, std::max(maxZ, 0.0f) };
 			DrawWorldLine(drawList, camera, imageMin, imageMax, zFrom, zTo, Z_AXIS_COLOR, AXIS_THICKNESS);
+		}
+
+		drawList->PopClipRect();
+	}
+
+
+	void SceneOverlay::DrawSelection(ImDrawList* drawList, const aq::Camera& camera, const ImVec2& imageMin, const ImVec2& imageMax,
+	                                 const SceneNodeBounds& selection)
+	{
+		if (imageMax.x <= imageMin.x || imageMax.y <= imageMin.y) {
+			return;
+		}
+
+		drawList->PushClipRect(imageMin, imageMax, true);
+
+		if (selection.hasBounds) {
+			// 箱の 8 つの角(添字の bit 0 / 1 / 2 が x / y / z の +側)と 12 本の辺
+			const aq::math::AABB& box = selection.bounds;
+			float corners[8][3];
+			for (int i = 0; i < 8; ++i) {
+				corners[i][0] = box.center.x + ((i & 1) ? box.extent.x : -box.extent.x);
+				corners[i][1] = box.center.y + ((i & 2) ? box.extent.y : -box.extent.y);
+				corners[i][2] = box.center.z + ((i & 4) ? box.extent.z : -box.extent.z);
+			}
+			static constexpr int EDGES[12][2] = {
+				{ 0, 1 }, { 2, 3 }, { 4, 5 }, { 6, 7 },   // x 方向
+				{ 0, 2 }, { 1, 3 }, { 4, 6 }, { 5, 7 },   // y 方向
+				{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },   // z 方向
+			};
+			for (const auto& edge : EDGES) {
+				DrawWorldLine(drawList, camera, imageMin, imageMax, corners[edge[0]], corners[edge[1]], SELECTION_COLOR, SELECTION_THICKNESS);
+			}
+		} else if (selection.hasPosition) {
+			// 位置を画面へ写して十字を描く(カメラの後ろ・近い面より手前なら描かない)
+			const float p[3] = { selection.position.x, selection.position.y, selection.position.z };
+			const ClipPoint clip = ToClip(camera, p);
+			if (clip.w > 1e-6f && clip.z >= 0.0f) {
+				const float width  = imageMax.x - imageMin.x;
+				const float height = imageMax.y - imageMin.y;
+				const ImVec2 center(imageMin.x + (clip.x / clip.w * 0.5f + 0.5f) * width,
+				                    imageMin.y + (0.5f - clip.y / clip.w * 0.5f) * height);
+				drawList->AddLine(ImVec2(center.x - SELECTION_CROSS_SIZE, center.y), ImVec2(center.x + SELECTION_CROSS_SIZE, center.y),
+				                  SELECTION_COLOR, SELECTION_THICKNESS);
+				drawList->AddLine(ImVec2(center.x, center.y - SELECTION_CROSS_SIZE), ImVec2(center.x, center.y + SELECTION_CROSS_SIZE),
+				                  SELECTION_COLOR, SELECTION_THICKNESS);
+			}
 		}
 
 		drawList->PopClipRect();

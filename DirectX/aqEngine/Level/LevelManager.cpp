@@ -77,11 +77,16 @@ namespace aq
 							return rawCreate(std::move(types));
 						};
 
-					// 生成・deserialize 完了直後に levelId を差す。
-					auto stamp = [levelId](ecs::Entity e, const ecs::PrefabNodeData&)
+					// 生成・deserialize 完了直後に levelId を差し、観測の関数があれば呼ぶ（エディタ E11 5.）。
+					// 観測の関数は Load の時点ではなく、この生成の時点で設定されているものを使う
+					// （プレビューを捨てるときに外した関数が、後から走る生成で呼ばれないように）。
+					// この経路は同期の Load / LoadInline だけが通る。非同期の LoadAsync（ProcessAsyncLoads）では呼ばない。
+					auto stamp = [levelId, &manager](ecs::Entity e, const ecs::PrefabNodeData& node)
 					{
 						if (auto* member = e.GetComponent<LevelMemberComponent>())
 							member->levelId = levelId;
+						if (manager.spawnObserver_)
+							manager.spawnObserver_(levelId, e, node);
 					};
 
 					for (const ecs::PrefabNodeData& node : data->entities)
@@ -571,6 +576,7 @@ namespace aq
 						types.push_back(ecs::TypeInfo::Create<LevelMemberComponent>());
 						return ecs::EntityContext::Get().CreateEntityFromTypes(std::move(types));
 					};
+					// 生成の観測（SetSpawnObserver）はこの非同期の経路では呼ばない（同期の Load だけ。エディタ E11 5.）。
 					const auto stamp = [jobLevelId](ecs::Entity e, const ecs::PrefabNodeData&)
 					{
 						if (auto* member = e.GetComponent<LevelMemberComponent>()) member->levelId = jobLevelId;

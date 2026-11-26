@@ -35,6 +35,9 @@ namespace editor
 		static constexpr float MAX_DISTANCE         = 5000.0f;
 		static constexpr float ZOOM_RATIO_PER_NOTCH = 0.9f;
 
+		/** F で寄るとき、境界の無いノードとの距離 [m] */
+		static constexpr float FOCUS_DISTANCE_WITHOUT_BOUNDS = 5.0f;
+
 		/** 1 フレームの時間の上限(止まった後の飛びすぎを避ける) */
 		static constexpr float MAX_DELTA_TIME = 0.1f;
 
@@ -179,6 +182,26 @@ namespace editor
 			}
 			break;
 		}
+	}
+
+
+	void SceneCamera::Focus(const aq::math::Vector3& center, const float radius, const float aspect)
+	{
+		float distance = FOCUS_DISTANCE_WITHOUT_BOUNDS;
+		if (radius > 0.0f) {
+			// 縦の画角と、アスペクト比から求めた横の画角の狭い方で、球が収まる距離
+			const float halfVertical   = viewAngle_ * 0.5f;
+			const float halfHorizontal = std::atan(std::tan(halfVertical) * std::max(aspect, 1e-3f));
+			const float halfAngle      = std::min(halfVertical, halfHorizontal);
+			distance = radius / std::max(std::sin(halfAngle), 1e-3f);
+		}
+		distance_ = Clamp(distance, MIN_DISTANCE, MAX_DISTANCE);
+
+		float forward[3], right[3], up[3];
+		GetBasis(forward, right, up);
+		positionX_ = center.x - forward[0] * distance_;
+		positionY_ = center.y - forward[1] * distance_;
+		positionZ_ = center.z - forward[2] * distance_;
 	}
 
 

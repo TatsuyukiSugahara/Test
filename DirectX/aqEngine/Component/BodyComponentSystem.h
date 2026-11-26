@@ -65,6 +65,9 @@ namespace aq
 		public:
 			inline bool IsCompleted() const { return componentState_ == ComponentState::Completed; }
 
+			/** 描画と同じ境界のワールドの AABB(単位キューブ × ワールド行列)。初期化前は false(エディタのクリック選択・選択の箱に使う) */
+			bool GetWorldBounds(aq::math::AABB& out) const;
+
 			inline const aq::math::Vector4& GetColor() const { return color_; }
 
 			// 描画対象から外す/戻す。フラスタム外の箱はカリングされるが、視界内でも
@@ -164,6 +167,9 @@ namespace aq
 		public:
 			inline bool IsCompleted()     const { return componentState_ == ComponentState::Completed; }
 			inline const std::string& GetModelPath() const { return modelPath_; }
+
+			/** 描画と同じ境界のワールドの AABB(メッシュのローカル AABB × ワールド行列)。読み込み前は false(エディタのクリック選択・選択の箱に使う) */
+			bool GetWorldBounds(aq::math::AABB& out) const;
 
 		public:
 			inline aq::graphics::StaticMesh* GetStaticMesh() { return &staticMesh_; }
@@ -298,6 +304,12 @@ namespace aq
 
 			bool IsCompleted()            const { return componentState_ == ComponentState::Completed; }
 			const std::string& GetModelPath() const { return modelPath_; }
+
+			/**
+			 * 描画と同じ境界のワールドの AABB(バインドポーズの AABB を 1.5 倍したもの × ワールド行列)。
+			 * 読み込み前は false(エディタのクリック選択・選択の箱に使う)
+			 */
+			bool GetWorldBounds(aq::math::AABB& out) const;
 
 			aq::graphics::SkeletalMesh* GetSkeletalMesh() { return &skeletalMesh_; }
 

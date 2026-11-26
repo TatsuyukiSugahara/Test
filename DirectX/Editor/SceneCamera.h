@@ -14,7 +14,7 @@ namespace editor
 	 * シーンビュー(Edit 中のゲームビュー)の編集用カメラ。
 	 * 位置・ヨー・ピッチ・注視点までの距離・移動速度を持つ。入力は OnBuildUI(エディタ用の NewFrame の後)で読んで状態を更新し、
 	 * メインカメラへ書くのは次のフレームの OnBeginFrame(ApplyTo。Edit のときだけ)。
-	 * 操作は設計書/エディタ/E11_シーンビュー.md 2. のとおり(F キーは E11b)。座標系は左手系・Y 上、ヨー 0 で +Z を向く
+	 * 操作は設計書/エディタ/E11_シーンビュー.md 2. のとおり(F キーで選んだノードへ寄るのは Focus。E11b)。座標系は左手系・Y 上、ヨー 0 で +Z を向く
 	 */
 	class SceneCamera
 	{
@@ -64,6 +64,13 @@ namespace editor
 
 		/** メインカメラへ書く(OnBeginFrame から、Edit のときだけ)。アスペクト比は変えない */
 		void ApplyTo(aq::Camera& camera) const;
+
+		/**
+		 * F キー: 向きを変えずに center へ寄る。radius > 0 なら、半径 radius の球が画角(縦横の狭い方)に収まる距離にする。
+		 * radius <= 0(境界の無いノード)なら決まった距離にする。注視点は center になる
+		 * @param aspect  画像の幅 / 高さ(横の画角を求めるのに使う)
+		 */
+		void Focus(const aq::math::Vector3& center, const float radius, const float aspect);
 
 
 	public:

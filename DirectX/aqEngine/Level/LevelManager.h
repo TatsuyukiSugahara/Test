@@ -2,6 +2,7 @@
 #include "Level/LevelId.h"
 #include "Level/LevelData.h"
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -49,6 +50,13 @@ namespace aq
 		// を付与して所属を記録する（設計 §1・§7）。
 		class LevelManager
 		{
+		// ── 公開型 ──
+		public:
+			// 同期の Load（インライン subLevel を含む）でエンティティを 1 つ生成するたびに呼ぶ関数（エディタ E11 5.）。
+			// levelId はそのエンティティの所属 Level（インライン subLevel は親とは別の LevelId）、node は生成元のノード。
+			// 生成中（FlushCommands の中）に呼ばれるので、エンティティの構造を変えない・ImGui に触れないこと。
+			using SpawnObserver = std::function<void(LevelId, ecs::Entity, const ecs::PrefabNodeData&)>;
+
 		// ── 内部型 ──
 		private:
 			struct LevelSlot
@@ -93,6 +101,7 @@ namespace aq
 			bool                     autoReload_ = false;       // D2: ファイル変更の自動監視
 			float                    pollTimer_  = 0.0f;        // D2: ポーリング間引き用
 			std::vector<AsyncLoad>   asyncLoads_;               // §15: 進行中の非同期ロード
+			SpawnObserver            spawnObserver_;            // 同期ロードの生成の観測（1 つだけ。既定は空）
 
 		// ── メンバ関数 ──
 		public:
@@ -113,6 +122,11 @@ namespace aq
 			// EntityContext::Update 後の安全点（Tick）で生成する。loadOnStart サブLevel も同じキューに含める。
 			// 進捗は返り値のハンドルで live に読める（ローディング画面用）。実体は複数フレームにわたり生成される。
 			LevelLoadHandle LoadAsync(std::string_view pathOrId, LevelId parent = LevelId(), const uint32_t entitiesPerFrame = 64);
+
+			// 同期の Load の生成を観測する関数を設定する（1 つだけ。空で外す）。呼ばれるのは生成を実行する
+			// FlushCommands の時点で、そのとき設定されているものが呼ばれる（Load の時点の値ではない）。
+			// levelId を差した後に呼ぶ。非同期の LoadAsync の経路では呼ばない（エディタのプレビューは同期の Load だけを使う）。
+			void SetSpawnObserver(SpawnObserver observer) { spawnObserver_ = std::move(observer); }
 
 			// 進行中の非同期ロード件数（デバッグ表示用）。
 			size_t GetActiveAsyncCount() const { return asyncLoads_.size(); }

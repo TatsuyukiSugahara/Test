@@ -22,6 +22,10 @@
     <ClCompile Include="SceneCamera.cpp" />
     <ClCompile Include="SceneOverlay.cpp" />
     <ClCompile Include="ScenePicker.cpp" />
+    <ClCompile Include="SceneGizmo.cpp" />
+    <ClCompile Include="Commands\CompositeCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
     <ClCompile Include="Commands\NodeCommands.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
@@ -60,6 +64,11 @@
     <ClInclude Include="SceneCamera.h" />
     <ClInclude Include="SceneOverlay.h" />
     <ClInclude Include="ScenePicker.h" />
+    <ClInclude Include="SceneGizmo.h" />
+    <ClInclude Include="GizmoMath.h" />
+    <ClInclude Include="Commands\CompositeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
     <ClInclude Include="Commands\IEditorCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>

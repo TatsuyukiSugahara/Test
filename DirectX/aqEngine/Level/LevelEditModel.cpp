@@ -720,13 +720,16 @@ namespace aq
 		}
 
 
-		bool LevelEditModel::RemoveComponent(const uint32_t id, const std::string& typeName, util::JsonValue* outJson, size_t* outIndex)
+		bool LevelEditModel::RemoveComponent(const uint32_t id, const std::string& typeName, util::JsonValue* outJson, size_t* outIndex,
+		                                     const bool ignoreAddable)
 		{
 			ecs::ComponentRegistry& registry = ecs::ComponentRegistry::Get();
 			const ecs::TypeInfo     type     = registry.TypeOf(typeName);
 			if (type == ecs::TypeInfo()) { return false; }
 			const ecs::ComponentMeta* meta = registry.Find(type.GetHash());
-			if (!meta || !meta->addable) { return false; }   // Transform などは消さない
+			if (!meta) { return false; }
+			// Transform などは消さない。ただし足したものの取り消し（ignoreAddable）は足す操作の逆なので通す
+			if (!meta->addable && !ignoreAddable) { return false; }
 
 			ecs::PrefabEditNode* node = FindNode(id);
 			if (!node || !node->prefabRef.empty()) { return false; }

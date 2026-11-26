@@ -220,9 +220,12 @@ namespace aq
 
 			/**
 			 * 実体ノードからコンポーネントを外す。addable == false の型（Transform）・持っていない・参照ノードなら false。
-			 * outJson には外す前の serializePtr の値を、outIndex には外す前のコンポーネントの列の中の位置を返す
+			 * outJson には外す前の serializePtr の値を、outIndex には外す前のコンポーネントの列の中の位置を返す。
+			 * ignoreAddable が true なら addable を見ない（AddComponent で足したものを取り消すときだけ使う。
+			 * 足す操作のちょうど逆なので addable の制限の対象ではない。エディタ E11 7.）。インスペクターの経路は false のまま
 			 */
-			bool RemoveComponent(uint32_t id, const std::string& typeName, util::JsonValue* outJson = nullptr, size_t* outIndex = nullptr);
+			bool RemoveComponent(uint32_t id, const std::string& typeName, util::JsonValue* outJson = nullptr, size_t* outIndex = nullptr,
+			                     bool ignoreAddable = false);
 
 
 		public:

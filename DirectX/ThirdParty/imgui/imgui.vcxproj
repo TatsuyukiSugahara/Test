@@ -224,6 +224,10 @@
     <ClCompile Include="imgui_impl_win32.cpp" />
     <ClCompile Include="imgui_impl_dx11.cpp" />
     <ClCompile Include="imgui_impl_dx12.cpp" />
+    <!-- ImGuizmo(エディタのシーンビューのギズモ。設計書/エディタ/E11_シーンビュー.md 7.)。
+         上流のまま #include "imgui.h" と書くが、各構成の AdditionalIncludeDirectories の
+         $(ProjectDir)(このフォルダ)で解決する。 -->
+    <ClCompile Include="..\imguizmo\ImGuizmo.cpp" />
     <!-- Vulkan SDK 未導入でもビルドが壊れないよう、AqGraphicsApi=Vulkan のときだけ
          コンパイルする(aqEngine/Graphics/Vulkan/*.cpp と異なり、公式バックエンドは
          ファイル内で ENGINE_GRAPHICS_VULKAN ガードできないため vcxproj 側で切る)。
@@ -243,6 +247,7 @@
     <ClInclude Include="imstb_rectpack.h" />
     <ClInclude Include="imstb_textedit.h" />
     <ClInclude Include="imstb_truetype.h" />
+    <ClInclude Include="..\imguizmo\ImGuizmo.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

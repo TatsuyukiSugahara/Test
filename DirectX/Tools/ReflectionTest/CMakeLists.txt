@@ -10,6 +10,7 @@
 #  T15 (a) アセットの一覧(E9a。全構成)は Editor の AssetCatalog.cpp を直接コンパイルして試す。
 #  T15 (b) Prefab の作成(E9b。Debug のみ)は Editor の PrefabAuthoring.cpp と NodeCommands.cpp を直接コンパイルして試す。
 #  T16 (a) シーンビューの数学(E11a。全構成)は aqEngine の Math/Bounds.h と Graphics/Camera だけを使う(追加のソースは無い)。
+#  T16 (c) ギズモ(E11c。Debug のみ)は Editor の GizmoMath.h と Commands/CompositeCommand.cpp を直接コンパイルして試す。
 #  設計書 エディタ全体設計.md 6.4 節「5. 検査ツール」(E6a / E6b)、7.8 節「9. 検査ツールの追加」(E4a)。
 #
 #  CMake 専用。vcxproj は用意していない(使い方は README.md)。
@@ -35,6 +36,10 @@ target_sources(ReflectionTest PRIVATE
 # (T13 で足した NodeCommands.cpp の ReplaceWithReferenceCommand / CreateReferenceNodeCommand も使う)。
 target_sources(ReflectionTest PRIVATE
 	"$<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/Editor/PrefabAuthoring.cpp>")
+
+# T16 (c) ギズモは Editor の CompositeCommand をそのままコンパイルして使う(GizmoMath はヘッダだけ)。LevelEditModel が Debug だけなので Debug のときだけ足す。
+target_sources(ReflectionTest PRIVATE
+	"$<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/Editor/Commands/CompositeCommand.cpp>")
 
 # ComponentRegistry とコンポーネントの実体はすべて aqEngine にあるので、aqEngine ごとリンクする。
 target_link_libraries(ReflectionTest PRIVATE aqEngine)

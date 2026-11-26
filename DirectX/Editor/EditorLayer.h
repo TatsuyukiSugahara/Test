@@ -6,6 +6,7 @@
 #include "PlayModeController.h"
 #include "PlayStopSelfTest.h"
 #include "SceneCamera.h"
+#include "SceneGizmo.h"
 #include "ScenePicker.h"
 #include "Panels/ConsolePanel.h"
 #include "Panels/ContentBrowserPanel.h"
@@ -33,6 +34,9 @@ namespace editor
 
 		/** シーンビューのクリック選択 */
 		ScenePicker scenePicker_;
+
+		/** シーンビューのギズモ(選んだノードの Transform を動かす) */
+		SceneGizmo sceneGizmo_;
 
 		/** 再生・一時停止・停止の遷移 */
 		PlayModeController playModeController_;
@@ -83,8 +87,8 @@ namespace editor
 		GameViewState DrawGameView(const aq::rendering::RenderTargetHandle gameViewRT);
 
 		/**
-		 * ゲームビューの画像の上の重ね描き。Edit のときは編集用カメラの入力処理(F で選んだノードへ寄る)・クリック選択と、
-		 * グリッド・選んだノードの箱を描く。左上に今のカメラの表示を出す。
+		 * ゲームビューの画像の上の重ね描き。Edit のときは編集用カメラの入力処理(F で選んだノードへ寄る)・ギズモの W / E / R・クリック選択と、
+		 * グリッド・選んだノードの箱を描く。左上に今のカメラの表示を出す(ギズモとその切り替えボタンは DrawGameView が入力用ボタンより前に置く)。
 		 * ゲームビューのウィンドウの Begin 〜 End の間に呼ぶ(ウィンドウの描画リストへ描く)
 		 */
 		void DrawSceneViewOverlay(const bool isEdit, const ImVec2& imageMin, const ImVec2& imageMax, const bool isHovered);

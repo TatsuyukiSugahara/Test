@@ -5,6 +5,7 @@
 #include "SceneOverlay.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>   // DockBuilder(初期配置の関数だけで使う)
+#include <imguizmo/ImGuizmo.h>
 #include <cmath>
 #include <string>
 
@@ -21,6 +22,9 @@ namespace editor
 		static constexpr const char* GAME_VIEW_WINDOW_NAME      = "Game View";   // 初期配置(DockBuilderDockWindow)用。ID は下の 2 つと同じ
 		static constexpr const char* GAME_VIEW_WINDOW_NAME_EDIT = "Scene###Game View";
 		static constexpr const char* GAME_VIEW_WINDOW_NAME_PLAY = "Game###Game View";
+
+		/** 画像に重ねる入力用の見えないボタンの ID(ギズモの開始の判定でも、このボタンの ID を引く) */
+		static constexpr const char* GAME_VIEW_INPUT_BUTTON_ID = "##GameViewInput";
 
 		/** 左上のカメラ表示の余白・文字色・背景色 */
 		static constexpr float    CAMERA_LABEL_MARGIN     = 8.0f;
@@ -86,6 +90,9 @@ namespace editor
 
 	void EditorLayer::OnBuildUI(const aq::rendering::RenderTargetHandle gameViewRT)
 	{
+		// ImGuizmo のフレームの始まり(前のフレームのギズモのホバーを控え直す。エディタ用の NewFrame の後に毎フレーム 1 回)
+		ImGuizmo::BeginFrame();
+
 		// メニューバーはドックスペースより先に置く(ドッキング先がメニューバーの下の領域になる)
 		DrawMainMenuBar();
 		// File メニューのモーダルと Ctrl+S(メニューバーの外の ID の階層で開く)
@@ -187,11 +194,30 @@ namespace editor
 					ImGui::SetCursorScreenPos(imagePos);
 					ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(textureId)), imageSize);
 
+					// 補助線・ラベル(チャンネル 0)より上にギズモと切り替えボタンを描く(チャンネル 1)。ウィンドウの End より前に合わせる
+					ImDrawList* windowDrawList = ImGui::GetWindowDrawList();
+					windowDrawList->ChannelsSplit(2);
+
+					// ギズモ(Edit のときだけ。Play の要求が出ているフレームは出さず、ドラッグ中なら書き戻す)。
+					// 切り替えボタンとギズモは入力用ボタンより前に置く(先に置いた項目がホバーを取る。ギズモはこのフレームの開始の判定を
+					// 入力用ボタンが今のフレームのホバーを取る前に行う必要がある)
+					if (isEdit && !playModeController_.HasPendingRequest()) {
+						const ImVec2 imageMax(imagePos.x + imageSize.x, imagePos.y + imageSize.y);
+						windowDrawList->ChannelsSetCurrent(1);
+						sceneGizmo_.DrawToolbar(imagePos, imageMax);
+						if (const aq::Camera* mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main)) {
+							// Alt + 左は編集用カメラの回り込み。カメラのドラッグ中もギズモを始めない
+							const bool allowActivate = !ImGui::GetIO().KeyAlt && !sceneCamera_.IsDragging();
+							sceneGizmo_.Manipulate(editorContext_, *mainCamera, imagePos, imageMax, ImGui::GetID(GAME_VIEW_INPUT_BUTTON_ID), allowActivate);
+						}
+						windowDrawList->ChannelsSetCurrent(0);
+					}
+
 					// 画像と同じ位置・大きさに見えないボタンを重ねる。押している間はこのボタンがアクティブになり、
 					// 浮かせたゲームビューの中身をドラッグしてもウィンドウが動かない。
 					// Image は ID を持たずホバーを取らない項目なので、重ねても当たり判定の取り合いにならない
 					ImGui::SetCursorScreenPos(imagePos);
-					ImGui::InvisibleButton("##GameViewInput", imageSize,
+					ImGui::InvisibleButton(GAME_VIEW_INPUT_BUTTON_ID, imageSize,
 					                       ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
 					isInputButtonActive = ImGui::IsItemActive();
 
@@ -204,6 +230,7 @@ namespace editor
 					state.imageMaxY = itemMax.y;
 
 					DrawSceneViewOverlay(isEdit, itemMin, itemMax, ImGui::IsItemHovered());
+					windowDrawList->ChannelsMerge();
 				}
 			}
 		}
@@ -212,6 +239,10 @@ namespace editor
 		if (!isEdit || !state.visible) {
 			sceneCamera_.CancelDrag();
 			scenePicker_.CancelClick();
+		}
+		// ギズモのドラッグは Play の要求が出たときもやめる(遷移の前に元の値へ書き戻す)
+		if (!isEdit || !state.visible || playModeController_.HasPendingRequest()) {
+			sceneGizmo_.Cancel(editorContext_);
 		}
 		state.sceneCameraFlying = isEdit && sceneCamera_.IsFlying();
 
@@ -236,6 +267,9 @@ namespace editor
 			// 入力を読んで編集用カメラの状態を更新する(メインカメラへ書くのは次のフレームの OnBeginFrame)
 			sceneCamera_.OnBuildUI(isHovered, imageMax.y - imageMin.y);
 
+			// W / E / R でギズモの操作を切り替える(右ドラッグ中の W / E は編集用カメラの移動)
+			sceneGizmo_.HandleShortcuts(isHovered, sceneCamera_.IsFlying());
+
 			// 選んだノードの境界(F・選択の箱で使う)。対応表は前のフレームまでの Flush で埋まっている
 			const aq::level::LevelEditModel* model = editorContext_.GetModel();
 			const uint32_t  selectedId = editorContext_.GetSelectedId();
@@ -258,8 +292,9 @@ namespace editor
 
 			// 画像はこのフレームのメインカメラで描かれているので、クリック選択と補助線も同じカメラで行う
 			if (const aq::Camera* mainCamera = aq::CameraManager::Get().GetCamera(aq::CameraType::Main)) {
-				// 編集用カメラのドラッグ中(右・中・Alt + 左)はクリック選択を始めない。ギズモの上の判定は E11c で渡す
-				scenePicker_.OnBuildUI(editorContext_, *mainCamera, imageMin, imageMax, isHovered && !sceneCamera_.IsDragging(), false);
+				// 編集用カメラのドラッグ中(右・中・Alt + 左)と、ギズモの上・ギズモのドラッグ中はクリック選択を始めない
+				scenePicker_.OnBuildUI(editorContext_, *mainCamera, imageMin, imageMax, isHovered && !sceneCamera_.IsDragging(),
+				                       sceneGizmo_.IsOverGizmo());
 
 				SceneOverlay::DrawGrid(drawList, *mainCamera, imageMin, imageMax);
 				SceneOverlay::DrawSelection(drawList, *mainCamera, imageMin, imageMax, selection);

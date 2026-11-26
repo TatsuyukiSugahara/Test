@@ -132,12 +132,17 @@ endif()
 #  この 2 本にだけ -fobjc-arc を付ける(エンジンの .mm は ARC なしのまま。
 #  エディタ全体設計.md 4.5 節)。osx が使う Cocoa / GameController は aqEngine がリンクする
 #  (imgui は静的ライブラリなので、最終リンクで解決される。Carbon はヘッダの定数だけでリンク不要)。
+#
+#  ImGuizmo(ThirdParty/imguizmo/。エディタのシーンビューのギズモ。設計書/エディタ/E11_シーンビュー.md 7.)も
+#  このターゲットに入れる(imgui.vcxproj と同じ)。上流のまま `#include "imgui.h"` と書くので、
+#  ThirdParty/imgui を PRIVATE のインクルードパスに足して解決する(利用側は <imguizmo/ImGuizmo.h> と書く)。
 # ----------------------------------------------------------------------------
 set(AQ_IMGUI_SOURCES
 	"${AQ_THIRDPARTY_ROOT}/imgui/imgui.cpp"
 	"${AQ_THIRDPARTY_ROOT}/imgui/imgui_draw.cpp"
 	"${AQ_THIRDPARTY_ROOT}/imgui/imgui_tables.cpp"
 	"${AQ_THIRDPARTY_ROOT}/imgui/imgui_widgets.cpp"
+	"${AQ_THIRDPARTY_ROOT}/imguizmo/ImGuizmo.cpp"
 )
 
 if(WIN32)
@@ -171,6 +176,8 @@ endif()
 
 add_library(imgui STATIC ${AQ_IMGUI_SOURCES})
 target_include_directories(imgui PUBLIC "${AQ_THIRDPARTY_ROOT}")
+# ImGuizmo.cpp の `#include "imgui.h"` / `"imgui_internal.h"` 用(上流のファイルを書き換えないため)
+target_include_directories(imgui PRIVATE "${AQ_THIRDPARTY_ROOT}/imgui")
 target_compile_features(imgui PRIVATE cxx_std_20)
 
 # Vulkan ヘッダ(Windows / Mac)。Android は NDK の sysroot が供給するため不要

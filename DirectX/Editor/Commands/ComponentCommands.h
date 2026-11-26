@@ -63,7 +63,8 @@ namespace editor
 
 
 	/**
-	 * 実体ノードにコンポーネントを既定値で足すコマンド
+	 * 実体ノードにコンポーネントを足すコマンド。値は既定値、または与えた JSON(deserializePtr に渡す)。
+	 * 取り消しは足したものを外す(addable を見ない。足す操作のちょうど逆なので、Transform を足したものも外せる。エディタ E11 7.)
 	 */
 	class AddComponentCommand final : public IEditorCommand
 	{
@@ -72,9 +73,13 @@ namespace editor
 		uint32_t    nodeId_;
 		std::string typeName_;
 
+		/** 足すときの値(Null なら既定値) */
+		aq::util::JsonValue json_;
+
 
 	public:
 		AddComponentCommand(const uint32_t nodeId, const std::string& typeName);
+		AddComponentCommand(const uint32_t nodeId, const std::string& typeName, const aq::util::JsonValue& json);
 
 		bool        Execute(aq::level::LevelEditModel& model) override;
 		bool        Undo(aq::level::LevelEditModel& model) override;

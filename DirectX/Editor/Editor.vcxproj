@@ -181,6 +181,12 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClCompile Include="ScenePicker.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="SceneGizmo.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Commands\CompositeCommand.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Panels\ContentBrowserPanel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -206,6 +212,9 @@ if exist "$(VULKAN_SDK)\Bin\dxil.dll" copy /Y "$(VULKAN_SDK)\Bin\dxil.dll" "$(Ou
     <ClInclude Include="SceneCamera.h" />
     <ClInclude Include="SceneOverlay.h" />
     <ClInclude Include="ScenePicker.h" />
+    <ClInclude Include="SceneGizmo.h" />
+    <ClInclude Include="GizmoMath.h" />
+    <ClInclude Include="Commands\CompositeCommand.h" />
     <ClInclude Include="Panels\ContentBrowserPanel.h" />
   </ItemGroup>
   <ItemGroup>

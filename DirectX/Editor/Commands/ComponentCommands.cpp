@@ -74,16 +74,27 @@ namespace editor
 	}
 
 
+	AddComponentCommand::AddComponentCommand(const uint32_t nodeId, const std::string& typeName, const aq::util::JsonValue& json)
+		: nodeId_(nodeId)
+		, typeName_(typeName)
+		, json_(json)
+	{
+	}
+
+
 	bool AddComponentCommand::Execute(aq::level::LevelEditModel& model)
 	{
-		// 既定値で末尾に足す。参照ノードや、すでに持っている型ならモデルが断る
-		return model.AddComponent(nodeId_, typeName_);
+		// 既定値(JSON があればその値)で末尾に足す。参照ノードや、すでに持っている型ならモデルが断る
+		const aq::util::JsonValue* json = json_.IsNull() ? nullptr : &json_;
+		return model.AddComponent(nodeId_, typeName_, json);
 	}
 
 
 	bool AddComponentCommand::Undo(aq::level::LevelEditModel& model)
 	{
-		return model.RemoveComponent(nodeId_, typeName_);
+		// 足したものを外すのは足す操作のちょうど逆なので、addable == false の型(ギズモが足す Transform)も外す。
+		// インスペクターの Remove Component(RemoveComponentCommand)は今までどおり addable を見る
+		return model.RemoveComponent(nodeId_, typeName_, nullptr, nullptr, true);
 	}
 
 

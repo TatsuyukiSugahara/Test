@@ -26,6 +26,7 @@
 // Editor の PrefabAuthoring.cpp と Commands/NodeCommands.cpp を直接コンパイルして使う(Debug 構成のみ。Prefab の読み直しの間だけ Engine を Create する)。
 // E11a で T16 (a) シーンビューの数学(Math/Bounds.h の IntersectRayAABB と、Camera の ScreenPointToRay / WorldToClip の往復)を足した。画面も Engine も作らない(全構成)。
 // E11b で T16 (b) ノードとエンティティの対応表(LevelEditModel::FindPreviewEntities / FindEditIdOfEntity)を足した。T8 と同じ Engine + EntityContext の環境で行う(Debug 構成のみ)。
+// E11c で T16 (c) ギズモ(Editor の GizmoMath の往復、Commands/CompositeCommand.cpp、Transform の無い実体ノードへの AddComponentCommand)を足した(Debug 構成のみ)。
 #include "aq.h"
 #include "ECS/ComponentRegistry.h"
 #include "ECS/AlignedStorage.h"
@@ -50,6 +51,10 @@
 #include "CommandHistory.h"                // T13(Editor のソースを Debug だけ直接コンパイルする)
 #include "Commands/ComponentCommands.h"
 #include "Commands/NodeCommands.h"
+#include "Commands/CompositeCommand.h"     // T16 (c)(Editor のソースを Debug だけ直接コンパイルする)
+#include "GizmoMath.h"                     // T16 (c)(Editor のヘッダだけ)
+#include "Component/HierarchicalTransformComponent.h"
+#include "ECS/JsonFieldVisitor.h"
 #endif
 
 #include <array>
@@ -150,7 +155,8 @@ namespace
 			"      T14 ログの通知(SetLogListener、Editor の ConsoleLog の行の分割・重要度・上限・複数スレッド)を試す。\n"
 			"      T15 (a) アセットの一覧(Editor の AssetCatalog の ClassifyAsset と、TestData/T15_Assets の木の読み込み)を試す。\\n"
 			"      T16 (a) シーンビューの数学(IntersectRayAABB と、Camera の ScreenPointToRay / WorldToClip の往復)を試す。\n"
-			"      Debug 構成では T16 (b) ノードとエンティティの対応表(プレビューの生成・参照ノードの部分木・ReleasePreview)も試す。\n");
+			"      Debug 構成では T16 (b) ノードとエンティティの対応表(プレビューの生成・参照ノードの部分木・ReleasePreview)と\n"
+			"      T16 (c) ギズモ(GizmoMath の往復、CompositeCommand、Transform の追加の取り消し)も試す。\n");
 	}
 
 
@@ -5073,12 +5079,309 @@ namespace
 #endif
 
 
+#ifdef AQ_DEBUG_IMGUI
+	/** T16 (c) の値の許容 */
+	static constexpr float GIZMO_TOLERANCE = 1e-4f;
+
+
+	/** T16 (c): 2 つのベクトルの各成分の差が許容の内か */
+	bool GizmoNearlyEqual(const aq::math::Vector3& a, const aq::math::Vector3& b)
+	{
+		return std::fabs(a.x - b.x) <= GIZMO_TOLERANCE && std::fabs(a.y - b.y) <= GIZMO_TOLERANCE && std::fabs(a.z - b.z) <= GIZMO_TOLERANCE;
+	}
+
+
+	/** T16 (c): 同じ回転か(q と -q は同じ回転なので符号をそろえて、各成分の差が許容の内か) */
+	bool GizmoNearlyEqual(const aq::math::Quaternion& a, const aq::math::Quaternion& b)
+	{
+		const float sign = (a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w) < 0.0f ? -1.0f : 1.0f;
+		return std::fabs(a.x * sign - b.x) <= GIZMO_TOLERANCE && std::fabs(a.y * sign - b.y) <= GIZMO_TOLERANCE
+		    && std::fabs(a.z * sign - b.z) <= GIZMO_TOLERANCE && std::fabs(a.w * sign - b.w) <= GIZMO_TOLERANCE;
+	}
+
+
+	bool GizmoNearlyEqual(const aq::ecs::Transform& a, const aq::ecs::Transform& b)
+	{
+		return GizmoNearlyEqual(a.position, b.position) && GizmoNearlyEqual(a.rotation, b.rotation) && GizmoNearlyEqual(a.scale, b.scale);
+	}
+
+
+	/** T16 (c): 位置・回転(軸と角度 [rad])・拡縮から Transform を作る */
+	aq::ecs::Transform MakeGizmoTransform(const aq::math::Vector3& position, const aq::math::Vector3& axis, const float angle,
+	                                      const aq::math::Vector3& scale)
+	{
+		aq::math::Vector3 normalizedAxis = axis;
+		normalizedAxis.Normalize();
+		aq::ecs::Transform transform;
+		transform.position = position;
+		transform.rotation.SetRotation(normalizedAxis, angle);
+		transform.scale    = scale;
+		return transform;
+	}
+
+
+	/** T16 (c): Transform を 1 行の文字列にする(失敗の説明用) */
+	std::string GizmoTransformText(const aq::ecs::Transform& t)
+	{
+		char text[256];
+		std::snprintf(text, sizeof(text), "pos(%.5f, %.5f, %.5f) rot(%.5f, %.5f, %.5f, %.5f) scale(%.5f, %.5f, %.5f)",
+			t.position.x, t.position.y, t.position.z, t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w, t.scale.x, t.scale.y, t.scale.z);
+		return text;
+	}
+
+
+	/** T16 (c) の親の例 1 件 */
+	struct GizmoParentCase
+	{
+		const char*        name;
+		bool               hasParent;
+		aq::ecs::Transform parent;
+	};
+
+
+	/** T16 (c) で使う親の例(親なし・一様の拡縮・非一様の拡縮 2 つ。どれも回転と平行移動あり) */
+	std::vector<GizmoParentCase> MakeGizmoParentCases()
+	{
+		using aq::math::Vector3;
+		return {
+			{ "親なし",               false, aq::ecs::Transform() },
+			{ "一様の親",             true,  MakeGizmoTransform(Vector3(10.0f, -3.0f, 4.0f), Vector3(0.0f, 1.0f, 0.0f), 1.2f, Vector3(2.0f, 2.0f, 2.0f)) },
+			{ "非一様の親 (2,1,1)",   true,  MakeGizmoTransform(Vector3(-5.0f, 2.0f, 1.0f), Vector3(1.0f, 0.0f, 1.0f), 0.9f, Vector3(2.0f, 1.0f, 1.0f)) },
+			{ "非一様の親 (0.5,3,1.5)", true, MakeGizmoTransform(Vector3(0.5f, 7.0f, -2.0f), Vector3(0.3f, -1.0f, 0.4f), -2.0f, Vector3(0.5f, 3.0f, 1.5f)) },
+		};
+	}
+
+
+	/**
+	 * T16 (c) GizmoMath の往復(E11c。Debug)
+	 *
+	 * ローカル → ComposeWorld(UpdateWorld と同じ規則)でワールド → WorldToLocal でローカルが元に戻る。
+	 * ギズモの経路(ワールド → ComposeMatrix → DecomposeMatrix → WorldToLocal)でも元に戻る。許容 1e-4
+	 */
+	void RunGizmoMathRoundTripTest(TestResults& results)
+	{
+		using aq::math::Vector3;
+		const aq::ecs::Transform local = MakeGizmoTransform(Vector3(1.5f, -2.0f, 3.0f), Vector3(1.0f, 2.0f, 0.5f), 0.7f, Vector3(1.5f, 0.5f, 2.0f));
+
+		for (const GizmoParentCase& c : MakeGizmoParentCases()) {
+			const std::string name = std::string("T16 (c) GizmoMath の往復 ") + c.name;
+			const aq::ecs::Transform* parent = c.hasParent ? &c.parent : nullptr;
+			const aq::ecs::Transform  world  = editor::GizmoMath::ComposeWorld(local, parent);
+
+			// ワールド → ローカル
+			aq::ecs::Transform back;
+			const bool converted = editor::GizmoMath::WorldToLocal(world, parent, back);
+			const bool restored  = converted && GizmoNearlyEqual(back, local);
+			ReportOnFailure(results, name + " ワールド → ローカル", restored,
+				converted ? "期待 " + GizmoTransformText(local) + " / 実際 " + GizmoTransformText(back) : std::string("WorldToLocal が false"));
+
+			// 行列を経る(ImGuizmo に渡して戻ってきた行列を分ける経路)
+			aq::ecs::Transform decomposed;
+			const bool split = editor::GizmoMath::DecomposeMatrix(editor::GizmoMath::ComposeMatrix(world), decomposed);
+			const bool sameWorld = split && GizmoNearlyEqual(decomposed, world);
+			ReportOnFailure(results, name + " 行列の組み立てと分解", sameWorld,
+				split ? "期待 " + GizmoTransformText(world) + " / 実際 " + GizmoTransformText(decomposed) : std::string("DecomposeMatrix が false"));
+
+			aq::ecs::Transform backFromMatrix;
+			const bool convertedFromMatrix = split && editor::GizmoMath::WorldToLocal(decomposed, parent, backFromMatrix);
+			const bool restoredFromMatrix  = convertedFromMatrix && GizmoNearlyEqual(backFromMatrix, local);
+			ReportOnFailure(results, name + " 行列を経たローカル", restoredFromMatrix,
+				"期待 " + GizmoTransformText(local) + " / 実際 " + GizmoTransformText(backFromMatrix));
+		}
+	}
+
+
+	/**
+	 * T16 (c) GizmoMath::ComposeWorld が HierarcicalTransformSystem::UpdateWorld と同じ値になる(E11c。Debug)。
+	 * T16 (b) と同じ Engine + EntityContext の環境で、親と子のエンティティを作り、System の Update を 1 回だけ直接呼ぶ。
+	 * 子のワールドが ComposeWorld と一致し、WorldToLocal で子のローカルに戻る
+	 */
+	void RunGizmoMathUpdateWorldTest(TestResults& results)
+	{
+		using aq::math::Vector3;
+		aq::ecs::EntityContext& ctx = aq::ecs::EntityContext::Get();
+		const aq::ecs::Transform local = MakeGizmoTransform(Vector3(1.5f, -2.0f, 3.0f), Vector3(1.0f, 2.0f, 0.5f), 0.7f, Vector3(1.5f, 0.5f, 2.0f));
+
+		for (const GizmoParentCase& c : MakeGizmoParentCases()) {
+			if (!c.hasParent) continue;
+			const std::string name = std::string("T16 (c) UpdateWorld と同じ規則 ") + c.name;
+
+			const aq::ecs::EntityHandle parent = ctx.CreateEntity<>().GetHandle();
+			const aq::ecs::EntityHandle child  = ctx.CreateEntity<>().GetHandle();
+			auto* parentTransform = ctx.GetComponent<aq::ecs::TransformComponent>(parent);
+			auto* childTransform  = ctx.GetComponent<aq::ecs::TransformComponent>(child);
+			auto* childHierarchy  = ctx.GetComponent<aq::ecs::HierarchicalTransformComponent>(child);
+			if (!parentTransform || !childTransform || !childHierarchy || !childHierarchy->SetParent(child, parent)) {
+				Report(results, name, false, "親子のエンティティを作れない");
+				continue;
+			}
+			parentTransform->position = c.parent.position;
+			parentTransform->rotation = c.parent.rotation;
+			parentTransform->scale    = c.parent.scale;
+			childTransform->position  = local.position;
+			childTransform->rotation  = local.rotation;
+			childTransform->scale     = local.scale;
+
+			{
+				aq::ecs::HierarcicalTransformSystem system;
+				system.Update();
+			}
+
+			const aq::ecs::Transform engineWorld = ctx.GetComponent<aq::ecs::HierarchicalTransformComponent>(child)->transform;
+			const aq::ecs::Transform gizmoWorld  = editor::GizmoMath::ComposeWorld(local, &c.parent);
+			ReportOnFailure(results, name + " ワールド", GizmoNearlyEqual(engineWorld, gizmoWorld),
+				"UpdateWorld " + GizmoTransformText(engineWorld) + " / ComposeWorld " + GizmoTransformText(gizmoWorld));
+
+			aq::ecs::Transform back;
+			const bool restored = editor::GizmoMath::WorldToLocal(engineWorld, &c.parent, back) && GizmoNearlyEqual(back, local);
+			ReportOnFailure(results, name + " ローカルへ戻る", restored, "期待 " + GizmoTransformText(local) + " / 実際 " + GizmoTransformText(back));
+
+			ctx.RequestDestroyEntity(child);
+			ctx.RequestDestroyEntity(parent);
+			ctx.FlushPendingCommands();
+		}
+	}
+
+
+	/**
+	 * T16 (c) CompositeCommand(E11c。Debug)
+	 *
+	 * (1) 実行・取り消し・やり直しで ToJson が戻る。(2) 途中の子(2 つ目。存在しないノードを指す SetField)が失敗したら、
+	 * false を返し ToJson が実行前と同じ。(3) 取り消しの途中の子が失敗したら、false を返し ToJson が取り消し前と同じ
+	 */
+	void RunCompositeCommandTest(TestResults& results)
+	{
+		const std::string name = "T16 (c) CompositeCommand";
+		static constexpr uint32_t MISSING_NODE_ID = 0xfffffff0u;
+
+		// (1) 2 つのキーをまとめたもの
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			const uint32_t id = IdOf(model, "InlineChild");   // Transform と Spawner を持つ実体ノード
+			editor::CompositeCommand composite("Transform");
+			composite.Add(std::make_unique<editor::SetFieldCommand>(id, "Transform", "position", aq::ecs::ToJson(aq::math::Vector3(1.0f, 2.0f, 3.0f))));
+			composite.Add(std::make_unique<editor::SetFieldCommand>(id, "Transform", "scale", aq::ecs::ToJson(aq::math::Vector3(2.0f, 1.0f, 1.0f))));
+			ReportOnFailure(results, name + " 名前", std::string(composite.GetName()) == "Transform", composite.GetName());
+			CheckUndoRedo(results, name, model, composite);
+		}
+
+		// (2) 実行の途中の失敗: 1 つ目の成功を取り消して、実行前と同じになる
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			const uint32_t  id     = IdOf(model, "InlineChild");
+			const JsonValue before = model.ToJson();
+			editor::CompositeCommand composite("Transform");
+			composite.Add(std::make_unique<editor::SetFieldCommand>(id, "Transform", "position", aq::ecs::ToJson(aq::math::Vector3(4.0f, 5.0f, 6.0f))));
+			composite.Add(std::make_unique<editor::SetFieldCommand>(MISSING_NODE_ID, "Transform", "position", aq::ecs::ToJson(aq::math::Vector3(7.0f, 8.0f, 9.0f))));
+			composite.Add(std::make_unique<editor::SetFieldCommand>(id, "Transform", "scale", aq::ecs::ToJson(aq::math::Vector3(3.0f, 3.0f, 3.0f))));
+			const bool executed = composite.Execute(model);
+			const JsonValue after = model.ToJson();
+			ReportOnFailure(results, name + " 実行の途中の失敗", !executed && JsonEqualsExact(before, after),
+				executed ? "true を返した" : "実行前と違う: " + StringifyOneLine(after));
+		}
+
+		// (3) 取り消しの途中の失敗: 取り消した 3 つ目を実行し直して、取り消し前と同じになる
+		{
+			aq::level::LevelEditModel model;
+			if (!LoadValueTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+			const uint32_t id = IdOf(model, "InlineChild");
+			editor::CompositeCommand composite("Transform");
+			composite.Add(std::make_unique<editor::SetFieldCommand>(id, "Transform", "position", aq::ecs::ToJson(aq::math::Vector3(4.0f, 5.0f, 6.0f))));
+			composite.Add(std::make_unique<HistoryTestCommand>(true, false));   // 取り消しだけが失敗する
+			composite.Add(std::make_unique<editor::SetFieldCommand>(id, "Transform", "scale", aq::ecs::ToJson(aq::math::Vector3(3.0f, 3.0f, 3.0f))));
+			const bool      executed     = composite.Execute(model);
+			const JsonValue executedJson = model.ToJson();
+			const bool      undone       = composite.Undo(model);
+			const JsonValue after        = model.ToJson();
+			ReportOnFailure(results, name + " 取り消しの途中の失敗", executed && !undone && JsonEqualsExact(executedJson, after),
+				!executed ? "実行が false" : (undone ? "取り消しが true を返した" : "取り消し前と違う: " + StringifyOneLine(after)));
+		}
+	}
+
+
+	/**
+	 * T16 (c) Transform の無い実体ノードへの AddComponentCommand("Transform", JSON)(E11c。Debug)
+	 *
+	 * 実行・取り消し・やり直しで ToJson が戻り(取り消しで Transform が外れる)、足した値が JSON のとおり。
+	 * インスペクターと同じ RemoveComponent(ignoreAddable = false)と RemoveComponentCommand では今までどおり Transform を外せない
+	 */
+	void RunAddTransformCommandTest(TestResults& results)
+	{
+		const std::string name = "T16 (c) Transform の追加";
+		aq::level::LevelEditModel model;
+		if (!LoadStructureTestModel(model)) { Report(results, name, false, "試験用 Level を読み込めない"); return; }
+
+		auto node  = std::make_unique<PrefabEditNode>();
+		node->name = "NoTransform";
+		const uint32_t id = model.InsertNode(aq::level::NodeParent{ 0, -1 }, STRUCTURE_APPEND, std::move(node));
+		JsonValue probe;
+		if (id == 0 || model.GetComponentField(id, "Transform", "position", probe)) {
+			Report(results, name, false, "Transform の無いノードを置けない");
+			return;
+		}
+		const JsonValue original = model.ToJson();
+
+		aq::math::Quaternion rotation;
+		rotation.SetRotation(aq::math::Vector3(0.0f, 1.0f, 0.0f), 0.5f);
+		JsonValue json = JsonValue::MakeObject();
+		json.Set("position", aq::ecs::ToJson(aq::math::Vector3(1.0f, 2.0f, 3.0f)));
+		json.Set("rotation", aq::ecs::ToJson(rotation));
+		json.Set("scale",    aq::ecs::ToJson(aq::math::Vector3(2.0f, 1.0f, 1.0f)));
+
+		editor::AddComponentCommand command(id, "Transform", json);
+		CheckUndoRedo(results, name, model, command);
+
+		// やり直した後: 値が JSON のとおり
+		{
+			JsonValue position;
+			JsonValue scale;
+			const bool hasValues = model.GetComponentField(id, "Transform", "position", position)
+			                    && model.GetComponentField(id, "Transform", "scale", scale);
+			const bool valuesOk  = hasValues && JsonEqualsExact(position, json["position"]) && JsonEqualsExact(scale, json["scale"]);
+			ReportOnFailure(results, name + " 値", valuesOk, hasValues ? "position " + StringifyOneLine(position) + " scale " + StringifyOneLine(scale)
+			                                                           : std::string("Transform が無い"));
+		}
+
+		// インスペクターの経路では Transform を外せない(モデルは変わらない)
+		{
+			const JsonValue before = model.ToJson();
+			const bool removedByModel = model.RemoveComponent(id, "Transform");
+			editor::RemoveComponentCommand removeCommand(id, "Transform");
+			const bool removedByCommand = removeCommand.Execute(model);
+			ReportOnFailure(results, name + " インスペクターでは外せない", !removedByModel && !removedByCommand && JsonEqualsExact(before, model.ToJson()),
+				"Transform が外れた / モデルが変わった");
+		}
+
+		// 取り消すと Transform が外れ、実行前と同じ
+		{
+			const bool undone = command.Undo(model);
+			const bool absent = !model.GetComponentField(id, "Transform", "position", probe);
+			ReportOnFailure(results, name + " 取り消しで外れる", undone && absent && JsonEqualsExact(original, model.ToJson()),
+				!undone ? "取り消しが false" : (absent ? "実行前と違う" : "Transform が残っている"));
+		}
+	}
+
+
+	/** T16 (c) ギズモ(E11c。Debug)。CompositeCommand と Transform の追加は画面も Engine も要らない */
+	void RunGizmoTests(TestResults& results)
+	{
+		RunGizmoMathRoundTripTest(results);
+		RunCompositeCommandTest(results);
+		RunAddTransformCommandTest(results);
+	}
+#endif
+
+
 	/**
 	 * T16 シーンビュー(E11)
 	 *
 	 * (a)(E11a。全構成)は Math/Bounds.h の IntersectRayAABB と Camera の ScreenPointToRay / WorldToClip を試す(画面も Engine も作らない)。
 	 * (b)(E11b。Debug)は LevelEditModel のノードとエンティティの対応表を試す。T8 と同じく画面無しで Engine(Create のみ)と
-	 * EntityContext を作り(System は登録しない)、遅延生成は FlushPendingCommands で進める。後始末も T8 と同じ順
+	 * EntityContext を作り(System は登録しない)、遅延生成は FlushPendingCommands で進める。後始末も T8 と同じ順。
+	 * (c)(E11c。Debug)は GizmoMath の往復、CompositeCommand、Transform の無い実体ノードへの AddComponentCommand を試す。
+	 * ComposeWorld と UpdateWorld の一致だけは (b) と同じ環境で HierarcicalTransformSystem の Update を直接 1 回呼んで確かめる
 	 */
 	void RunSceneViewTests(TestResults& results)
 	{
@@ -5086,12 +5389,15 @@ namespace
 		RunCameraRoundTripTest(results);
 
 #ifdef AQ_DEBUG_IMGUI
+		RunGizmoTests(results);
+
 		{
 			const bool engineCreatedHere = !aq::Engine::IsCreated();
 			if (engineCreatedHere) aq::Engine::Create();
 			aq::ecs::EntityContext::Initialize();
 
 			RunPreviewEntityTableTest(results);
+			RunGizmoMathUpdateWorldTest(results);
 
 			ResetSpawnTestWorld();
 			LevelRegistry::Get().Clear();
@@ -5099,7 +5405,7 @@ namespace
 			if (engineCreatedHere) aq::Engine::Release();
 		}
 #else
-		std::printf("        T16 (b): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
+		std::printf("        T16 (b) / (c): AQ_DEBUG_IMGUI が無い構成(Release)なので行わない(LevelEditModel が無い)\n");
 #endif
 	}
 

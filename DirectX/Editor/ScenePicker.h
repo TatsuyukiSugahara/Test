@@ -58,7 +58,7 @@ namespace editor
 		 * @param imageMin     画像の左上(スクリーン座標)
 		 * @param imageMax     画像の右下(スクリーン座標)
 		 * @param isHovered    画像の上にマウスがある(ほかの操作中でない)
-		 * @param isOverGizmo  ギズモの上にマウスがある(E11c で使う。今は常に false)
+		 * @param isOverGizmo  ギズモの上にマウスがある、またはギズモのドラッグ中(SceneGizmo::IsOverGizmo)
 		 */
 		void OnBuildUI(EditorContext& context, const aq::Camera& camera, const ImVec2& imageMin, const ImVec2& imageMax,
 		               const bool isHovered, const bool isOverGizmo);
